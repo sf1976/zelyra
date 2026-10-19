@@ -589,12 +589,24 @@ pub struct TableViewRoute {
     pub before_content_html: Option<String>,
     pub after_content_html: Option<String>,
     pub row_actions: Option<(String, String)>,
+    pub policy_row_actions: Option<TableViewPolicyRowActions>,
     pub filters: Vec<TableViewFilter>,
     pub searchable: bool,
     pub sortable: bool,
     pub page_size: Option<u32>,
     pub requires_auth: bool,
     pub permissions: Vec<String>,
+}
+
+#[derive(Clone, Debug)]
+pub struct TableViewPolicyRowActions {
+    pub crud_index: usize,
+    pub item: String,
+    pub edit_html: Option<String>,
+    pub delete_html: Option<String>,
+    pub requires_auth: bool,
+    pub edit_permissions: Vec<String>,
+    pub delete_permissions: Vec<String>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -661,6 +673,9 @@ struct CrudRequestContext<'a> {
     actor_user_id: Option<i64>,
     tenant_context: Option<&'a TenantContext>,
     language: UiLanguage,
+    validation_program: Option<&'a Program>,
+    crud_policy_functions: &'a [zelyra_ast::CrudPolicyFunction],
+    granted_permissions: Vec<String>,
 }
 
 struct CrudMutationContext<'a> {
@@ -669,12 +684,26 @@ struct CrudMutationContext<'a> {
     audit_chain: bool,
     actor_user_id: Option<i64>,
     tenant_context: Option<&'a TenantContext>,
+    validation_program: Option<&'a Program>,
+    crud_policy_functions: &'a [zelyra_ast::CrudPolicyFunction],
+    granted_permissions: Vec<String>,
+}
+
+struct CrudPolicyMutationCheck<'a> {
+    program: &'a Program,
+    functions: &'a [zelyra_ast::CrudPolicyFunction],
+    crud_index: usize,
+    action: zelyra_ast::CrudRecordAction,
+    granted_permissions: &'a [String],
 }
 
 struct FormExecutionContext<'a> {
     actor_user_id: Option<i64>,
     expected_snapshot: Option<&'a [u8]>,
     tenant_context: Option<&'a TenantContext>,
+    validation_program: Option<&'a Program>,
+    crud_policy_functions: &'a [zelyra_ast::CrudPolicyFunction],
+    granted_permissions: &'a [String],
 }
 
 struct FormDispatchContext<'a> {
@@ -683,6 +712,8 @@ struct FormDispatchContext<'a> {
     language: UiLanguage,
     validation_program: Option<&'a Program>,
     table_validation_functions: &'a [zelyra_ast::TableValidationFunction],
+    crud_policy_functions: &'a [zelyra_ast::CrudPolicyFunction],
+    granted_permissions: Vec<String>,
 }
 
 fn tenant_selector(request: &Request) -> Result<Option<String>, u16> {
@@ -887,16 +918,21 @@ fn execute_crud_mutation(
     queries: &[zelyra_database::Query],
     tenant_context: Option<&TenantContext>,
     scoped_record_check: Option<&zelyra_database::Query>,
+    policy_check: Option<&CrudPolicyMutationCheck<'_>>,
 ) -> Result<(), zelyra_database::DatabaseError> {
     let is_postgres = zelyra_database::is_postgres_url(database_url);
     let Some(tenant_context) = tenant_context else {
         if let Some(scoped_record_check) = scoped_record_check {
             return zelyra_database::with_decision_transaction(database_url, |transaction| {
-                if transaction.execute(scoped_record_check)?.rows.is_empty() {
+                let checked_row = transaction.execute(scoped_record_check)?;
+                if checked_row.rows.is_empty() {
                     return Err(zelyra_database::DatabaseError {
                         message: "ZELYRA_TENANT_DENIED: record is not available to this user"
                             .into(),
                     });
+                }
+                if let Some(policy_check) = policy_check {
+                    enforce_crud_policy_check(policy_check, &checked_row)?;
                 }
                 for query in queries {
                     transaction.execute(query)?;
@@ -930,10 +966,14 @@ fn execute_crud_mutation(
                 message: "tenant-scoped CRUD mutation has no record check".into(),
             });
         };
-        if transaction.execute(scoped_record_check)?.rows.is_empty() {
+        let checked_row = transaction.execute(scoped_record_check)?;
+        if checked_row.rows.is_empty() {
             return Err(zelyra_database::DatabaseError {
                 message: "ZELYRA_TENANT_DENIED: record is not available in this tenant".into(),
             });
+        }
+        if let Some(policy_check) = policy_check {
+            enforce_crud_policy_check(policy_check, &checked_row)?;
         }
         transaction.execute(mutation)?;
         for query in audit {
@@ -941,6 +981,22 @@ fn execute_crud_mutation(
         }
         Ok(())
     })
+}
+
+fn enforce_crud_policy_check(
+    check: &CrudPolicyMutationCheck<'_>,
+    row: &zelyra_database::QueryResult,
+) -> Result<(), zelyra_database::DatabaseError> {
+    let denied = |message: String| zelyra_database::DatabaseError { message };
+    let evaluation = evaluate_crud_operation_policies(
+        check.program,
+        check.functions,
+        check.crud_index,
+        check.action,
+        row,
+    )
+    .map_err(|error| denied(format!("ZELYRA_POLICY_EVALUATION: {error}")))?;
+    check_crud_policy_result(evaluation, check.granted_permissions).map_err(denied)
 }
 
 #[derive(Clone, Debug)]
@@ -1002,6 +1058,7 @@ pub struct WebApp {
     pub forms: Vec<FormRoute>,
     validation_program: Option<Arc<Program>>,
     table_validation_functions: Vec<zelyra_ast::TableValidationFunction>,
+    crud_policy_functions: Vec<zelyra_ast::CrudPolicyFunction>,
     pub cruds: Vec<CrudRoute>,
     pub tableviews: Vec<TableViewRoute>,
     pub database_url: Option<String>,
@@ -1034,6 +1091,7 @@ impl WebApp {
             forms,
             validation_program: None,
             table_validation_functions: Vec::new(),
+            crud_policy_functions: Vec::new(),
             cruds: Vec::new(),
             tableviews: Vec::new(),
             database_url: None,
@@ -1070,6 +1128,7 @@ impl WebApp {
             forms,
             validation_program: None,
             table_validation_functions: Vec::new(),
+            crud_policy_functions: Vec::new(),
             cruds: Vec::new(),
             tableviews: Vec::new(),
             database_url,
@@ -1104,8 +1163,11 @@ impl WebApp {
     /// by generated and declarative form submissions.
     pub fn with_validation_program(mut self, program: Program) -> Self {
         let (lowered, mappings) = zelyra_ast::lower_table_validation_functions_owned(program);
+        let (lowered, crud_policy_functions) =
+            zelyra_ast::lower_crud_policy_functions_owned(lowered);
         self.validation_program = Some(Arc::new(lowered));
         self.table_validation_functions = mappings;
+        self.crud_policy_functions = crud_policy_functions;
         self
     }
 
@@ -1657,6 +1719,13 @@ impl WebApp {
                                 language: self.ui_language,
                                 validation_program: self.validation_program.as_deref(),
                                 table_validation_functions: &self.table_validation_functions,
+                                crud_policy_functions: &self.crud_policy_functions,
+                                granted_permissions: authenticated_permissions(
+                                    self,
+                                    request,
+                                    self.database_url.as_deref(),
+                                )
+                                .unwrap_or_default(),
                             },
                         ),
                         form.layout_html.as_deref(),
@@ -1705,6 +1774,14 @@ impl WebApp {
                                 .and_then(|session| session.user_id),
                                 tenant_context: tenant_context.as_ref(),
                                 language: self.ui_language,
+                                validation_program: self.validation_program.as_deref(),
+                                crud_policy_functions: &self.crud_policy_functions,
+                                granted_permissions: authenticated_permissions(
+                                    self,
+                                    request,
+                                    self.database_url.as_deref(),
+                                )
+                                .unwrap_or_default(),
                             },
                         ),
                         crud.layout_html.as_deref(),
@@ -1760,6 +1837,13 @@ impl WebApp {
                                     language: self.ui_language,
                                     validation_program: self.validation_program.as_deref(),
                                     table_validation_functions: &self.table_validation_functions,
+                                    crud_policy_functions: &self.crud_policy_functions,
+                                    granted_permissions: authenticated_permissions(
+                                        self,
+                                        request,
+                                        self.database_url.as_deref(),
+                                    )
+                                    .unwrap_or_default(),
                                 },
                             ),
                             action.form.layout_html.as_deref(),
@@ -1815,6 +1899,14 @@ impl WebApp {
                                 )
                                 .and_then(|session| session.user_id),
                                 tenant_context: tenant_context.as_ref(),
+                                validation_program: self.validation_program.as_deref(),
+                                crud_policy_functions: &self.crud_policy_functions,
+                                granted_permissions: authenticated_permissions(
+                                    self,
+                                    request,
+                                    self.database_url.as_deref(),
+                                )
+                                .unwrap_or_default(),
                             },
                         ),
                         tenant_context.as_ref(),
@@ -1868,6 +1960,14 @@ impl WebApp {
                                 )
                                 .and_then(|session| session.user_id),
                                 tenant_context: tenant_context.as_ref(),
+                                validation_program: self.validation_program.as_deref(),
+                                crud_policy_functions: &self.crud_policy_functions,
+                                granted_permissions: authenticated_permissions(
+                                    self,
+                                    request,
+                                    self.database_url.as_deref(),
+                                )
+                                .unwrap_or_default(),
                             },
                         ),
                         crud.layout_html.as_deref(),
@@ -1922,6 +2022,14 @@ impl WebApp {
                                 )
                                 .and_then(|session| session.user_id),
                                 tenant_context: tenant_context.as_ref(),
+                                validation_program: self.validation_program.as_deref(),
+                                crud_policy_functions: &self.crud_policy_functions,
+                                granted_permissions: authenticated_permissions(
+                                    self,
+                                    request,
+                                    self.database_url.as_deref(),
+                                )
+                                .unwrap_or_default(),
                             },
                         ),
                         crud.layout_html.as_deref(),
@@ -1970,6 +2078,14 @@ impl WebApp {
                                 .and_then(|session| session.user_id),
                                 tenant_context: tenant_context.as_ref(),
                                 language: self.ui_language,
+                                validation_program: self.validation_program.as_deref(),
+                                crud_policy_functions: &self.crud_policy_functions,
+                                granted_permissions: authenticated_permissions(
+                                    self,
+                                    request,
+                                    self.database_url.as_deref(),
+                                )
+                                .unwrap_or_default(),
                             },
                         ),
                         crud.layout_html.as_deref(),
@@ -1998,6 +2114,37 @@ impl WebApp {
                     request,
                     self.database_url.as_deref(),
                     self.ui_language,
+                    TableViewPolicyContext {
+                        program: self.validation_program.as_deref(),
+                        functions: &self.crud_policy_functions,
+                        granted_permissions: authenticated_permissions(
+                            self,
+                            request,
+                            self.database_url.as_deref(),
+                        )
+                        .unwrap_or_default(),
+                        edit_permission_granted: tableview.policy_row_actions.as_ref().is_none_or(
+                            |policy| {
+                                can_authorize(
+                                    policy.requires_auth,
+                                    &policy.edit_permissions,
+                                    request,
+                                    self,
+                                )
+                            },
+                        ),
+                        delete_permission_granted: tableview
+                            .policy_row_actions
+                            .as_ref()
+                            .is_none_or(|policy| {
+                                can_authorize(
+                                    policy.requires_auth,
+                                    &policy.delete_permissions,
+                                    request,
+                                    self,
+                                )
+                            }),
+                    },
                 );
                 return apply_generated_layout(response, tableview.layout_html.as_deref());
             }
@@ -5939,6 +6086,8 @@ fn dispatch_form(
             language: UiLanguage::English,
             validation_program: None,
             table_validation_functions: &[],
+            crud_policy_functions: &[],
+            granted_permissions: Vec::new(),
         },
     )
 }
@@ -5956,6 +6105,8 @@ fn dispatch_form_with_language(
         language,
         validation_program,
         table_validation_functions,
+        crud_policy_functions,
+        granted_permissions,
     } = context;
     if form.tenant_column.is_some() && tenant_context.is_none() {
         return Response::html(403, "<h1>403 Forbidden</h1>");
@@ -6006,6 +6157,82 @@ fn dispatch_form_with_language(
         } else {
             EditValues::default()
         };
+        if is_edit_form(form) {
+            if let (Some(program), Some(database_url), Some(id)) = (
+                validation_program,
+                database_url,
+                path_params.get("id").and_then(|id| id.parse::<i64>().ok()),
+            ) {
+                if let Some(crud_index) = program
+                    .cruds
+                    .iter()
+                    .position(|crud| Some(crud.table.as_str()) == form.form.table.as_deref())
+                    .filter(|index| {
+                        program.cruds[*index]
+                            .guards
+                            .iter()
+                            .any(|guard| guard.action == zelyra_ast::CrudRecordAction::Edit)
+                            || program.cruds[*index].conditional_permissions.iter().any(
+                                |permission| {
+                                    permission.action == zelyra_ast::CrudRecordAction::Edit
+                                },
+                            )
+                    })
+                {
+                    let Some(table) = program
+                        .tables
+                        .iter()
+                        .find(|table| Some(table.name.as_str()) == form.form.table.as_deref())
+                    else {
+                        return Response::html(500, "<h1>500 Internal Server Error</h1>");
+                    };
+                    let query = match crud_policy_record_query(
+                        form,
+                        table,
+                        id,
+                        actor_user_id,
+                        tenant_context,
+                        false,
+                    ) {
+                        Ok(query) => query,
+                        Err(error) => {
+                            eprintln!("zelyra web: CRUD edit policy query failed: {error}");
+                            return Response::html(500, "<h1>500 Internal Server Error</h1>");
+                        }
+                    };
+                    let row = match zelyra_database::execute_query(
+                        database_url,
+                        &query.sql,
+                        query.params,
+                    ) {
+                        Ok(row) => row,
+                        Err(error) => {
+                            eprintln!("zelyra web: CRUD edit policy query failed: {error}");
+                            return Response::html(500, "<h1>500 Internal Server Error</h1>");
+                        }
+                    };
+                    if row.rows.is_empty() {
+                        return Response::html(404, "<h1>404 Not Found</h1>");
+                    }
+                    let evaluation = match evaluate_crud_operation_policies(
+                        program,
+                        crud_policy_functions,
+                        crud_index,
+                        zelyra_ast::CrudRecordAction::Edit,
+                        &row,
+                    ) {
+                        Ok(evaluation) => evaluation,
+                        Err(error) => {
+                            eprintln!("zelyra web: CRUD edit policy evaluation failed: {error}");
+                            return Response::html(500, "<h1>500 Internal Server Error</h1>");
+                        }
+                    };
+                    if check_crud_policy_result(evaluation, &granted_permissions).is_err() {
+                        return Response::html(403, "<h1>403 Forbidden</h1>");
+                    }
+                }
+            }
+        }
         let mut html = render_form_with_language(
             &rendered_form,
             &values.rendered_values(),
@@ -6163,6 +6390,9 @@ fn dispatch_form_with_language(
                 actor_user_id,
                 expected_snapshot: expected_snapshot.as_deref(),
                 tenant_context,
+                validation_program,
+                crud_policy_functions,
+                granted_permissions: &granted_permissions,
             },
         ) {
             eprintln!("zelyra web: form action failed: {error}");
@@ -6175,6 +6405,19 @@ fn dispatch_form_with_language(
                     409,
                     "409 Conflict",
                     "This record changed while you were editing it. Reload the form and review the latest values.",
+                );
+            }
+            if error.starts_with("ZELYRA_GUARD_DENIED:")
+                || error.starts_with("ZELYRA_POLICY_DENIED:")
+                || error.starts_with("ZELYRA_TENANT_DENIED:")
+            {
+                let message = error
+                    .split_once(':')
+                    .map(|(_, message)| message.trim())
+                    .unwrap_or("The operation is not permitted.");
+                return Response::html(
+                    403,
+                    format!("<h1>403 Forbidden</h1><p>{}</p>", html_escape(message)),
                 );
             }
             return action_error_response(
@@ -6702,6 +6945,7 @@ fn dispatch_crud(
         actor_user_id,
         tenant_context,
         language,
+        ..
     } = context;
     if request.method != "GET" {
         return Response::html(405, "<h1>405 Method Not Allowed</h1>");
@@ -7144,6 +7388,7 @@ fn dispatch_tableview(
     request: &Request,
     database_url: Option<&str>,
     language: UiLanguage,
+    policy_context: TableViewPolicyContext<'_>,
 ) -> Response {
     if request.method != "GET" {
         return Response::html(405, "<h1>405 Method Not Allowed</h1>");
@@ -7385,6 +7630,7 @@ fn dispatch_tableview(
         render_tableview(
             tableview,
             &result.rows,
+            &result.nulls,
             TableViewRenderState {
                 query_values: &query_values,
                 search: &search,
@@ -7394,8 +7640,17 @@ fn dispatch_tableview(
                 per_page,
             },
             language,
+            policy_context,
         ),
     )
+}
+
+struct TableViewPolicyContext<'a> {
+    program: Option<&'a Program>,
+    functions: &'a [zelyra_ast::CrudPolicyFunction],
+    granted_permissions: Vec<String>,
+    edit_permission_granted: bool,
+    delete_permission_granted: bool,
 }
 
 struct TableViewRenderState<'a> {
@@ -7410,8 +7665,10 @@ struct TableViewRenderState<'a> {
 fn render_tableview(
     tableview: &TableViewRoute,
     rows: &[Vec<String>],
+    row_nulls: &[Vec<bool>],
     state: TableViewRenderState<'_>,
     language: UiLanguage,
+    policy_context: TableViewPolicyContext<'_>,
 ) -> String {
     let TableViewRenderState {
         query_values,
@@ -7543,7 +7800,12 @@ fn render_tableview(
             ));
             html.push_str("</th>");
         }
-        if tableview.row_actions.is_some() {
+        if tableview.row_actions.is_some()
+            || tableview
+                .policy_row_actions
+                .as_ref()
+                .is_some_and(|actions| actions.edit_html.is_some() || actions.delete_html.is_some())
+        {
             html.push_str("<th scope=\"col\">");
             html.push_str(if language == UiLanguage::German {
                 "Aktionen"
@@ -7592,6 +7854,16 @@ fn render_tableview(
                 }
                 html.push_str("</td>");
             }
+            let policy_actions_visible =
+                tableview
+                    .policy_row_actions
+                    .as_ref()
+                    .is_some_and(|actions| {
+                        actions.edit_html.is_some() || actions.delete_html.is_some()
+                    });
+            if tableview.row_actions.is_some() || policy_actions_visible {
+                html.push_str("<td class=\"z-table__actions\">");
+            }
             if let Some((item, template)) = &tableview.row_actions {
                 let mut row_values = HashMap::new();
                 for (index, column) in query_columns.iter().enumerate() {
@@ -7600,13 +7872,76 @@ fn render_tableview(
                         row.get(index).map(String::as_str).unwrap_or("").to_owned(),
                     );
                 }
-                html.push_str("<td class=\"z-table__actions\">");
                 let scoped = scope_dialog_auto_ids(template, &[row_index]);
                 html.push_str(&render_interpolations(
                     &scoped,
                     &HashMap::new(),
                     &row_values,
                 ));
+            }
+            if let Some(actions) = &tableview.policy_row_actions {
+                let item = actions.item.as_str();
+                let mut row_values = HashMap::new();
+                for (index, column) in query_columns.iter().enumerate() {
+                    row_values.insert(
+                        format!("{item}.{column}"),
+                        row.get(index).map(String::as_str).unwrap_or("").to_owned(),
+                    );
+                }
+                let nulls = row_nulls.get(row_index).cloned().unwrap_or_default();
+                let policy_row = zelyra_database::QueryResult {
+                    columns: query_columns
+                        .iter()
+                        .map(|column| (*column).to_owned())
+                        .collect(),
+                    rows: vec![row.clone()],
+                    nulls: vec![nulls],
+                    column_types: Vec::new(),
+                };
+                if let (Some(program), Some(template)) =
+                    (policy_context.program, actions.edit_html.as_deref())
+                {
+                    if tableview_policy_allows(
+                        program,
+                        policy_context.functions,
+                        actions.crud_index,
+                        zelyra_ast::CrudRecordAction::Edit,
+                        &policy_row,
+                        &policy_context.granted_permissions,
+                        policy_context.edit_permission_granted,
+                    ) {
+                        let scoped = scope_dialog_auto_ids(template, &[row_index]);
+                        html.push_str(&render_interpolations(
+                            &scoped,
+                            &HashMap::new(),
+                            &row_values,
+                        ));
+                    }
+                }
+                if let (Some(program), Some(template)) =
+                    (policy_context.program, actions.delete_html.as_deref())
+                {
+                    if tableview_policy_allows(
+                        program,
+                        policy_context.functions,
+                        actions.crud_index,
+                        zelyra_ast::CrudRecordAction::Delete,
+                        &policy_row,
+                        &policy_context.granted_permissions,
+                        policy_context.delete_permission_granted,
+                    ) {
+                        let scoped = scope_dialog_auto_ids(template, &[row_index, 1]);
+                        html.push_str(&render_interpolations(
+                            &scoped,
+                            &HashMap::new(),
+                            &row_values,
+                        ));
+                    }
+                }
+                if actions.edit_html.is_some() || actions.delete_html.is_some() {
+                    html.push_str("</td>");
+                }
+            } else if tableview.row_actions.is_some() {
                 html.push_str("</td>");
             }
             html.push_str("</tr>");
@@ -7700,13 +8035,16 @@ fn dispatch_crud_detail(
     request: &Request,
     path_params: &HashMap<String, String>,
     database_url: Option<&str>,
-    ui_actions: CrudUiActions,
+    mut ui_actions: CrudUiActions,
     context: CrudRequestContext<'_>,
 ) -> Response {
     let CrudRequestContext {
         actor_user_id,
         tenant_context,
         language,
+        validation_program,
+        crud_policy_functions,
+        granted_permissions,
     } = context;
     if request.method != "GET" {
         return Response::html(405, "<h1>405 Method Not Allowed</h1>");
@@ -7838,6 +8176,89 @@ fn dispatch_crud_detail(
     let Some(row) = result.rows.first() else {
         return Response::html(404, "<h1>404 Not Found</h1>");
     };
+    if ui_actions.edit || ui_actions.delete {
+        if let Some(program) = validation_program {
+            if let Some(crud_index) = program
+                .cruds
+                .iter()
+                .position(|definition| definition.table == crud.table)
+                .filter(|index| {
+                    [
+                        zelyra_ast::CrudRecordAction::Edit,
+                        zelyra_ast::CrudRecordAction::Delete,
+                    ]
+                    .iter()
+                    .any(|action| {
+                        program.cruds[*index]
+                            .guards
+                            .iter()
+                            .any(|guard| guard.action == *action)
+                            || program.cruds[*index]
+                                .conditional_permissions
+                                .iter()
+                                .any(|permission| permission.action == *action)
+                    })
+                })
+            {
+                let Some(policy_table) = program
+                    .tables
+                    .iter()
+                    .find(|candidate| candidate.name == crud.table)
+                else {
+                    return Response::html(500, "<h1>500 Internal Server Error</h1>");
+                };
+                let policy_query = match crud_route_policy_record_query(
+                    crud,
+                    policy_table,
+                    id,
+                    actor_user_id,
+                    tenant_context,
+                ) {
+                    Ok(query) => query,
+                    Err(error) => {
+                        eprintln!("zelyra web: CRUD detail policy query failed: {error}");
+                        return Response::html(500, "<h1>500 Internal Server Error</h1>");
+                    }
+                };
+                let policy_row = match zelyra_database::execute_query(
+                    database_url,
+                    &policy_query.sql,
+                    policy_query.params,
+                ) {
+                    Ok(result) => result,
+                    Err(error) => {
+                        eprintln!("zelyra web: CRUD detail policy query failed: {error}");
+                        return Response::html(500, "<h1>500 Internal Server Error</h1>");
+                    }
+                };
+                for (action, visible) in [
+                    (zelyra_ast::CrudRecordAction::Edit, &mut ui_actions.edit),
+                    (zelyra_ast::CrudRecordAction::Delete, &mut ui_actions.delete),
+                ] {
+                    if !*visible {
+                        continue;
+                    }
+                    let evaluation = match evaluate_crud_operation_policies(
+                        program,
+                        crud_policy_functions,
+                        crud_index,
+                        action,
+                        &policy_row,
+                    ) {
+                        Ok(evaluation) => evaluation,
+                        Err(error) => {
+                            eprintln!("zelyra web: CRUD detail policy evaluation failed: {error}");
+                            *visible = false;
+                            continue;
+                        }
+                    };
+                    if check_crud_policy_result(evaluation, &granted_permissions).is_err() {
+                        *visible = false;
+                    }
+                }
+            }
+        }
+    }
     Response::html(
         200,
         render_crud_detail_with_actions(crud, &columns, row, &id_text, ui_actions, language),
@@ -7856,6 +8277,7 @@ fn dispatch_crud_mark_read(
         audit_chain,
         actor_user_id,
         tenant_context,
+        ..
     } = context;
     if request.method != "POST" {
         return Response::html(405, "<h1>405 Method Not Allowed</h1>");
@@ -7980,7 +8402,13 @@ fn dispatch_crud_mark_read(
             &details,
         ));
     }
-    let result = execute_crud_mutation(database_url, &queries, tenant_context, Some(&record_check));
+    let result = execute_crud_mutation(
+        database_url,
+        &queries,
+        tenant_context,
+        Some(&record_check),
+        None,
+    );
     if let Err(error) = result {
         eprintln!("zelyra web: CRUD mark-read failed: {error}");
         if error.message.starts_with("ZELYRA_TENANT_DENIED:") {
@@ -8031,6 +8459,9 @@ fn dispatch_crud_delete(
         audit_chain,
         actor_user_id,
         tenant_context,
+        validation_program,
+        crud_policy_functions,
+        granted_permissions,
     } = context;
     if request.method != "POST" {
         return Response::html(405, "<h1>405 Method Not Allowed</h1>");
@@ -8101,15 +8532,72 @@ fn dispatch_crud_delete(
         .iter()
         .map(|condition| format!(" AND {condition}"))
         .collect::<String>();
-    let scoped_record_check = (!scope_conditions.is_empty()).then(|| zelyra_database::Query {
-        sql: format!(
-            "SELECT {} FROM {} WHERE {} = :id AND {} FOR UPDATE",
-            quote_ident("id", is_postgres),
-            quote_ident(&crud.table, is_postgres),
-            quote_ident("id", is_postgres),
-            scope_conditions.join(" AND ")
-        ),
-        params: scope_params,
+    let policy = validation_program.and_then(|program| {
+        program
+            .cruds
+            .iter()
+            .position(|definition| definition.table == crud.table)
+            .filter(|index| {
+                program.cruds[*index]
+                    .guards
+                    .iter()
+                    .any(|guard| guard.action == zelyra_ast::CrudRecordAction::Delete)
+                    || program.cruds[*index]
+                        .conditional_permissions
+                        .iter()
+                        .any(|permission| permission.action == zelyra_ast::CrudRecordAction::Delete)
+            })
+            .map(|crud_index| CrudPolicyMutationCheck {
+                program,
+                functions: crud_policy_functions,
+                crud_index,
+                action: zelyra_ast::CrudRecordAction::Delete,
+                granted_permissions: &granted_permissions,
+            })
+    });
+    let scoped_record_check = (!scope_conditions.is_empty() || policy.is_some()).then(|| {
+        let selected = if policy.is_some() {
+            validation_program
+                .and_then(|program| program.tables.iter().find(|table| table.name == crud.table))
+                .map(|table| {
+                    table
+                        .columns
+                        .iter()
+                        .map(|column| {
+                            let schema_table = crud
+                                .schema
+                                .tables
+                                .iter()
+                                .find(|table| table.name == crud.table);
+                            let storage = schema_table
+                                .and_then(|table| crud_foreign_key(table, &column.name))
+                                .map(|foreign_key| foreign_key.column.clone())
+                                .unwrap_or_else(|| column.name.clone());
+                            format!(
+                                "{} AS {}",
+                                quote_ident(&storage, is_postgres),
+                                quote_ident(&column.name, is_postgres)
+                            )
+                        })
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                })
+                .unwrap_or_else(|| quote_ident("id", is_postgres))
+        } else {
+            quote_ident("id", is_postgres)
+        };
+        zelyra_database::Query {
+            sql: format!(
+                "SELECT {selected} FROM {} WHERE {} = :id{} FOR UPDATE",
+                quote_ident(&crud.table, is_postgres),
+                quote_ident("id", is_postgres),
+                scope_conditions
+                    .iter()
+                    .map(|condition| format!(" AND {condition}"))
+                    .collect::<String>()
+            ),
+            params: scope_params,
+        }
     });
     let (query, success_message) = if let Some(soft_delete) = &crud.soft_delete {
         (
@@ -8179,10 +8667,31 @@ fn dispatch_crud_delete(
         &queries,
         tenant_context,
         scoped_record_check.as_ref(),
+        policy.as_ref(),
     ) {
         eprintln!("zelyra web: CRUD delete failed: {error}");
         if error.message.starts_with("ZELYRA_TENANT_DENIED:") {
             return Response::html(404, "<h1>404 Not Found</h1>");
+        }
+        if error.message.starts_with("ZELYRA_GUARD_DENIED:") {
+            let message = error
+                .message
+                .trim_start_matches("ZELYRA_GUARD_DENIED:")
+                .trim();
+            return Response::html(
+                403,
+                format!("<h1>403 Forbidden</h1><p>{}</p>", html_escape(message)),
+            );
+        }
+        if error.message.starts_with("ZELYRA_POLICY_DENIED:") {
+            let message = error
+                .message
+                .trim_start_matches("ZELYRA_POLICY_DENIED:")
+                .trim();
+            return Response::html(
+                403,
+                format!("<h1>403 Forbidden</h1><p>{}</p>", html_escape(message)),
+            );
         }
         return crud_error_response(
             crud,
@@ -8210,6 +8719,7 @@ fn dispatch_crud_restore(
         audit_chain,
         actor_user_id,
         tenant_context,
+        ..
     } = context;
     if request.method != "POST" {
         return Response::html(405, "<h1>405 Method Not Allowed</h1>");
@@ -8339,6 +8849,7 @@ fn dispatch_crud_restore(
         &queries,
         tenant_context,
         scoped_record_check.as_ref(),
+        None,
     ) {
         eprintln!("zelyra web: CRUD restore failed: {error}");
         if error.message.starts_with("ZELYRA_TENANT_DENIED:") {
@@ -9556,6 +10067,14 @@ fn evaluate_table_validations(
     table_name: &str,
     values: &HashMap<String, String>,
 ) -> Result<Vec<FieldError>, String> {
+    if !mappings.iter().any(|mapping| {
+        program
+            .tables
+            .get(mapping.table_index)
+            .is_some_and(|table| table.name == table_name)
+    }) {
+        return Ok(Vec::new());
+    }
     let Some((table_index, table)) = program
         .tables
         .iter()
@@ -9615,6 +10134,309 @@ fn evaluate_table_validations(
         }
     }
     Ok(errors)
+}
+
+#[derive(Default)]
+struct CrudPolicyEvaluation {
+    guard_message: Option<String>,
+    conditional_permissions: Vec<(String, bool)>,
+}
+
+fn evaluate_crud_operation_policies(
+    program: &Program,
+    mappings: &[zelyra_ast::CrudPolicyFunction],
+    crud_index: usize,
+    action: zelyra_ast::CrudRecordAction,
+    row: &zelyra_database::QueryResult,
+) -> Result<CrudPolicyEvaluation, String> {
+    let crud = program
+        .cruds
+        .get(crud_index)
+        .ok_or_else(|| "CRUD policy references an unknown resource".to_owned())?;
+    let table = program
+        .tables
+        .iter()
+        .find(|table| table.name == crud.table)
+        .ok_or_else(|| "CRUD policy table is missing".to_owned())?;
+    if row.rows.len() != 1 || row.nulls.len() != 1 {
+        return Err("CRUD policy row result is inconsistent".into());
+    }
+    let names = &row.columns;
+    let values = &row.rows[0];
+    let nulls = &row.nulls[0];
+    if names.len() != values.len() || names.len() != nulls.len() {
+        return Err("CRUD policy row metadata is inconsistent".into());
+    }
+    let row_values = names
+        .iter()
+        .zip(values)
+        .zip(nulls)
+        .map(|((name, value), is_null)| (name.clone(), (!is_null).then_some(value.clone())))
+        .collect::<HashMap<_, _>>();
+    let mut result = CrudPolicyEvaluation::default();
+    for mapping in mappings
+        .iter()
+        .filter(|mapping| mapping.crud_index == crud_index)
+    {
+        if mapping.is_guard {
+            let Some(definition) = crud.guards.get(mapping.policy_index) else {
+                return Err("CRUD guard mapping is inconsistent".into());
+            };
+            if definition.action != action {
+                continue;
+            }
+            if evaluate_crud_policy_function(program, &mapping.function_name, table, &row_values)? {
+                result.guard_message = Some(definition.message.clone());
+                break;
+            }
+        } else {
+            let Some(definition) = crud.conditional_permissions.get(mapping.policy_index) else {
+                return Err("CRUD permission mapping is inconsistent".into());
+            };
+            if definition.action != action {
+                continue;
+            }
+            let applies =
+                evaluate_crud_policy_function(program, &mapping.function_name, table, &row_values)?;
+            result
+                .conditional_permissions
+                .push((definition.permission.clone(), applies));
+        }
+    }
+    Ok(result)
+}
+
+fn tableview_policy_allows(
+    program: &Program,
+    mappings: &[zelyra_ast::CrudPolicyFunction],
+    crud_index: usize,
+    action: zelyra_ast::CrudRecordAction,
+    row: &zelyra_database::QueryResult,
+    granted_permissions: &[String],
+    base_permission_granted: bool,
+) -> bool {
+    if !base_permission_granted {
+        return false;
+    }
+    match evaluate_crud_operation_policies(program, mappings, crud_index, action, row)
+        .and_then(|evaluation| check_crud_policy_result(evaluation, granted_permissions))
+    {
+        Ok(()) => true,
+        Err(error) => {
+            eprintln!("zelyra web: TableView row action denied: {error}");
+            false
+        }
+    }
+}
+
+fn evaluate_crud_policy_function(
+    program: &Program,
+    function_name: &str,
+    table: &zelyra_ast::TableDef,
+    row: &HashMap<String, Option<String>>,
+) -> Result<bool, String> {
+    let mut args = Vec::with_capacity(table.columns.len());
+    for column in &table.columns {
+        let Some(value) = row.get(&column.name) else {
+            return Err(format!("CRUD policy row is missing `{}`", column.name));
+        };
+        let runtime_value = match (&column.ty, value) {
+            (Type::Option(_), None) => RuntimeValue::Option(None),
+            (Type::Option(inner), Some(value)) => RuntimeValue::Option(Some(Box::new(
+                runtime_value_for_type(program, inner, value)?,
+            ))),
+            (_, Some(value)) => runtime_value_for_type(program, &column.ty, value)?,
+            (_, None) => {
+                return Err(format!(
+                    "non-optional policy field `{}` is NULL",
+                    column.name
+                ))
+            }
+        };
+        args.push(runtime_value);
+    }
+    match zelyra_runtime::execute_function_with_capabilities_and_policies(
+        program,
+        function_name,
+        args,
+        None,
+        None,
+        Some(&zelyra_runtime::RuntimePolicy {
+            step_budget: Some(10_000),
+            ..zelyra_runtime::RuntimePolicy::default()
+        }),
+    )
+    .map_err(|error| error.message)?
+    {
+        RuntimeValue::Bool(value) => Ok(value),
+        value => Err(format!(
+            "CRUD policy returned {:?}, expected Bool",
+            value.ty()
+        )),
+    }
+}
+
+fn crud_policy_record_query(
+    form: &FormRoute,
+    table: &zelyra_ast::TableDef,
+    id: i64,
+    actor_user_id: Option<i64>,
+    tenant_context: Option<&TenantContext>,
+    lock: bool,
+) -> Result<zelyra_database::Query, String> {
+    let is_postgres = form
+        .schema
+        .as_ref()
+        .is_some_and(|schema| schema.backend() == zelyra_database::Backend::Postgres);
+    let schema_table = form
+        .schema
+        .as_ref()
+        .and_then(|schema| {
+            schema
+                .tables
+                .iter()
+                .find(|candidate| candidate.name == table.name)
+        })
+        .ok_or_else(|| "CRUD policy schema table is missing".to_owned())?;
+    let select = table
+        .columns
+        .iter()
+        .map(|column| {
+            let storage = crud_foreign_key(schema_table, &column.name)
+                .map(|foreign_key| foreign_key.column.clone())
+                .unwrap_or_else(|| column.name.clone());
+            format!(
+                "{} AS {}",
+                quote_ident(&storage, is_postgres),
+                quote_ident(&column.name, is_postgres)
+            )
+        })
+        .collect::<Vec<_>>()
+        .join(", ");
+    let mut conditions = vec![format!("{} = :id", quote_ident("id", is_postgres))];
+    let mut params = vec![("id".into(), zelyra_database::QueryValue::Int(id))];
+    if let Some(tenant_column) = form.tenant_column.as_deref() {
+        let Some(context) = tenant_context else {
+            return Err("ZELYRA_TENANT_DENIED: tenant context is required".into());
+        };
+        conditions.push(format!(
+            "{} = :zelyra_tenant_id AND {}",
+            quote_ident(tenant_column, is_postgres),
+            tenant_membership_predicate(context, is_postgres)
+        ));
+        params.extend(tenant_query_params(context));
+    }
+    if let Some(recipient_column) = form.recipient_column.as_deref() {
+        let user_id = actor_user_id.ok_or_else(|| {
+            "ZELYRA_TENANT_DENIED: authenticated recipient is required".to_owned()
+        })?;
+        conditions.push(format!(
+            "{} = :zelyra_user_id",
+            quote_ident(recipient_column, is_postgres)
+        ));
+        params.push((
+            "zelyra_user_id".into(),
+            zelyra_database::QueryValue::Int(user_id),
+        ));
+    }
+    Ok(zelyra_database::Query {
+        sql: format!(
+            "SELECT {select} FROM {} WHERE {}{}",
+            quote_ident(&table.name, is_postgres),
+            conditions.join(" AND "),
+            if lock { " FOR UPDATE" } else { "" },
+        ),
+        params,
+    })
+}
+
+fn crud_route_policy_record_query(
+    crud: &CrudRoute,
+    table: &zelyra_ast::TableDef,
+    id: i64,
+    actor_user_id: Option<i64>,
+    tenant_context: Option<&TenantContext>,
+) -> Result<zelyra_database::Query, String> {
+    let is_postgres = crud.schema.backend() == zelyra_database::Backend::Postgres;
+    let schema_table = crud
+        .schema
+        .tables
+        .iter()
+        .find(|candidate| candidate.name == table.name)
+        .ok_or_else(|| "CRUD policy schema table is missing".to_owned())?;
+    let select = table
+        .columns
+        .iter()
+        .map(|column| {
+            let storage = crud_foreign_key(schema_table, &column.name)
+                .map(|foreign_key| foreign_key.column.clone())
+                .unwrap_or_else(|| column.name.clone());
+            format!(
+                "{} AS {}",
+                quote_ident(&storage, is_postgres),
+                quote_ident(&column.name, is_postgres)
+            )
+        })
+        .collect::<Vec<_>>()
+        .join(", ");
+    let mut conditions = vec![format!("{} = :id", quote_ident("id", is_postgres))];
+    let mut params = vec![("id".into(), zelyra_database::QueryValue::Int(id))];
+    if let Some(column) = crud.tenant_column.as_deref() {
+        let context = tenant_context
+            .ok_or_else(|| "ZELYRA_TENANT_DENIED: tenant context is required".to_owned())?;
+        conditions.push(format!(
+            "{} = :zelyra_tenant_id AND {}",
+            quote_ident(column, is_postgres),
+            tenant_membership_predicate(context, is_postgres)
+        ));
+        params.extend(tenant_query_params(context));
+    }
+    if let Some(column) = crud.recipient_column.as_deref() {
+        let user_id = actor_user_id.ok_or_else(|| {
+            "ZELYRA_TENANT_DENIED: authenticated recipient is required".to_owned()
+        })?;
+        conditions.push(format!(
+            "{} = :zelyra_user_id",
+            quote_ident(column, is_postgres)
+        ));
+        params.push((
+            "zelyra_user_id".into(),
+            zelyra_database::QueryValue::Int(user_id),
+        ));
+    }
+    Ok(zelyra_database::Query {
+        sql: format!(
+            "SELECT {select} FROM {} WHERE {}",
+            quote_ident(&table.name, is_postgres),
+            conditions.join(" AND ")
+        ),
+        params,
+    })
+}
+
+fn check_crud_policy_result(
+    evaluation: CrudPolicyEvaluation,
+    granted_permissions: &[String],
+) -> Result<(), String> {
+    if let Some(message) = evaluation.guard_message {
+        return Err(format!("ZELYRA_GUARD_DENIED: {message}"));
+    }
+    for (permission, applies) in evaluation.conditional_permissions {
+        if !applies {
+            return Err(format!(
+                "ZELYRA_POLICY_DENIED: condition for permission `{permission}` does not apply"
+            ));
+        }
+        if !granted_permissions
+            .iter()
+            .any(|granted| granted == &permission)
+        {
+            return Err(format!(
+                "ZELYRA_POLICY_DENIED: missing permission `{permission}`"
+            ));
+        }
+    }
+    Ok(())
 }
 
 /// Evaluate a table's declared cross-field rules against already type-checked
@@ -9781,9 +10603,7 @@ fn runtime_value_for_type(
             .parse()
             .map(RuntimeValue::Timestamp)
             .map_err(|_| invalid()),
-        Type::Named(name)
-            if name == "Id" || program.tables.iter().any(|table| &table.name == name) =>
-        {
+        Type::Named(name) if name == "Id" || table_name_for_type(program, name).is_some() => {
             value.parse().map(RuntimeValue::Int).map_err(|_| invalid())
         }
         Type::Named(name) if name == "Money" => zelyra_ast::decimal::parse_scaled(value, 9)
@@ -9816,6 +10636,28 @@ fn runtime_value_for_type(
             "table validation does not support submitted type {other:?}"
         )),
     }
+}
+
+/// Resolve nominal table types using the same singular-to-table convention
+/// used by schema planning and relation fields (for example `Department` ->
+/// `departments`). Relation values submitted by forms are database IDs, so
+/// table validation evaluates them as integer identities.
+fn table_name_for_type(program: &Program, name: &str) -> Option<String> {
+    let name = name.rsplit("::").next()?;
+    let snake = name.to_ascii_lowercase();
+    if program.tables.iter().any(|table| table.name == snake) {
+        return Some(snake);
+    }
+    let plural = if snake.ends_with('y') {
+        format!("{}ies", &snake[..snake.len() - 1])
+    } else {
+        format!("{snake}s")
+    };
+    program
+        .tables
+        .iter()
+        .any(|table| table.name == plural)
+        .then_some(plural)
 }
 
 fn relation_target_for_field(form: &FormRoute, field: &zelyra_ast::FormField) -> Option<String> {
@@ -9876,6 +10718,9 @@ fn execute_form_action(
         actor_user_id,
         expected_snapshot,
         tenant_context,
+        validation_program,
+        crud_policy_functions,
+        granted_permissions,
     } = context;
     let is_postgres = zelyra_database::is_postgres_url(database_url);
     if is_postgres && form.audit_table.is_some() && form.audit_chain {
@@ -10081,6 +10926,58 @@ fn execute_form_action(
                     },
                 });
             };
+            if let Some(program) = validation_program {
+                if let Some(crud_index) = program
+                    .cruds
+                    .iter()
+                    .position(|crud| Some(crud.table.as_str()) == form.form.table.as_deref())
+                    .filter(|index| {
+                        program.cruds[*index]
+                            .guards
+                            .iter()
+                            .any(|guard| guard.action == zelyra_ast::CrudRecordAction::Edit)
+                            || program.cruds[*index].conditional_permissions.iter().any(
+                                |permission| permission.action == zelyra_ast::CrudRecordAction::Edit,
+                            )
+                    })
+                {
+                    let table = program
+                        .tables
+                        .iter()
+                        .find(|table| Some(table.name.as_str()) == form.form.table.as_deref())
+                        .ok_or_else(|| zelyra_database::DatabaseError {
+                            message: "CRUD policy table is missing".into(),
+                        })?;
+                    let query = crud_policy_record_query(
+                        form,
+                        table,
+                        id,
+                        actor_user_id,
+                        tenant_context,
+                        true,
+                    )
+                    .map_err(|message| zelyra_database::DatabaseError { message })?;
+                    let policy_row = transaction.execute(&query)?;
+                    if policy_row.rows.is_empty() {
+                        return Err(zelyra_database::DatabaseError {
+                            message: "ZELYRA_TENANT_DENIED: record is not available".into(),
+                        });
+                    }
+                    let evaluation = evaluate_crud_operation_policies(
+                        program,
+                        crud_policy_functions,
+                        crud_index,
+                        zelyra_ast::CrudRecordAction::Edit,
+                        &policy_row,
+                    )
+                    .map_err(|error| zelyra_database::DatabaseError {
+                        message: format!("ZELYRA_POLICY_EVALUATION: {error}"),
+                    })?;
+                    check_crud_policy_result(evaluation, granted_permissions).map_err(
+                        |message| zelyra_database::DatabaseError { message },
+                    )?;
+                }
+            }
             if !form_snapshot_matches(&form.csrf, expected_snapshot, &current_values) {
                 return Err(zelyra_database::DatabaseError {
                     message: "ZELYRA_CONFLICT: edited record changed after the form was loaded"

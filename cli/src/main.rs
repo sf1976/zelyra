@@ -4292,6 +4292,104 @@ fn validate_components(path: &str, program: &zelyra_ast::Program) -> bool {
                 );
                 valid = false;
             }
+            let operation_templates = [
+                ("edit", actions.edit_html.as_deref()),
+                ("delete", actions.delete_html.as_deref()),
+            ];
+            if actions.edit_html.is_some() || actions.delete_html.is_some() {
+                let Some(model_name) = actions.crud_model.as_deref() else {
+                    diagnostic_with_span(
+                        path,
+                        "E-VIEW-037",
+                        "operation-scoped TableView row actions require `crud: Model`",
+                        actions.span,
+                    );
+                    valid = false;
+                    continue;
+                };
+                let Some(crud) = program.cruds.iter().find(|crud| crud.name == model_name) else {
+                    diagnostic_with_span(
+                        path,
+                        "E-VIEW-037",
+                        &format!(
+                            "TableView row actions reference unknown CRUD model `{model_name}`"
+                        ),
+                        actions.span,
+                    );
+                    valid = false;
+                    continue;
+                };
+                let result_model = match &tableview.result_type {
+                    Type::Array(inner) => inner.as_ref(),
+                    other => other,
+                };
+                if !matches!(result_model, Type::Named(name) if name == model_name) {
+                    diagnostic_with_span(
+                        path,
+                        "E-VIEW-037",
+                        &format!("policy-scoped row actions require result type `{model_name}[]`"),
+                        actions.span,
+                    );
+                    valid = false;
+                }
+                let available = tableview
+                    .columns
+                    .iter()
+                    .chain(tableview.view.row_fields.iter())
+                    .cloned()
+                    .collect::<HashSet<_>>();
+                if let Some(table) = program.tables.iter().find(|table| table.name == crud.table) {
+                    for column in &table.columns {
+                        if !available.contains(&column.name) {
+                            diagnostic_with_span(
+                                path,
+                                "E-VIEW-037",
+                                &format!("policy-scoped row actions must select `{}` in columns or row_fields", column.name),
+                                actions.span,
+                            );
+                            valid = false;
+                        }
+                    }
+                } else {
+                    diagnostic_with_span(
+                        path,
+                        "E-VIEW-037",
+                        &format!("CRUD model `{model_name}` has no table definition"),
+                        actions.span,
+                    );
+                    valid = false;
+                }
+            }
+            for (operation, html) in operation_templates {
+                let Some(html) = html else { continue };
+                valid &= validate_component_template(
+                    path,
+                    program,
+                    html,
+                    actions.span.line,
+                    actions.span.column,
+                    &bindings,
+                );
+                valid &= validate_record_template_fields_for_root(
+                    path,
+                    html,
+                    &actions.item,
+                    &available,
+                    actions.span,
+                );
+                if html_contains_element(&expand_view_components(program, html.to_owned()), "form")
+                {
+                    diagnostic_with_span(
+                        path,
+                        "E-VIEW-035",
+                        &format!(
+                            "tableview `{operation}` row action content must not contain a form"
+                        ),
+                        actions.span,
+                    );
+                    valid = false;
+                }
+            }
         }
         if let Some(result_fields) = tableview_template_fields(&tableview.result_type, program) {
             let mut selected = tableview.columns.iter().cloned().collect::<HashSet<_>>();
@@ -10311,6 +10409,32 @@ fn serve_command(mut args: impl Iterator<Item = String>) -> ExitCode {
                     row.item.clone(),
                     expand_view_components(&program, row.html.clone()),
                 )
+            }),
+            policy_row_actions: tableview.view.row_actions.as_ref().and_then(|row| {
+                let model = row.crud_model.as_deref()?;
+                let crud_index = program.cruds.iter().position(|crud| crud.name == model)?;
+                let crud = &program.cruds[crud_index];
+                Some(zelyra_web::TableViewPolicyRowActions {
+                    crud_index,
+                    item: row.item.clone(),
+                    edit_html: row
+                        .edit_html
+                        .as_deref()
+                        .map(|html| expand_view_components(&program, html.to_owned())),
+                    delete_html: row
+                        .delete_html
+                        .as_deref()
+                        .map(|html| expand_view_components(&program, html.to_owned())),
+                    requires_auth: crud.requires_auth,
+                    edit_permissions: effective_crud_permissions(
+                        &crud.permissions,
+                        &crud.edit_permissions,
+                    ),
+                    delete_permissions: effective_crud_permissions(
+                        &crud.permissions,
+                        &crud.delete_permissions,
+                    ),
+                })
             }),
             filters: tableview
                 .filters

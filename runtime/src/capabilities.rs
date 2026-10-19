@@ -62,10 +62,12 @@ fn analyze_capabilities(
     grants: Option<&HashSet<String>>,
 ) -> (Vec<CapabilityError>, Vec<CapabilityUse>) {
     let (validation_functions, _) = zelyra_ast::build_table_validation_functions(program);
+    let (crud_policy_functions, _) = zelyra_ast::build_crud_policy_functions(program);
     let all_functions = program
         .functions
         .iter()
         .chain(validation_functions.iter())
+        .chain(crud_policy_functions.iter())
         .collect::<Vec<_>>();
     let functions = all_functions
         .iter()

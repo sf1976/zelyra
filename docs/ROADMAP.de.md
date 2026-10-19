@@ -211,11 +211,20 @@ abgeschlossen.
   Der aktuelle Branch prüft deklarative Formulare und generiertes CRUD vor
   Schreibaktionen; die Bindung beliebiger APIs an Tabellen ist noch offen.
   Siehe [`table-invariants.de.md`](table-invariants.de.md).
-- [ ] **1.2.21 — Lifecycle-Guards und datensatzabhängige CRUD-Rechte:**
-  Geprüfte Update-/Delete-Guards und bedingte Edit-/Delete-Rechte ergänzen.
-  Gerenderte Aktionen und direkte Requests müssen dieselbe serverseitige
-  Entscheidung verwenden. Eigene Aktionen bleiben an typgeprüfte Funktionen
-  mit Capabilityprüfung gebunden.
+- [~] **1.2.21 — Lifecycle-Guards und datensatzabhängige CRUD-Rechte:**
+  Parser und Typprüfung senken Datensatzbedingungen jetzt auf gewöhnliche,
+  typgeprüfte Bool-Funktionen ab. Edit-Guards und bedingte Rechte werden beim
+  Öffnen des Formulars und erneut unter der Zeilensperre der Edit-Transaktion
+  geprüft; Delete-Guards und -Rechte innerhalb der Löschtransaktion. Der
+  Bearbeiten-Link auf der Detailseite und ausdrücklich zugeordnete
+  TableView-Bearbeiten-/Löschen-Slots verwenden denselben Auswerter.
+  TableView-Slots müssen ihr CRUD-Modell nennen und die vollständige typisierte
+  Zeile auswählen; unvollständige Policy-Zeilen weist der Compiler ab.
+  MariaDB-Integrationstests für direkte Requests und die Zeilensperren-Race-Case
+  laufen jetzt im CI-Workflow; lokal sind sie bestanden, der vollständige
+  externe PR-CI-Lauf steht noch aus. Eigene Aktionen bleiben an typgeprüfte
+  Funktionen mit Capabilityprüfung gebunden. Siehe das
+  [Arbeitsprotokoll 1.2.21](release-plans/1.2.21-crud-lifecycle-policies.de.md).
 - [ ] **1.2.22 — transaktionales Master-Detail-CRUD:** Typisierte
   Kinddatensätze, atomare Speicherung von Kopf und Positionen, deklarierte
   Löschregeln und geprüfte Aggregate ergänzen. Der erste UI-Schnitt muss

@@ -41,6 +41,45 @@ fn table_validation_predicate_runs_before_form_writes_and_returns_declared_messa
 }
 
 #[test]
+fn table_validation_converts_relation_fields_to_database_identity_values() {
+    let source = r#"
+        table departments { id: Int primary auto name: String required }
+        table machines {
+            department: Department required
+            validate { department == department: "A department is required." }
+        }
+        fn main() {}
+    "#;
+    let program = zelyra_parser::parse(&zelyra_lexer::lex(source).unwrap()).unwrap();
+    zelyra_runtime::check(&program).expect("relation field and validation are well typed");
+    let (lowered, mappings) = zelyra_ast::lower_table_validation_functions(&program);
+    let values = HashMap::from([("department".to_owned(), "1".to_owned())]);
+
+    assert!(
+        evaluate_table_validations(&lowered, &mappings, "machines", &values)
+            .unwrap()
+            .is_empty()
+    );
+    assert!(matches!(
+        runtime_value_for_type(&lowered, &Type::Named("Department".into()), "1"),
+        Ok(RuntimeValue::Int(1))
+    ));
+    assert!(runtime_value_for_type(&lowered, &Type::Named("UnknownRecord".into()), "1").is_err());
+}
+
+#[test]
+fn tables_without_invariants_do_not_require_validation_form_values() {
+    let source = "table machines { number: String required } fn main() {}";
+    let program = zelyra_parser::parse(&zelyra_lexer::lex(source).unwrap()).unwrap();
+    let (lowered, mappings) = zelyra_ast::lower_table_validation_functions(&program);
+    assert!(
+        evaluate_table_validations(&lowered, &mappings, "machines", &HashMap::new())
+            .unwrap()
+            .is_empty()
+    );
+}
+
+#[test]
 fn auto_dialog_ids_are_repeatable_and_unique_inside_collection_loops() {
     let template = r#"
 <ul>
@@ -394,6 +433,8 @@ fn table_validation_rejects_invalid_form_before_action_execution() {
             language: UiLanguage::English,
             validation_program: Some(&lowered),
             table_validation_functions: &mappings,
+            crud_policy_functions: &[],
+            granted_permissions: Vec::new(),
         },
     );
     assert_eq!(response.status, 422);
@@ -413,6 +454,8 @@ fn table_validation_rejects_invalid_form_before_action_execution() {
             language: UiLanguage::English,
             validation_program: Some(&lowered),
             table_validation_functions: &mappings,
+            crud_policy_functions: &[],
+            granted_permissions: Vec::new(),
         },
     );
     assert_eq!(
@@ -705,6 +748,7 @@ fn default_shell_covers_standalone_forms_and_tableviews_but_not_custom_pages() {
         before_content_html: None,
         after_content_html: None,
         row_actions: None,
+        policy_row_actions: None,
         filters: Vec::new(),
         searchable: false,
         sortable: false,
@@ -3273,6 +3317,7 @@ fn renders_tableview_with_escaped_values_and_pagination_state() {
         before_content_html: None,
         after_content_html: None,
         row_actions: None,
+        policy_row_actions: None,
         filters: Vec::new(),
         searchable: true,
         sortable: true,
@@ -3288,6 +3333,7 @@ fn renders_tableview_with_escaped_values_and_pagination_state() {
     let html = render_tableview(
         &tableview,
         &[vec!["1".into(), "<unsafe>".into()]],
+        &[vec![false, false]],
         TableViewRenderState {
             query_values: &query_values,
             search: "CNC machine",
@@ -3297,6 +3343,13 @@ fn renders_tableview_with_escaped_values_and_pagination_state() {
             per_page: 1,
         },
         UiLanguage::English,
+        TableViewPolicyContext {
+            program: None,
+            functions: &[],
+            granted_permissions: Vec::new(),
+            edit_permission_granted: true,
+            delete_permission_granted: true,
+        },
     );
     let html = localize_html(&html, UiLanguage::English);
     assert!(html.contains("&lt;unsafe&gt;"));
@@ -3354,6 +3407,7 @@ fn renders_tableview_row_actions_for_each_row_and_escapes_dynamic_content() {
         before_content_html: Some("<p>Before</p>".into()),
         after_content_html: Some("<p>After</p>".into()),
         row_actions: Some(("customer".into(), "<button type=\"button\" data-name=\"{customer.name}\" data-z-dialog-auto-open=\"customer-dialog\">Open</button><dialog id=\"z-dialog-auto-0000000000\" data-z-dialog data-z-dialog-auto=\"z-dialog-auto-0000000000\" aria-labelledby=\"z-dialog-auto-0000000000-title\"><h2 id=\"z-dialog-auto-0000000000-title\">Details for {customer.name}</h2></dialog>".into())),
+        policy_row_actions: None,
         filters: Vec::new(),
         searchable: false,
         sortable: false,
@@ -3367,6 +3421,7 @@ fn renders_tableview_row_actions_for_each_row_and_escapes_dynamic_content() {
             vec!["1".into(), "<North>".into()],
             vec!["2".into(), "South".into()],
         ],
+        &[vec![false, false], vec![false, false]],
         TableViewRenderState {
             query_values: &HashMap::new(),
             search: "",
@@ -3376,6 +3431,13 @@ fn renders_tableview_row_actions_for_each_row_and_escapes_dynamic_content() {
             per_page: 25,
         },
         UiLanguage::English,
+        TableViewPolicyContext {
+            program: None,
+            functions: &[],
+            granted_permissions: Vec::new(),
+            edit_permission_granted: true,
+            delete_permission_granted: true,
+        },
     );
     assert!(html.contains("<p>Before</p>"));
     assert!(html.contains("<button type=\"button\" data-name=\"&lt;North&gt;\" data-z-dialog-auto-open=\"customer-dialog-r0\">Open</button>"));
@@ -3406,6 +3468,7 @@ fn renders_hidden_tableview_row_fields_as_escaped_column_supporting_content() {
         before_content_html: None,
         after_content_html: None,
         row_actions: None,
+        policy_row_actions: None,
         filters: Vec::new(),
         searchable: false,
         sortable: false,
@@ -3423,6 +3486,7 @@ fn renders_hidden_tableview_row_fields_as_escaped_column_supporting_content() {
             vec!["SKU-7".into(), "<Customer 18>".into()],
             vec!["SKU-8".into(), "Customer 19".into()],
         ],
+        &[vec![false, false], vec![false, false]],
         TableViewRenderState {
             query_values: &HashMap::new(),
             search: "",
@@ -3432,6 +3496,13 @@ fn renders_hidden_tableview_row_fields_as_escaped_column_supporting_content() {
             per_page: 25,
         },
         UiLanguage::English,
+        TableViewPolicyContext {
+            program: None,
+            functions: &[],
+            granted_permissions: Vec::new(),
+            edit_permission_granted: true,
+            delete_permission_granted: true,
+        },
     );
     assert!(html.contains("<td>SKU-7<small>Customer: &lt;Customer 18&gt;</small><button"));
     assert!(!html.contains("<td><Customer 18>"));
@@ -3457,6 +3528,7 @@ fn renders_typed_tableview_filters_and_preserves_state() {
         before_content_html: None,
         after_content_html: None,
         row_actions: None,
+        policy_row_actions: None,
         filters: vec![TableViewFilter {
             name: "orders".into(),
             kind: TableViewFilterKind::Numeric,
@@ -3474,6 +3546,7 @@ fn renders_typed_tableview_filters_and_preserves_state() {
     let html = render_tableview(
         &tableview,
         &[vec!["1".into(), "3".into()]],
+        &[vec![false, false]],
         TableViewRenderState {
             query_values: &query_values,
             search: "",
@@ -3483,6 +3556,13 @@ fn renders_typed_tableview_filters_and_preserves_state() {
             per_page: 25,
         },
         UiLanguage::English,
+        TableViewPolicyContext {
+            program: None,
+            functions: &[],
+            granted_permissions: Vec::new(),
+            edit_permission_granted: true,
+            delete_permission_granted: true,
+        },
     );
     let html = localize_html(&html, UiLanguage::English);
     assert!(html.contains(
@@ -5131,6 +5211,9 @@ fn execute_form_action_rejects_postgres_chained_audit() {
         actor_user_id: Some(1),
         expected_snapshot: None,
         tenant_context: None,
+        validation_program: None,
+        crud_policy_functions: &[],
+        granted_permissions: &[],
     };
     let err = execute_form_action(
         &form,
@@ -5144,4 +5227,126 @@ fn execute_form_action_rejects_postgres_chained_audit() {
     assert!(err
         .unwrap_err()
         .contains("PostgreSQL does not support chained audit tables"));
+}
+
+#[test]
+fn crud_row_policy_evaluation_distinguishes_guard_and_conditional_permission() {
+    let source = r#"
+        table invoices {
+            id: Int primary auto
+            status: String(20) required
+            locked: Bool required
+        }
+        crud Invoice -> invoices {
+            permits edit "invoices.manage" when status == "draft"
+            guard edit when locked == true { error: "Locked invoices cannot be edited." }
+            guard delete when locked == true { error: "Locked invoices cannot be deleted." }
+        }
+    "#;
+    let program = zelyra_parser::parse(&zelyra_lexer::lex(source).unwrap()).unwrap();
+    let (functions, mappings) = zelyra_ast::build_crud_policy_functions(&program);
+    let mut executable = program.clone();
+    executable.functions.extend(functions);
+    let query_result = |status: &str, locked: bool| zelyra_database::QueryResult {
+        columns: vec!["id".into(), "status".into(), "locked".into()],
+        rows: vec![vec!["7".into(), status.into(), locked.to_string()]],
+        nulls: vec![vec![false; 3]],
+        column_types: Vec::new(),
+    };
+
+    let allowed = evaluate_crud_operation_policies(
+        &executable,
+        &mappings,
+        0,
+        zelyra_ast::CrudRecordAction::Edit,
+        &query_result("draft", false),
+    )
+    .unwrap();
+    assert!(check_crud_policy_result(allowed, &["invoices.manage".into()]).is_ok());
+
+    let denied_permission = evaluate_crud_operation_policies(
+        &executable,
+        &mappings,
+        0,
+        zelyra_ast::CrudRecordAction::Edit,
+        &query_result("draft", false),
+    )
+    .unwrap();
+    assert!(check_crud_policy_result(denied_permission, &[])
+        .unwrap_err()
+        .contains("invoices.manage"));
+
+    let guarded = evaluate_crud_operation_policies(
+        &executable,
+        &mappings,
+        0,
+        zelyra_ast::CrudRecordAction::Edit,
+        &query_result("draft", true),
+    )
+    .unwrap();
+    assert!(
+        check_crud_policy_result(guarded, &["invoices.manage".into()])
+            .unwrap_err()
+            .contains("Locked invoices cannot be edited.")
+    );
+
+    let tableview = TableViewRoute {
+        path: "/views/invoice-rows".into(),
+        title: "Invoice rows".into(),
+        layout_html: None,
+        source: "SELECT id, status, locked FROM invoices".into(),
+        columns: vec!["status".into()],
+        row_fields: vec!["id".into(), "locked".into()],
+        column_content: Vec::new(),
+        before_content_html: None,
+        after_content_html: None,
+        row_actions: None,
+        policy_row_actions: Some(TableViewPolicyRowActions {
+            crud_index: 0,
+            item: "invoice".into(),
+            edit_html: Some("<a href=\"/invoices/{invoice.id}/edit\">Edit</a>".into()),
+            delete_html: Some("<button type=\"button\">Delete</button>".into()),
+            requires_auth: false,
+            edit_permissions: Vec::new(),
+            delete_permissions: Vec::new(),
+        }),
+        filters: Vec::new(),
+        searchable: false,
+        sortable: false,
+        page_size: Some(10),
+        requires_auth: false,
+        permissions: Vec::new(),
+    };
+    let render_policy_row = |status: &str, locked: bool| {
+        render_tableview(
+            &tableview,
+            &[vec![status.into(), "7".into(), locked.to_string()]],
+            &[vec![false; 3]],
+            TableViewRenderState {
+                query_values: &HashMap::new(),
+                search: "",
+                sort: "status",
+                order: "ASC",
+                page: 1,
+                per_page: 10,
+            },
+            UiLanguage::English,
+            TableViewPolicyContext {
+                program: Some(&executable),
+                functions: &mappings,
+                granted_permissions: vec!["invoices.manage".into()],
+                edit_permission_granted: true,
+                delete_permission_granted: true,
+            },
+        )
+    };
+    let editable_html = render_policy_row("draft", false);
+    assert!(editable_html.contains("/invoices/7/edit"));
+    assert!(editable_html.contains(">Delete</button>"));
+    let non_draft_html = render_policy_row("sent", false);
+    assert!(!non_draft_html.contains("/invoices/7/edit"));
+    assert!(non_draft_html.contains(">Delete</button>"));
+    let locked_html = render_policy_row("draft", true);
+    assert!(!locked_html.contains("/invoices/7/edit"));
+    assert!(!locked_html.contains(">Delete</button>"));
 }

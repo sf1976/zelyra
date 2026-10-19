@@ -41,6 +41,14 @@ pub fn parse(tokens: &[Token]) -> Result<Program, ParseError> {
     .program()
 }
 
+fn crud_record_action(scope: Option<&str>) -> Option<zelyra_ast::CrudRecordAction> {
+    match scope {
+        Some("edit") => Some(zelyra_ast::CrudRecordAction::Edit),
+        Some("delete") => Some(zelyra_ast::CrudRecordAction::Delete),
+        _ => None,
+    }
+}
+
 struct Parser<'a> {
     tokens: &'a [Token],
     pos: usize,
@@ -813,6 +821,8 @@ impl<'a> Parser<'a> {
         let mut create_permissions = Vec::new();
         let mut edit_permissions = Vec::new();
         let mut delete_permissions = Vec::new();
+        let mut conditional_permissions = Vec::new();
+        let mut guards = Vec::new();
         let mut actions = Vec::new();
 
         if self.at(&TokenKind::LBrace) {
@@ -896,13 +906,33 @@ impl<'a> Parser<'a> {
                             _ => None,
                         };
                         let permission = self.string_value("permission")?;
-                        match scope.as_deref() {
-                            Some("create") => create_permissions.push(permission),
-                            Some("edit") => edit_permissions.push(permission),
-                            Some("delete") => delete_permissions.push(permission),
-                            Some("view") | None => permissions.push(permission),
-                            _ => unreachable!("CRUD permission scope was validated above"),
+                        if self.at_word("when") {
+                            let (_, when_span) = self.ident("`when`")?;
+                            let Some(action) = crud_record_action(scope.as_deref()) else {
+                                return Err(ParseError {
+                                    message: "conditional CRUD permissions require `permits edit` or `permits delete`".into(),
+                                    span: when_span,
+                                });
+                            };
+                            let condition = self.expression()?;
+                            conditional_permissions.push(zelyra_ast::CrudConditionalPermissionDef {
+                                action,
+                                permission,
+                                span: when_span.join(condition.span),
+                                condition,
+                            });
+                        } else {
+                            match scope.as_deref() {
+                                Some("create") => create_permissions.push(permission),
+                                Some("edit") => edit_permissions.push(permission),
+                                Some("delete") => delete_permissions.push(permission),
+                                Some("view") | None => permissions.push(permission),
+                                _ => unreachable!("CRUD permission scope was validated above"),
+                            }
                         }
+                    }
+                    TokenKind::Ident(name) if name == "guard" => {
+                        guards.push(self.crud_guard_definition()?);
                     }
                     TokenKind::Action => {
                         actions.push(self.form_action()?);
@@ -936,6 +966,8 @@ impl<'a> Parser<'a> {
                 create_permissions,
                 edit_permissions,
                 delete_permissions,
+                conditional_permissions,
+                guards,
                 actions,
                 span: start.join(end),
             });
@@ -961,8 +993,52 @@ impl<'a> Parser<'a> {
             create_permissions,
             edit_permissions,
             delete_permissions,
+            conditional_permissions,
+            guards,
             actions,
             span: start.join(table_span),
+        })
+    }
+
+    fn crud_guard_definition(&mut self) -> Result<zelyra_ast::CrudGuardDef, ParseError> {
+        let (_, start) = self.ident("`guard`")?;
+        let (action_name, action_span) = self.ident("`edit` or `delete` after `guard`")?;
+        let action = match action_name.as_str() {
+            "edit" => zelyra_ast::CrudRecordAction::Edit,
+            "delete" => zelyra_ast::CrudRecordAction::Delete,
+            _ => {
+                return Err(ParseError {
+                    message: "CRUD guards support only `edit` and `delete`".into(),
+                    span: action_span,
+                })
+            }
+        };
+        let (when_name, when_span) = self.ident("`when` after CRUD guard action")?;
+        if when_name != "when" {
+            return Err(ParseError {
+                message: "expected `when` after CRUD guard action".into(),
+                span: when_span,
+            });
+        }
+        let condition = self.expression()?;
+        self.expect(TokenKind::LBrace, "`{` before CRUD guard error")?;
+        self.skip_newlines();
+        let (error_name, error_span) = self.ident("`error` in CRUD guard")?;
+        if error_name != "error" {
+            return Err(ParseError {
+                message: "CRUD guard block requires `error: \"message\"`".into(),
+                span: error_span,
+            });
+        }
+        self.expect(TokenKind::Colon, "`:` after CRUD guard error")?;
+        let message = self.string_value("CRUD guard error message")?;
+        self.skip_newlines();
+        let end = self.expect(TokenKind::RBrace, "`}` after CRUD guard error")?;
+        Ok(zelyra_ast::CrudGuardDef {
+            action,
+            condition,
+            message,
+            span: start.join(end),
         })
     }
 
@@ -1717,10 +1793,16 @@ impl<'a> Parser<'a> {
                             self.expect(TokenKind::LBrace, "`{` after tableview row_actions")?;
                             let mut item = None;
                             let mut html = None;
+                            let mut crud_model = None;
+                            let mut edit_html = None;
+                            let mut delete_html = None;
                             self.skip_newlines();
                             while !self.at(&TokenKind::RBrace) && !self.at(&TokenKind::Eof) {
                                 let property = if self.at(&TokenKind::Html) {
                                     "html".to_owned()
+                                } else if self.at(&TokenKind::Crud) {
+                                    self.advance();
+                                    "crud".to_owned()
                                 } else {
                                     self.ident("row_actions property")?.0
                                 };
@@ -1728,6 +1810,28 @@ impl<'a> Parser<'a> {
                                     "item" => {
                                         self.expect(TokenKind::Colon, "`:` after row_actions item")?;
                                         item = Some(self.ident("tableview row binding")?.0);
+                                    }
+                                    "crud" => {
+                                        self.expect(TokenKind::Colon, "`:` after row_actions crud")?;
+                                        crud_model = Some(self.ident("CRUD model name")?.0);
+                                    }
+                                    "edit" | "delete" => {
+                                        let target = property.as_str();
+                                        self.expect(TokenKind::LBrace, "`{` after row action operation")?;
+                                        self.skip_newlines();
+                                        self.expect(TokenKind::Html, "`html` in row action operation")?;
+                                        self.expect(TokenKind::LBrace, "`{` after row action html")?;
+                                        let body = match self.current().kind.clone() {
+                                            TokenKind::HtmlBody(body) => { self.advance(); body }
+                                            _ => return self.error("expected HTML body in row action operation"),
+                                        };
+                                        self.expect(TokenKind::RBrace, "`}` after row action HTML")?;
+                                        self.skip_newlines();
+                                        self.expect(TokenKind::RBrace, "`}` after row action operation")?;
+                                        let slot = if target == "edit" { &mut edit_html } else { &mut delete_html };
+                                        if slot.replace(body).is_some() {
+                                            return self.error(format!("duplicate `{target}` row action"));
+                                        }
                                     }
                                     "html" => {
                                         self.expect(TokenKind::Html, "`html` in tableview row_actions")?;
@@ -1738,17 +1842,25 @@ impl<'a> Parser<'a> {
                                         });
                                         self.expect(TokenKind::RBrace, "`}` after row_actions HTML")?;
                                     }
-                                    _ => return self.error("expected `item` or `html` in tableview row_actions"),
+                                    _ => return self.error("expected `item`, `crud`, `html`, `edit`, or `delete` in tableview row_actions"),
                                 }
                                 self.skip_newlines();
                             }
                             let end = self.expect(TokenKind::RBrace, "`}` after tableview row_actions")?;
                             if view.row_actions.is_some() { return self.error("duplicate tableview `row_actions` block"); }
                             let Some(item) = item else { return self.error("row_actions requires `item`"); };
-                            let Some(html) = html else { return self.error("row_actions requires `html`"); };
+                            if html.is_none() && edit_html.is_none() && delete_html.is_none() {
+                                return self.error("row_actions requires `html`, `edit`, or `delete` content");
+                            }
+                            if (edit_html.is_some() || delete_html.is_some()) && crud_model.is_none() {
+                                return self.error("operation-specific row actions require `crud: Model`");
+                            }
                             view.row_actions = Some(TableViewRowActionsDef {
                                 item,
-                                html,
+                                crud_model,
+                                html: html.unwrap_or_default(),
+                                edit_html,
+                                delete_html,
                                 span: block_span.join(end),
                             });
                         }
@@ -5767,6 +5879,35 @@ mod tests {
     }
 
     #[test]
+    fn parses_policy_scoped_tableview_row_actions() {
+        let source = r#"
+            crud Invoice -> invoices {
+                guard edit when locked == true { error: "Locked" }
+                guard delete when locked == true { error: "Locked" }
+            }
+            tableview InvoiceRows {
+                source sql<Invoice[]> { SELECT id, status, locked FROM invoices }
+                columns { status }
+                view {
+                    row_fields { id locked }
+                    row_actions {
+                        item: invoice
+                        crud: Invoice
+                        edit { html { <a href="/invoices/{invoice.id}/edit">Edit</a> } }
+                        delete { html { <button type="button">Delete</button> } }
+                    }
+                }
+            }
+        "#;
+        let program = parse(&lex(source).unwrap()).unwrap();
+        let actions = program.tableviews[0].view.row_actions.as_ref().unwrap();
+        assert_eq!(actions.crud_model.as_deref(), Some("Invoice"));
+        assert!(actions.html.is_empty());
+        assert!(actions.edit_html.as_deref().unwrap().contains("/edit"));
+        assert!(actions.delete_html.as_deref().unwrap().contains("Delete"));
+    }
+
+    #[test]
     fn rejects_duplicate_crud_field_content() {
         let source = r#"crud Customer -> customers { view { create {
             field_content { email { html { <p>A</p> } } email { html { <p>B</p> } } }
@@ -5924,6 +6065,35 @@ mod tests {
         assert!(program.cruds[0].create_permissions.is_empty());
         assert!(program.cruds[0].edit_permissions.is_empty());
         assert!(program.cruds[0].delete_permissions.is_empty());
+    }
+
+    #[test]
+    fn parses_row_conditioned_crud_permissions_and_lifecycle_guards() {
+        let program = parse(
+            &lex(r#"
+                crud Invoice -> invoices {
+                    permits edit "invoices.manage" when status == "draft"
+                    permits delete "invoices.manage" when editable == true
+                    guard edit when locked == true { error: "Locked invoices cannot be edited." }
+                    guard delete when locked == true { error: "Locked invoices cannot be deleted." }
+                }
+            "#)
+            .unwrap(),
+        )
+        .unwrap();
+        let crud = &program.cruds[0];
+        assert_eq!(crud.conditional_permissions.len(), 2);
+        assert_eq!(
+            crud.conditional_permissions[0].action,
+            CrudRecordAction::Edit
+        );
+        assert_eq!(
+            crud.conditional_permissions[0].permission,
+            "invoices.manage"
+        );
+        assert_eq!(crud.guards.len(), 2);
+        assert_eq!(crud.guards[0].action, CrudRecordAction::Edit);
+        assert_eq!(crud.guards[1].message, "Locked invoices cannot be deleted.");
     }
 
     #[test]
