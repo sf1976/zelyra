@@ -14,13 +14,13 @@ In diesem Einführungskapitel erfährst du:
 - Wie dieses Lehrbuch aufgebaut ist und wie du am besten damit arbeitest.
 
 ### 2. Warum ist das Thema wichtig?
-Bevor du die erste Zeile Code schreibst, solltest du verstehen, welches Problem Zelyra löst. In der modernen Softwareentwicklung – besonders bei daten- und webgestützten Anwendungen – herrscht oft ein riesiges Durcheinander: Man modelliert eine Tabelle in SQL, schreibt dieselben Regeln noch einmal in einem Backend-Framework (wie Laravel, Express oder Django), validiert dieselben Daten ein drittes Mal im Frontend (HTML/JavaScript) und generiert mühsam API-Beschreibungen.
-Zelyra bricht mit dieser Fragmentierung: Du beschreibst dein Datenmodell, deine Regeln und deine Schnittstellen an einer einzigen Stelle – und Zelyra leitet daraus geprüfte, sichere Bausteine ab.
+Bevor du die erste Zeile Code schreibst, solltest du verstehen, welches Problem Zelyra löst. Kennst du das Gefühl, wenn ein winziger Buchstabendreher in Zeile 412 erst am Freitagabend um 17:03 Uhr im Produktivbetrieb bemerkt wird – just in dem Moment, in dem du die Jacke anziehen wolltest? In der modernen Softwareentwicklung herrscht oft ein heilloses Durcheinander: Man modelliert eine Tabelle in SQL, schreibt dieselben Regeln noch einmal in einem Backend-Framework (wie Laravel, Express oder Django), validiert dieselben Daten ein drittes Mal im Frontend (HTML/JavaScript) und hofft inständig, dass alle Schichten synchron bleiben.
+Zelyra bricht mit dieser Fragmentierung: Du beschreibst dein Datenmodell, deine Regeln und deine Schnittstellen an einer einzigen Stelle – und Zelyra leitet daraus geprüfte, sichere Bausteine ab. Keine doppelten Definitionen, keine Synchronisationskatastrophen und vor allem: entspanntere Freitagnachmittage.
 
 ### 3. Verständliche Erklärung
-Eine **Programmiersprache** ist wie ein präzises Regelwerk. Sie erlaubt es dir, einem Computer eindeutige Anweisungen zu geben. Computer sind extrem schnell, aber sie besitzen keinen gesunden Menschenverstand: Wenn eine Anweisung zweideutig ist oder ein unerwarteter Zustand eintritt, stürzt das Programm ab oder produziert fatale Fehler.
+Eine **Programmiersprache** ist wie ein präzises Regelwerk. Sie erlaubt es dir, einem Computer eindeutige Anweisungen zu geben. Computer sind unfassbar schnelle Rechenknechte, glänzen aber durch die vollständige Abwesenheit von gesundem Menschenverstand: Wenn du einem Computer sagst: *»Lauf zum Bäcker und kauf ein Brot, und wenn sie Eier haben, bring zehn mit«*, kommt er im Zweifel mit zehn Broten zurück. In Zelyra nimmt der Compiler dich und den Rechner an die Hand, damit genau solche Missverständnisse gar nicht erst kompiliert werden.
 
-**Zelyra** ist eine moderne, statisch typisierte Sprache. „Statisch typisiert“ bedeutet einfach: Bereits vor dem Start des Programms prüft der Zelyra-Compiler gründlich, ob alle Bausteine zusammenpassen. Wenn eine Funktion Text erwartet, du ihr aber versehentlich eine Zahl übergibst, weist Zelyra dich sofort darauf hin – bevor der Code jemals einen Server oder Nutzer erreicht.
+**Zelyra** ist eine statisch typisierte Sprache. Das bedeutet: Der Compiler prüft Typen beim Übersetzen und kann bestimmte Typkonflikte vor der Ausführung melden. Welche weiteren Regeln er prüft, hängt vom implementierten Prüfumfang ab; eine Fehlerfreiheit des Programms garantiert das nicht.
 
 Gleichzeitig ist Zelyra **datenbank- und webzentriert**:
 - Ein Tabellenschema (`table`) ist keine isolierte SQL-Datei, sondern integraler Bestandteil der Sprache.
@@ -38,22 +38,6 @@ fn main() {
 }
 ```
 
-Einzeilige Kommentare beginnen mit `#`. Ein Blockkommentar beginnt und endet
-mit jeweils einer alleinstehenden `##`-Zeile. Blockkommentare können nicht
-verschachtelt werden; fehlt die schließende Zeile, meldet der Lexer einen
-Fehler:
-
-```zelyra
-##
-Dieser ganze Bereich wird vom Compiler ignoriert.
-Er kann sich über mehrere Zeilen erstrecken.
-##
-```
-
-Die ältere Schreibweise `//` wird aus Kompatibilitätsgründen weiterhin
-verstanden. Für neuen Zelyra-Code sind `#` und `##` der empfohlene Standard.
-Ein vollständiges Beispiel steht in [`examples/comments.zyl`](../../../examples/comments.zyl).
-
 Wenn du diesem Programm mehr Struktur geben möchtest, zerlegst du die Aufgabe in eine Funktion:
 
 ```zelyra
@@ -67,16 +51,34 @@ fn main() {
 }
 ```
 
+### Kommentare: `#` und `##`
+
+`#` beginnt einen Zeilenkommentar. Er kann am Zeilenanfang oder hinter einer Anweisung stehen und reicht bis zum Zeilenende. Ein Blockkommentar wird durch zwei `##`-Begrenzer eingeschlossen. Die Begrenzer stehen jeweils allein auf einer Zeile; der Inhalt darf mehrere Zeilen umfassen. Blockkommentare sind nicht verschachtelt. `#` innerhalb einer Zeichenkette gehört zum Text.
+
+```zelyra
+# Ein Zeilenkommentar
+##
+Dieser Text ist ein Blockkommentar.
+Er kann mehrere Zeilen umfassen.
+##
+fn main() {
+    print("Hallo") # Kommentar hinter einer Anweisung
+    print("# bleibt innerhalb der Zeichenkette sichtbar")
+}
+```
+
+Die bestehende Schreibweise `//` bleibt kompatibel. Verwende in neuen Beispielen `#`. Die kompakte Schreibweise `## Text ##` auf derselben Zeile ist im dokumentierten Lexer kein Blockkommentar über mehrere Zeilen; verwende für einen Block die oben gezeigten alleinstehenden Begrenzer.
+
 ### 5. Typische Fehler und deren Ursachen
 - **Fehler:** Ein Semikolon am Zeilenende setzen (wie in Java, C++ oder PHP).
   *Ursache:* In Zelyra trennen Zeilenumbrüche Anweisungen sauber ab. Überflüssige Satzzeichen stören das Schriftbild.
-- **Fehler:** Annehmen, Zelyra sei nur ein Framework oder eine Skriptsprache.
-  *Ursache:* Zelyra ist eine eigenständige, kompilierte Sprache mit eigenem Typ- und Prüfsystem.
+- **Fehler:** Zelyra für ein Framework oder eine Konfigurationssprache halten.
+  *Ursache:* Zelyra hat eine eigene Syntax und ein eigenes Typsystem. Der Compiler übersetzt und prüft Zelyra-Programme; Laufzeit und Projektwerkzeuge ergänzen die Sprache für unterstützte Anwendungsfälle.
 
 ### 6. Merksätze
 1. Zelyra verbindet Datenmodell, Logik und Oberfläche in einer einzigen klaren Sprache.
 2. Was du meinst, steht im Code: Keine versteckte Magie, keine impliziten Null-Werte.
-3. Der Compiler ist dein Partner: Er findet Fehler früh, bevor sie Schaden anrichten können.
+3. Der Compiler meldet erkannte Syntax- und Typfehler vor der Ausführung. Laufzeitfehler und nicht abgedeckte Prüffälle bleiben möglich.
 
 ### 7. Übungsaufgaben
 - **Stufe 1 (Leicht):** Ändere das Begrüßungsprogramm so, dass es deinen eigenen Vornamen und Wohnort ausgibt.
@@ -90,8 +92,8 @@ Erstelle eine Datei `aufgaben_start.zyl`, die den Namen unseres Systems und die 
 ```zelyra
 fn main() {
     system_name = "Zelyra TaskManager"
-    version = "0.1.50"
-    print(system_name + " (Version " + version + ") gestartet.")
+    app_version = "0.9.9"
+    print(system_name + " (Version " + app_version + ") gestartet.")
 }
 ```
 
@@ -117,7 +119,7 @@ fn main() {
 - Was ein Algorithmus ist und wie das EVA-Prinzip (Eingabe, Verarbeitung, Ausgabe) funktioniert.
 
 ### 2. Warum ist das Thema wichtig?
-Programmierfehler zu beheben ist kinderleicht, wenn man versteht, an welcher Station des Compilers der Fehler gemeldet wird. Ein Syntaxfehler bedeutet, dass der Text unlesbar ist; ein Typfehler bedeutet, dass die Logik widersprüchlich ist; ein Laufzeitfehler bedeutet, dass während der Ausführung eine unvorhergesehene Bedingung eintrat. Wenn du diese Kette verstehst, verlierst du jegliche Scheu vor Fehlermeldungen.
+Programmierfehler zu beheben ist kinderleicht, wenn man versteht, an welcher Station des Compilers der Fehler gemeldet wird. Ein Computer ist im Grunde ein extrem fleißiger, aber erschreckend wörtlich nehmender Assistent: Er tut haargenau das, was du ihm aufschreibst – niemals das, was du dir insgeheim dabei gedacht hast. Ein Syntaxfehler bedeutet, dass der Text unlesbar ist (wie ein Rezept, in dem »Salz« mit drei Konsonanten geschrieben wurde); ein Typfehler bedeutet, dass die Logik widersprüchlich ist (wie der Versuch, Milch zu braten); ein Laufzeitfehler bedeutet, dass während der Ausführung eine unvorhergesehene Bedingung eintrat. Wenn du diese Kette verstehst, verlierst du jegliche Scheu vor Fehlermeldungen: Der Compiler ist kein schlecht gelaunter Türsteher, sondern dein treuer Pair-Programming-Partner.
 
 ### 3. Verständliche Erklärung
 Ein Computerprozessor versteht nur Nullen und Einsen (Maschinencode). Wenn wir Menschen eine Textdatei mit Zelyra-Code schreiben (z. B. `programm.zyl`), durchläuft dieser Text mehrere Stationen:
@@ -215,7 +217,7 @@ fn main() {
 ### 1. Was lerne ich in diesem Kapitel?
 - Die Systemvoraussetzungen für die Zelyra-Entwicklungsumgebung auf Linux, macOS und Windows.
 - Plattformspezifische Docker-Installation und Verifikation mit `docker compose version`.
-- Wie du Zelyra über den Quellcode (`./install.sh` / `install.ps1`) oder das stabile Release-Archiv (`--release v1.1.0`) installierst.
+- Wie du Zelyra über den Quellcode (`./install.sh` / `install.ps1`) oder das Release-Archiv (`--release v1.0.7`) installierst.
 - Vollständige Versionsabfrage mit `zelyra --version` und Systemdiagnose mit `zelyra doctor`.
 - Den integrierten, token-geschützten Web-Setup-Assistenten (`zelyra setup --web`).
 - Typische Berechtigungs- und Port-Konflikte (z. B. Docker-Socket-Rechte, automatische Port-Wahl).
@@ -240,15 +242,17 @@ git clone https://github.com/sf1976/zelyra.git
 cd zelyra
 ./install.sh
 ```
+
 Oder direkt als vorkompiliertes Release ohne Rust-Toolchain:
 ```bash
-./install.sh --release v1.1.0
+./install.sh --release v1.0.7
 ```
+
 Unter Windows (PowerShell):
 ```powershell
 git clone https://github.com/sf1976/zelyra.git
 Set-Location zelyra
-.\install.ps1 -Release v1.1.0
+.\install.ps1 -Release v1.0.7
 ```
 
 **Schritt 2: Vollständige Version und Hilfe prüfen**
@@ -256,18 +260,8 @@ Set-Location zelyra
 zelyra --version
 zelyra --help
 ```
+
 `zelyra --version` gibt den vollständigen Compiler- und Paketversionsstand aus (z. B. `zelyra 1.0.7`). Die Sprachkompatibilitätslinie bleibt 0.1.
-
-Eine benutzereigene Installation entfernst du mit `zelyra uninstall`. Prüfe
-das Ziel vorher mit `zelyra uninstall --dry-run`. Paketverwaltete Installationen
-müssen über ihren Paketmanager entfernt werden; weitere Details stehen im
-[Deinstallationsleitfaden](../../uninstall.de.md).
-
-Für das Rechnungstutorial und andere Docker-Projekte ist Docker Compose
-v2 oder neuer erforderlich. Die alte Python `docker-compose` v1 wird nicht
-unterstützt. Auf Linux wird das Compose-Plugin benötigt; prüfe es mit
-`docker compose version`. Hinweise zur Installation stehen in der
-[Docker-Dokumentation](https://docs.docker.com/engine/install/).
 
 **Schritt 3: Docker Compose prüfen (für MariaDB-Projekte)**
 ```bash
@@ -278,6 +272,7 @@ docker compose version
 ```bash
 zelyra doctor
 ```
+
 Dieser Befehl analysiert Umgebung, Pfade, Ports und Werkzeuge. Mit `zelyra doctor --json` erhältst du strukturierte Maschinendaten für IDEs.
 
 **Schritt 5: Geführter Web-Setup-Assistent (Optional)**
@@ -285,7 +280,16 @@ In jedem MariaDB-Projektverzeichnis kannst du den grafischen Assistenten starten
 ```bash
 zelyra setup --web
 ```
+
 Zelyra öffnet einen lokalen HTTP-Server auf `127.0.0.1:3030` mit einem zufälligen, einmaligen Sicherheitstoken. Dort kannst du mit einem Klick die `.env`-Konfiguration erzeugen, den MariaDB-Container starten und das Datenbankschema anwenden.
+
+`zelyra setup` richtet die MariaDB-Umgebung ein. Ein Minimalprojekt, das mit
+`zelyra init` ohne `--mariadb` angelegt wurde, läuft direkt mit
+`zelyra run main.zyl` und benötigt diesen Setup-Schritt nicht. Pfade werden
+wörtlich interpretiert: Nach `mkdir test_a` zeigt `./test_a` auf diesen Ordner;
+`/test_a` bezeichnet unter Linux dagegen einen Ordner direkt unter dem
+Dateisystemstamm. Existiert nur der relative Ordner, schlägt die CLI ihn als
+Pfadkorrektur vor.
 
 ### 5. Typische Fehler und deren Ursachen
 - **Fehler:** `zelyra: command not found`
@@ -298,7 +302,7 @@ Zelyra öffnet einen lokalen HTTP-Server auf `127.0.0.1:3030` mit einem zufälli
 ### 6. Merksätze
 1. Das Zelyra-CLI bündelt Compiler, Runner, Formularprüfer, Webserver und Setup-Assistenten in einem einzigen Werkzeug.
 2. Mit `docker compose version` und `zelyra doctor` überprüfst du jederzeit den Zustand deiner Toolchain.
-3. Das stabile Release kann mit `--release v1.1.0` direkt ohne Rust-Compiler installiert werden.
+3. Das Release kann mit `--release v1.0.7` direkt ohne Rust-Compiler installiert werden.
 4. `zelyra setup --web` bietet eine intuitive, browserbasierte Ersteinrichtung mit sicherem Einmal-Token.
 
 ### 7. Übungsaufgaben
@@ -316,6 +320,7 @@ echo 'fn main() { print("TaskManager-Umgebung bereit.") }' > test.zyl
 zelyra check test.zyl
 zelyra run test.zyl
 ```
+
 Wenn die Ausgabe `TaskManager-Umgebung bereit.` erscheint, ist dein System perfekt vorbereitet!
 
 ### 9. Zusammenfassung
@@ -362,6 +367,7 @@ crud = true
 auth = true
 audit = true
 ```
+
 Wird ein deaktivierter Bereich im Code genutzt, meldet der Compiler verlässlich `E-FEATURE-001`. Die wirksame Konfiguration kannst du jederzeit mit `zelyra config main.zyl` (oder `--format=json`) geheimnisfrei inspizieren.
 
 ### 4. Kleine, aufeinander aufbauende Beispiele
@@ -377,16 +383,11 @@ zelyra new taskmanager-web --mariadb
 cd taskmanager-web
 ```
 
-Neu erzeugte MariaDB-Projekte legen die Datenbankdeklaration in
-`src/database.zyl` ab und importieren dieses Modul ausdrücklich aus `main.zyl`.
-Das trennt die Zuständigkeit im Quellbaum, bietet aber noch keine mehreren
-benannten Verbindungen; die Laufzeit nutzt weiterhin eine projektweite
-`DATABASE_URL`.
-
 **Ersteinrichtung mit einem einzigen Befehl:**
 ```bash
 zelyra setup --all
 ```
+
 Dieser Befehl legt eine geschützte `.env` an, startet die MariaDB-Container-Umgebung und wendet das Schema an.
 
 **Projektkonfiguration prüfen:**
@@ -404,7 +405,20 @@ zelyra run main.zyl
 ```bash
 zelyra fmt main.zyl
 ```
+
 `zelyra fmt` sorgt dafür, dass aller Zelyra-Code im gesamten Team exakt denselben, sauberen Gestaltungsregeln folgt.
+
+Weitere dokumentierte CLI-Befehle für den Projektalltag:
+
+```bash
+zelyra verify main.zyl
+zelyra db plan main.zyl
+zelyra editor
+```
+
+`zelyra verify` führt die unterstützten Vertrags- und Invariantenprüfungen aus; Kapitel 19 erklärt ihre Reichweite. `zelyra db plan` zeigt geplante Schemaänderungen. Prüfe diesen Plan, bevor du Änderungen mit `zelyra db apply` übernimmst; Kapitel 24 beschreibt den Ablauf. `zelyra editor` startet Zelyra Studio.
+
+Die aktuelle CLI-Referenz führt weder einen Unterbefehl `zelyra test` noch separate Programme `zelyrac build` oder `zelyra lsp` auf. Assertions beschreibst du mit `assert(...)` in einer ausführbaren `.zyl`-Datei und startest sie mit `zelyra run`; einen eigenen Test-Runner dokumentiert die Referenz nicht.
 
 ### 5. Typische Fehler und deren Ursachen
 - **Fehler:** Dateien ohne die Dateiendung `.zyl` anlegen.
@@ -419,7 +433,7 @@ zelyra fmt main.zyl
 
 ### 7. Übungsaufgaben
 - **Stufe 1 (Leicht):** Erstelle ein neues Projekt `mein_erstes_projekt` mit `zelyra new` und führe es aus.
-- **Stufe 2 (Mittel):** Ändere in `zelyra.toml` die Version auf `0.3.1` und gib in `main()` die neue Versionsnummer aus.
+- **Stufe 2 (Mittel):** Ändere in `zelyra.toml` die Version auf `0.3.0` und gib in `main()` die neue Versionsnummer aus.
 - **Stufe 3 (Anspruchsvoll):** Verändere die Einrückungen in `main.zyl` absichtlich unordentlich und beobachte, wie `zelyra fmt main.zyl` den Quelltext wieder perfekt ausrichtet.
 
 ### 8. Praxisaufgabe: Die Aufgabenverwaltung als echtes Projekt initialisieren
@@ -445,6 +459,7 @@ fn main() {
     zeige_menue()
 }
 ```
+
 Prüfe das Projekt mit `zelyra check main.zyl` und führe es mit `zelyra run main.zyl` aus.
 
 ### 9. Zusammenfassung
@@ -472,17 +487,17 @@ Prüfe das Projekt mit `zelyra check main.zyl` und führe es mit `zelyra run mai
 - Der Unterschied zwischen automatischer Typableitung und ausdrücklicher Typangabe.
 
 ### 2. Warum ist das Thema wichtig?
-Im echten Leben kann man Äpfel nicht mit Birnen addieren. Ein Computer würde ohne Typen jedoch genau das tun: Er würde versuchen, eine Postleitzahl mit einem Preis zu multiplizieren oder einen Buchstabensalat als Datum zu interpretieren. In Zelyra verhindert das Typsystem solche Absurditäten von vornherein. Ein Datentyp legt exakt fest, welche Werte erlaubt sind und welche Operationen darauf ausgeführt werden dürfen.
+Im echten Leben kann man Äpfel nicht mit Birnen addieren. Ein Computer würde ohne Typen jedoch genau das tun: Er würde versuchen, eine Postleitzahl mit einem Stundensatz zu multiplizieren oder einen Buchstabensalat als Datum zu interpretieren. Wer schon einmal erlebt hat, wie ein System Geldbeträge als Fließkommazahl (`Float`) speicherte und 0.10 € + 0.20 € plötzlich zu 0.30000000000000004 € wurden, weiß: Buchhalter und Finanzämter haben für solche quantenmechanischen Rundungsüberraschungen erstaunlich wenig Sinn für Humor. In Zelyra verhindert das Typsystem solche Absurditäten von vornherein.
 
 ### 3. Verständliche Erklärung
 Jeder Wert in Zelyra besitzt einen Typ. Du kannst den Typ entweder explizit hinschreiben oder Zelyra ihn automatisch aus dem zugewiesenen Wert ableiten lassen:
 
 ```zelyra
 fn main() {
-    // Explizite Typangabe: Name gefolgt von Doppelpunkt und Typ
+    # Explizite Typangabe: Name gefolgt von Doppelpunkt und Typ
     anzahl: Int = 10
 
-    // Automatische Typableitung: Zelyra erkennt sofort, dass dies ein String ist
+    # Automatische Typableitung: Zelyra erkennt sofort, dass dies ein String ist
     titel = "Wichtige Besprechung"
 
     print(titel)
@@ -493,12 +508,11 @@ Die wichtigsten Datentypen in Zelyra:
 - **`Int`**: Ganze Zahlen mit Vorzeichen (64-Bit), z. B. `-5`, `0`, `42`.
 - **`UInt`**: Ganze Zahlen ohne Vorzeichen (nur `>= 0`), z. B. IDs oder Zähler.
 - **`Float`**: Fließkommazahlen für wissenschaftliche Berechnungen, z. B. `3.1415`.
-- **`Decimal`**: Festkommazahl mit neun Nachkommastellen und exakter Basis-10-Arithmetik. Schreibe Werte als `decimal("19.99")`; mehr als neun Nachkommastellen werden abgewiesen. Eine Division, die mehr Stellen erzeugt, kürzt Richtung null auf neun Stellen. JSON speichert Decimal als Zeichenkette, damit keine Präzision verloren geht.
+- **`Decimal`**: Festkommawerte aus `decimal("0.10")` mit neun Nachkommastellen. Basis-10-Rechenoperationen sind unterstützt; Werte mit mehr Nachkommastellen, Überlauf und Division durch null werden abgewiesen. Lege fachliche Rundungsregeln für Geld ausdrücklich fest.
 - **`Bool`**: Wahrheitswerte. Es gibt exakt zwei Zustände: `true` (wahr) oder `false` (falsch).
 - **`String`**: Zeichenketten (Text) in doppelten Anführungszeichen: `"Hallo Welt"`.
 - **`Char`**: Einzelne Zeichen in einfachen Anführungszeichen: `'A'`, `'z'`, `'✓'`.
 - **`Unit`**: Steht für „kein Wert“, ähnlich wie `void` in anderen Sprachen. Wenn eine Funktion nur etwas ausgibt und nichts zurückliefert, ist ihr Typ `Unit`.
-- **`Date`, `Time`, `Duration`, `Bytes`**: Erzeuge Datum und Uhrzeit mit `date("2026-10-11")` und `time("09:30:00")`, Dauern mit `duration_ms(1500)` und Bytes mit `bytes([65, 66])`. Die Laufzeit prüft die Werte und erhält sie beim JSON-Roundtrip.
 
 ### 4. Kleine, aufeinander aufbauende Beispiele
 
@@ -542,7 +556,7 @@ fn main() {
     task_id: Int = 1
     task_name: String = "Datenbankschema pruefen"
     is_done: Bool = false
-    priority: Int = 1 // 1 = hoch, 2 = mittel, 3 = niedrig
+    priority: Int = 1 # 1 = hoch, 2 = mittel, 3 = niedrig
 
     print("Aufgabe #" + "1" + ": " + task_name)
     if is_done {
@@ -575,8 +589,8 @@ fn main() {
 - Warum Unveränderlichkeit Software dramatisch stabiler und fehlerfreier macht.
 
 ### 2. Warum ist das Thema wichtig?
-Einer der häufigsten Gründe für schwer auffindbare Softwarefehler in Sprachen wie JavaScript, Python oder C++ ist unkontrollierte Veränderbarkeit: Eine Funktion verändert heimlich eine globale Variable, und an ganz anderer Stelle stürzt das Programm ab.
-Zelyra folgt einem radikal klaren Prinzip: **Feste Werte sind der Normalfall.** Wenn sich ein Wert während der Programmlaufzeit ändern darf, musst du das ganz bewusst mit dem Schlüsselwort `mutable` ankündigen.
+Einer der häufigsten Gründe für schwer auffindbare Softwarefehler in Sprachen wie JavaScript, Python oder C++ ist unkontrollierte Veränderbarkeit: Eine Funktion verändert heimlich eine globale Variable, und an ganz anderer Stelle stürzt das Programm ab – der gefürchtete »Gestern ging es noch und niemand hat was angefasst«-Effekt. Veränderlicher Zustand hat in Entwicklerteams schon mehr Freundschaften ruiniert als die endlose Debatte über Tabs versus Leerzeichen.
+Zelyra folgt einem radikal klaren Prinzip: **Feste Werte sind der Normalfall.** Ein Wert, der sich niemals hinter deinem Rücken ändern kann, stiftet auch keine heimliche Verwirrung. Wenn sich ein Wert während der Programmlaufzeit ändern darf, musst du das ganz bewusst mit dem Schlüsselwort `mutable` ankündigen.
 
 ### 3. Verständliche Erklärung
 Stell dir eine Variable wie eine beschriftete Schachtel im Arbeitsspeicher vor:
@@ -588,6 +602,7 @@ Stell dir eine Variable wie eine beschriftete Schachtel im Arbeitsspeicher vor:
       print(titel)
   }
   ```
+
   Du legst den Text `"Steuererklärung"` in die Schachtel mit der Aufschrift `titel` und versiegelst sie. Niemand darf den Inhalt der Schachtel austauschen. Jeder, der die Schachtel liest, kann sich darauf verlassen, dass immer dasselbe darin liegt.
 
 - **Veränderbare Variable (`mutable`):**
@@ -598,6 +613,7 @@ Stell dir eine Variable wie eine beschriftete Schachtel im Arbeitsspeicher vor:
       print(zaehler)
   }
   ```
+
   Hier bleibt die Schachtel offen. Du darfst den alten Wert herausnehmen und durch einen neuen ersetzen.
 
 **Gültigkeitsbereich (Scope):**
@@ -609,7 +625,7 @@ Variablen leben immer nur innerhalb des Blocks `{ ... }`, in dem sie deklariert 
 ```zelyra
 fn main() {
     projekt = "Zelyra Kern"
-    // projekt = "Neues Projekt" // FEHLER: Compiler blockiert Zuweisung an unveränderliche Variable!
+    # projekt = "Neues Projekt" // FEHLER: Compiler blockiert Zuweisung an unveränderliche Variable!
     print(projekt)
 }
 ```
@@ -620,7 +636,7 @@ fn main() {
     mutable offene_aufgaben = 5
     print(offene_aufgaben)
 
-    // Eine Aufgabe wurde erledigt:
+    # Eine Aufgabe wurde erledigt:
     offene_aufgaben = offene_aufgaben - 1
     print(offene_aufgaben)
 }
@@ -635,7 +651,7 @@ fn main() {
         print(lokal)
         print(bereich)
     }
-    // print(lokal) // FEHLER: `lokal` existiert außerhalb des Blocks nicht mehr!
+    # print(lokal) // FEHLER: `lokal` existiert außerhalb des Blocks nicht mehr!
 }
 ```
 
@@ -664,12 +680,12 @@ fn main() {
     print("Start: Aufgaben zu erledigen: ")
     print(anzahl_offen)
 
-    // Erste Aufgabe erledigt:
+    # Erste Aufgabe erledigt:
     anzahl_offen = anzahl_offen - 1
     print("Zwischenstand: Noch offen:")
     print(anzahl_offen)
 
-    // Zweite Aufgabe erledigt:
+    # Zweite Aufgabe erledigt:
     anzahl_offen = anzahl_offen - 1
     print("Endstand: Noch offen:")
     print(anzahl_offen)
@@ -698,7 +714,7 @@ fn main() {
 - Operatorrangfolge und verständliche Klammersetzung.
 
 ### 2. Warum ist das Thema wichtig?
-Programme bestehen nicht nur aus festen Werten, sondern berechnen Ergebnisse, treffen Vergleiche und kombinieren logische Aussagen. Ein Operator ist das Bindeglied, das aus einzelnen Werten neue Erkenntnisse formt. Wer Operatoren beherrscht, kann komplexe Geschäftsregeln präzise in einfache Ausdrücke übersetzen.
+Programme bestehen nicht nur aus festen Werten, sondern berechnen Ergebnisse, treffen Vergleiche und kombinieren logische Aussagen. Ein Operator ist das Bindeglied, das aus einzelnen Werten neue Erkenntnisse formt. Wer Operatoren beherrscht, kann komplexe Geschäftsregeln präzise in einfache Ausdrücke übersetzen – und verhindert peinliche Rechenpannen, bei denen durch eine vergessene Klammer plötzlich jeder Kunde 100% Rabatt erhält, nur weil heute Dienstag ist.
 
 ### 3. Verständliche Erklärung
 - Ein **Ausdruck** ist jedes Stück Quelltext, das zu einem Wert ausgewertet werden kann. Zum Beispiel ist `5 + 3` ein Ausdruck, der zum Wert `8` wird.
@@ -722,31 +738,24 @@ Programme bestehen nicht nur aus festen Werten, sondern berechnen Ergebnisse, tr
 - `||` (ODER): Wahr, wenn **mindestens eine** Seite wahr ist.
 - `!` (NICHT): Kehrt einen Wahrheitswert um (`!true == false`).
 
-**Pipeline-Operator (Neu in 1.0.3):**
-- `|>` (Forward-Pipeline): Reicht das Ergebnis des linken Ausdrucks als erstes Argument an den nächsten Funktionsaufruf weiter. Das verwandelt geschachtelte Aufrufe `f(g(x))` in eine von links nach rechts lesbare Datenkette: `x |> g() |> f()`.
-
 ### 4. Kleine, aufeinander aufbauende Beispiele
 
 ```zelyra
 fn main() {
-    // Rechnen
+    # Rechnen
     grundzeit = 60
     puffer = 15
     gesamtzeit = grundzeit + puffer
     print(gesamtzeit)
 
-    // Vergleichen
+    # Vergleichen
     ist_lang = gesamtzeit > 60
     print(ist_lang)
 
-    // Logische Verknüpfung
+    # Logische Verknüpfung
     hat_puffer = puffer > 0
     ist_kritisch = gesamtzeit > 120 && !hat_puffer
     print(ist_kritisch)
-
-    // Pipeline-Verarbeitung mit |>
-    sauberer_text = "  zelyra 1.0.3  " |> text_trim() |> text_to_upper()
-    print(sauberer_text)
 }
 ```
 
@@ -775,10 +784,10 @@ fn main() {
     ist_erledigt = false
     ist_blockiert = false
 
-    // Eine Aufgabe ist ueberfaellig, wenn Tage < 0 und sie noch nicht erledigt ist
+    # Eine Aufgabe ist ueberfaellig, wenn Tage < 0 und sie noch nicht erledigt ist
     ist_ueberfaellig = tage_verbleibend < 0 && !ist_erledigt
 
-    // Hohe Dringlichkeit: Ueberfaellig und nicht durch andere blockiert
+    # Hohe Dringlichkeit: Ueberfaellig und nicht durch andere blockiert
     braucht_eingriff = ist_ueberfaellig && !ist_blockiert
 
     print("Aufgabe ueberfaellig?")
@@ -799,8 +808,6 @@ fn main() {
 3. Wofür steht der Operator `%`?
 
 ---
-
-<a id="kapitel-8-ein--und-ausgaben"></a>
 
 ## Kapitel 8: Ein- und Ausgaben
 
@@ -947,7 +954,7 @@ fn main() {
 - Typische Denkfehler bei Verschachtelungen und wie man sie vermeidet.
 
 ### 2. Warum ist das Thema wichtig?
-Ohne Bedingungen wäre jedes Programm starr wie eine Musikwalze: Es würde immer exakt dieselben Schritte abspielen. Wirklich nützlich wird Software erst, wenn sie auf unterschiedliche Situationen reagiert: Ist der Nutzer eingeloggt? Ist die Frist abgelaufen? Reicht das Guthaben? Mit `if` und `match` verleihst du deinem Code Urteilsvermögen.
+Ohne Bedingungen wäre jedes Programm starr wie eine Spieluhr: Es würde stur immer dieselbe Melodie dudeln. Wirklich nützlich wird Software erst, wenn sie auf unterschiedliche Situationen reagiert: Ist der Nutzer eingeloggt? Ist die Frist abgelaufen? Reicht das Guthaben oder versucht der Kunde gerade, minus fünf Pizzen in den Warenkorb zu legen? Mit `if` und `match` verleihst du deinem Code echtes Urteilsvermögen – und mit Zelyras exhaustivem `match` passt der Compiler auf, dass du keinen einzigen Sonderfall unter den Tisch fallen lässt.
 
 ### 3. Verständliche Erklärung
 - **`if` / `else`:** Prüft eine Bedingung. Wenn sie `true` ergibt, wird der erste Block ausgeführt; andernfalls der `else`-Block:
@@ -964,6 +971,7 @@ Ohne Bedingungen wäre jedes Programm starr wie eine Musikwalze: Es würde immer
       pruefe_ergebnis(75)
   }
   ```
+
 - **`match`:** Wenn du einen Wert gegen viele feste Möglichkeiten prüfen willst, ist `match` viel lesbarer als endlose `if / else if`-Ketten. In Zelyra stellt der Compiler sicher, dass alle möglichen Fälle abgedeckt sind (Exhaustiveness):
   ```zelyra
   fn zeige_status(status_code: Int) {
@@ -979,6 +987,7 @@ Ohne Bedingungen wäre jedes Programm starr wie eine Musikwalze: Es würde immer
       zeige_status(2)
   }
   ```
+
   Der Unterstrich `_` ist das sogenannte **Wildcard-Muster**: Er greift für alle anderen, nicht ausdrücklich genannten Werte.
 
 ### 4. Kleine, aufeinander aufbauende Beispiele
@@ -996,24 +1005,19 @@ fn main() {
 ```
 
 **Mehrstufige Entscheidung (`else if`):**
-In Zelyra 1.0.3 kannst du alternative Bedingungen direkt mit `else if` aneinanderhängen, ohne Blöcke künstlich tief verschachteln zu müssen:
-
 ```zelyra
-fn bewerte_prioritaet(punkte: Int) -> String {
-    if punkte >= 90 {
-        return "SEHR DRINGEND"
-    } else if punkte >= 70 {
-        return "NORMAL"
-    } else if punkte >= 40 {
-        return "NIEDRIG"
-    } else {
-        return "UNBEKANNT"
+fn bewerte_prioritaet(stufe: Int) -> String {
+    match stufe {
+        1 => { return "SEHR DRINGEND" }
+        2 => { return "NORMAL" }
+        3 => { return "NIEDRIG" }
+        _ => { return "UNBEKANNT" }
     }
 }
 
 fn main() {
-    print(bewerte_prioritaet(95))
-    print(bewerte_prioritaet(50))
+    print(bewerte_prioritaet(1))
+    print(bewerte_prioritaet(2))
 }
 ```
 
@@ -1101,7 +1105,7 @@ fn main() {
 - Schleifeninvarianten (`invariant`), mit denen Zelyra Korrektheit formal beweisen kann.
 
 ### 2. Warum ist das Thema wichtig?
-Computer wurden erfunden, um monotone, wiederkehrende Aufgaben fehlerfrei und in Sekundenschnelle zu erledigen. Wenn du 1.000 Aufgaben aus einer Datenbank laden, prüfen und anzeigen willst, schreibst du den Code nicht tausendmal, sondern einmal innerhalb einer Schleife. Zelyra bietet dafür sichere Konstrukte und erlaubt es sogar, mathematische Garantien über Schleifendurchläufe abzugeben.
+Computer wurden erfunden, um monotone, wiederkehrende Aufgaben fehlerfrei und in Sekundenschnelle zu erledigen – und weil menschliche Entwickler nach der zwanzigsten manuellen Wiederholung unweigerlich Fehler machen oder verzweifeln. Wenn du 1.000 Aufgaben aus einer Datenbank laden, prüfen und anzeigen willst, schreibst du den Code nicht tausendmal, sondern einmal innerhalb einer Schleife. Eine Endlosschleife ist dabei wie ein Hamsterrad mit Turbomotor: Viel Lärm, glühende Lüfter, aber null Fortschritt. Zelyra bietet dafür sichere Konstrukte und erlaubt es sogar, mathematische Garantien über Schleifendurchläufe abzugeben.
 
 ### 3. Verständliche Erklärung
 Zelyra kennt drei Arten von Schleifen:
@@ -1114,6 +1118,7 @@ Zelyra kennt drei Arten von Schleifen:
        }
    }
    ```
+
 2. **`while bedingung`:** Wiederholt den Block so lange, wie die Bedingung wahr (`true`) bleibt. Ideal, wenn du vorher nicht weißt, wie viele Durchläufe nötig sind.
 3. **`loop`:** Eine Dauerschleife. Sie läuft endlos weiter, bis sie im Inneren durch den Befehl `break` gestoppt wird.
 
@@ -1154,17 +1159,18 @@ fn main() {
 fn main() {
     for zahl in [1, 2, 3, 4, 5] {
         if zahl == 2 {
-            // Die 2 wollen wir auslassen:
+            # Die 2 wollen wir auslassen:
             continue
         }
         if zahl == 4 {
-            // Bei 4 brechen wir komplett ab:
+            # Bei 4 brechen wir komplett ab:
             break
         }
         print(zahl)
     }
 }
 ```
+
 *Ausgabe:* Gibt `1` und `3` aus!
 
 ### 5. Typische Fehler und deren Ursachen
@@ -1250,6 +1256,7 @@ fn main() {
     print(addiere(2, 3))
 }
 ```
+
 Besitzt eine Funktion keinen Rückgabewert, weil sie z. B. nur eine Zeile Text ausgibt, ist ihr Rückgabetyp `Unit` (oder kann weggelassen werden):
 ```zelyra
 fn drucke_trennlinie() {
@@ -1362,7 +1369,7 @@ fn main() {
 - Warum Verträge defensiven `if`-Kaskaden überlegen sind.
 
 ### 2. Warum ist das Thema wichtig?
-Häufig entstehen Fehler, weil Entwickler Annahmen treffen, die nirgendwo festgeschrieben sind: „Diese Funktion darf niemals mit einer negativen Zahl aufgerufen werden!“ Wenn jemand die Funktion ein halbes Jahr später doch mit `-1` aufruft, kracht es unerwartet. In herkömmlichen Sprachen schreibt man seitenlange `if`-Prüfungen oder hofft auf gute Kommentare. Zelyra hebt Verträge auf Sprachebene: Vor- und Nachbedingungen sind Teil der Funktionssignatur und werden garantiert geprüft.
+Häufig entstehen Fehler, weil Entwickler Annahmen treffen, die nirgendwo festgeschrieben sind: »Diese Funktion darf niemals mit einer negativen Zahl aufgerufen werden!« Wenn jemand die Funktion ein halbes Jahr später doch mit `-1` aufruft, kracht es unerwartet im Gebälk. In herkömmlichen Sprachen schreibt man seitenlange `if`-Prüfungen oder hofft auf das Prinzip Hoffnung. Verträge (`requires` und `ensures`) machen Schluss mit dem Hoffen. Sie sind wie ein notarieller Vertrag an der Funktionsgrenze: »Lieferst du mir gültige Daten (`requires`), garantiere ich dir ein korrektes Ergebnis (`ensures`). Wenn nicht, weise ich den Aufruf sofort ab!« Wer einmal erlebt hat, wie Buchhalter nachts rotieren, weil fehlerhafte Buchungsbeträge das Hauptbuch zerschossen haben, liebt vertragsbasierte Programmierung.
 
 ### 3. Verständliche Erklärung
 Ein Vertrag in Zelyra funktioniert wie ein notarieller Vertrag zwischen dem Aufrufer und der Funktion:
@@ -1467,8 +1474,6 @@ fn main() {
 
 ---
 
-<a id="kapitel-13-sammlungen-listen-und-worterbucher-arrays-und-maps"></a>
-
 ## Kapitel 13: Sammlungen, Listen und Wörterbücher (Arrays & Maps)
 
 ### 1. Was lerne ich in diesem Kapitel?
@@ -1506,7 +1511,7 @@ Zelyra stellt mächtige Hilfswerkzeuge für Arrays bereit:
 Eine `Map` ordnet jedem eindeutigen Schlüssel (*Key*) genau einen Wert (*Value*) zu.
 - **Typnotation:** `Map<KeyTyp, WertTyp>`, zum Beispiel `Map<String, Int>` oder `Map<String, String>`.
 - **Literalschreibweise:** `Map { "schluessel": wert }`
-- **Schlüsseltypen:** Alle Skalartypen (`String`, `Int`, `Id` etc.) sind zulässig.
+- **Schlüsseltypen:** `Int`, `UInt`, `String`, `Bool`, `Char` und `Timestamp` sind dokumentiert. Für JSON müssen Map-Schlüssel `String` sein.
 
 ```zelyra
 fn main() {
@@ -1554,27 +1559,28 @@ fn main() {
         "Tee": 2
     }
     
-    // Neues Element hinzufügen
+    # Neues Element hinzufügen
     mutable aktion = put(preise, "Kuchen", 4)
-    // Vorhandenen Preis anpassen
+    # Vorhandenen Preis anpassen
     aktion = put(aktion, "Kaffee", 4)
     
-    // Nullsicher mit match abfragen
+    # Nullsicher mit match abfragen
     match get(aktion, "Kaffee") {
         Some(preis) => {
-            print("Kaffeepreis: " + str(preis) + " Euro")
+            print("Kaffeepreis in Euro:")
+            print(preis)
         }
         None => {
             print("Artikel nicht gefunden.")
         }
     }
     
-    // Alle Schlüssel und Werte ausgeben
+    # Alle Schlüssel und Werte ausgeben
     print(keys(aktion))
 }
 ```
 
-**Beispiel 4: Prüfen der Existenz und Standardwerte in einer Map**
+**Beispiel 4: Prüfen der Existenz in einer Map**
 ```zelyra
 fn main() {
     einstellungen: Map<String, Bool> = Map {
@@ -1582,43 +1588,9 @@ fn main() {
         "benachrichtigungen": false
     }
     
-    // has_key prüft direkt auf Vorhandensein
-    if has_key(einstellungen, "dunkelmodus") {
-        print("Dunkelmodus ist vorhanden.")
+    if contains(einstellungen, "dunkelmodus") {
+        print("Dunkelmodus-Einstellung ist konfiguriert.")
     }
-
-    // get_or liefert einen Fallback, falls der Schlüssel fehlt
-    auto_save = get_or(einstellungen, "auto_save", true)
-    print(auto_save)
-}
-```
-
-**Beispiel 5: Map-Einträge mit entries() auslesen (Neu in 1.0.3)**
-`entries(map)` liefert ein Array aus Schlüssel-Wert-Tupeln. Eine `for`-Schleife
-kann die Tupel mit passender Typprüfung direkt in einzelne Variablen zerlegen.
-```zelyra
-fn main() {
-    preise: Map<String, Int> = Map {
-        "Kaffee": 3
-        "Tee": 2
-    }
-    for (artikel, preis) in entries(preise) {
-        print(artikel + ": " + to_string(preis) + " Euro")
-    }
-}
-```
-
-**Beispiel 6: Erweiterte Array-Operationen (Sortieren, Eindeutigkeit, Chunks)**
-```zelyra
-fn main() {
-    werte: Int[] = [5, 2, 8, 2, 1, 9]
-    sortiert = sort(werte)
-    ohne_duplikate = unique(sortiert)
-    print(ohne_duplikate)
-
-    // Summe und Durchschnitt
-    summe = array_sum(werte)
-    print("Summe: " + to_string(summe))
 }
 ```
 
@@ -1628,7 +1600,7 @@ fn main() {
 - **Fehler:** `map.get("key")` direkt als Wert behandeln wollen, ohne die `Option` auszupacken.
   *Ursache:* Zelyra garantiert Compile-Time-Sicherheit. Da ein Schlüssel in der Map fehlen könnte, zwingt der Compiler dich, mit `match` oder Standardwerten auf `Some` und `None` zu reagieren.
 - **Fehler:** Nicht-skalare Typen (wie Arrays) als Map-Schlüssel verwenden.
-  *Ursache:* Map-Schlüssel müssen skalare Typen sein (`String`, `Int`, `Id`), damit sie deterministisch vergleichbar und JSON-serialisierbar sind.
+  *Ursache:* Map-Schlüssel müssen einen unterstützten vergleichbaren Typ besitzen (`Int`, `UInt`, `String`, `Bool`, `Char`, `Timestamp`). JSON unterstützt nur String-Schlüssel.
 
 ### 6. Merksätze
 1. Arrays in Zelyra sind typrein: `Int[]`, `String[]`, `Bool[]`.
@@ -1648,7 +1620,8 @@ Erstelle eine Verwaltung von Prioritätsstufen für Aufgaben mit einer Map:
 fn prioritaet_anzeigen(prioritaeten: Map<String, Int>, aufgabe: String) {
     match get(prioritaeten, aufgabe) {
         Some(stufe) => {
-            print("Prioritaet fuer " + aufgabe + ": Stufe " + str(stufe))
+            print("Prioritaet fuer " + aufgabe + ":")
+            print(stufe)
         }
         None => {
             print("Keine Prioritaet hinterlegt fuer: " + aufgabe)
@@ -1685,6 +1658,7 @@ fn main() {
 ### 1. Was lerne ich in diesem Kapitel?
 - Wie du eigene domänenspezifische Datentypen erstellst.
 - Was nominale Typen (`type TaskId = Id`) sind und wie sie Verwechslungen verhindern.
+- Was Aufzählungs- und Summentypen bedeuten und welche Varianten Zelyra eingebaut bereitstellt.
 - Wie Datensätze in Zelyra als `table` mit Attributen definiert werden (`id: Id primary auto`).
 - Warum starke Typisierung die Softwarequalität revolutioniert.
 
@@ -1693,7 +1667,7 @@ In schlechter Software wird fast alles als einfache Zahl oder Zeichenkette behan
 
 ### 3. Verständliche Erklärung
 Eigene Datentypen erlauben es dir, der realen Welt einen Namen zu geben:
-1. **Nominale Aliase:**
+1. **Fachliche Typ-Aliase:**
    ```zelyra
    type TaskId = Id
 
@@ -1701,8 +1675,12 @@ Eigene Datentypen erlauben es dir, der realen Welt einen Namen zu geben:
        print("Typalias TaskId aktiv")
    }
    ```
-   Hierdurch wird `TaskId` ein eigener, eindeutiger Typ.
-2. **Tabellen als strukturierte Datentypen:**
+
+   Der Alias gibt der ID einen fachlichen Namen. Er besitzt keine eigene Runtimeidentität; verwechslungssichere Geschäftsregeln müssen im konkreten Prüfumfang abgesichert werden.
+2. **Aufzählungs- und Summentypen:**
+
+   Ein Aufzählungstyp beschreibt einen Wert, der genau eine Variante aus einer festen Menge benannter Varianten annimmt. Eine Variante kann zusätzlich einen Wert tragen; deshalb heißen solche Typen auch Summentypen. Das allgemeine Konzept lässt sich als `enum State { Draft, Active, Archived }` skizzieren. Diese Schreibweise ist jedoch **nur eine Konzeptdarstellung und keine unterstützte Zelyra-Syntax**. Benutzerdefinierte `enum`-Deklarationen gehören nicht zum derzeit dokumentierten Sprachumfang. Eingebaute Summentypen sind `Option<T>` und `Result<T, E>`; ihre Varianten werden mit `match` behandelt.
+3. **Tabellen als strukturierte Datentypen:**
    ```zelyra
    table aufgaben {
        id: Id primary auto
@@ -1714,6 +1692,7 @@ Eigene Datentypen erlauben es dir, der realen Welt einen Namen zu geben:
        print("Tabellenschema definiert")
    }
    ```
+
    Dieses Schema definiert nicht nur eine Datenbanktabelle, sondern stellt in Zelyra automatisch den Datentyp für eine Aufgabe bereit!
 
 ### 4. Kleine, aufeinander aufbauende Beispiele
@@ -1812,399 +1791,30 @@ fn main() {
 - Wie ein typisches Zelyra-Projekt strukturiert ist.
 - Die Rolle der Projektkonfigurationsdatei `zelyra.toml`.
 - Wie Code in logische Bestandteile (Schema, Logik, Ansichten) gegliedert wird.
-- Wie `import` mehrere Quelldateien zu einem Projektgraphen verbindet.
-- Welche Grenzen das Modulmodell und einzelne Werkzeuge noch haben.
+- Wie Zelyras CLI zusammenhängende Projektdateien prüft und baut.
+- Den aktuellen Entwicklungsstand und die Roadmap von Modulen und Imports.
 
 ### 2. Warum ist das Thema wichtig?
 Zu Beginn schreibt man gerne alles in eine einzige Datei. Doch wenn deine Aufgabenverwaltung wächst – mit Datenbanktabellen, 20 Funktionen, Webformularen und Validierungen –, verliert man in einer 2000-Zeilen-Datei schnell den Überblick. Gute Softwareentwicklung bedeutet, Code so zu organisieren, dass man Neuerungen sofort an der richtigen Stelle findet.
 
 ### 3. Verständliche Erklärung
-Ein Projekt besitzt eine klare Ablagestruktur. `zelyra.toml` enthält
-Projektangaben und Capability-Freigaben; `main.zyl` ist die Einstiegsdatei.
-Weitere Dateien bindest du mit `import` in den Projektgraphen ein. Befehle wie
-`check`, `build`, `run`, `serve`, `context`, `verify`, `impact` und
-Datenbankwerkzeuge können diesen Graphen verarbeiten.
+Ein professionelles Zelyra-Projekt folgt einer klaren Ablagestruktur:
+- `zelyra.toml`: Die Geburtsurkunde des Projekts. Hier stehen Name, Version und erforderliche Berechtigungen.
+- `src/schema.zyl`: Enthält alle Tabellendefinitionen (`table`) und Domänentypen.
+- `src/main.zyl`: Enthält die Hauptlogik und den Einstiegspunkt (`fn main()`).
 
 ```toml
-[project]
+[package]
 name = "aufgaben_planer"
-version = "1.0.4"
-zelyra = "0.1"
+version = "0.1.0"
+authors = ["Entwickler <dev@example.com>"]
 
 [capabilities]
+filesystem = false
 database = true
-network = false
-console = false
 ```
 
-**Modulunterstützung in Zelyra 1.0.4:** Mehrdateiprojekte verwenden
-`import "src/math.zyl" as math`. Das Modulmodell ist verfügbar, hat aber noch
-dokumentierte Grenzen: Es gibt pro Projektgraphen höchstens eine
-Datenbankkonfiguration; `fmt` und `edit` bearbeiten nur die angegebene Datei;
-SQLite-Tableviews und vollständige Quellenzuordnung einiger Diagnosen fehlen.
-`zelyra module plan` erstellt eine Abhängigkeitsvorschau, aber kein isoliertes
-Modul- oder Deploymentpaket. Die unterstützte Syntax lautet:
-
-~~~zelyra
-import "src/math.zyl" as math
-
-fn main() {
-    print(math::add(2, 3))
-}
-~~~
-
-Die importierte Datei darf Funktionen, Typ-Aliase, Records, Tabellen,
-`tableview`-Definitionen, Seiten, benannte Views, typisierte Komponenten,
-Formulare, CRUD-Deklarationen, API-Routen und Authentifizierungsdefinitionen
-enthalten. API-Handler und Typen werden im jeweiligen Modulkontext aufgelöst;
-Authentifizierungstabellen werden gegen das gemeinsame Schema geprüft.
-Funktionen, Typen, Records, Views und Komponenten brauchen `pub`, wenn andere
-Dateien sie über einen Alias verwenden. Views und Komponenten sind
-standardmäßig privat und werden mit `pub view` beziehungsweise
-`pub component` exportiert. Modulübergreifende Page- und CRUD-Layout-Verweise
-sowie erkannte Komponenten-Tags in Page-, View-, Komponenten- und CRUD-Slot-HTML
-benötigen einen direkten oder transitiven Importpfad zum Besitzer. Private
-UI-Verweise melden `E-MOD-007`, fehlende Kanten `E-MOD-020`. Die
-Komponentenerkennung scannt bekannte Tagnamen im HTML-Text; sie ist keine
-vollständige HTML- oder Namespace-Analyse.
-Tabellen fließen in ein gemeinsames Schema ein und behalten globale SQL-Namen;
-doppelte Tabellen- und Ressourcennamen werden abgelehnt. Eine
-Datenbankdefinition gilt projektweit und höchstens eine ist zulässig.
-
-`check`, `build`, `run`, `serve`, `context`, `verify`, `impact` und die
-Datenbankbefehle laden den Projektgraphen. `serve` kann importierte
-`tableview`s, Seiten, Views, Komponenten, Formulare, CRUD-Ressourcen,
-API-Routen und Authentifizierungskonfiguration in die Anwendung integrieren.
-Importierte Seiten werden projektweit als Routen zusammengesetzt;
-überschneidende Seitenpfade werden mit Verweis auf die importierte Quelldatei
-abgelehnt.
-Tableview-Abfragen laufen derzeit über MariaDB; SQLite-Tableviews werden noch
-nicht ausgeführt.
-`context --format=json` zeigt den deterministisch sortierten Modulgraphen,
-Importkanten und pro Datei die derzeit unterstützten öffentlichen Funktionen,
-Typen und Records unter `modules[].exports`. Die Modul-Einträge enthalten auch
-Importalias und projektrelativen Quellpfad. Importierte Tabellen,
-`tableview`-Definitionen, Seiten, Views, Komponenten, Formulare, CRUD-, API-
-und Authentifizierungsdefinitionen erscheinen mit ihrem
-`span.file`-Quellpfad in den Deklarationen. Diese Exportliste ist eine
-Introspektionshilfe; sie ist noch kein vollständiges Paket- oder
-Deploymentmanifest und macht UI-Ressourcen nicht öffentlich. Typ-,
-Capability- und Contract-Prüfungen bleiben aktiv; einige Template-Diagnosen
-brauchen noch eine vollständigere Zuordnung zur Quelldatei. `verify` bewahrt
-noch keine Modul-Quellzuordnung in seinen Ergebnissen. `fmt` und `edit`
-bearbeiten weiterhin nur die ausdrücklich angegebene Quelldatei.
-Datenbankbefehle bauen das Schema aus dem verknüpften Projektgraphen auf;
-Quellzuordnung für Schemafehler aus importierten Dateien ist noch nicht in
-allen Fällen vollständig. Diese Modulunterstützung ist Teil des stabilen Releases 1.0.4; die oben genannten
-Grenzen bleiben bestehen.
-
-Das MariaDB-Dockerprojekt kopiert zusätzlich den konventionellen Ordner
-`src/` in das Laufzeitimage. Mehrdateienprojekte mit importierten
-Zelyra-Dateien unter `src/` können dadurch im Container geladen werden.
-Das ist weder ein Export einzelner Module noch ein unabhängig konfigurierbares
-Datenbankmodul; Zugangsdaten gehören weiterhin ausschließlich in die lokale
-Laufzeitkonfiguration und nicht in Quelldateien.
-
-Die experimentelle Vorschau für spätere Modul-Exporte ist:
-
-~~~sh
-zelyra module plan main.zyl src/invoices.zyl
-~~~
-
-Die Vorschau kann statt bei einer Quelldatei auch bei einer unterstützten
-Anwendungsressource beginnen. IDs mit Leerzeichen müssen als ein Argument
-zitiert werden:
-
-~~~sh
-zelyra module plan examples/modules/main.zyl 'page:/invoices'
-~~~
-
-Unterstützte Ressourcen-Wurzeln sind `page:<pfad>`, `api:<METHODE> <pfad>`,
-`crud:<name>`, `form:<name>` und `tableview:<name>`. Der Plan startet beim
-Quellmodul der Ressource und verfolgt dessen bekannte Abhängigkeiten; alle
-Deklarationen derselben Quelldatei bleiben Teil der Vorschau. Das ist noch
-keine isolierte Ressource und keine eigenständig deploybare Anwendung.
-Unter `modules[].declarations` listet der Plan alle erkannten Deklarationen
-der jeweils einbezogenen Quelldateien stabil sortiert auf. So ist sichtbar,
-welche Funktionen, Typen, Records und Anwendungsressourcen durch die gemeinsame
-Quelldatei zusätzlich enthalten sind.
-`declaration_closure` trennt davon die ausgewählte Ressource und die über den
-aktuellen statischen Wirkungsgraphen erreichbaren Deklarationen. `edges` zeigt
-bekannte Sprach- und Typreferenzen, zum Beispiel API-Ein-/Ausgaben,
-Funktionssignaturen, Records und Type Aliases. `configuration_edges` weist die
-Datenbankkonfiguration separat aus. `database.configurations` nennt für jede
-im Abschluss liegende Datenbankdeklaration ihren Namen, ihr Backend, den
-logischen Datenbanknamen, die Quelldatei und `DATABASE_URL` als aktuelle
-Laufzeitvariable. Der Plan kennzeichnet außerdem `connection_model` als
-`single-project-wide-connection` und `supports_multiple_connections` als
-`false`. Die Deklaration beschreibt also Schema-/Backend-Konfiguration; sie ist
-noch keine separat adressierbare Datenbankschnittstelle. Zugangsdaten werden
-nicht in den Plan aufgenommen.
-`runtime_effects.effects` listet ausdrücklich deklarierte Funktions-Capabilities
-in den einbezogenen Quellmodulen auf. `deployment_readiness.blockers` nennt
-nicht deklarierte Datei-Umfänge, ausgehende Netzwerkverträge,
-Prozessabhängigkeiten, Umgebungsvariablennamen und nicht aufgelöste statische
-Verweise. `ready` bleibt `false`; implizite Ressourceneffekte sind noch nicht
-vollständig modelliert, und der Plan beweist kein vollständiges Deployment.
-Für einbezogene Auth-Module mit `reset_tokens` beschreibt
-`external_service_contracts` öffentliche Basis-URL, SMTP-Einstellungen,
-Schlüssel der verschlüsselten Outbox, Geheimnis-Variablen und die Zustellung
-„at least once“. Docker-Bundles zeigen die passenden Felder in `.env.example`
-mit dem bestehenden Standard `implicit_tls`/465; Zugangsdaten werden nie
-kopiert. Vertragsversion 1 weist außerdem 30 Sekunden Wiederholungsfrist und
-mögliche doppelte Zustellung aus. Die Vorlage zeigt, wie ein stabiler
-Outbox-Schlüssel erzeugt wird. Der Dienstvertrag vervollständigt weder Quell-
-noch Deploymentgraph.
-`additional_declarations_in_included_source_files`
-führt Deklarationen auf, die wegen der einbezogenen Dateien zusätzlich
-auftauchen. Das ist nur eine Analyse des bekannten Graphen: `complete` bleibt
-`false`, und nicht erkannte Abhängigkeiten können fehlen.
-
-Der JSON-Plan folgt schreibgeschützt und deterministisch den expliziten
-Importen sowie den Verweisen, die der statische Wirkungsgraph derzeit erkennt.
-Dazu gehören bekannte Verweise von Seiten zu Views und Komponenten, von
-Page-SQL und Formular-/CRUD-Aktions-SQL zu Tabellen, von API-Handlern zu
-Funktionen, benannte Funktionsaufrufe in Formular-/CRUD-Aktionen zu ihren
-Funktionen, Typreferenzen aus API-Feldern, Funktionssignaturen, Records,
-Type Aliases, Tabellenspalten sowie typisierten Feldern von Formularen,
-Formularaktionen und CRUD-Aktionen, Typannotationen in Funktionskörpern,
-Record-Literalen und SQL-Ergebnistypen, von geschützten Ressourcen zur
-Authentifizierung, von
-Authentifizierung zu Tabellen, erkannte Tabellenrelationen und
-Datenbankkonfiguration. `database.configurations` macht die im Abschluss
-liegenden Deklarationen mit Backend, logischem Datenbanknamen, Quelldatei und
-der aktuellen Laufzeitvariable `DATABASE_URL` sichtbar. Der Plan weist
-`connection_model: "single-project-wide-connection"` und
-`supports_multiple_connections: false` aus: Mehrere unabhängig konfigurierbare
-Verbindungen oder eine benannte DB-Schnittstelle werden noch nicht unterstützt.
-Zugangsdaten erscheinen nicht im Plan.
-Nicht auflösbare Verweise erscheinen in `unresolved_references`. Dynamische
-oder nicht modellierte Abhängigkeiten, Assets, Laufzeitkonfiguration, externe
-Dienste und Docker-Artefakte sind nicht enthalten. Aktionsaufrufe werden
-statisch anhand der aufgelösten Funktionsnamen erkannt; das macht die Analyse
-noch nicht vollständig. `complete_deployment` bleibt ausdrücklich `false`; der
-Befehl exportiert oder startet keine Anwendung.
-
-SQL-Tabellenkanten tragen zusätzlich `access`: `read`, `write`, `read_write`
-oder `unknown`. Der Beobachter erkennt bekannte, nicht qualifizierte
-Tabellennamen in den einfachen `SELECT`-, `INSERT`-, `UPDATE`- und `DELETE`-
-Formen, die der Analyzer abdeckt. Bei `INSERT ... SELECT` wird die Zieltabelle
-als Schreibzugriff und die gelesene Quelle als Lesezugriff ausgewiesen.
-Komplexe verbundene `UPDATE`-/`DELETE`-Formen werden konservativ als
-`unknown` markiert. Nicht erkannte SQL-Formen oder nicht zugeordnete Tabellen
-können in der Analyse fehlen. Diese Angaben beschreiben beobachtete
-Abhängigkeiten; sie sind weder Berechtigungsprüfung noch Durchsetzung von
-Schemaeigentum und machen den Graphen nicht vollständig. `schema_ownership`
-weist die Quelldatei einer Tabellendeklaration als
-`inferred_owner_module` aus; `enforced` und `ownership_enforced` stehen
-ausdrücklich auf `false`.
-
-Der Compiler prüft jetzt zusätzlich erkannte modulübergreifende Tabellenkanten:
-Das Modul, das eine Tabelle über SQL, CRUD, Formulare, Tableviews,
-Authentifizierung oder eine Tabellenbeziehung verwendet, muss das Modul mit
-der Tabellendeklaration direkt oder transitiv importieren. Andernfalls meldet
-`zelyra check` `E-MOD-019`; bei erkanntem SQL-Zugriff nennt die Diagnose auch
-`read`-/`write`-Modi. Auch Tabellen in `main.zyl` sind importierten Modulen
-nicht implizit zugänglich: Ein Kind kann den Einstieg nicht zurückimportieren.
-Lege gemeinsam genutzte Tabellen deshalb in ein eigenes Schema-Modul und
-importiere es sowohl im Einstieg als auch in jedem Verbraucher.
-
-Ein Verbraucher von Datenbankfunktionen braucht außerdem eine Importkante zum
-Datenbankmodul selbst. Module mit SQL-Funktionen (`uses Database`), Daten-
-Pages, Tableviews, Formularen, CRUD oder Authentifizierung müssen den Provider
-direkt oder transitiv importieren. Ein Import der Datenbankkonfiguration nur in
-`main.zyl` wird nicht seitwärts an andere Module vererbt. Andernfalls meldet
-`zelyra check` `E-MOD-022`. Liegt die `database`-Deklaration noch im Einstieg,
-verschiebe sie in eine eigene Datei wie `src/database.zyl` und importiere diese
-aus den Modulen, die Datenbankfunktionen verwenden. Das ist eine geprüfte
-Quellcodeabhängigkeit; es erzeugt weder mehrere Laufzeitverbindungen noch
-MariaDB-Berechtigungen.
-
-Zelyra 1.0.4 prüft außerdem modulbezogene Tabellenfreigaben. Der Eigentümer kann sie direkt in der Tabellendeklaration
-festlegen:
-
-~~~zelyra
-table customers {
-    id: Id primary auto
-    name: String(100) required
-    access {
-        read: ["src/reports.zyl"]
-        write: ["src/importer.zyl"]
-        read_write: ["src/customer_admin.zyl"]
-    }
-}
-~~~
-
-Die Pfade sind exakt projekt-relative `.zyl`-Dateipfade. Ein Verbraucher muss
-weiterhin das Eigentümermodul importieren und zusätzlich in der passenden
-Liste stehen. `read` erlaubt erkannte Lesezugriffe, `write` erkannte
-Schreibzugriffe, `read_write` beides. Ein kombiniertes SQL-Muster braucht
-entweder `read_write` oder getrennte Lese- und Schreibfreigaben. Bei
-`unknown`-SQL-Zugriffen reicht nur `read_write`; CRUD-, Formular- und
-Authentifizierungsressourcen benötigen ebenfalls `read_write`. Ohne passende
-Freigabe meldet `zelyra check` `E-MOD-021`; eine fehlende Importkante bleibt
-weiterhin `E-MOD-019`.
-
-Die Freigaben sind Compiler-Verträge für erkannte Abhängigkeiten, keine
-MariaDB-`GRANT`-Anweisungen und keine Datenbankkonto-Sicherheit. Unbekannte
-SQL-Formen können der Analyse entgehen; Rechte für Schemaänderungen werden
-nicht geprüft, `schema_ownership.enforced` bleibt `false`. Ein nicht exakt
-passender Grant-Pfad erteilt keinen Zugriff; der Fehler erscheint beim
-Verbraucher. Der maschinenlesbare Modulplan gibt erkannte Grants und die
-unvollständige Analyse unter `table_access_contract` aus.
-
-Als nächste experimentelle Stufe gibt es `zelyra module bundle`:
-
-Die [Docker-Abnahme für Rechnungen und Inventar](../../module-docker-acceptance.de.md)
-zeigt den wiederholbaren Test der Gesamtanwendung und der beiden Einzelexporte,
-einschließlich eigener Zugangsdaten und negativer Berechtigungsprüfungen.
-
-~~~sh
-zelyra module bundle examples/modules/main.zyl 'page:/invoices' --output ../invoices-bundle --dry-run
-~~~
-
-Mit `--dry-run` gibt der Befehl einen JSON-Plan mit jedem relativen Dateinamen
-und seinem vollständigen Zielpfad aus. Der Plan weist außerdem aus, dass keine
-Geheimnisse übernommen und keine Zieldateien veröffentlicht werden. Das
-gewünschte Ausgabeverzeichnis wird nicht angelegt; intern erzeugt Zelyra ein
-temporäres Paket, prüft es mit `zelyra check` und entfernt es anschließend.
-Der Plan bleibt experimentell und kennzeichnet weiterhin
-`source_closure_complete: true` wird nur bei leerer Liste ungelöster Verweise und nach erfolgreicher Compilerprüfung des generierten Einstiegs gemeldet. `complete_deployment` bleibt `false`, bis Laufzeit- und Betriebsanforderungen separat geprüft sind.
-
-Für den eigentlichen Export lässt du `--dry-run` weg:
-
-~~~sh
-zelyra module bundle examples/modules/main.zyl 'page:/invoices' --output ../invoices-bundle
-~~~
-
-Der Befehl materialisiert die im Plan bekannten Quelldateien in einem neuen
-Zielordner, erzeugt einen Einstieg, der diese Module importiert und das nötige
-leere `fn main()` enthält, prüft das Ergebnis mit `zelyra check` und
-veröffentlicht den Ordner erst nach erfolgreicher Prüfung. Er kopiert außerdem
-`zelyra.toml`, `zelyra.theme.css` und JSON-Sprachkataloge, sofern vorhanden.
-Ein vorhandenes Ziel, ein nicht auflösbarer Verweis oder eine Abhängigkeit vom
-ursprünglichen Einstieg wird abgelehnt. Die ausgewählte Quelldatei bleibt
-vollständig enthalten. Enthält der geprüfte Projektgraph mehrere
-Datenbankdeklarationen, stoppt die Planung mit `E-DB-001`, bevor Dateien
-geschrieben werden. Derzeit ist nur eine projektweite `DATABASE_URL`-Verbindung
-implementiert.
-
-Das Ergebnis ist ausdrücklich nur ein experimentelles Quellpaket:
-`zelyra.bundle.json` dokumentiert den geprüften Quellabschluss und hält
-`complete_deployment` auf `false`. Es enthält weder Docker-/Compose-Dateien,
-Compiler-Binärdatei, Datenbankdienst noch `.env`; Zugangsdaten werden nicht
-kopiert. Für Betrieb und Datenbank sind weiterhin eine passende Zelyra-Version,
-eine externe Laufzeitkonfiguration und gegebenenfalls eine MariaDB nötig. Ein
-eigenständiger Dockerexport ist damit noch nicht erreicht.
-Das Manifest übernimmt außerdem `runtime_effects`, ausdrückliche
-`external_service_contracts` und `deployment_readiness`-Blocker aus dem Plan,
-damit modellierte Effekte mit fehlender Laufzeitkonfiguration sichtbar bleiben.
-`ready: false` und die beiden Vollständigkeitsfelder bleiben `false`; das
-experimentelle Bundle ist weiterhin keine vollständige Deploymentbeschreibung.
-
-Eine experimentelle Docker-Paketierung lässt sich zusätzlich erzeugen:
-
-~~~sh
-zelyra module bundle examples/modules/main.zyl 'page:/invoices' --output ../invoices-docker --docker --compiler-ref 0123456789012345678901234567890123456789
-~~~
-
-`--compiler-ref` muss ein vollständiger 40-stelliger Commit sein, der die
-benötigte Modulsyntax enthält. Der erzeugte Docker-Build lädt genau diesen
-Compiler-Commit aus dem öffentlichen Zelyra-Repository und baut daraus das
-Runtime-CLI. Die Compose-Datei startet die extrahierte Anwendung; eine
-MariaDB wird ausdrücklich nicht mitgeliefert. `.env.example` enthält nur
-Platzhalter und eine leere `DATABASE_URL`. Kopiere sie nach `.env` und
-konfiguriere dort die Datenbankverbindung, falls die Anwendung sie benötigt.
-Die Zugangsdaten werden weder kopiert noch in das Image gebaut. Benötigt das
-ausgewählte Modul MariaDB, installiert das Image den aktuell benötigten
-`mariadb-client`; die Datenbank selbst bleibt extern. Die tatsächlich
-eingeplanten Laufzeitpakete stehen in `docker.runtime_packages` im Manifest.
-Jedes exportierte Compose-Paket hat sein eigenes `.env.example` und damit nach
-dem lokalen Kopieren eine unabhängig konfigurierbare `DATABASE_URL`. Das ist
-eine Verbindung pro laufender Anwendungseinheit, kein Datenbankmodul mit
-mehreren benannten Verbindungen innerhalb desselben Prozesses. Das Manifest
-weist diesen begrenzten Umfang unter
-`docker.database_connection_scope: "per_exported_compose_project"` aus.
-
-Auch diese Docker-Paketierung ist noch kein vollständiger Modul-Export:
-`source_closure_complete` dokumentiert den geprüften Quellabschluss;
-`complete_deployment` bleibt `false`, weil Laufzeit- und Asset-Anforderungen
-nicht vollständig belegt sind. Ein erfolgreicher `zelyra check` ersetzt diesen Nachweis nicht.
-Der Docker-End-to-End-Test exportiert zwei CRUD-Ressourcen aus getrennten
-Quelldateien in separate Compose-Projekte. Jedes Paket erhält eine eigene
-`DATABASE_URL`, ein separat bereitgestelltes Schema und ein MariaDB-Konto mit
-minimalen Rechten. Die Apps führen schreibendes CRUD aus und bestehen negative
-Datenbank-Berechtigungstests. Das ist ein begrenzter Nachweis für diese
-Testressourcen, nicht für vollständige Fachmodule oder beliebige Projekte.
-Gemeinsames Schemaeigentum und modulübergreifender Datenbankzugriff werden von
-diesem experimentellen Bundle nicht unterstützt. Prüfe das Manifest und erfülle
-vor der Nutzung die aufgeführten Laufzeitanforderungen.
-
-Importierte Oberflächenbausteine können von einer Seite der Einstiegsdatei
-verwendet werden. Der Alias bindet die Datei ein; View- und Komponentennamen
-werden in der HTML-Deklaration derzeit nicht mit `ui::` qualifiziert:
-
-~~~zelyra
-// src/ui.zyl
-component Banner {
-    props {
-        title: String
-    }
-    html {
-        <header><strong>{title}</strong></header>
-    }
-}
-
-view Shell {
-    html {
-        <html><body><Banner title="Rechnungen" /><main><slot /></main></body></html>
-    }
-}
-~~~
-
-~~~zelyra
-// main.zyl
-import "src/ui.zyl" as ui
-
-page "/" {
-    view: Shell
-    html {
-        <p>Die Seite verwendet importierte Bausteine.</p>
-    }
-}
-~~~
-
-Mit `zelyra serve main.zyl` wird die Seite aus dem verknüpften Projektgraphen
-gerendert. Die vollständige Beispieldatei mit Logik- und Datenbankmodulen liegt
-unter `examples/modules/`.
-Sie enthält außerdem `src/invoice_admin.zyl` mit importiertem Formular und
-CRUD. Prüfen und ausführen kannst du sie mit `zelyra check examples/modules/main.zyl`
-und `zelyra run examples/modules/main.zyl` (Ausgabe: `25`). Der experimentelle
-Modulplan für die Verwaltung lautet:
-
-~~~sh
-zelyra module plan examples/modules/main.zyl src/invoice_admin.zyl
-~~~
-
-Er zeigt die Form-/CRUD-Abhängigkeit zur Rechnungstabelle und die separate
-Datenbank-Konfigurationsdatei. Er ist weiterhin kein Docker-Export.
-
-Ein Modul kann einen fachlichen Record exportieren, den ein anderes Modul in
-einer Funktionssignatur verwendet:
-
-~~~zelyra
-pub struct Money {
-    cents: Int
-}
-~~~
-
-~~~zelyra
-import "src/money.zyl" as money
-
-pub fn total() -> money::Money {
-    return money::Money { cents: 2500 }
-}
-~~~
+*Hinweis zur Sprachkompatibilität:* Zelyra unterstützt ausdrückliche projektrelative Importe wie `import "src/models.zyl" as models`. Diese Importe verbinden Quelldateien innerhalb eines Projekts; sie bieten weder eine Paketregistrierung noch dynamische Laufzeitimporte. Modulgraph und Deployment-Abschluss bleiben experimentell und können unvollständig sein. Die Sprachkompatibilitätslinie bleibt 0.1.
 
 ### 4. Kleine, aufeinander aufbauende Beispiele
 
@@ -2230,11 +1840,8 @@ fn main() {
 In `zelyra.toml` legst du fest, welche Systemzugriffe das Projekt überhaupt anfordern darf. Greift dein Code auf die Datenbank zu, muss `database = true` aktiviert sein.
 
 ### 5. Typische Fehler und deren Ursachen
-- **Fehler:** Eine importierte Datei ohne `pub`-Export aus einem anderen Modul
-  verwenden.
-  *Ursache:* Funktionen, Typen, Records, Views und Komponenten sind standardmäßig
-  privat. Exportiere benötigte Deklarationen ausdrücklich und beachte die
-  Grenzen des Modulmodells.
+- **Fehler:** Python- oder JavaScript-Importsyntax übernehmen.
+  *Ursache:* Zelyra erwartet projektrelative Importe wie `import "src/models.zyl" as models`. Verwende für unterstützte öffentliche Deklarationen den Modulnamen; eine Paketregistrierung gibt es nicht.
 - **Fehler:** `zelyra.toml` löschen oder im falschen Verzeichnis ausführen.
   *Ursache:* `zelyra run` sucht im aktuellen Verzeichnis nach der Konfiguration.
 
@@ -2245,7 +1852,7 @@ In `zelyra.toml` legst du fest, welche Systemzugriffe das Projekt überhaupt anf
 
 ### 7. Übungsaufgaben
 - **Stufe 1 (Leicht):** Erstelle mit `zelyra new aufgaben_app` eine neue Projektstruktur und untersuche die erzeugten Dateien.
-- **Stufe 2 (Mittel):** Konfiguriere in `zelyra.toml` eine Beschreibung und eine passende Projektversion, zum Beispiel `1.0.5`.
+- **Stufe 2 (Mittel):** Konfiguriere in `zelyra.toml` eine Beschreibung und die Versionsnummer `0.3.0`.
 - **Stufe 3 (Anspruchsvoll):** Schreibe ein Programm mit drei separaten Funktionen für Initialisierung, Verarbeitung und Ausgabe.
 
 ### 8. Praxisaufgabe: Projektstruktur für die Aufgabenverwaltung
@@ -2269,15 +1876,14 @@ fn main() {
 ```
 
 ### 9. Zusammenfassung
-- `zelyra.toml` steuert Metadaten und Capability-Sicherheitsfreigaben des Projekts.
-- Zelyra 1.0.4 verarbeitet importierte Quelldateien als gemeinsamen Projektgraphen.
-- Das Modulmodell hat dokumentierte Grenzen; ein Import erzeugt kein unabhängiges Paket.
+- Projekte werden über `zelyra.toml` gesteuert und konfiguriert.
+- Zelyra prüft Projektdateien als ganzheitliche Einheit.
 - Eine modulare Denkweise erleichtert Erweiterungen und Teamarbeit.
 
 ### 10. Kontrollfragen zur Selbstprüfung
 1. Welche Datei enthält die Metadaten eines Zelyra-Projekts?
 2. Warum ist die Trennung von Datenmodell und Ausführungslogik sinnvoll?
-3. Was ist beim Export von Funktionen und UI-Ressourcen aus einem Modul zu beachten?
+3. Wie prüft die Zelyra-CLI das gesamte Projekt auf einmal?
 
 # TEIL IV – SICHERHEIT UND FEHLERBEHANDLUNG
 
@@ -2293,7 +1899,7 @@ In diesem Kapitel lernst du:
 - Warum frühe Fehlererkennung beim Kompilieren bares Geld spart.
 
 ### 2. Warum ist das Thema wichtig?
-Fehler sind beim Programmieren völlig normal. Selbst erfahrene Programmierer machen dutzende Fehler pro Tag. Der Unterschied zwischen frustrierenden und erfolgreichen Entwicklern liegt nicht darin, keine Fehler zu machen, sondern darin, Fehlermeldungen lesen und verstehen zu können. Zelyra wurde so entworfen, dass möglichst viele Fehler bereits beim Kompilieren (`zelyra check`) abgefangen werden, bevor die Anwendung den ersten Nutzer erreicht.
+Fehler sind beim Programmieren völlig normal. Selbst erfahrene Programmierer machen dutzende Fehler pro Tag – der einzige Unterschied ist, dass Profis dabei etwas entspannter Kaffee trinken. Der Unterschied zwischen frustrierenden und erfolgreichen Entwicklern liegt nicht darin, keine Fehler zu machen, sondern darin, Fehlermeldungen lesen und verstehen zu können. Zelyra wurde so entworfen, dass möglichst viele Fehler bereits beim Kompilieren (`zelyra check`) abgefangen werden, bevor die Anwendung den ersten Nutzer erreicht und dein Bereitschaftshandy am Wochenende klingelt.
 
 ### 3. Verständliche Erklärung
 Wir unterscheiden vier Kategorien:
@@ -2307,7 +1913,7 @@ Wir unterscheiden vier Kategorien:
 **Beispiel 1: Typischer Syntaxfehler (und wie man ihn liest)**
 Wenn du in Zelyra eine Klammer vergisst:
 ```zelyra
-// Syntaktisch korrekt:
+# Syntaktisch korrekt:
 fn korrekte_klammern() {
     print("Alle Klammern sind geschlossen.")
 }
@@ -2398,7 +2004,7 @@ fn main() {
 - Warum Fehler als Werte deinen Code transparent und absturzsicher machen.
 
 ### 2. Warum ist das Thema wichtig?
-In vielen älteren Sprachen (wie Java oder Python) wirft eine Funktion im Fehlerfall eine „Exception“. Wenn irgendwo im Code eine solche Ausnahme vergessen wird, stürzt die gesamte Webanwendung mit einem Serverfehler ab. In Zelyra gibt es keine unkontrollierten Abstürze: Wenn eine Operation fehlschlagen kann (z. B. Datei nicht gefunden oder ungültige ID), gibt sie zwingend ein `Result<T, E>` zurück. Der Compiler zwingt dich, beide Fälle zu behandeln.
+In vielen älteren Sprachen (wie Java oder Python) wirft eine Funktion im Fehlerfall eine »Exception«. Exceptions sind wie Feueralarme: Oft laut, panisch, und niemand weiß genau, wer den Notausgang blockiert hat. Wenn irgendwo im Code eine solche Ausnahme vergessen wird, stürzt die gesamte Webanwendung mit einem Serverfehler ab. In Zelyra gibt es keine unkontrollierten Abstürze: Wenn eine Operation fehlschlagen kann (z. B. Datei nicht gefunden oder ungültige ID), gibt sie zwingend ein `Result<T, E>` zurück. Der Compiler zwingt dich, beide Fälle zu behandeln – Gelassenheit statt Panik.
 
 ### 3. Verständliche Erklärung
 Stelle dir ein Postpaket vor:
@@ -2563,7 +2169,7 @@ fn main() {
 - Wie Standard-Listenoperationen wie `first` und `last` den Typ `Option` nutzen.
 
 ### 2. Warum ist das Thema wichtig?
-In Sprachen wie JavaScript, Java, PHP oder C existiert `null`. Wenn ein Programm versucht, eine Methode auf einem `null`-Wert aufzurufen, stürzt es augenblicklich mit einer gefürchteten `NullPointerException` oder `Cannot read properties of null` ab. Zelyra besitzt schlicht kein `null`. Jeder Wert ist garantiert vorhanden. Wenn etwas fehlen kann, muss es ausdrücklich als `Option` deklariert werden.
+In Sprachen wie JavaScript, Java, PHP oder C existiert `null`. Wenn ein Programm versucht, eine Methode auf einem `null`-Wert aufzurufen, stürzt es augenblicklich mit einer gefürchteten `NullPointerException` oder `Cannot read properties of null` ab. Sir Tony Hoare nannte seine Erfindung von `null` rückblickend selbst seinen »Milliarden-Dollar-Fehler«. Zelyra besitzt schlicht kein `null`. Wir haben `null` gar nicht erst zur Party eingeladen! Jeder Wert ist garantiert vorhanden. Wenn etwas fehlen kann, muss es ausdrücklich als `Option` deklariert werden – und der Compiler passt auf, dass du keinen `None`-Fall übersiehst.
 
 ### 3. Verständliche Erklärung
 Stell dir eine Schachtel vor:
@@ -2708,7 +2314,7 @@ fn main() {
 - Wie Zelyras Verifikations-Befehl `zelyra verify` Verträge formal analysiert.
 - Wie man eigene Test- und Prüffunktionen strukturiert.
 - Was die Philosophie von *Test-Driven Development* (TDD) bedeutet.
-- Der Ausblick auf das zukünftige integrierte Testmodul.
+- Wie Assertions und projektbezogene Test-Runner funktionieren und welche Testbefehle die aktuelle CLI bereitstellt.
 
 ### 2. Warum ist das Thema wichtig?
 Manuelle Tests (Klicken im Browser oder wiederholtes manuelles Aufrufen) sind mühsam, fehleranfällig und unvollständig. Sobald eine Software komplexer wird, führt jede kleine Änderung an einer Stelle unweigerlich zu neuen Fehlern an einer anderen Stelle („Regressionen“). Automatisierte Tests stellen sicher, dass alle bereits gebauten Funktionen auch nach Wochen und Monaten noch exakt wie vereinbart arbeiten.
@@ -2718,14 +2324,25 @@ Testen in Zelyra stützt sich auf zwei kraftvolle Säulen:
 1. **Formale Vertragsverifikation mit `zelyra verify`:**
    Der Compiler prüft, ob die Vor- und Nachbedingungen (`requires`, `ensures`) deiner Funktionen mathematisch und logisch haltbar sind.
 2. **Prüffunktionen mit Erwartungsabgleich:**
-   Du schreibst kleine Prüffunktionen, die bestimmte Eingaben in deine Funktionen schicken und das tatsächliche Ergebnis mit dem erwarteten Ergebnis vergleichen.
+   Testfunktionen übergeben Geschäftslogik-Beispielen Eingaben und vergleichen tatsächliche mit erwarteten Ergebnissen. Die eingebaute Assertion `assert(bedingung, meldung)` meldet einen Fehler, wenn die Bedingung falsch ist.
 
-*Hinweis zur Roadmap:* Das integrierte CLI-Testframework `zelyra test` befindet sich laut Roadmap in Phase 11/12. In Zelyra 0.1 erfolgt die Qualitätssicherung über `zelyra check`, `zelyra verify` sowie gezielte Test-Hauptroutinen.
-`// [Platzhalter: Zelyra Test Framework - in 0.1 ueber verify und Test-Runner realisiert; siehe Roadmap Phase 11]`
+Die aktuelle CLI-Referenz führt keinen Unterbefehl `zelyra test` auf.
+Lege projektbezogene Testroutinen in einer ausführbaren `.zyl`-Datei ab und
+starte sie mit `zelyra run <file.zyl>`. Prüfe den Quelltext vor der
+Ausführung mit `zelyra check`; `zelyra verify` führt die unterstützten
+formalen Vertragsprüfungen aus.
 
 ### 4. Kleine, aufeinander aufbauende Beispiele
 
-**Beispiel 1: Eine einfache Assert-Prüffunktion**
+**Beispiel 1: Eine direkte Assertion**
+~~~zelyra
+fn main() {
+    ergebnis = 6 * 7
+    assert(ergebnis == 42, "Die Multiplikation muss 42 ergeben")
+}
+~~~
+
+**Beispiel 2: Eine einfache Prüffunktion**
 ```zelyra
 fn pruefe(test_name: String, bedingung: Bool) {
     if bedingung {
@@ -2745,7 +2362,7 @@ fn main() {
 }
 ```
 
-**Beispiel 2: Testen von Option-Rückgaben**
+**Beispiel 3: Testen von Option-Rückgaben**
 ```zelyra
 fn ist_volljaehrig(alter: Int) -> Option<Bool> {
     if alter < 0 {
@@ -2771,7 +2388,7 @@ fn main() {
 }
 ```
 
-**Beispiel 3: Verifikation mit Verträgen absichern**
+**Beispiel 4: Verifikation mit Verträgen absichern**
 ```zelyra
 fn berechne_ueberstunden(stunden: Int, regelarbeitszeit: Int) -> Int
     requires { stunden >= 0 && regelarbeitszeit >= 0 }
@@ -2847,7 +2464,6 @@ In diesem Kapitel lernst du:
 - Wie du mit Zelyra Textdateien erstellst, liest, auflistest und löschst.
 - Warum Dateizugriffe in Zelyra zwingend die Fähigkeit (*Capability*) `uses FileSystem` verlangen.
 - Die wichtigsten Bibliotheksfunktionen: `read_text`, `write_text`, `delete_file`, `list_dir`.
-- Wie die Result-Varianten erwartbare Datei- und JSON-Fehler zurückgeben.
 - Wie du Aufgabenlisten persistent als Datei auf der Festplatte speicherst.
 
 ### 2. Warum ist das Thema wichtig?
@@ -2915,84 +2531,6 @@ fn main() uses FileSystem {
 }
 ```
 
-**Beispiel 4: Pfadverarbeitung und Dateiüberprüfung (Neu in 1.0.3)**
-```zelyra
-fn datei_inspektion(ordner: String, dateiname: String) uses FileSystem {
-    // Pfade nach den Konventionen des Hostbetriebssystems verbinden (keine Capability)
-    voller_pfad = path_join(ordner, dateiname)
-    print("Ziel: " + voller_pfad)
-    print("Dateiname: " + path_filename(voller_pfad))
-    print("Endung: " + path_extension(voller_pfad))
-
-    // Existenz und Groesse pruefen (benoetigt uses FileSystem)
-    if file_exists(voller_pfad) {
-        match file_size(voller_pfad) {
-            Ok(bytes) => {
-                print("Dateigroesse: " + to_string(bytes) + " Bytes")
-            }
-            Err(e) => {
-                print("Fehler beim Lesen der Groesse: " + e)
-            }
-        }
-    }
-}
-
-fn main() uses FileSystem {
-    datei_inspektion(".", "zelyra.toml")
-}
-```
-
-**Beispiel 5: JSON- und Datei-Fehler verständlich behandeln**
-
-`read_text` und `json_decode` melden Fehler direkt als Laufzeitfehler. Wenn eine
-Anwendung auf fehlende oder beschädigte Dateien reagieren soll, verwende
-`read_text_result`, `write_text_result` und `json_decode_result<T>`:
-
-```zelyra
-struct Einstellungen {
-    thema: String
-}
-
-fn lade_thema() uses FileSystem {
-    match read_text_result("settings.json") {
-        Ok(text) => {
-            match json_decode_result<Einstellungen>(text) {
-                Ok(einstellungen) => { print("Thema: " + einstellungen.thema) }
-                Err(fehler) => { print("JSON-Datei ungueltig: " + fehler) }
-            }
-        }
-        Err(fehler) => { print("Datei konnte nicht gelesen werden: " + fehler) }
-    }
-}
-
-fn main() uses FileSystem {
-    lade_thema()
-}
-```
-
-Fehlende Projektfreigaben und verweigerte Capabilities bleiben Sicherheitsfehler.
-Die Result-Varianten fangen gewöhnliche Pfad-, Lese-, Schreib- und JSON-Fehler ab.
-
-Für sichere Textdatei-Änderungen gibt es außerdem `write_text_new_result`,
-`atomic_write_text_result`, `append_text_result`, `copy_file_new_result`,
-`rename_file_result` und `delete_file_result`. `write_text_new_result` legt
-Dateien exklusiv an und meldet einen Konflikt, wenn der Zielname bereits
-existiert. `atomic_write_text_result` schreibt zuerst eine temporäre Datei im
-gleichen Verzeichnis und ersetzt das Ziel erst nach erfolgreichem Schreiben.
-`rename_file_result` und `copy_file_new_result` überschreiben ebenfalls keine
-vorhandene Zieldatei. Alle Dateioperationen bleiben auf die in der
-Projektkonfiguration freigegebenen Wurzelverzeichnisse beschränkt.
-
-`text_contains` sucht eine wörtliche Zeichenfolge. `text_replace_result` ersetzt
-alle Vorkommen eines nicht leeren Suchtexts; `text_split_result` teilt an einem
-nicht leeren Trenntext und erhält auch leere Teile am Anfang oder Ende. Diese
-Funktionen arbeiten mit UTF-8-Strings und interpretieren den Suchtext nicht als
-regulären Ausdruck.
-
-Ein vollständiges, mehrteiliges Beispiel mit Notizverwaltung, Backups,
-Protokoll, Restore und Tests liegt unter
-[`examples/notes_manager`](../../../examples/notes_manager/README.md).
-
 ### 5. Typische Fehler und deren Ursachen
 - **Fehler:** Aufruf von `read_text` oder `write_text` ohne Deklaration von `uses FileSystem`.
   *Ursache:* Zelyras Sicherheitssystem (`E-CAP-001`) verhindert jeden unberechtigten Zugriff auf die Festplatte.
@@ -3003,7 +2541,6 @@ Protokoll, Restore und Tests liegt unter
 1. Jede Funktion, die Dateien berührt, muss `uses FileSystem` deklarieren.
 2. `write_text` legt Dateien an oder überschreibt sie vollständig.
 3. `read_text` liefert den gesamten Dateiinhalt als `String`.
-4. `*_result`-Funktionen machen erwartbare Fehler zu normalen `Err`-Werten.
 
 ### 7. Übungsaufgaben
 - **Stufe 1 (Leicht):** Schreibe ein Programm, das eine Begrüßungsnachricht in `hallo.txt` schreibt.
@@ -3039,13 +2576,12 @@ fn main() uses FileSystem {
 
 ### 1. Was lerne ich in diesem Kapitel?
 - Wie du mit `now()` den aktuellen Zeitstempel abfragst (`uses Clock`).
-- Wie `format_timestamp` Zeitstempel als UTC-Datum mit Uhrzeit darstellt.
 - Wie Zufallswerte mit `random_int(min, max)` erzeugt werden (`uses Random`).
 - Wie Datenstrukturen mit `json_encode` in universelles JSON umgewandelt werden.
 - Wie JSON-Text mit `json_decode<T>` wieder typisiert zurückgewandelt wird.
 
 ### 2. Warum ist das Thema wichtig?
-Praktisch jede reale Software benötigt Zeitangaben: Wann wurde eine Aufgabe erstellt? Wann ist die Frist abgelaufen? Auch strukturierte Datenformate wie JSON sind im Internet Standard – von REST-APIs bis hin zu Speicherständen. Zelyra integriert Zeit, Zufall und JSON nahtlos und typgeprüft.
+Praktisch jede reale Software benötigt Zeitangaben: Wann wurde eine Aufgabe erstellt? Wann ist die Frist abgelaufen? Zeitzonen, Sommerzeit-Umstellungen und Schaltsekunden haben allerdings schon gestandene Mathematiker zum Weinen gebracht. Auch strukturierte Datenformate wie JSON sind im Internet Standard – von REST-APIs bis hin zu Speicherständen. Zelyra integriert Zeit (`uses Clock`), Zufall (`uses Random`) und JSON nahtlos, typgeprüft und deterministisch testbar.
 
 ### 3. Verständliche Erklärung
 - **Zeitstempel:** `now()` liefert die exakte aktuelle Systemzeit als `Timestamp`. Dafür benötigt deine Funktion die Erlaubnis `uses Clock`.
@@ -3055,7 +2591,7 @@ Praktisch jede reale Software benötigt Zeitangaben: Wann wurde eine Aufgabe ers
 ```zelyra
 fn zeige_zeit() uses Clock {
     jetzt = now()
-    print(format_timestamp(jetzt))
+    print("Aktuelle Systemzeit erfasst")
 }
 
 fn main() uses Clock {
@@ -3100,49 +2636,6 @@ fn main() {
     ids: Int[] = [101, 102, 103]
     json_text = exportiere_ids_als_json(ids)
     print("JSON-Ausgabe: " + json_text)
-}
-```
-
-**Beispiel 4: Kalenderrechnung und Datumsvergleiche (Neu in 1.0.3)**
-```zelyra
-fn fristen_berechnen() {
-    start = date("2026-10-01")
-    frist = date_add_days(start, 14)
-    heute = date("2026-10-14")
-
-    verbleibend = date_diff_days(frist, heute)
-    print("Verbleibende Tage: " + to_string(verbleibend))
-
-    if is_after(heute, frist) {
-        print("Frist ueberschritten!")
-    } else {
-        print("Frist eingehalten.")
-    }
-}
-
-fn main() {
-    fristen_berechnen()
-}
-```
-
-**Beispiel 5: Kryptografie, Web-Encodings und UUIDs (Neu in 1.0.3)**
-```zelyra
-fn sicherheits_workflow() uses Random {
-    id = uuid_v4()
-    print("Transaktions-UUID: " + id)
-
-    hash = hash_sha256("geheim123")
-    print("SHA-256: " + hash)
-
-    base64 = base64_encode("Zelyra Daten")
-    print("Base64: " + base64)
-
-    url_param = url_encode("Kunde & Partner GmbH")
-    print("URL-Parameter: " + url_param)
-}
-
-fn main() uses Random {
-    sicherheits_workflow()
 }
 ```
 

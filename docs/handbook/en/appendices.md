@@ -1,34 +1,12 @@
 # APPENDICES
 
----
-
-## 24. Authoritative Sources and Compiler Verification (Source Authority)
-
-> **Principle:** Zelyra is its own language. The parser and verified tests decide what exists.
-
-When sources disagree, report the disagreement explicitly and use this authoritative order:
-
-1. **[Formal Language Specification](../../specification.md) and phase documents**
-2. **Compiler implementation code:** Lexer, AST, parser, name resolution, type checking, and semantic compiler code across `lexer`, `parser`, `ast`, `hir`, `cli`, `runtime`, `database`, `web`, and `forms`
-3. **Official automated language and integration tests:** Workspace tests (`cargo test --workspace`), machine-interface tests, and E2E scripts in `tests/`
-4. **Official standard library:** (once formally introduced)
-5. **Official Zelyra examples:** `.zyl` files in `examples/` verified by the current compiler
-6. **Documentation and handbook explanations**
-
-### Invariants for developers and AI agents
-
-- **Roadmap is planning, not syntax:** Future phase proposals become valid syntax only after implementation in lexer and parser.
-- **Rust is the implementation language, not Zelyra:** Zelyra is developed in Rust, but Rust syntax in a `.zyl` file is invalid unless Zelyra's grammar explicitly defines it.
-- **No invented commands:** Every CLI command must exist in `cli/src/main.rs`.
-- **Quality gate:** Every feature undergoes formatting (`cargo fmt`), workspace checks (`cargo check`), clippy linter (`cargo clippy`), and test suite execution (`cargo test`).
-
----
-
 ## Appendix A: Quickstart / Cheat Sheet (Syntax Cheat Sheet)
 
 ### Basic Syntax
+
+`# comment` continues to the end of the line. For a block, opening and closing `##` each stand alone on their own line, with comment text between them.
 ```zelyra
-// Functions with contracts
+# Functions with contracts
 fn sum(a: Int, b: Int) -> Int
     requires { a >= 0 && b >= 0 }
     ensures { result >= 0 }
@@ -36,11 +14,11 @@ fn sum(a: Int, b: Int) -> Int
     return a + b
 }
 
-// Entry point and variables
+# Entry point and variables
 fn main() {
-    x = 10                  // Type inference (immutable)
-    mutable counter = 0     // Mutable
-    name: String = "Zelyra" // Explicit type
+    x = 10                  # Type inference (immutable)
+    mutable counter = 0     # Mutable
+    name: String = "Zelyra" # Explicit type
 
     print(sum(3, 7))
 }
@@ -122,18 +100,12 @@ page "/items" {
 | `E-VIEW-001` - `E-VIEW-009` | Views & Pages | Error in view interpolation, slots, or data binding | Check slot names and binding data types |
 | `E-VIEW-010` - `E-VIEW-015` | Query controls | Invalid search, sort, pagination, or filter fields | Check declared whitelist (`search`, `sort`, `filter`) |
 | `E-FORM-001` - `E-FORM-004` | Forms | Validation error or invalid form field types | Review form declaration and input payload |
-| `E-FORM-005` - `E-FORM-006` | Form UI | Invalid appearance variant or widget value | Use a documented appearance or widget value |
-| `E-FORM-007` | Form redirect | Redirect is not a safe same-origin absolute path or contains control characters or backslashes | Use a local path such as `/invoices`; external and protocol-relative targets are rejected |
 | `E-CRUD-001` - `E-CRUD-006` | CRUD | Invalid CRUD resource, schema conflict, or layout error | Verify table binding and layout slots |
 | `E-AUTH-001` - `E-AUTH-028` | Authentication | Session, password, or permission conflict | Check roles (`permits`), `requires auth`, and password hashes |
 | `E-AUDIT-001` - `E-AUDIT-010` | Audit trail | Failure in cryptographic hash chain of audit log | Validate checksums and audit table integrity |
 | `E-SETUP-001` - `E-SETUP-006` | Setup flow | Port conflict, socket error, or Compose failure | Choose free ports, check Docker socket permissions |
 | `E-SETUP-WEB-001` | Web setup | Invalid or expired setup token | Restart setup assistant and use tokenized URL |
 | `E-IMPACT-001` | Impact analysis | Cyclical or invalid dependencies | Untangle code dependencies |
-| `E-MOD-019` | Module/table dependency | Table owner is missing from the consumer's import closure | Import the table-owning module directly or transitively |
-| `E-MOD-020` | Module/UI dependency | Referenced public view or component is outside the consumer's import graph | Import the UI-owning module directly or transitively |
-| `E-MOD-021` | Module/table grant | A recognized read/write access has no matching grant from the table owner | Check the table's `access` list and exact module path |
-| `E-MOD-022` | Module/database dependency | A database-using module does not import the provider | Import the provider directly or transitively; move configuration out of `main.zyl` |
 | `E-RUNTIME-001` | Runtime | Unhandled runtime error | Check contracts (`requires`, `ensures`) or error values |
 
 ---
@@ -150,10 +122,8 @@ page "/items" {
 | `zelyra check <file.zyl>` | `[--format json]` | Statically checks syntax, types, contracts, and capabilities |
 | `zelyra run <file.zyl>` | | Compiles and executes a Zelyra program |
 | `zelyra serve <file.zyl>` | `[host:port]` | Starts the built-in HTTP web server |
-| `zelyra module plan <entry> <module-or-resource>` | | Experimental read-only preview of known module dependencies |
-| `zelyra module bundle <entry> <module-or-resource>` | `--output <dir> [--dry-run] [--docker --compiler-ref <commit>]` | Writes a checked experimental bundle or previews its JSON file plan; not a completeness claim |
-| | `--docker --compiler-ref <40-character-commit>` | Generates Dockerfile, Compose app, and `.env.example`; closure remains incomplete |
-| `zelyra setup` | `[--database]` | Starts Docker Compose / MariaDB |
+| `zelyra routes <entry.zyl>` | `[--format human\|json]` | Lists recognized routes with HTTP methods and source locations; same-method overlaps fail with `E-ROUTE-001` |
+| `zelyra setup` | `[--database]` | MariaDB |
 | | `[--schema]` | Starts environment and applies database schema |
 | | `[--all]` | Executes configuration, container startup, and schema migration |
 | | `[--host-port <p>] [--db-host-port <p>]` | Enforces exact host ports for new `.env` |
@@ -165,14 +135,43 @@ page "/items" {
 | `zelyra verify <file.zyl>` | | Performs formal contract verification |
 | `zelyra doc <file.zyl>` | `--openapi` | Generates OpenAPI 3.0 specifications |
 | | `--typescript` | Generates typed dependency-free TypeScript client |
-| `zelyra db init <file.zyl>` | | Initializes database and base tables |
+| `zelyra db create <file.zyl>` | | Generates database setup SQL |
 | `zelyra db setup <file.zyl>` | | Sets up MariaDB database initially |
+| `zelyra db map <file.zyl>` | `[--format=text\|json]` | Read-only comparison of declared tables with live tables, columns, and foreign keys |
+| `zelyra db plan <file.zyl>` | | Shows the schema changes that would be applied; review the plan before migration |
 | `zelyra db apply <file.zyl>` | | Applies schema migrations safely |
-| `zelyra db history <file.zyl> [--format=json]` | | Inspects MariaDB migration progress |
 | `zelyra auth hash-password` | `[--stdin]` | Generates secure Argon2 password hashes |
 | `zelyra form validate <file> <Form>` | | Tests forms with sample values on console |
 | `zelyra context <file.zyl>` | `[--format json]` | Emits semantic source context for developer tools |
-| `zelyra module plan <entry> <module-or-resource-id>` | | Shows known source dependencies and declared runtime effects; readiness blockers remain and it is not a deployment export |
+| `zelyra editor [directory]` | `[--port <p>] [--no-open]` | starts Studio |
+| `zelyra --tutorial invoice [directory]` | `[--no-start]` | creates the invoice tutorial |
+| `zelyra outbox setup <file.zyl>` | | sets up the MariaDB outbox |
+| `zelyra outbox list <file.zyl>` | `[--limit <1..200>] [--format text\|json]` | lists entries |
+| `zelyra outbox run <file.zyl>` | `--handler <event.type=function> [--once]` | processes due events |
+| `zelyra outbox requeue <event-id> <file.zyl>` | | requeues an event |
+| `zelyra task <list|run> <file.zyl>` | `[command] [options]` | Lists declared tasks and runs them with compiler verification |
+| `zelyra service <install|status|restart|change|remove>` | `[--port <port>]` | Installs and manages Linux systemd user services |
+| `zelyra schedule <list|export> <file.zyl>` | `[--format cron\|json]` | Lists resident schedules or exports them as a cron preview |
+| `zelyra module init <dir> --name <n>` | `[--version <semver>]` | Scaffolds an offline-first local Zelyra module package |
+| `zelyra module list <file.zyl>` | `[--format human\|json]` | Inspects source modules, exports, checksums, and settings schemas |
+| `zelyra module settings check <file.zyl>` | `[--format json]` | Validates typed module settings and environment secret availability |
+| `zelyra module plan <entry.zyl> <target>` | | Analyzes static module source closure and dependency graph |
+| `zelyra module bundle <entry> <target>` | `--output <dir> [--docker]` | Creates a portable source bundle with isolated package dependencies |
+| `zelyra package lock [file.zyl]` | `[--check\|--update]` | Verifies or updates SHA-256 package digests in `zelyra.lock` |
+| `zelyra package keygen\|sign\|verify` | `[options]` | Creates Ed25519 keypairs and signs/verifies `.zpkg` source archives |
+| `zelyra package trust <add\|list\|remove>` | `[publisher] [key-hex]` | Manages trusted publisher public keys in `zelyra.trust.toml` |
+| `zelyra package registry build <dir>` | | Builds a static index (`index.json`) from signed `.zpkg` files |
+| `zelyra package search <url> [filter]` | | Searches a static package index by name |
+| `zelyra package add <url> <pkg> <ver>` | `--as <alias>` | Installs an exact, verified package version |
+| `zelyra package update <url> <pkg> <ver>` | `--as <alias> [--plan <file>]` | Deterministically upgrades package dependencies |
+| `zelyra package remove <alias>` | | Removes a package dependency and refreshes `zelyra.lock` |
+| `zelyra package cache clean` | `[--apply]` | Safely previews and prunes unreferenced cached package versions |
+| `zelyra package recover` | `[--apply]` | Restores manifests and lockfiles after interrupted transactions |
+| `zelyra reflect <entry.zyl>` | `[--format=json\|human]` | Exports symbols, schemas, routes, and contracts as versioned JSON |
+| `zelyra audit <inspect\|export\|verify\|prune>` | `<file.zyl> [options]` | Inspects, verifies, or prunes application audit logs |
+| `zelyra migrate-layout --check` | `[entry.zyl] [--format human\|json]` | Verifies compliance with the canonical standard project layout |
+| `zelyra db history <file.zyl>` | | Displays applied database migration history |
+| `zelyra update` | `[--check]` | Checks or installs the stable release |
 
 ---
 
@@ -366,7 +365,7 @@ table tasks {
 }
 
 fn sql_examples() uses Database {
-    // 1. SELECT with typed return type and safe parameter
+    # 1. SELECT with typed return type and safe parameter
     status = false
     filtered = sql<Task[]> {
         SELECT id, name, completed
@@ -374,7 +373,7 @@ fn sql_examples() uses Database {
         WHERE completed = :status
     }
 
-    // 2. INSERT within a transaction
+    # 2. INSERT within a transaction
     text = "New task"
     transaction {
         sql {
@@ -383,7 +382,7 @@ fn sql_examples() uses Database {
         }
     }
 
-    // 3. UPDATE
+    # 3. UPDATE
     target_id = 1
     transaction {
         sql {
@@ -424,16 +423,68 @@ fn main() uses Database {
 
 ## Appendix G: Glossary of Technical Terms
 
-- **AST (Abstract Syntax Tree):** The hierarchical tree data structure representing the syntactic elements of your source code following lexical and grammatical analysis.
-- **Capability:** An explicit permission marker (`uses FileSystem`, `uses Database`, etc.) required on a function's signature before it is permitted to touch guarded external system resources.
-- **Design by Contract:** A formal software design methodology where functions establish strict preconditions (`requires`) and postconditions (`ensures`) enforced by static analysis and runtime checks.
-- **Immutable:** Unchangeable after initial assignment. In Zelyra, all variables are immutable by default unless explicitly declared with the `mutable` keyword.
-- **Invariant:** A logical condition (such as in a loop) that is guaranteed to evaluate to true before and after every execution cycle.
-- **Option:** A algebraic data type (`Some(v)` or `None`) representing the potential absence of a value—Zelyra's robust replacement for dreaded null-pointer exceptions.
-- **Result:** A type (`Ok(v)` or `Err(e)`) that encapsulates the outcome of an operation that might fail, treating errors as first-class recoverable values rather than untyped exceptions.
-- **Typed Hole (`_`):** A compiler-supported placeholder indicating incomplete code, which signals the compiler and AI tooling to display the required type, local scope, and applicable contracts for that location.
+Each entry links to the chapter that explains the term. Unsupported language constructs and CLI commands are marked as such.
 
----
+- **Value:** A named piece of data. In Zelyra, values are immutable by default to prevent hidden side effects and state bugs. [Chapter 5: Values and Data Types](#chapter-5-values-and-data-types).
+- **mutable (Mutability):** Keyword required to declare variables that may be reassigned. Makes state mutations explicitly visible to developers and compilers. [Chapter 6: Variables and Immutability](#chapter-6-variables-and-immutability).
+- **Function (fn):** A named operation with explicit parameter types and a definite return type. Functions are the foundational building blocks of Zelyra programs. [Chapter 11: Functions and Procedures](#chapter-11-functions-and-procedures).
+- **Pure Function:** A function without side effects: its result depends only on its inputs, so identical inputs produce the same result. [Chapter 11: Functions and Procedures](#chapter-11-functions-and-procedures).
+- **Type Inference:** The compiler's capability to automatically deduce data types from values and expressions, combining static safety with concise syntax. [Chapter 5: Values and Data Types](#chapter-5-values-and-data-types).
+- **Typed Hole (_):** The underscore `_` as a formal typed placeholder. Instructs compiler and AI tools where implementation is needed, with expected types inferred from surrounding context. [Chapter 32: AI-Nativity](#chapter-32-ai-nativity-why-zelyra-is-built-for-ai-assistants).
+- **Block & Scope:** The lexical scope of identifiers, bounded by curly braces `{ ... }`. Names declared inside a block are bound to that scope. [Chapter 6: Variables and Immutability](#chapter-6-variables-and-immutability).
+- **Data Type:** A precise description of allowable values and valid operations. Includes scalars (Int, Float, Bool, String, Decimal, Id) and compound types. [Chapter 5: Values and Data Types](#chapter-5-values-and-data-types).
+- **Option (Some / None):** Type representing a value that may be present (`Some(v)`) or absent (`None`). The question mark suffix `Type?` guarantees absence is handled explicitly. [Chapter 18: Option](#chapter-18-nothingness-does-not-exist-working-safely-with-option).
+- **Result (Ok / Err):** A type for operations that may fail. It returns success as `Ok(data)` and an error as `Err(reason)` explicitly. [Chapter 17: Result Pattern](#chapter-17-errors-as-values-the-result-pattern).
+- **Null Safety (Zero null):** Zelyra has no concept of `null`, `nil`, or `undefined`. The "billion-dollar mistake" of null-pointer exceptions is structurally excluded by the type system. [Chapter 18: Option](#chapter-18-nothingness-does-not-exist-working-safely-with-option).
+- **Pattern Matching (match):** Exhaustive pattern evaluation across data structures, options, and results. The compiler rejects code if any branch is left unhandled. [Chapter 14: Custom Data Types](#chapter-14-creating-custom-data-types-records-tables).
+- **Domain Types (Nominal):** Nominal type definitions like `type UserId = Id` and `type OrderId = Id`. Prevents accidentally swapping identically represented primitives in business logic. [Chapter 14: Custom Data Types](#chapter-14-creating-custom-data-types-records-tables).
+- **Record / Struct:** A structured collection of named, strongly typed fields representing a concrete entity, with constructor and destructuring support. [Chapter 14: Custom Data Types](#chapter-14-creating-custom-data-types-records-tables).
+- **Enum / Sum Type:** An enum describes a fixed set of distinct variants. User-defined `enum` declarations are not part of the currently documented Zelyra language surface; the conceptual pattern is not executable Zelyra syntax. [Chapter 14: Custom Data Types](#chapter-14-creating-custom-data-types-records-tables).
+- **Design by Contract:** Formal software engineering method ensuring correctness: functions declare rigorous preconditions (`requires`) and postconditions (`ensures`). [Chapter 12: Contracts and Preconditions](#chapter-12-contracts-and-preconditions-design-by-contract).
+- **Precondition (requires):** Contract clause attached to a function signature enforcing valid caller inputs before body execution. Shields functions from invalid state. [Chapter 12: Contracts and Preconditions](#chapter-12-contracts-and-preconditions-design-by-contract).
+- **Postcondition (ensures & result):** Contractual guarantee about the computation. The keyword `result` references the returned value and verifies its invariants. [Chapter 12: Contracts and Preconditions](#chapter-12-contracts-and-preconditions-design-by-contract).
+- **Loop Invariant (invariant):** Formal assertion inside loops that must remain true before and after each iteration, facilitating mathematical verification. [Chapter 12: Contracts and Preconditions](#chapter-12-contracts-and-preconditions-design-by-contract).
+- **Capability:** Explicit permission clause (`uses FileSystem`, `uses Database`) without which code cannot perform I/O or access external resources. [Chapter 33: Capabilities](#chapter-33-safety-through-capabilities).
+- **Sandboxing & Least Privilege:** The capability model limits system access to capabilities requested by functions and enabled for the project. [Chapter 33: Capabilities](#chapter-33-safety-through-capabilities).
+- **Array (Type[]):** A homogeneous ordered collection of elements. Supports indexed access and standard utilities like `len()`, `append()`, `first()`, and `contains()`. [Chapter 13: Arrays & Maps](#chapter-13-collections-lists-and-dictionaries-arrays-maps).
+- **Map (Map<K, V>):** Associative key-value dictionary. Querying via `get(map, key)` always returns a safe `Option<V>`, eliminating crashes on missing keys. [Chapter 13: Arrays & Maps](#chapter-13-collections-lists-and-dictionaries-arrays-maps).
+- **Immutable Collections:** Immutable collection operations do not change the existing value directly; they return a new value for a change. [Chapter 13: Arrays & Maps](#chapter-13-collections-lists-and-dictionaries-arrays-maps).
+- **for .. in Iteration:** A loop form that visits collection elements in sequence and avoids manual index management. [Chapter 10: Repetition and Loops](#chapter-10-repetition-and-loops).
+- **Table Schema (table):** Direct relational table declaration in Zelyra syntax including types, primary keys, uniqueness constraints, and default values. [Chapter 24: Defining Tables](#chapter-24-defining-tables-and-data-modeling).
+- **Migration (db plan & apply):** Controlled schema changes: `zelyra db plan` shows the difference between the source model and database; `zelyra db apply` applies the reviewed plan. Review possible effects first, since interrupted DDL can leave a partially changed state. [Chapter 24: Defining Tables](#chapter-24-defining-tables-and-data-modeling).
+- **CRUD Resource (crud):** Create, Read, Update, Delete: Declarative resource binding generating query routines, forms, and layouts without repetitive boilerplate. [Chapter 28: CRUD Pattern](#chapter-28-the-complete-crud-pattern).
+- **Native SQL (sql { ... }):** First-class SQL validated against schemas at compile-time. Delivers raw query performance and expressiveness without ORM friction. [Chapter 25: Querying Data](#chapter-25-querying-and-modifying-data).
+- **Transaction (transaction):** Atomic database transaction block: all database operations succeed together or automatically roll back upon any failure. [Chapter 25: Querying Data](#chapter-25-querying-and-modifying-data).
+- **Foreign Key (fk):** Declarative relational link between tables enforcing referential integrity and cascade rules directly at database level. [Chapter 24: Defining Tables](#chapter-24-defining-tables-and-data-modeling).
+- **Component (component):** Reusable UI template unit with typed props, slots, and automated contextual HTML escaping against XSS vulnerabilities. [Chapter 26: Rendering Web Pages](#chapter-26-rendering-web-pages).
+- **Slot (slot: name):** A named injection slot in container components enabling flexible layout composition with dynamic child elements. [Chapter 26: Rendering Web Pages](#chapter-26-rendering-web-pages).
+- **Form & Validation (form):** Declarative web form specification providing unified server and browser validation with structured error feedback. [Chapter 27: Forms](#chapter-27-forms-and-user-inputs).
+- **CSRF Protection:** Built-in cryptographic token mechanism preventing Cross-Site Request Forgery on all state-modifying requests. [Chapter 27: Forms](#chapter-27-forms-and-user-inputs).
+- **Route:** Explicit binding of HTTP method and URL endpoint to an executable controller handler or CRUD resource. [Chapter 26: Rendering Web Pages](#chapter-26-rendering-web-pages).
+- **Authentication (auth):** Native declarative block configuring user login, session lifecycle, and credentials without third-party frameworks. [Chapter 29: Authentication](#chapter-29-users-passwords-and-sessions).
+- **Argon2 Password Hashing:** State-of-the-art memory-hard hashing algorithm natively enforced across Zelyra authentication modules. [Chapter 29: Authentication](#chapter-29-users-passwords-and-sessions).
+- **requires auth & permits:** Declarative route authorization attribute restricting endpoints to logged-in users or specific privilege roles. [Chapter 29: Authentication](#chapter-29-users-passwords-and-sessions).
+- **uses FileSystem:** Security capability governing storage I/O. Functions reading or writing files must declare this permission at the boundary. [Chapter 20: Files](#chapter-20-working-with-files).
+- **read_text & write_text:** Standard library utilities for atomic, safe UTF-8 file reading and writing with automatic resource closing. [Chapter 20: Files](#chapter-20-working-with-files).
+- **uses Clock & now():** System time capability: querying current timestamps via `now()` requires `uses Clock`, enabling deterministic mocking in automated tests. [Chapter 21: Date & Time](#chapter-21-date-time-randomness-and-structured-data).
+- **uses Random & random_int():** Randomness capability: grants access to pseudo-random generators while keeping pure algorithms cleanly separated. [Chapter 21: Date & Time](#chapter-21-date-time-randomness-and-structured-data).
+- **uses Environment & env():** Environment variable capability: `env("KEY")` queries runtime configuration or `.env` and yields a null-safe `Option<String>`. [Chapter 37: Configuration](#chapter-37-configuration-and-environment-variables).
+- **parallel & await:** A `parallel` block starts independent tasks and uses `await` to wait for their results. The task scope remains visible in the block. [Chapter 22: Concurrency](#chapter-22-concurrency-and-background-tasks).
+- **json_encode & json_decode:** Type-safe JSON serialization and deserialization yielding explicit `Result<T, JsonError>` containers. [Chapter 21: JSON & Data](#chapter-21-date-time-randomness-and-structured-data).
+- **zelyra.toml (Project Manifest):** Project manifest for metadata, capability grants, and supported project settings. Zelyra modules are included by project path; a package registry is outside the documented scope. [Chapter 15: Modules & Projects](#chapter-15-modules-and-code-organization).
+- **zelyra verify (Contract Prover):** CLI command for the documented contract and invariant checks. Formal analysis is limited to the supported verification scope and does not guarantee overall program correctness. [Chapter 19: QA & Testing](#chapter-19-testing-and-quality-assurance).
+- **assert (Test Assertion):** Checks a condition and reports an error when it is false. Project-specific assertions can run in an executable `.zyl` file with `zelyra run`; a separate test subcommand is not documented. [Chapter 19: QA & Testing](#chapter-19-testing-and-quality-assurance).
+- **Source Authority Principle:** A rule for resolving conflicting sources. The handbook reference orders them as language specification, compiler implementation, official tests, standard library, verified examples, and documentation. [Ref 24: Source Authority](#24-authoritative-sources-and-compiler-verification-source-authority).
+- **Three-Layer Architecture:** Canonical Zelyra architectural pattern strictly isolating UI presentation, pure business logic, and schema persistence. [Chapter 36: Architecture](#chapter-36-architecture-and-clean-code-structure).
+- **TDD (Test-Driven Development):** Methodology where formal contracts and automated test assertions precede the actual function implementation. [Chapter 19: QA & Testing](#chapter-19-testing-and-quality-assurance).
+- **Regression Prevention:** Prevention of bugs reappearing after refactoring. Static checks, contract verification, and project-specific test runs help catch unintended changes. [Chapter 19: QA & Testing](#chapter-19-testing-and-quality-assurance).
+- **AST (Abstract Syntax Tree):** The hierarchical syntax tree built by the parser from source code. Compiler phases such as name resolution and type checking continue from this structured representation. [Chapter 24: Source Authority](#24-authoritative-sources-and-compiler-verification-source-authority).
+- **Zelyra CLI (zelyra):** The command-line interface for Zelyra projects: it creates projects with `new`, checks source with `check`, runs programs with `run`, and provides other documented subcommands. The current CLI reference does not list a dedicated `test` subcommand. [Chapter 4: The First Zelyra Project](#chapter-4-the-first-zelyra-project).
+- **zelyrac (Compiler):** The compiler processes Zelyra source behind the `zelyra` CLI. The current CLI reference does not document a separate `zelyrac` executable or `zelyrac build`; use `zelyra check` and `zelyra run` to check and execute programs. [Chapter 4: The First Zelyra Project](#chapter-4-the-first-zelyra-project).
+- **zelyra fmt (Formatter):** Built-in source formatter with deterministic output. `--check` checks formatting without changing the file. [Chapter 4: The First Zelyra Project](#chapter-4-the-first-zelyra-project).
+- **LSP (Language Server Protocol):** The Language Server Protocol standardizes communication between a language and an editor. The current CLI reference documents `zelyra editor` for Studio, but no separate `zelyra lsp` subcommand. [Chapter 4: The First Zelyra Project](#chapter-4-the-first-zelyra-project).
+- **AI-Native Language Design:** Language and tooling features such as structured diagnostics, contracts, and typed holes can support AI-assisted work. They do not guarantee error-free code or replace human review. [Chapter 32: AI-Nativity](#chapter-32-ai-nativity-why-zelyra-is-built-for-ai-assistants).
+- **Standard Library (std):** Overview of documented standard functions and capability-guarded functions such as filesystem, time, randomness, and database access. [Appendix D: Standard Library](#appendix-d-standard-library-overview-zelyra-103).
 
 ## Appendix H: Solutions to Chapter Exercises
 
@@ -502,11 +553,8 @@ fn main() {
 
 ## Appendix I: Frequently Asked Questions (FAQ)
 
-**Question: How do I import other source files in Zelyra 1.0.4?**
-*Answer:* Use `import "src/math.zyl" as math` to add a file to the project
-graph. Public functions and other supported declarations can then be referenced
-through the alias. Module support has documented limits; see
-[Chapter 15](textbook-foundations.md#chapter-15-modules-and-code-organization).
+**Question: How do I use imports?**
+*Answer:* `import "src/models.zyl" as models` includes a project-local source file. Access supported public declarations through the module name. A package registry, dynamic imports, and complete deployment closure are not included.
 
 **Question: Can I build command-line applications with Zelyra?**
 *Answer:* Yes. `print()` emits values. `read_console("Prompt: ")` reads a line and returns `String?`; the function needs `uses Console` and the project may also need `console = true`.
@@ -521,3 +569,533 @@ through the alias. Module support has documented limits; see
 - **Official GitHub Repository:** [https://github.com/sf1976/zelyra](https://github.com/sf1976/zelyra)
 - **Documentation & Online Handbook:** [https://siedelmann.com/handbook](https://siedelmann.com/handbook) / [https://siedelmann.com/handbuch](https://siedelmann.com/handbuch)
 - **Examples & Templates:** Check the `examples/` directory in the official repository for runnable templates covering authentication, CRUD views, REST APIs, and database migrations.
+
+---
+
+## Appendix K: The Zelyra Cookbook (Practical Recipes)
+
+The Zelyra Cookbook provides a curated collection of proven patterns, architectural recipes, and concrete solutions for real-world business and web engineering challenges. Each recipe follows a practical three-tier format: **Problem**, **Solution** (contract-verified Zelyra code), and **Explanation**.
+
+---
+
+### Part 1: Data Processing & Standard Library
+
+#### Recipe K.1: Exact Commercial Rounding & Cash Discount Calculations
+
+**Problem:**
+In commercial and accounting applications, binary floating-point numbers (`Float`) introduce rounding errors into discounts, VAT splits, and ledger totals.
+
+**Solution:**
+```zelyra
+pub record DiscountResult {
+    base_net: Decimal,
+    discount_rate: Decimal,
+    discount_amount: Decimal,
+    final_net: Decimal,
+}
+
+pub fn apply_cash_discount(amount: Decimal, rate: Decimal) -> DiscountResult
+    requires { amount >= decimal("0.00") && rate >= decimal("0.00") && rate <= decimal("100.00") }
+    ensures { result.final_net <= result.base_net && result.discount_amount >= decimal("0.00") }
+{
+    let discount = (amount * rate) / decimal("100.00")
+    let final_amount = amount - discount
+    return DiscountResult {
+        base_net: amount,
+        discount_rate: rate,
+        discount_amount: discount,
+        final_net: final_amount,
+    }
+}
+```
+
+**Explanation:**
+- Zelyra's `Decimal` type implements high-precision fixed-point arithmetic without binary representation errors.
+- The precondition contract `requires` guarantees that negative discount rates or values above 100% cannot be passed into the function.
+- The postcondition `ensures` verifies mathematically that the final discounted total can never exceed the starting net amount.
+
+---
+
+#### Recipe K.2: Safely Parsing & Typing External Webhook Payloads
+
+**Problem:**
+An external payment provider (such as Stripe or PayPal) transmits event notifications via HTTP POST webhooks. Missing or malicious attributes must be rejected with full type safety.
+
+**Solution:**
+```zelyra
+pub enum PaymentStatus {
+    Paid,
+    Pending,
+    Failed,
+}
+
+pub record WebhookPayload {
+    event_id: String,
+    payment_reference: String,
+    amount: Decimal,
+    status: PaymentStatus,
+}
+
+pub fn parse_payment_status(raw: String) -> Option<PaymentStatus> {
+    match raw {
+        "succeeded" => { return Option::Some(PaymentStatus::Paid) }
+        "processing" => { return Option::Some(PaymentStatus::Pending) }
+        "requires_payment_method" => { return Option::Some(PaymentStatus::Failed) }
+        _ => { return Option::None }
+    }
+}
+```
+
+**Explanation:**
+- Zelyra requires exhaustive `match` checking. Unrecognized status payloads hit the fallback wildcard `_` and return `Option::None`, eliminating unhandled runtime crashes.
+
+---
+
+#### Recipe K.3: Computing Payment Due Dates and Business Days
+
+**Problem:**
+An invoice requires a 14-day payment window. If the due date falls on a weekend, the payment deadline must automatically shift to the subsequent business day (Monday).
+
+**Solution:**
+```zelyra
+pub fn calculate_due_date(invoice_date: Date, net_days: Int) -> Date
+    requires { net_days >= 0 }
+{
+    let target = invoice_date.add_days(net_days)
+    let weekday = target.day_of_week()
+    if weekday == 6 {
+        return target.add_days(2)
+    } else if weekday == 7 {
+        return target.add_days(1)
+    } else {
+        return target
+    }
+}
+```
+
+**Explanation:**
+- Calendar arithmetic in Zelyra operates on typed `Date` records and accounts for calendar months and leap years without timezone ambiguity.
+
+---
+
+### Part 2: Database, Transactions & Multi-Tenancy
+
+#### Recipe K.4: Gapless Invoice Number Sequences (Atomic Sequence)
+
+**Problem:**
+Tax authorities and accounting regulations require gapless, strictly sequential document numbering. Under high concurrency, naive increments create race conditions and duplicates.
+
+**Solution:**
+```zelyra
+table invoice_sequences scoped by tenant_id: TenantId {
+    id: Id primary auto
+    tenant_id: TenantId required
+    fiscal_year: Int required
+    current_value: Int required default 0
+
+    unique within tenant fiscal_year
+}
+
+fn next_invoice_number(t_id: TenantId, year: Int) -> String uses Database {
+    transaction {
+        let seq = query_one(
+            "SELECT id, current_value FROM invoice_sequences WHERE tenant_id = ? AND fiscal_year = ? FOR UPDATE",
+            [t_id, year]
+        )
+        let next_val = seq.current_value + 1
+        execute(
+            "UPDATE invoice_sequences SET current_value = ? WHERE id = ?",
+            [next_val, seq.id]
+        )
+        return "INV-" + year.to_string() + "-" + next_val.to_string()
+    }
+}
+```
+
+**Explanation:**
+- The `FOR UPDATE` query inside an explicit `transaction` block acquires an exclusive row lock.
+- `scoped by tenant_id` paired with `unique within tenant fiscal_year` isolates number series between separate tenants and fiscal years.
+
+---
+
+#### Recipe K.5: Immutable Audit Trail (Temporal Ledger)
+
+**Problem:**
+Mutations to sensitive business data (prices, bank routing numbers, administrative permissions) must be recorded permanently with the acting user and timestamp.
+
+**Solution:**
+```zelyra
+table audit_ledger scoped by tenant_id: TenantId {
+    id: Id primary auto
+    tenant_id: TenantId required
+    actor_id: Id required
+    entity_name: String(64) required
+    entity_id: Id required
+    action_type: String(32) required
+    payload_hash: String(64) required
+    created_at: Instant required
+}
+
+fn record_audit_entry(
+    t_id: TenantId,
+    actor: Id,
+    entity: String,
+    target_id: Id,
+    action: String,
+    raw_payload: String
+) uses Database, Clock {
+    let now_ts = now()
+    let hash = hash_sha256(raw_payload)
+    execute(
+        "INSERT INTO audit_ledger (tenant_id, actor_id, entity_name, entity_id, action_type, payload_hash, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
+        [t_id, actor, entity, target_id, action, hash, now_ts]
+    )
+}
+```
+
+**Explanation:**
+- Explicit capabilities `Database` and `Clock` guarantee reproducible unit tests via virtual clock mocks while recording strict UTC timestamps in production.
+- Computing a SHA-256 hash fixes the payload cryptographically for forensic audits.
+
+---
+
+#### Recipe K.6: High-Performance Keyset Pagination for Large Datasets
+
+**Problem:**
+On tables with millions of rows, `OFFSET`-based pagination (`SELECT ... LIMIT 50 OFFSET 500000`) degrades query performance because the engine must traverse all preceding rows.
+
+**Solution:**
+```zelyra
+table customer_logs scoped by tenant_id: TenantId {
+    id: Id primary auto
+    tenant_id: TenantId required
+    created_at: Instant required
+    message: String(255) required
+
+    index idx_tenant_cursor (tenant_id, created_at, id)
+}
+
+fn fetch_log_page(t_id: TenantId, last_ts: Instant, last_id: Id, page_size: Int) -> CustomerLog[] uses Database {
+    return query(
+        "SELECT id, tenant_id, created_at, message FROM customer_logs WHERE tenant_id = ? AND (created_at < ? OR (created_at = ? AND id < ?)) ORDER BY created_at DESC, id DESC LIMIT ?",
+        [t_id, last_ts, last_ts, last_id, page_size]
+    )
+}
+```
+
+**Explanation:**
+- Keyset (cursor) pagination uses the compound index `(tenant_id, created_at, id)` to seek directly to the next page, maintaining sub-millisecond execution regardless of table size.
+
+---
+
+### Part 3: Security, Authentication & Governance
+
+#### Recipe K.7: Two-Factor Authentication with TOTP & Recovery Codes
+
+**Problem:**
+Sensitive user profiles must enforce RFC 6238 time-based one-time passwords (TOTP) alongside cryptographic recovery codes.
+
+**Solution:**
+```zelyra
+table user_mfa_settings scoped by tenant_id: TenantId {
+    id: Id primary auto
+    tenant_id: TenantId required
+    user_id: Id required unique
+    secret_key: String(64) required
+    is_enabled: Bool required default false
+    backup_code_hash: String(128) required
+}
+
+fn verify_totp_attempt(user_secret: String, user_token: String) -> Bool uses Clock {
+    let valid = totp_verify(user_secret, user_token, 30)
+    return valid
+}
+```
+
+**Explanation:**
+- `totp_verify` accepts a 30-second skew window (±1 step) to accommodate minor drift between client mobile authenticators and servers.
+
+---
+
+#### Recipe K.8: Tenant-Bound API with Role Verification
+
+**Problem:**
+A JSON API approving accounting vouchers must ensure that users can only mutate records belonging to their own tenant and strictly possess the `vouchers.approve` permission.
+
+**Solution:**
+```zelyra
+table vouchers scoped by tenant_id: TenantId {
+    id: Id primary auto
+    tenant_id: TenantId required
+    voucher_number: String(40) required
+    status: String(20) required default "draft"
+    total_amount: Decimal(12, 2) required
+}
+
+api approve_voucher(voucher_id: Id) scoped by tenant_id {
+    permission: "vouchers.approve"
+    validates {
+        voucher_id > 0: "Invalid voucher ID."
+    }
+
+    execute uses Database {
+        transaction {
+            let row = query_one(
+                "SELECT id, status FROM vouchers WHERE id = ? AND tenant_id = ? FOR UPDATE",
+                [voucher_id, session.tenant_id]
+            )
+            if row.status == "approved" {
+                return { success: false, error: "Voucher has already been approved." }
+            }
+            execute(
+                "UPDATE vouchers SET status = 'approved' WHERE id = ? AND tenant_id = ?",
+                [voucher_id, session.tenant_id]
+            )
+            return { success: true, message: "Voucher approved successfully." }
+        }
+    }
+}
+```
+
+**Explanation:**
+- `scoped by tenant_id` guarantees that requests are bound to the caller's authenticated tenant (`session.tenant_id`), rendering cross-tenant data leakage impossible at compile time.
+
+---
+
+#### Recipe K.9: Rate Limiting & Brute-Force Defense
+
+**Problem:**
+Authentication and credential endpoints require rate limiting to prevent brute-force attacks and credential stuffing.
+
+**Solution:**
+```zelyra
+table rate_limits {
+    id: Id primary auto
+    client_ip: String(45) required
+    action: String(30) required
+    attempts: Int required default 1
+    locked_until: Instant?
+
+    index idx_client_action (client_ip, action)
+}
+
+fn check_rate_limit(ip: String, action_name: String, max_attempts: Int) -> Bool uses Database, Clock {
+    let now_ts = now()
+    let record = query_one_optional(
+        "SELECT id, attempts, locked_until FROM rate_limits WHERE client_ip = ? AND action = ?",
+        [ip, action_name]
+    )
+    match record {
+        Option::Some(r) => {
+            if r.attempts >= max_attempts {
+                return false
+            }
+            execute("UPDATE rate_limits SET attempts = attempts + 1 WHERE id = ?", [r.id])
+            return true
+        }
+        Option::None => {
+            execute("INSERT INTO rate_limits (client_ip, action, attempts) VALUES (?, ?, 1)", [ip, action_name])
+            return true
+        }
+    }
+}
+```
+
+**Explanation:**
+- Once `max_attempts` is reached, further invocations are blocked immediately, mitigating credential stuffing and conserving backend resources.
+
+---
+
+### Part 4: Web, CRUD & Master-Detail
+
+#### Recipe K.10: Master-Detail Invoice Form with Line Items (`has_many`)
+
+**Problem:**
+An invoice requires header fields (customer, invoice date) alongside a variable collection of line items, committed atomically with server-calculated summary aggregates.
+
+**Solution:**
+```zelyra
+table invoices scoped by tenant_id: TenantId {
+    id: Id primary auto
+    tenant_id: TenantId required
+    invoice_number: String(32) required unique within tenant
+    invoice_date: Date required
+    customer_name: String(100) required
+    total_net: Decimal(12, 2) required default decimal("0.00")
+    total_gross: Decimal(12, 2) required default decimal("0.00")
+}
+
+table invoice_items scoped by tenant_id: TenantId {
+    id: Id primary auto
+    tenant_id: TenantId required
+    invoice: Invoice required on_delete cascade
+    description: String(120) required
+    quantity: Decimal(8, 2) required
+    unit_price: Decimal(10, 2) required
+    line_total: Decimal(12, 2) required
+}
+
+crud Invoice -> invoices {
+    title: "Create Invoice"
+
+    has_many items: InvoiceItem {
+        title: "Line Items"
+        fields: [description, quantity, unit_price, line_total]
+    }
+
+    aggregates {
+        total_net = sum(items.line_total)
+        total_gross = sum(items.line_total) * decimal("1.19")
+    }
+}
+```
+
+**Explanation:**
+- `has_many items` generates child item grids directly within the parent form.
+- The `aggregates` block computes monetary sums inside the storage transaction on the server, preventing client-side price tampering.
+
+---
+
+#### Recipe K.11: Lifecycle Guards for Immutable Finalized Documents
+
+**Problem:**
+Invoices that have been finalized or paid must be permanently protected against subsequent editing or deletion.
+
+**Solution:**
+```zelyra
+table sales_invoices scoped by tenant_id: TenantId {
+    id: Id primary auto
+    tenant_id: TenantId required
+    doc_number: String(30) required
+    is_finalized: Bool required default false
+    is_cancelled: Bool required default false
+}
+
+crud SalesInvoice -> sales_invoices {
+    title: "Sales Invoices"
+
+    guard edit when is_finalized == true {
+        error: "Finalized documents cannot be edited. Create a cancellation credit note instead."
+    }
+
+    guard delete when is_finalized == true {
+        error: "Finalized invoices cannot be deleted under regulatory compliance rules."
+    }
+}
+```
+
+**Explanation:**
+- Zelyra evaluates guards within the database mutation transaction.
+- In addition, generated `tableview` action columns automatically hide or disable edit and delete actions when the condition evaluates to `true`.
+
+---
+
+#### Recipe K.12: Cross-Field Invariant Enforcement (`validate`)
+
+**Problem:**
+In hotel and rental reservations, the departure date must always be after the arrival date.
+
+**Solution:**
+```zelyra
+table hotel_bookings scoped by tenant_id: TenantId {
+    id: Id primary auto
+    tenant_id: TenantId required
+    guest_name: String(100) required
+    check_in: Date required
+    check_out: Date required
+    rooms_count: Int required default 1
+
+    validate {
+        check_out > check_in: "Check-out date must be after check-in date."
+        rooms_count >= 1 && rooms_count <= 10: "Between 1 and 10 rooms can be booked per reservation."
+    }
+}
+```
+
+**Explanation:**
+- Invariants are enforced across forms, CRUD actions, and API mutations before committing writes, returning standardized HTTP 422 errors and setting `aria-invalid="true"`.
+
+---
+
+### Part 5: Background Services, Email & Export
+
+#### Recipe K.13: Transactional PDF Invoicing & Email Outbox
+
+**Problem:**
+When an order completes, an official PDF receipt must be generated and queued for email delivery without risking orphaned emails if the database transaction rolls back.
+
+**Solution:**
+```zelyra
+fn finalize_order(order_id: Id, recipient_mail: String) uses Database {
+    transaction {
+        let order = query_one("SELECT id, order_number, total_gross FROM orders WHERE id = ?", [order_id])
+        let pdf_bytes = render_pdf("templates/OrderConfirmation.html", order)
+        mail_queue(
+            recipient_mail,
+            "Your Order Confirmation " + order.order_number,
+            "Thank you for your order. Please find your official confirmation attached.",
+            order.order_number + ".pdf",
+            pdf_bytes
+        )
+        execute("UPDATE orders SET status = 'confirmed' WHERE id = ?", [order_id])
+    }
+}
+```
+
+**Explanation:**
+- `mail_queue` enqueues the message directly into MariaDB's `mail_queue` table inside the active transaction. If the transaction rolls back, no email is sent.
+
+---
+
+#### Recipe K.14: Idempotent Background Cron Jobs with Renewable Leases
+
+**Problem:**
+A nightly reminder job must execute at 02:00 UTC without duplicate processing across clustered servers.
+
+**Solution:**
+```zelyra
+schedule "0 2 * * *" {
+    name: "nightly_payment_reminders"
+    timeout: 3600
+
+    execute uses Database, Clock {
+        transaction {
+            let pending_invoices = query(
+                "SELECT id, customer_mail, due_date FROM invoices WHERE status = 'open' AND due_date < CURRENT_DATE() FOR UPDATE SKIP LOCKED",
+                []
+            )
+            for inv in pending_invoices {
+                execute("UPDATE invoices SET status = 'reminded' WHERE id = ?", [inv.id])
+            }
+        }
+    }
+}
+```
+
+**Explanation:**
+- Combining `FOR UPDATE SKIP LOCKED` with Zelyra's leased scheduler ensures that multiple server nodes work concurrently without overlapping task execution.
+
+---
+
+#### Recipe K.15: Streaming CSV Export for Accounting Integration
+
+**Problem:**
+Exporting accounting journals to CSV for tax advisors must maintain low memory usage even with tens of thousands of records.
+
+**Solution:**
+```zelyra
+fn export_datev_csv(t_id: TenantId, year: Int) -> String uses Database {
+    mutable csv_output = "Date;Voucher;Account;ContraAccount;Amount;Notice\n"
+    let entries = query(
+        "SELECT booking_date, voucher_no, account, contra_account, amount, notice FROM bookings WHERE tenant_id = ? AND fiscal_year = ? ORDER BY booking_date ASC",
+        [t_id, year]
+    )
+    for row in entries {
+        csv_output = csv_output + row.booking_date.to_string() + ";" + row.voucher_no + ";" + row.account.to_string() + ";" + row.contra_account.to_string() + ";" + row.amount.to_string() + ";" + row.notice + "\n"
+    }
+    return csv_output
+}
+```
+
+**Explanation:**
+- Explicit types guarantee that numerical values and dates are exported using deterministic formatting standards.

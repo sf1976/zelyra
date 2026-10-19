@@ -296,6 +296,7 @@ SQL injection has remained one of the top web security threats for over two deca
   }
   fn main() uses Database { load_tasks(false) }
   ```
+
 - **Writing inside a transaction:**
   ```zelyra
   database main {
@@ -318,6 +319,7 @@ SQL injection has remained one of the top web security threats for over two deca
   }
   fn main() uses Database { create_task("Test") }
   ```
+
   If an error occurs during execution, the database automatically rolls back all intermediate operations.
 
 ### 4. Small, progressive examples
@@ -542,7 +544,7 @@ page "/secure/{user_input}" {
 }
 ```
 
-**Example 4: Reusable view layouts and named slots**
+**Example 4: Reusable view layouts and named slots (from Zelyra 0.1.41)**
 Instead of repeating `<html>`, `<head>`, headers, and footers on every page, you declare reusable layout shells with `view`. A view defines exactly one default slot `<slot />` and optional named slots with safe fallback content:
 ```zelyra
 view AppShell {
@@ -573,7 +575,7 @@ page "/dashboard" {
 }
 ```
 
-**Example 5: Declarative search, filtering, and pagination**
+**Example 5: Declarative search, filtering, and pagination (from Zelyra 0.1.40)**
 For data-driven collection pages, Zelyra automatically generates semantic form controls for search, sorting, and pagination with full URL state preservation:
 ```zelyra
 database main {
@@ -608,6 +610,7 @@ page "/tasks" {
     }
 }
 ```
+
 Zelyra automatically runs the optimized `COUNT(*)` query in the background, binds `total` and `pages` as typed `UInt` variables, and renders semantic filter fieldsets.
 
 ### 5. Typical errors and their causes
@@ -840,7 +843,7 @@ crud Task -> tasks {
 }
 ```
 
-> **Automatic Detail Linking with Hidden ID:**
+> **Automatic Detail Linking with Hidden ID :**
 > When the technical `id` column is omitted from the `fields` block (as shown here, where only `name` and `done` are visible), Zelyra automatically links the first displayed field (`name`) to the record detail page. This applies to both table (`table`) and card (`cards`) layouts.
 
 ### 4. Small, progressive examples
@@ -929,7 +932,12 @@ crud Task -> tasks {
 }
 ```
 
-**Example 3: CRUD resources with reusable view layouts**
+> **Transactional behavior and limits of CRUD actions:**
+> - **Multiple SQL statements in one transaction:** An action can execute multiple SQL queries sequentially within its `sql { ... }` block (e.g. updating a record and appending an audit record). Zelyra bundles all statements into a single MariaDB transaction. If any statement fails, the entire transaction is rolled back atomically.
+> - **Automatic parameter binding:** The `:id` parameter is bound automatically from the URL path of the target row. Custom fields declared with `field name: Type` are rendered in the confirmation dialog, validated upfront, and passed as `:name` parameters to the SQL statements.
+> - **Current execution boundaries:** In Zelyra 1.2.24, actions are strictly limited to SQL statements. General Zelyra expressions, function calls, and row or session objects (`row`, `session`) cannot be evaluated inside actions.
+
+**Example 3: CRUD resources with reusable view layouts (from Zelyra 0.1.43)**
 With `layout: ViewName`, you automatically embed all generated CRUD screens (list, details, form, and delete dialogs) into an existing layout shell:
 ```zelyra
 view AppShell {
@@ -957,6 +965,7 @@ crud Task -> tasks {
     }
 }
 ```
+
 The generated CRUD resource adopts the navigation and container structure of `AppShell`, while security checks, permissions, and CSRF protection remain fully active.
 
 ### 5. Typical errors and their causes
@@ -1067,7 +1076,6 @@ table auth_sessions {
     user: User required
     token_hash: String(64) required unique
     expires_at: Timestamp required
-    device_label: String(255)
 }
 
 table user_permissions {
@@ -1096,7 +1104,6 @@ table auth_sessions {
     user: User required
     token_hash: String(64) required unique
     expires_at: Timestamp required
-    device_label: String(255)
 }
 
 table user_permissions {
@@ -1135,7 +1142,6 @@ table auth_sessions {
     user: User required
     token_hash: String(64) required unique
     expires_at: Timestamp required
-    device_label: String(255)
 }
 
 table user_permissions {
@@ -1165,7 +1171,6 @@ table auth_sessions {
     user: User required
     token_hash: String(64) required unique
     expires_at: Timestamp required
-    device_label: String(255)
 }
 
 table user_permissions {
@@ -1188,46 +1193,8 @@ page "/dashboard" {
 ### 5. Typical errors and their causes
 - **Error:** Storing plaintext passwords inside the user table.
   *Cause:* Zelyra expects a `password_hash` column and provides `zelyra auth hash-password` for hashing.
-- **Error:** Expecting sessions to survive a restart without a session table.
-  *Cause:* Without `sessions: auth_sessions`, sessions are held in process memory.
-  Declare the table for persistence and administrative session revocation.
-
-#### Session administration
-
-Signed-in users can open `/account/sessions` to review and revoke their own
-active sessions. Pages using the generated navigation link to it.
-It requires a valid session, CSRF token and same-origin evidence for changes.
-Revoking the current session clears its cookie and redirects to sign-in. For
-persistent sessions, the page supports both session tables with and without an
-`id` column. In-memory sessions are listed only while the process is running.
-Bearer tokens are never emitted. For legacy session tables without an `id`
-column, the stored token hash is used as a hidden revocation selector. A
-`device_label: String(255)` column enables a bounded browser label for each new
-session; values are user supplied, may be misleading, and are HTML-escaped.
-The server does not store IP addresses or browser history. Without that column,
-device labels are not persisted. The `/account/sessions` path is reserved when
-authentication is configured.
-
-When persistent sessions with an `id` column and the role administration page are configured,
-authorized administrators see up to 100 unexpired sessions, ordered by expiry.
-Each row contains its database ID, user email and expiry in database time.
-Neither the browser token nor its hash is displayed. Administrators see the
-optional user-agent label only when the session table declares that column.
-The value is not verified as a device identity; IP history is not recorded.
-
-Use **Revoke session** to end an individual session. The POST requires the
-configured administration permission, a valid CSRF token and same-origin
-evidence. The session ID and user ID must match. Repeating a request for an
-already removed session is harmless. If audit is configured, the transaction
-records `auth.session_revoke_requested`, including the numeric session ID;
-this event records a request, not proof that a row existed.
-
-Revoking your current session makes subsequent protected requests fail with
-401. Sign in again: the operation does not disable the account or remove the
-last administrator's role. Persistent sessions expire after one day. In-memory sessions are also bounded to 24 hours; they disappear
-on restart and are not listed by this persistent-session administration page.
-Expiry is checked on access. Revocation does not cancel requests already in
-progress. These controls do not implement password recovery or device tracking.
+- **Error:** Omitting the `auth_sessions` table.
+  *Cause:* Zelyra requires an explicit table for tracking session tokens cryptographically.
 
 ### 6. Key takeaways
 1. `auth` declares user, session, and permission schemas at a single centralized location.
@@ -1260,7 +1227,6 @@ table auth_sessions {
     user: User required
     token_hash: String(64) required unique
     expires_at: Timestamp required
-    device_label: String(255)
 }
 
 table user_permissions {
@@ -1387,6 +1353,7 @@ Execute:
 ```bash
 zelyra doc main.zyl --openapi
 ```
+
 Zelyra generates a standards-compliant `openapi.json` file ready for import into Swagger UI, Postman, or API gateway catalogs.
 
 ### 5. Typical errors and their causes
@@ -1608,6 +1575,7 @@ When an AI tool invokes:
 ```bash
 zelyra check main.zyl --format json
 ```
+
 it receives structured JSON with exact error codes, file paths, line numbers, column offsets, and actionable remediation hints.
 
 ### 5. Typical errors and their causes
@@ -1673,8 +1641,8 @@ Think of Zelyra's capability system as a physical security clearance:
 
 ```zelyra
 fn safe_operation() {
-    // This function has NO capabilities.
-    // It is mathematically impossible for it to damage the disk or access the network!
+    # This function has NO capabilities.
+    # It is mathematically impossible for it to damage the disk or access the network!
     print("Guaranteed side-effect free.")
 }
 
@@ -1742,12 +1710,12 @@ fn main() uses Database {
 ### 8. Practical project task: Task Management
 Isolate capability boundaries in our Task Management system:
 ```zelyra
-// 1. Pure logic: NO capabilities required
+# 1. Pure logic: NO capabilities required
 fn is_ready_for_export(task_count: Int) -> Bool {
     return task_count > 0
 }
 
-// 2. I/O logic: Explicit FileSystem capability
+# 2. I/O logic: Explicit FileSystem capability
 fn execute_export(filename: String, content: String) uses FileSystem {
     write_text(filename, content)
     print("Export completed.")
@@ -1826,7 +1794,7 @@ fn main() {
   *Cause:* Zelyra manages memory completely automatically, freeing the developer to focus on business logic.
 
 ### 6. Key takeaways
-1. Zelyra unifies the simplicity and developer velocity of scripting languages with the strict correctness of modern static type systems.
+1. Zelyra combines an approachable development workflow with its own static type system and compiler checks. Which issues those checks catch depends on their current scope.
 2. Databases, web endpoints, and interfaces are native language constructs rather than disparate third-party libraries.
 3. Reliability and security are enforced structurally by the compiler rather than added as an afterthought.
 
@@ -1865,7 +1833,7 @@ fn main() uses Database {
 ```
 
 ### 9. Summary
-- Zelyra bridges the gap between overly complex systems languages and error-prone dynamic scripting languages.
+- Zelyra is an independent compiled language. Comparisons with scripting or systems languages should name specific properties and use cases.
 - For modern web backends, data processing, and AI workflows, Zelyra offers an exceptionally dependable, developer-friendly platform.
 
 ### 10. Self-check review questions
@@ -2005,18 +1973,18 @@ A well-architected Zelyra application is divided into three distinct layers:
 3. **Presentation and Interface Layer:** Web interfaces (`crud`, `page`) and REST endpoints (`api`).
 
 ```zelyra
-// 1. Data Model
+# 1. Data Model
 table tasks {
     id: Id primary auto
     name: String required
 }
 
-// 2. Business Logic
+# 2. Business Logic
 fn format_name(raw_text: String) -> String {
     return "[TASK] " + raw_text
 }
 
-// 3. Entry point / Execution
+# 3. Entry point / Execution
 fn main() {
     print(format_name("Check server"))
 }
@@ -2026,14 +1994,14 @@ fn main() {
 
 **Example 1: Decoupling domain logic from I/O**
 ```zelyra
-// Pure calculation function: No capabilities needed
+# Pure calculation function: No capabilities needed
 fn calculate_percentage(value: Int, max_value: Int) -> Int
     requires { max_value > 0 && value >= 0 }
 {
     return (value * 100) / max_value
 }
 
-// I/O function: Uses the logic and prints output
+# I/O function: Uses the logic and prints output
 fn main() {
     percentage = calculate_percentage(45, 50)
     print(percentage)
@@ -2080,19 +2048,19 @@ database main {
     database: "tasks_architecture"
 }
 
-// Layer 1: Persistence
+# Layer 1: Persistence
 table tasks {
     id: Id primary auto
     name: String required
     completed: Bool default false
 }
 
-// Layer 2: Business Logic
+# Layer 2: Business Logic
 fn is_task_important(name: String, urgent: Bool) -> Bool {
     return urgent
 }
 
-// Layer 3: Application / Execution
+# Layer 3: Application / Execution
 fn main() uses Database {
     important = is_task_important("Submit tax return", true)
     print("Task architecture verified.")
@@ -2253,6 +2221,7 @@ Zelyra provides a comprehensive toolkit for proactive system diagnostics:
 ```bash
 zelyra doctor main.zyl
 ```
+
 If your MariaDB server is offline or unreachable, `zelyra doctor` immediately highlights the exact cause instead of leaving you stranded.
 
 ### 4. Small, progressive examples
@@ -2356,6 +2325,7 @@ Zelyra includes its own high-performance, asynchronous web server:
 ```bash
 zelyra serve src/main.zyl 0.0.0.0:8080
 ```
+
 For professional production deployments, you package your application into a Docker container:
 - The container contains the compiled Zelyra binary, your project source files, and `zelyra.toml`.
 - On startup, the container automatically runs database schema migrations via `zelyra db apply` and launches the web server.
@@ -2485,9 +2455,9 @@ database main {
     database: "zelyra_tasks_app"
 }
 
-// ==========================================
-// 1. AUTHENTIFIZIERUNG & BENUTZERVERWALTUNG
-// ==========================================
+# ==========================================
+# 1. AUTHENTIFIZIERUNG & BENUTZERVERWALTUNG
+# ==========================================
 
 auth users {
     table: users
@@ -2507,7 +2477,6 @@ table auth_sessions {
     user: User required
     token_hash: String(64) required unique
     expires_at: Timestamp required
-    device_label: String(255)
 }
 
 table user_permissions {
@@ -2516,9 +2485,9 @@ table user_permissions {
     permission: String(100) required
 }
 
-// ==========================================
-// 2. AUFGABEN-DATENMODELL
-// ==========================================
+# ==========================================
+# 2. AUFGABEN-DATENMODELL
+# ==========================================
 
 type TaskId = Id
 
@@ -2530,9 +2499,9 @@ table tasks {
     erledigt: Bool default false
 }
 
-// ==========================================
-// 3. GESCHÄFTSLOGIK MIT VERTRÄGEN
-// ==========================================
+# ==========================================
+# 3. GESCHÄFTSLOGIK MIT VERTRÄGEN
+# ==========================================
 
 fn berechne_erfolgsquote(erledigte: Int, gesamt: Int) -> Int
     requires { gesamt > 0 && erledigte >= 0 && erledigte <= gesamt }
@@ -2558,9 +2527,9 @@ fn prioritaet_label(stufe: Int) -> String {
     }
 }
 
-// ==========================================
-// 4. WEBOBERFLÄCHE & CRUD-SCHNITTSTELLE
-// ==========================================
+# ==========================================
+# 4. WEBOBERFLÄCHE & CRUD-SCHNITTSTELLE
+# ==========================================
 
 crud Task -> tasks {
     title: "Zelyra Aufgabenverwaltung"
@@ -2610,9 +2579,9 @@ crud Task -> tasks {
     }
 }
 
-// ==========================================
-// 5. REST-API ENDPUNKTE
-// ==========================================
+# ==========================================
+# 5. REST-API ENDPUNKTE
+# ==========================================
 
 api GET "/api/tasks/{id}" {
     input {
@@ -2635,9 +2604,9 @@ api POST "/api/tasks" {
     }
 }
 
-// ==========================================
-// 6. STARTSEITE
-// ==========================================
+# ==========================================
+# 6. STARTSEITE
+# ==========================================
 
 page "/" {
     html {
@@ -2654,9 +2623,9 @@ page "/" {
     }
 }
 
-// ==========================================
-// 7. EINSTIEGSPUNKT
-// ==========================================
+# ==========================================
+# 7. EINSTIEGSPUNKT
+# ==========================================
 
 fn main() {
     print("Zelyra Aufgabenverwaltung vollstaendig initialisiert.")
@@ -2688,6 +2657,7 @@ cd task_manager
 zelyra check src/main.zyl
 zelyra serve src/main.zyl 0.0.0.0:8080
 ```
+
 Navigate to `http://localhost:8080` in your browser—your own live Zelyra application is operational!
 
 ### 9. Summary
@@ -2701,68 +2671,61 @@ Navigate to `http://localhost:8080` in your browser—your own live Zelyra appli
 
 ---
 
-<a id="chapter-41-the-zelyra-roadmap-from-090-to-10"></a>
-
-## Chapter 41: Current scope and roadmap
+## Chapter 41: Functionality and safe operation
 
 ### 1. What will I learn in this chapter?
-- What Zelyra 1.0.7 includes and how the language compatibility line 0.1 remains separate.
-- Which capabilities have arrived since 1.0.0.
-- Where to find verified features, limits, and planned work.
+- What changed in Zelyra 1.0.1 through 1.0.7.
+- How compiler versions, language compatibility, and database support relate.
+- How to review local changes safely and edit the invoice tutorial in Studio.
 
-### 2. Why is this topic important?
-Compiler versions and the language compatibility line describe different things. Updating to Zelyra 1.0.7 does not automatically change the language line declared in `zelyra.toml`. Release notes describe version changes; the implementation inventory, database matrix, and roadmap explain supported scope and limits.
+### 2. Why does this matter?
+A program can compile successfully and still contain business errors. A successful schema update does not replace a backup. Check the application and its database workflow before applying a new version.
 
-### 3. What changed since Zelyra 1.0.0?
-- **1.0.1:** Docker Compose v2 is detected; Python Compose v1 is rejected with a concrete update hint. Studio's Run button starts the project entry point.
-- **1.0.2:** Studio can start MariaDB for the invoice tutorial, wait for its connection, and apply the schema and sample data before preview. `for` ranges accept step sizes; `range(start, end, step)` returns the same sequence as an array.
-- **1.0.3:** The standard library adds math, text, array, set, map, date, error-handling, conversion, encoding, and path functions. It also adds the type-checked `|>` pipeline operator, flat `else if` chains, declared-schema display while the database is offline, automatic tutorial setup, free local port selection, repeatable sample data, and a bounded recursion-depth guard.
-- **1.0.4:** Invoice tutorials receive a dedicated Compose project name. Older tutorials can use an isolated database after an authentication error without deleting or changing the old volume. Compose versions such as `2.40` are recognized.
-- **1.0.5:** Studio shows local structured logs; `zelyra uninstall` removes the active user-owned program after confirmation. The invoice tutorial has a workflow home, an invoice overview, date-only input, automatic invoice numbers, and expanded English and German source guides.
-- **1.0.6:** Zelyra UI supplies compiler-checked components and locally bundled styles for generated CRUD, starter projects, Studio properties, and the invoice tutorial. It adds themes, responsive layouts, chart components, browser print/PDF, and prefilled email drafts. PDF files are attached manually in the mail client.
-- **1.0.7:** Value-producing `if` expressions, record updates (`Customer { ..old, active: true }`), typed lexical lambdas for pipelines (`map`, `filter`, `find`, `reduce`), boolean match guards, nested record patterns, tuple binding, and first-class tuple returns. Configurable execution step budgets (`--max-steps`), nominal Id aliases, server-side text PDF rendering (`render_pdf`), and transactional PDF mail attachments via the outbox.
+### 3. Current scope
+Zelyra 1.2.24 is the current stable release; the language compatibility line remains `0.1`. MariaDB has the broadest tested runtime path. PostgreSQL and MySQL support selected workflows, but do not automatically provide identical CRUD, authentication, mail, or recovery features. See the [database matrix](https://github.com/sf1976/zelyra/blob/main/docs/database-support.en.md) for tested paths.
 
-See the individual [release notes](../../release-notes/). The complete standard library catalog is in [Appendix D](appendices.md#appendix-d-standard-library-overview-zelyra-103).
+Since 1.0.0, releases added Compose v2 detection and a repaired Studio Run entry point (1.0.1); automatic local tutorial database, schema, and sample-data setup plus `for ... step` and `range` (1.0.2); the expanded standard library, `|>` pipelines, `else if`, free ports, and repeatable sample data (1.0.3); dedicated Compose project names and isolated database fallback without deleting old volumes (1.0.4); local Studio logs, safe uninstall, date-only invoice entry, server-assigned invoice numbers, a workflow-focused tutorial home, and detailed bilingual source guides (1.0.5); Zelyra UI compiler-loaded component library with 55 typed components, themes, variants, responsive layouts, charts, and browser print previews (1.0.6); value-producing `if` expressions, functional record updates (`Customer { ..old, active: true }`), typed lexical lambdas for pipelines (`map`, `filter`, `find`, `reduce`), boolean match guards, nested record patterns, tuple binding, execution step budgets (`--max-steps`), nominal Id aliases (`type OrderId = Id`), server-side text PDF rendering (`render_pdf`), and transactional PDF mail attachments via the outbox (1.0.7). The guide explains that `crud Invoice -> invoices` declares the resource from which Zelyra generates routes such as `/invoices/new`. Full lists are in [Appendix D](#appendix-d-standard-library-overview-zelyra-103) and the [release notes](https://github.com/sf1976/zelyra/tree/main/docs/release-notes).
 
-### 4. Start and edit the invoice tutorial
-`zelyra --tutorial invoice` prepares the local tutorial. It requires Docker Engine and Docker Compose v2 or newer; Python Compose v1 is unsupported. In Zelyra Studio, open the project with `zelyra editor ./invoice-tutorial`, select `main.zyl`, and click **Run**. Studio starts local MariaDB through Compose, applies the schema and repeatable sample data, then starts the local web preview. MariaDB runs in a container; the web preview is a local Zelyra process. Open **Logs** in Studio to review structured run and preview output.
+### 4. Invoice tutorial in Studio
+Generate the tutorial without a separate CLI startup, then open it in the editor:
 
-Edit source files in the project tree: `src/customers.zyl` for customers, `src/items.zyl` for items, `src/invoices.zyl` for invoices and line items, `src/dashboard.zyl` for the invoice overview, `src/shell.zyl` for the shared layout, and `zelyra.theme.css` for local styling. The tutorial uses Zelyra UI's own built-in CSS by default; its theme file customizes that design system. Tabler or another project-local stylesheet can be selected through `ZELYRA_UI_STYLESHEET`. Add business records through the application forms. The `issued_at` field accepts a calendar date; the server assigns the invoice number when the invoice is saved. Seed data is initial sample content and is not duplicated on repeated startup. Print `/invoices/NUMBER/print` and choose **Save as PDF** in the browser. `EmailLink` opens a local draft; attach the saved PDF there manually. See the [Zelyra UI guide](../../ui.en.md) and [invoice tutorial guide](../../tutorials/invoice.en.md), which links to the generated project's detailed source walkthrough.
+```bash
+zelyra --tutorial invoice --no-start
+zelyra editor ./invoice-tutorial
+```
 
-### 5. Compatibility and limits
-- The language compatibility line remains `0.1`; compiler and language versions are separate.
-- Compose-based tutorials require Docker Compose v2 or newer. Zelyra does not install Docker or Compose.
-- The database matrix describes tested workflows. It does not imply identical support across databases or guarantee arbitrary applications.
-- The verifier checks a bounded part of programs. It is not a general proof that an application is defect-free.
+Select `main.zyl` and click **Run**. With the local `.env` configuration, Studio starts MariaDB through Docker Compose, applies the schema and repeatable sample data, then starts the web preview. MariaDB runs in a container; the web application is a local Zelyra process. Docker Compose v2 or newer is required; Python Compose v1 is unsupported. Check the plugin with `docker compose version`.
 
-### 6. Roadmap and planned work
-The [roadmap](../../ROADMAP.md) distinguishes completed work from plans. The next planned installer work is Compose v2 detection and installation guidance; remaining ideas are marked separately. Roadmap items are not features of the current release unless checked as implemented.
+Edit `src/customers.zyl`, `src/items.zyl`, `src/invoices.zyl`, `src/dashboard.zyl`, or `src/shell.zyl` in the project tree. Local style rules are in `zelyra.theme.css`. Add business records through the forms; the seed contains repeatable sample data only. The `/` page guides the invoice workflow; `/views/invoicedashboard` is the invoice overview. `src/dashboard.zyl` declares the overview, and `crud Invoice -> invoices` generates the standard routes, including `/invoices/new`. The bilingual `TUTORIAL.en.md` and `TUTORIAL.de.md` files explain every setup command, option, source file, and source line. Invoice dates use a date-only input with a format hint, while the server assigns invoice numbers.
 
-### 7. Common misconceptions
-- **“A stable release means every application is production-ready.”** Check the database path, security requirements, and documented limits for your use case.
-- **“Studio always changes the database automatically.”** Run initializes the local invoice tutorial database. Other Studio assistants preview changes; schema updates use a separate reviewed workflow.
-- **“`/views/invoicedashboard` is the home page.”** This route is the tabular invoice overview. The `/` route is the workflow home page with links to customers, items, and invoice creation.
+### 5. Installation and safe changes
+Check the installed version with `zelyra --version` and the environment with `zelyra doctor`. Back up source, configuration, and database before changes. Read `zelyra db plan main.zyl` before running `db apply`. A reverse migration can remove later data; interrupted DDL can leave a partially changed state.
 
-### 8. Practical task: Check the version and Compose
+### 6. 1.0.7 release and tutorial details
+The [1.0.7 release notes](https://github.com/sf1976/zelyra/blob/main/docs/release-notes/1.0.7.en.md) and [roadmap](https://github.com/sf1976/zelyra/blob/main/docs/ROADMAP.md) distinguish released features from future work. The tutorial now documents every setup command and option, describes each source file and explains its source lines. In particular, `crud Invoice -> invoices` in `src/invoices.zyl` declares an invoice resource; Zelyra derives routes such as `/invoices/new` from that declaration and its standard CRUD actions. See the generated project guides `TUTORIAL.en.md` and `TUTORIAL.de.md`, or the [invoice tutorial guide](https://github.com/sf1976/zelyra/blob/main/docs/tutorials/invoice.en.md). Studio Logs show local Run and preview output and setup events; `zelyra uninstall` removes the active user-owned binary after confirmation and does not remove project data.
+
+### 7. Common errors
+- **Compose is not detected:** Check `docker compose version`. Zelyra requires the Compose v2 plugin; Python Compose v1 is not sufficient.
+- **Studio shows no tutorial data:** Check that **Run** completed and local MariaDB is reachable. Studio does not automatically start external or overridden database connections.
+- **A check is mistaken for a general correctness proof:** Compiler and integration checks cover defined workflows; they do not prove arbitrary applications correct.
+
+### 8. Practical task: Prepare changes
 ```bash
 zelyra --version
-docker compose version
+zelyra doctor
+zelyra check main.zyl
+zelyra db plan main.zyl
 ```
-Then read the notes for the installed release and compare your intended workflow with the database matrix.
+Review the output. Rehearse backup and restore in a separate test database before applying schema changes.
 
 ### 9. Summary
-- Zelyra 1.1.0 is the current stable release; the language compatibility line remains `0.1`.
-- Version 1.0.3 expands the standard library and adds `|>` pipelines and flat `else if` chains.
-- Version 1.0.6 adds Zelyra UI typed components, responsive layouts, themes, charts, and browser print previews.
-- Version 1.0.7 adds if-expressions, record updates, lambdas, match guards, tuples, step budgets (`--max-steps`), and server-side text PDF rendering (`render_pdf`).
-- The invoice tutorial runs locally with MariaDB in Docker Compose and a local web preview; Studio can start the full tutorial workflow.
-- Release notes describe shipped changes; the roadmap describes planned work.
+Zelyra 1.2.24 is the current stable release. The invoice tutorial starts MariaDB in Docker and runs the web preview as a local Zelyra process. Zelyra UI supplies compiler-checked components and responsive styling, while newer releases add if-expressions, record updates, lambdas, match guards, tuples, step budgets (`--max-steps`), server-side text PDF rendering (`render_pdf`), the resident scheduler, systemd service management, and modular CRUD enhancements.
 
-### 10. Self-check questions
+### 10. Review questions
 1. What is the difference between compiler version and language compatibility line?
-2. Which capabilities arrived in 1.0.3, 1.0.6, and 1.0.7?
-3. Which parts of the invoice tutorial run in Docker, and how do you edit the application?
-4. How can you distinguish a published feature from a roadmap item?
+2. Which important language and tutorial improvements arrived in 1.0.3, 1.0.6, and 1.0.7?
+3. Which tutorial components run in Docker, and which source files do you edit in Studio?
+4. How do release notes differ from the roadmap?
 
 ---
 
@@ -2849,3 +2812,152 @@ Congratulations! You have successfully mastered all 10 parts and 42 chapters of 
 1. Which unique feature of Zelyra do you appreciate most after completing this course?
 2. Why is the seamless interplay of language, compiler, and database in Zelyra so revolutionary?
 3. Which project will you build next with Zelyra?
+
+## Chapter 43: Working with Zelyra Studio
+
+### 1. What will I learn in this chapter?
+
+- How to start the local Zelyra editor and work with project source files.
+- How to inspect a database schema without changing records.
+- How guided CRUD preview generates and checks source before saving it.
+
+### 2. What is Zelyra Studio?
+
+Zelyra Studio is the web editor shipped with the Zelyra CLI. It helps you open a small Zelyra project, edit source, read compiler diagnostics, and inspect relevant database information in one place. You do not need a cloud editor or an external AI service.
+
+Studio is a local development tool. It is not yet a complete IDE and it does not make product decisions for you. Generated code remains ordinary Zelyra source that you can read, check, and version outside the editor.
+
+### 3. Start Studio
+
+Change to your project directory and start the editor:
+
+```bash
+cd machine-management
+zelyra editor
+```
+
+You can also pass the project directory directly:
+
+```bash
+zelyra editor ./machine-management
+```
+
+The CLI opens the default browser and prints the local address. On SSH or headless systems, use `zelyra editor . --no-open` and open the displayed address yourself. Editing does not require a running database. Studio binds to `127.0.0.1`; the startup address contains a random session token. Do not share it publicly. Browser writes require the token and the same browser origin.
+
+### 4. Edit and check source
+
+The project tree lists Zelyra source files. Open a file in a tab, search for text or symbols, use the available completion, and format source when needed. Before saving, Studio checks whether another program changed the file after it was loaded. On a conflict it does not overwrite the external version; reload the file and review the edits.
+
+Compiler diagnostics appear in the Problems panel and help you find errors in the editor. The action finder opens common actions; contextual help explains supported terms, options, and examples. `Ctrl+Space` offers completion from the compiler project model and local bindings when the current code parses. F12 opens an unambiguous definition in the current or directly imported file. Shift+F12 finds lexically identical identifiers in saved `.zyl` files but does not resolve scopes.
+
+The project map links recognized modules, imports, tables, TableViews, views, CRUD resources, pages, APIs, and functions to source locations. Page and CRUD layouts resolve within their module or through explicitly imported public views. Ambiguous and missing relationships receive stable diagnostic codes. Ambiguous and dynamic relationships are not guessed; size limits can make the map incomplete. `Ctrl+S` saves current content. Formatting and **Run** are explicit actions. Run executes `main.zyl` for at most 15 seconds and limits each output stream to 64 KiB; recognized environment and `.env` secrets are redacted. Interactive stdin is unavailable. Saving and running do not silently change other project files.
+
+### Accessibility and font size scaling
+
+For comfortable reading and diverse display resolutions, Zelyra Studio includes built-in three-tier font scaling (Default 100%, Medium +15%, and Large +30%):
+- **Topbar toggle:** The `#font-size-button` (`aA`, `aA⁺`, `aA⁺⁺`) in the top navigation cycles through font scale levels.
+- **Keyboard shortcuts:** Press `Ctrl`+`+` (or `Ctrl`+`=`) to increase size, `Ctrl`+`-` to decrease size, and `Ctrl`+`0` to reset to default (on macOS, use `Cmd`).
+- **Command palette:** The action finder (`F1` / `Ctrl`+`Shift`+`P`) provides *“Editor: Increase font size”*, *“Editor: Decrease font size”*, and *“Editor: Reset font size to default”*.
+- **Flash-free persistence:** The chosen scaling tier is saved to browser `localStorage` (`zelyra-editor-font-size`) and evaluated before DOM render to prevent any flash of unstyled content (FOUC). Both CodeMirror editor instances and Studio UI elements resize dynamically.
+
+### 5. Inspect the database schema
+
+Choose **Database** in Studio and load the schema. `DATABASE_URL` must be available in the process environment or local project `.env` file. The view reads table and column metadata and relationships. It does not read business records or apply schema changes.
+
+The map shows tables and foreign-key relationships. Within the tested scope it compares declared tables and columns with the live database and marks differences. Grouping by source file helps you navigate the project; it does not grant permissions.
+
+Visual schema inspection is available for the tested MariaDB and PostgreSQL paths. MySQL has a bounded parameterized query path in this release, but no live Studio introspection. See the exact [database support matrix](https://github.com/sf1976/zelyra/blob/main/docs/database-support.en.md).
+
+### Browse data and edit source columns
+
+The **data browser** reads records only on explicit request, with at most 25 rows per page. It is read-only. The schema view itself reads metadata; opening it does not automatically load business records.
+
+The **column assistant** adds source fields and edits simple existing fields. Key, unique, and default-valued fields are excluded from visual editing. Studio shows the diff and compiler diagnostics and rechecks the file hash before apply. Applying writes source only. Review `zelyra db plan main.zyl` afterward and perform database changes separately.
+
+### 5a. Start the invoice tutorial in Studio
+
+For the IDE workflow, generate the project files without starting the separate CLI workflow:
+
+```bash
+zelyra --tutorial invoice --no-start
+zelyra editor ./invoice-tutorial
+```
+
+Select `main.zyl` in the project tree and click **Run**. With the local tutorial configuration in `.env`, Studio starts MariaDB through Docker Compose, waits for the database, applies the declared schema, and loads the repeatable sample data. Studio then starts the web preview and shows its address. Click **Stop preview** to end it.
+
+Docker Engine and Docker Compose v2 or newer must be installed and accessible to your user. Python Compose v1 is unsupported. Check with `docker compose version`; Zelyra does not install Docker or Compose. If the Compose plugin is missing, follow the [Docker Engine installation guide for Linux](https://docs.docker.com/engine/install/).
+
+In this workflow, **MariaDB runs in a Docker container**. The web application runs as a local Zelyra process; it is not itself inside an application container. Studio does not start or automatically modify an external database or a connection overridden through the process environment.
+
+The tutorial includes two customers, three items, and the draft invoice `RE-2026-001` with two line items. Repeated starts do not duplicate the marked sample data. Add your own customers, items, and invoices through the application forms.
+
+### 5b. Edit the invoice tutorial
+
+Edit and save the files in Studio's project tree:
+
+- `src/customers.zyl`: customer fields, form, and list.
+- `src/items.zyl`: items, descriptions, and net prices.
+- `src/invoices.zyl`: invoice fields, line items, and print view.
+- `src/dashboard.zyl`: the tabular invoice overview.
+- `src/shell.zyl`: shared page frame and navigation.
+- `zelyra.theme.css`: local style overrides.
+
+Studio shows compiler diagnostics while you edit. Select `main.zyl` and click **Run** again to start the local preview with your changes. Enter business records through the application at `/customers`, `/items`, and `/invoices`; the invoice overview is currently available at `/views/invoicedashboard`.
+
+`/invoices/new` is not declared as an explicit `page` route. The `crud Invoice -> invoices` declaration in `src/invoices.zyl` generates CRUD routes for the `invoices` table path, including `GET /invoices/new` for the form and `POST /invoices/new` to save it. The name after `->` supplies the URL base path. By contrast, the print route `page "/invoices/{invoice_number}/print"` is written explicitly in the source. Run `zelyra routes main.zyl` to inspect where a route comes from: its output lists the method, path, route kind, source file, and line. `/invoices/new` therefore points back to the CRUD declaration.
+
+The `/views/invoicedashboard` route is a searchable and filterable invoice table with calculated net, tax, and gross totals. It is not a second dashboard home page. The `/` route currently shows metrics and guides you through the tutorial workflow. The separation and design of these views are scheduled for review in 1.0.5.
+
+If you run `zelyra update` while Studio is open, stop the session with `Ctrl+C` and restart Studio afterward. An IDE session that is already running does not automatically load a replaced executable.
+
+If loading or saving a customer shows **“The requested data could not be loaded”**, first check that the local database started and schema setup succeeded. `zelyra db create main.zyl` prints SQL for review but does not create the database or tables itself.
+
+### 6. Generate CRUD source with the guide
+
+When a table is declared in your Zelyra project, exists in the live database, and does not yet have a CRUD resource, you can use the guide. Choose the source file, resource name, title, and visible fields. Studio shows affected file, table, and relationship information as well as the generated routes.
+
+The workflow has three steps:
+
+1. **Choose:** Select the declared table, source file, and visible form fields.
+2. **Check code and preview:** Studio asks the normal project compiler to check the candidate and shows generated source, the diff, and any diagnostics.
+3. **Apply change:** The checked file is written only after your explicit confirmation. Immediately before writing, Studio checks the file hash again. If the source changed, it requires a fresh preview.
+
+This lets you inspect the proposed change before it enters your project. Apply writes source code. It does not migrate the database or create or delete records.
+
+### 7. A simple workflow
+
+For a small customer application, you can:
+
+1. Create a project with a declared table or open an existing project.
+2. Start Studio and check that the database connection is available.
+3. Inspect the table and foreign keys in the database map.
+4. Generate a CRUD preview and read the diff.
+5. Apply the change only after the file, fields, and routes match your intent.
+6. Check the project again with `zelyra check main.zyl` and, when useful, run it with `zelyra run main.zyl`.
+
+For customers, items, and invoices, you can instead start the guided CLI tutorial with `zelyra --tutorial invoice`. It walks through the connected application step by step.
+
+### Use the invoice tutorial
+
+The tutorial uses multiple source files and connects customers and items to invoices and linked lines. The dashboard counts saved customers and invoices. Line items determine net, 19% VAT, and gross amounts; totals include drafts and do not represent posted revenue. The browser can save the print view as PDF. Tabler Core 1.6.1 ships locally as CSS without a CDN or external JavaScript. The layout stylesheet `zelyra.css` incorporates responsive layout rules so that the main content grid utilizes the full available width even on narrow viewports without collapsing into a narrow side column. The example is not an independently reviewed accounting application and does not contain a native PDF engine.
+
+### 8. Limits and safety
+
+- Studio runs locally and is not designed as a public multi-user editor.
+- The database map is read-only. It is not a drag-and-drop database designer.
+- The CRUD guide uses tables that are already declared and live; it does not design arbitrary data models.
+- Database support depends on both backend and feature. Read the support matrix before planning a workflow.
+- Preview and compiler checks help with safe edits, but they do not prove the entire application correct.
+- Zelyra 1.0.4 is a stable release. Check documented feature, database, and security limits for the intended workflow.
+
+### 9. Exercises
+
+- **Level 1:** Start `zelyra editor` in a learning project and open `main.zyl`.
+- **Level 2:** Open the database map and note one declared relationship. Do not change database objects.
+- **Level 3:** Generate a CRUD preview, inspect the diff, and compare its listed routes with `zelyra routes main.zyl`.
+
+### 10. Summary
+
+Studio brings together source editing, compiler feedback, a schema overview, and guided CRUD source preview. You keep control over explicit apply; the database map remains read-only and generated CRUD remains ordinary Zelyra source.
+
+---
