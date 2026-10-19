@@ -2103,6 +2103,17 @@ fn print_table_row(row: &[String], widths: &[usize]) {
     println!();
 }
 
+pub(super) fn inspect_for_backend(
+    backend: Backend,
+    database_url: &str,
+) -> Result<Schema, zelyra_database::DatabaseError> {
+    match backend {
+        Backend::Postgres => inspect_postgres(database_url),
+        Backend::MariaDb => inspect_mariadb(database_url),
+        Backend::Sqlite => inspect_sqlite(database_url),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -2187,16 +2198,5 @@ mod tests {
             query_cell_json("hello", zelyra_database::QueryColumnType::Text),
             json!("hello")
         );
-    }
-}
-
-pub(super) fn inspect_for_backend(
-    backend: Backend,
-    database_url: &str,
-) -> Result<Schema, zelyra_database::DatabaseError> {
-    match backend {
-        Backend::Postgres => inspect_postgres(database_url),
-        Backend::MariaDb => inspect_mariadb(database_url),
-        Backend::Sqlite => inspect_sqlite(database_url),
     }
 }
