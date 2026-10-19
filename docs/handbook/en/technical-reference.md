@@ -1337,10 +1337,12 @@ details.
 
 ### Master-detail forms with `has_many`
 
-🧪 A CRUD can generate one direct child collection on its Create and Edit
-forms. The child model must declare a foreign key to the CRUD parent. Rows are
-server-rendered; at most 50 rows can be submitted at once. Child IDs, parent
-foreign keys, and tenant keys are not accepted from the browser.
+🧪 A CRUD can generate multiple direct child collections on its Create and
+Edit forms. Each child model must declare a foreign key to the CRUD parent.
+Rows are server-rendered; each collection is limited to 50 rows per submit.
+Child IDs, parent foreign keys, and tenant keys are not accepted from the
+browser. A child table can be used only once per CRUD resource, and a parent
+aggregate target can be assigned by only one collection.
 
 ~~~zelyra
 crud Invoice -> invoices {
@@ -1355,15 +1357,23 @@ crud Invoice -> invoices {
             gross_amount: sum(total_gross)
         }
     }
+
+    has_many attachments: InvoiceAttachment {
+        foreign_key: invoice_id
+        order_by: file_name asc
+        cascade: delete
+    }
 }
 ~~~
 
 The parent and child writes, child table invariants, and aggregate updates run
-inside one transaction. On Edit, the current children are loaded for the
-parent, then replaced atomically with the submitted collection. Schema
-foreign-key behavior controls deletion. This version supports one direct
-collection per CRUD; multiple child collections, nested collections, and
-client-authoritative aggregate values are not supported.
+inside one transaction. On Edit, the current rows from each collection are
+loaded for the parent, then replaced atomically with the submitted collections.
+If any collection fails validation or a write, all parent and child changes
+roll back. Schema foreign-key behavior controls deletion. Nested collections
+and client-authoritative aggregate values are not supported. A complete
+compiler-checked and MariaDB-tested example is available in
+[`examples/multiple_children/main.zyl`](../../../examples/multiple_children/main.zyl).
 
 ## 13. Authentication and permissions
 

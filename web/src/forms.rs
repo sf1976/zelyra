@@ -375,7 +375,7 @@ pub(super) fn render_form_with_language(
         }
         html.push_str("</div>");
     }
-    if let Some(child) = &route.child_collection {
+    for child in &route.child_collections {
         render_child_collection(&mut html, child, values, errors, relation_options, language);
     }
     html.push_str("<button class=\"z-button z-button--primary\" type=\"submit\">");
@@ -415,7 +415,7 @@ fn render_child_collection(
     language: UiLanguage,
 ) {
     let count = values
-        .get("_zelyra_child_count")
+        .get(&child.count_key)
         .and_then(|value| value.parse::<usize>().ok())
         .unwrap_or(1)
         .clamp(1, MAX_CRUD_CHILD_ROWS);
@@ -457,7 +457,11 @@ fn render_child_collection(
             html.push_str("\">");
             html.push_str(&html_escape_preserving_locale_references(&label));
             html.push_str("</label>");
-            if let Some(options) = relation_options.get(&field.name) {
+            let child_relation_key = format!("{}.{}", child.definition.name, field.name);
+            if let Some(options) = relation_options
+                .get(&child_relation_key)
+                .or_else(|| relation_options.get(&field.name))
+            {
                 html.push_str("<select class=\"z-select\" id=\"");
                 html.push_str(&html_escape(&key));
                 html.push_str("\" name=\"");
@@ -538,7 +542,12 @@ fn render_child_collection(
             html.push_str("</div>");
         }
         if row > 0 {
-            html.push_str("<button class=\"z-button z-button--secondary\" type=\"submit\" name=\"_zelyra_child_action\" value=\"remove:");
+            html.push_str("<button class=\"z-button z-button--secondary\" type=\"submit\" name=\"_zelyra_child_action\" value=\"");
+            if child.count_key != "_zelyra_child_count" {
+                html.push_str(&html_escape(&child.definition.name));
+                html.push(':');
+            }
+            html.push_str("remove:");
             html.push_str(&row.to_string());
             html.push_str("\"> ");
             html.push_str(&html_escape(if language == UiLanguage::German {
@@ -550,9 +559,16 @@ fn render_child_collection(
         }
         html.push_str("</fieldset>");
     }
-    html.push_str("<input type=\"hidden\" name=\"_zelyra_child_count\" value=\"");
+    html.push_str("<input type=\"hidden\" name=\"");
+    html.push_str(&html_escape(&child.count_key));
+    html.push_str("\" value=\"");
     html.push_str(&count.to_string());
-    html.push_str("\"><button class=\"z-button z-button--secondary\" type=\"submit\" name=\"_zelyra_child_action\" value=\"add\">");
+    html.push_str("\"><button class=\"z-button z-button--secondary\" type=\"submit\" name=\"_zelyra_child_action\" value=\"");
+    if child.count_key != "_zelyra_child_count" {
+        html.push_str(&html_escape(&child.definition.name));
+        html.push(':');
+    }
+    html.push_str("add\">");
     html.push_str(&html_escape(if language == UiLanguage::German {
         "Position hinzufügen"
     } else {

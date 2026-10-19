@@ -313,7 +313,7 @@ fn form_route() -> FormRoute {
         audit_event: None,
         audit_chain: false,
         layout_html: None,
-        child_collection: None,
+        child_collections: Vec::new(),
     }
 }
 
@@ -353,7 +353,7 @@ fn child_collection_form_route() -> FormRoute {
             span: zelyra_ast::Span::default(),
         },
     ];
-    route.child_collection = Some(CrudChildFormRoute {
+    route.child_collections = vec![CrudChildFormRoute {
         definition: zelyra_ast::CrudChildRelationDef {
             name: "items".into(),
             model: "InvoiceItem".into(),
@@ -375,7 +375,8 @@ fn child_collection_form_route() -> FormRoute {
             span: zelyra_ast::Span::default(),
         },
         fields,
-    });
+        count_key: "_zelyra_child_count".into(),
+    }];
     route
 }
 
@@ -401,50 +402,126 @@ fn renders_accessible_child_rows_and_escapes_submitted_values() {
 }
 
 #[test]
+fn renders_relation_options_from_the_matching_child_collection() {
+    let mut route = child_collection_form_route();
+    let child = route.child_collections.first_mut().unwrap();
+    child.fields[0].name = "customer_id".into();
+    child.fields[0].ty = Some(Type::Named("Customer".into()));
+    let options = HashMap::from([(
+        "items.customer_id".into(),
+        vec![SelectOption {
+            value: "42".into(),
+            label: "Acme GmbH".into(),
+        }],
+    )]);
+    let html = render_form_with_language(
+        &route,
+        &HashMap::from([("items.0.customer_id".into(), "42".into())]),
+        &[],
+        None,
+        &options,
+        UiLanguage::English,
+    );
+    assert!(html.contains(
+        "<select class=\"z-select\" id=\"items.0.customer_id\" name=\"items.0.customer_id\""
+    ));
+    assert!(html.contains("<option value=\"42\" selected>Acme GmbH</option>"));
+}
+
+#[test]
 fn child_row_add_remove_actions_are_bounded_and_preserve_values() {
     let route = child_collection_form_route();
-    let child = route.child_collection.as_ref().unwrap();
+    let child = route.child_collections.first().unwrap();
     let mut values = HashMap::from([
         ("_zelyra_child_count".into(), "2".into()),
         ("items.0.sku".into(), "A".into()),
         ("items.1.sku".into(), "B".into()),
     ]);
-    assert!(mutate_child_form_rows(&mut values, child, "add"));
+    assert!(mutate_child_form_rows(
+        &mut values,
+        std::slice::from_ref(child),
+        "add"
+    ));
     assert_eq!(
         values.get("_zelyra_child_count").map(String::as_str),
         Some("3")
     );
     values.insert("items.2.sku".into(), "C".into());
-    assert!(mutate_child_form_rows(&mut values, child, "remove:1"));
+    assert!(mutate_child_form_rows(
+        &mut values,
+        std::slice::from_ref(child),
+        "remove:1"
+    ));
     assert_eq!(values.get("items.1.sku").map(String::as_str), Some("C"));
     assert_eq!(
         values.get("_zelyra_child_count").map(String::as_str),
         Some("2")
     );
     values.insert("_zelyra_child_count".into(), "50".into());
-    assert!(!mutate_child_form_rows(&mut values, child, "add"));
-    assert!(!mutate_child_form_rows(&mut values, child, "remove:0"));
+    assert!(!mutate_child_form_rows(
+        &mut values,
+        std::slice::from_ref(child),
+        "add"
+    ));
+    assert!(!mutate_child_form_rows(
+        &mut values,
+        std::slice::from_ref(child),
+        "remove:0"
+    ));
+}
+
+#[test]
+fn multiple_child_sections_have_independent_counts_and_row_actions() {
+    let mut route = child_collection_form_route();
+    route.child_collections[0].count_key = "_items_zelyra_child_count".into();
+    let mut attachments = route.child_collections[0].clone();
+    attachments.definition.name = "attachments".into();
+    attachments.definition.model = "InvoiceAttachment".into();
+    attachments.definition.foreign_key = "invoice_id".into();
+    attachments.count_key = "_attachments_zelyra_child_count".into();
+    attachments.fields[0].name = "filename".into();
+    attachments.fields[0].label = Some("Filename".into());
+    route.child_collections.push(attachments);
+    let values = HashMap::from([
+        ("_items_zelyra_child_count".into(), "2".into()),
+        ("_attachments_zelyra_child_count".into(), "1".into()),
+        ("items.0.sku".into(), "SKU-A".into()),
+        ("items.1.sku".into(), "SKU-B".into()),
+        ("attachments.0.filename".into(), "invoice.pdf".into()),
+    ]);
+    let html = render_form(&route, &values, &[], None);
+    assert!(html.contains("name=\"items.1.sku\""));
+    assert!(html.contains("name=\"attachments.0.filename\""));
+    assert!(html.contains("name=\"_attachments_zelyra_child_count\" value=\"1\""));
+    assert!(html.contains("value=\"items:add\""));
+    assert!(html.contains("value=\"attachments:add\""));
+    assert_eq!(html.matches("z-crud-child-collection").count(), 2);
+
+    let mut values = values;
+    assert!(mutate_child_form_rows(
+        &mut values,
+        &route.child_collections,
+        "attachments:add"
+    ));
+    assert_eq!(values.get("_items_zelyra_child_count").unwrap(), "2");
+    assert_eq!(values.get("_attachments_zelyra_child_count").unwrap(), "2");
+    assert!(mutate_child_form_rows(
+        &mut values,
+        &route.child_collections,
+        "items:remove:1"
+    ));
+    assert_eq!(values.get("_items_zelyra_child_count").unwrap(), "1");
+    assert_eq!(values.get("_attachments_zelyra_child_count").unwrap(), "2");
 }
 
 #[test]
 fn child_field_names_are_isolated_from_parent_form_validation() {
     let route = child_collection_form_route();
-    assert!(is_crud_child_input_name(
-        route.child_collection.as_ref(),
-        "items.0.sku"
-    ));
-    assert!(is_crud_child_input_name(
-        route.child_collection.as_ref(),
-        "items.12.quantity"
-    ));
-    assert!(!is_crud_child_input_name(
-        route.child_collection.as_ref(),
-        "items.0.unknown"
-    ));
-    assert!(!is_crud_child_input_name(
-        route.child_collection.as_ref(),
-        "sku"
-    ));
+    let child = route.child_collections.first().unwrap();
+    assert!(is_crud_child_input_name(child, "items.0.sku"));
+    assert!(is_crud_child_input_name(child, "items.12.quantity"));
+    assert!(!is_crud_child_input_name(child, "items.0.unknown"));
+    assert!(!is_crud_child_input_name(child, "sku"));
 }
 
 #[test]

@@ -1447,11 +1447,13 @@ und Hashes werden aus Änderungsdetails entfernt.
 
 ### Master-Detail-Formulare mit `has_many`
 
-🧪 Ein CRUD kann auf Create und Edit eine direkte Kinddatensammlung erzeugen.
-Das Kindmodell muss einen Fremdschlüssel zum CRUD-Elternmodell deklarieren.
-Die Zeilen werden serverseitig gerendert; pro Submit sind höchstens 50 Zeilen
-zulässig. Kind-IDs, Elternfremdschlüssel und Tenant-Schlüssel werden nicht aus
-dem Browser übernommen.
+🧪 Ein CRUD kann auf Create und Edit mehrere direkte Kinddatensammlungen
+erzeugen. Jedes Kindmodell muss einen Fremdschlüssel zum CRUD-Elternmodell
+deklarieren. Die Zeilen werden serverseitig gerendert; pro Sammlung sind
+höchstens 50 Zeilen je Submit zulässig. Kind-IDs, Elternfremdschlüssel und
+Tenant-Schlüssel werden nicht aus dem Browser übernommen. Eine Kindtabelle
+darf pro CRUD nur einmal vorkommen; ein Aggregatziel darf nur einer Sammlung
+zugeordnet sein.
 
 ~~~zelyra
 crud Invoice -> invoices {
@@ -1466,15 +1468,23 @@ crud Invoice -> invoices {
             gross_amount: sum(total_gross)
         }
     }
+
+    has_many attachments: InvoiceAttachment {
+        foreign_key: invoice_id
+        order_by: file_name asc
+        cascade: delete
+    }
 }
 ~~~
 
 Eltern- und Kindschreibvorgänge, Kindtabellen-Invarianten und
 Aggregataktualisierungen laufen in einer Transaktion. Bei Edit werden die
-vorhandenen Kinder zum Elternsatz geladen und beim Speichern atomar ersetzt.
-Das Schema bestimmt das Löschverhalten. Diese Version unterstützt eine direkte
-Kinddatensammlung pro CRUD; mehrere oder verschachtelte Sammlungen sowie
-clientseitig maßgebliche Aggregate werden nicht unterstützt.
+vorhandenen Zeilen aller Sammlungen zum Elternsatz geladen und beim Speichern
+atomar ersetzt. Scheitert eine Prüfung oder ein Schreibvorgang, werden sämtliche
+Änderungen zurückgerollt. Das Schema bestimmt das Löschverhalten. Verschachtelte
+Sammlungen und clientseitig maßgebliche Aggregate werden nicht unterstützt.
+Ein vollständiges, compilergeprüftes und mit MariaDB getestetes Beispiel liegt
+unter [`examples/multiple_children/main.zyl`](../../../examples/multiple_children/main.zyl).
 
 ## 13. Authentifizierung und Berechtigungen
 

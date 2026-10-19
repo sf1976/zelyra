@@ -1,5 +1,17 @@
 ## Unreleased
 
+## 1.2.24 — 2026-10-19
+
+- Support multiple direct `has_many` collections in generated CRUD Create/Edit
+  forms. Each collection has independent bounded rows and validation; all
+  parent and child writes and aggregate recalculations share one transaction.
+  Reject duplicate child tables and ambiguous aggregate targets. / Mehrere
+  direkte `has_many`-Sammlungen in generierten CRUD-Anlegen-/Bearbeiten-
+  Formularen unterstützen. Jede Sammlung hat eigene begrenzte Zeilen und
+  Validierung; Eltern- und Kindschreibvorgänge sowie Aggregatberechnungen
+  laufen in einer Transaktion. Doppelte Kindtabellen und mehrdeutige
+  Aggregatziele werden abgewiesen.
+
 ## 1.2.23 — 2026-10-19
 
 - Allow authenticated API validation for tenant-scoped tables. Resolve the tenant from the active session and membership table, reject client-supplied tenant keys, run table invariants with the verified tenant, and pass it as the typed final handler parameter. Missing or unauthorized tenant context fails before handler execution. / Authentifizierte API-Validierung für mandantengebundene Tabellen ermöglichen. Den Mandanten aus aktiver Sitzung und Mitgliedschaftstabelle ableiten, vom Client übergebene Mandantenschlüssel abweisen, Tabelleninvarianten mit dem verifizierten Mandanten auswerten und ihn als letzten typisierten Handlerparameter übergeben. Fehlender oder nicht autorisierter Mandantenkontext bricht vor dem Handler ab.
