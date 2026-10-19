@@ -3266,6 +3266,91 @@ fn rejects_unknown_configured_crud_columns() {
 }
 
 #[test]
+fn checks_crud_child_foreign_key_order_and_numeric_aggregates() {
+    let source = r#"
+        table invoices {
+            id: Id primary auto
+            net_amount: Decimal required default 0
+            tax_amount: Decimal required default 0
+        }
+        table invoice_items {
+            id: Id primary auto
+            invoice: Invoice required on_delete cascade
+            position: Int required
+            total_net: Decimal required
+            total_gross: Decimal required
+        }
+        crud Invoice -> invoices {
+            has_many items: InvoiceItem {
+                foreign_key: invoice_id
+                order_by: position asc
+                cascade: delete
+                aggregates {
+                    net_amount: sum(total_net)
+                    tax_amount: sum(total_gross - total_net)
+                }
+            }
+        }
+    "#;
+    let program = parse(&lex(source).unwrap()).unwrap();
+    let schema = build_schema(&program).unwrap();
+    assert!(validate_cruds("invoice.zyl", &program, &schema));
+    let crud = &program.cruds[0];
+    let parent = program
+        .tables
+        .iter()
+        .find(|table| table.name == "invoices")
+        .unwrap();
+    let generated = generated_crud_form(
+        &program,
+        crud,
+        parent,
+        &schema,
+        false,
+        CrudGenerationContext {
+            layout_html: None,
+            before_form_html: None,
+            after_form_html: None,
+            field_content_html: HashMap::new(),
+            csrf: CsrfProtection::new("master-detail-test-token"),
+            membership_table: None,
+            audit_table: None,
+            audit_chain: false,
+        },
+    );
+    let child_form = generated.child_collection.as_ref().unwrap();
+    assert_eq!(child_form.definition.name, "items");
+    assert_eq!(
+        child_form
+            .fields
+            .iter()
+            .map(|field| field.name.as_str())
+            .collect::<Vec<_>>(),
+        ["position", "total_net", "total_gross"]
+    );
+    assert!(generated
+        .form
+        .fields
+        .iter()
+        .all(|field| field.name != "net_amount" && field.name != "tax_amount"));
+
+    let invalid_source = source.replace("foreign_key: invoice_id", "foreign_key: missing");
+    let program = parse(&lex(&invalid_source).unwrap()).unwrap();
+    let schema = build_schema(&program).unwrap();
+    assert!(!validate_cruds("invoice.zyl", &program, &schema));
+
+    let invalid_cascade = source.replace("cascade: delete", "cascade: restrict");
+    let program = parse(&lex(&invalid_cascade).unwrap()).unwrap();
+    let schema = build_schema(&program).unwrap();
+    assert!(!validate_cruds("invoice.zyl", &program, &schema));
+
+    let invalid_aggregate = source.replace("sum(total_net)", "sum(description)");
+    let program = parse(&lex(&invalid_aggregate).unwrap()).unwrap();
+    let schema = build_schema(&program).unwrap();
+    assert!(!validate_cruds("invoice.zyl", &program, &schema));
+}
+
+#[test]
 fn shared_crud_view_fields_drive_list_and_form_defaults() {
     let source = r#"
         table customers {
@@ -3289,6 +3374,7 @@ fn shared_crud_view_fields_drive_list_and_form_defaults() {
         .find(|table| table.name == "customers")
         .unwrap();
     let form = generated_crud_form(
+        &program,
         crud,
         table,
         &schema,
@@ -3370,6 +3456,7 @@ fn tenant_crud_forms_hide_and_server_bind_tenant_key() {
         .unwrap();
     let make_form = |edit| {
         generated_crud_form(
+            &program,
             crud,
             table,
             &schema,

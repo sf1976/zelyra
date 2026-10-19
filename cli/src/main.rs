@@ -8780,6 +8780,11 @@ fn validate_cruds(path: &str, program: &zelyra_ast::Program, schema: &Schema) ->
             .iter()
             .find(|table| table.name == crud.table)
             .expect("CRUD table existence was checked above");
+        for child in &crud.children {
+            if !validate_crud_child_relation(path, program, schema, crud, child, crud_table) {
+                valid = false;
+            }
+        }
         for (label, configured, require_nullable) in [
             ("unread", crud.unread_column.as_deref(), true),
             ("expires", crud.expires_column.as_deref(), false),
@@ -9006,6 +9011,243 @@ fn validate_cruds(path: &str, program: &zelyra_ast::Program, schema: &Schema) ->
         }
     }
     valid
+}
+
+fn validate_crud_child_relation(
+    path: &str,
+    program: &zelyra_ast::Program,
+    schema: &Schema,
+    crud: &zelyra_ast::CrudDef,
+    child: &zelyra_ast::CrudChildRelationDef,
+    parent: &zelyra_database::Table,
+) -> bool {
+    let fail = |message: String| {
+        diagnostic_with_span(path, "E-CRUD-009", &message, child.span);
+    };
+    if crud.children.len() > 1 {
+        fail("this CRUD currently supports one direct `has_many` collection".into());
+        return false;
+    }
+    let model = child.model.to_ascii_lowercase();
+    let mut snake = String::new();
+    for (index, character) in child.model.chars().enumerate() {
+        if character.is_ascii_uppercase() && index > 0 {
+            snake.push('_');
+        }
+        snake.push(character.to_ascii_lowercase());
+    }
+    let plural = if snake.ends_with('y') {
+        format!("{}ies", &snake[..snake.len() - 1])
+    } else {
+        format!("{snake}s")
+    };
+    let child_table_name = schema
+        .tables
+        .iter()
+        .find(|table| table.name == model || table.name == snake || table.name == plural)
+        .map(|table| table.name.as_str());
+    let Some(child_table_name) = child_table_name else {
+        fail(format!(
+            "CRUD child model `{}` does not resolve to a declared table",
+            child.model
+        ));
+        return false;
+    };
+    let Some(child_definition) = program
+        .tables
+        .iter()
+        .find(|table| table.name == child_table_name)
+    else {
+        fail(format!(
+            "CRUD child table `{child_table_name}` has no source definition"
+        ));
+        return false;
+    };
+    let Some(foreign_key_column) = child_definition.columns.iter().find(|column| {
+        column.name == child.foreign_key
+            || storage_column_name(schema, child_table_name, &column.name) == child.foreign_key
+    }) else {
+        fail(format!(
+            "child foreign-key field `{}` does not exist on `{child_table_name}`",
+            child.foreign_key
+        ));
+        return false;
+    };
+    let storage_foreign_key =
+        storage_column_name(schema, child_table_name, &foreign_key_column.name);
+    let Some(child_schema) = schema
+        .tables
+        .iter()
+        .find(|table| table.name == child_table_name)
+    else {
+        fail(format!(
+            "CRUD child table `{child_table_name}` is missing from the database schema"
+        ));
+        return false;
+    };
+    let relation = child_schema.foreign_keys.iter().find(|foreign_key| {
+        (foreign_key.column == storage_foreign_key
+            || foreign_key
+                .columns
+                .iter()
+                .any(|column| column == &storage_foreign_key))
+            && foreign_key.referenced_table == crud.table
+            && (foreign_key.referenced_column == "id"
+                || foreign_key
+                    .referenced_columns
+                    .iter()
+                    .any(|column| column == "id"))
+    });
+    let Some(relation) = relation else {
+        fail(format!(
+            "`{child_table_name}.{}` must be a declared foreign key to `{}`",
+            child.foreign_key, crud.table
+        ));
+        return false;
+    };
+    let editable_fields = child_definition
+        .columns
+        .iter()
+        .filter(|column| !column.primary_key && !column.auto)
+        .filter(|column| {
+            column.name != child.foreign_key
+                && storage_column_name(schema, child_table_name, &column.name) != child.foreign_key
+        })
+        .filter(|column| {
+            child_definition
+                .tenant_scope
+                .as_ref()
+                .is_none_or(|scope| column.name != scope.column)
+        })
+        .count();
+    if editable_fields == 0 {
+        fail("CRUD child relation needs at least one editable child field".into());
+        return false;
+    }
+    if child
+        .on_delete
+        .is_some_and(|action| action != relation.on_delete)
+    {
+        let actual_action = match relation.on_delete {
+            zelyra_ast::ReferentialAction::NoAction => "no_action",
+            zelyra_ast::ReferentialAction::Restrict => "restrict",
+            zelyra_ast::ReferentialAction::Cascade => "cascade",
+            zelyra_ast::ReferentialAction::SetNull => "set_null",
+            zelyra_ast::ReferentialAction::SetDefault => "set_default",
+        };
+        fail(format!(
+            "CRUD child delete behavior must match the schema foreign key (`on_delete {}`)",
+            actual_action
+        ));
+        return false;
+    }
+    if let Some(order_by) = child.order_by.as_deref() {
+        if !child_definition
+            .columns
+            .iter()
+            .any(|column| column.name == order_by)
+        {
+            fail(format!(
+                "child ordering field `{order_by}` does not exist on `{child_table_name}`"
+            ));
+            return false;
+        }
+    }
+    let mut valid = true;
+    for aggregate in &child.aggregates {
+        let target_is_numeric = parent
+            .columns
+            .iter()
+            .find(|column| column.name == aggregate.target)
+            .is_some_and(|column| is_numeric_sql_type(&column.sql_type));
+        if !target_is_numeric {
+            diagnostic_with_span(
+                path,
+                "E-CRUD-009",
+                &format!(
+                    "aggregate target `{}` must be a numeric field on `{}`",
+                    aggregate.target, crud.table
+                ),
+                aggregate.span,
+            );
+            valid = false;
+        }
+        if !crud_aggregate_expression_is_numeric(
+            &aggregate.expression,
+            child_definition,
+            schema,
+            child_table_name,
+        ) {
+            diagnostic_with_span(
+                path,
+                "E-CRUD-009",
+                "aggregate expressions may use only numeric child fields, numeric literals, and arithmetic operators",
+                aggregate.span,
+            );
+            valid = false;
+        }
+    }
+    // Relation fields must be nominal model references, not arbitrary scalar IDs.
+    if !foreign_key_column.required
+        || !matches!(foreign_key_column.ty, Type::Named(_) | Type::Option(_))
+    {
+        diagnostic_with_span(
+            path,
+            "E-CRUD-009",
+            "CRUD child foreign key must be a required declared model relation",
+            child.span,
+        );
+        valid = false;
+    }
+    valid
+}
+
+fn is_numeric_sql_type(sql_type: &str) -> bool {
+    let sql_type = sql_type.to_ascii_uppercase();
+    ["INT", "DECIMAL", "NUMERIC", "FLOAT", "DOUBLE", "REAL"]
+        .iter()
+        .any(|kind| sql_type.contains(kind))
+}
+
+fn crud_aggregate_expression_is_numeric(
+    expression: &zelyra_ast::Expr,
+    child: &zelyra_ast::TableDef,
+    schema: &Schema,
+    child_table: &str,
+) -> bool {
+    use zelyra_ast::{BinaryOp, ExprKind};
+    match &expression.kind {
+        ExprKind::Int(_) | ExprKind::UInt(_) | ExprKind::Float(_) => true,
+        ExprKind::Variable(name) => {
+            if !child.columns.iter().any(|column| column.name == *name) {
+                return false;
+            }
+            let storage = storage_column_name(schema, child_table, name);
+            schema
+                .tables
+                .iter()
+                .find(|table| table.name == child_table)
+                .and_then(|table| table.columns.iter().find(|column| column.name == storage))
+                .is_some_and(|column| is_numeric_sql_type(&column.sql_type))
+        }
+        ExprKind::Unary { op, expr } if *op == zelyra_ast::UnaryOp::Negate => {
+            crud_aggregate_expression_is_numeric(expr, child, schema, child_table)
+        }
+        ExprKind::Binary {
+            left,
+            op:
+                BinaryOp::Add
+                | BinaryOp::Subtract
+                | BinaryOp::Multiply
+                | BinaryOp::Divide
+                | BinaryOp::Remainder,
+            right,
+        } => {
+            crud_aggregate_expression_is_numeric(left, child, schema, child_table)
+                && crud_aggregate_expression_is_numeric(right, child, schema, child_table)
+        }
+        _ => false,
+    }
 }
 
 fn tenant_sql_type_is_integer(sql_type: &str) -> bool {
@@ -10189,6 +10431,7 @@ fn serve_command(mut args: impl Iterator<Item = String>) -> ExitCode {
             audit_event: None,
             audit_chain: false,
             layout_html: None,
+            child_collection: None,
         });
     }
     for crud in &program.cruds {
@@ -10201,6 +10444,7 @@ fn serve_command(mut args: impl Iterator<Item = String>) -> ExitCode {
                 return ExitCode::from(1);
             };
             form_routes.push(generated_crud_form(
+                &program,
                 crud,
                 table,
                 &schema,
@@ -10699,6 +10943,7 @@ struct CrudGenerationContext {
 }
 
 fn generated_crud_form(
+    program: &zelyra_ast::Program,
     crud: &zelyra_ast::CrudDef,
     table: &zelyra_ast::TableDef,
     schema: &Schema,
@@ -10710,6 +10955,72 @@ fn generated_crud_form(
     } else {
         effective_crud_permissions(&crud.permissions, &crud.create_permissions)
     };
+    let mut aggregate_targets = crud
+        .children
+        .iter()
+        .flat_map(|child| {
+            child
+                .aggregates
+                .iter()
+                .map(|aggregate| aggregate.target.clone())
+        })
+        .collect::<Vec<_>>();
+    aggregate_targets.sort();
+    aggregate_targets.dedup();
+    let child_collection = crud.children.first().and_then(|definition| {
+        let table_name = table_name_for_model(&definition.model, &program.tables)?;
+        let table = program
+            .tables
+            .iter()
+            .find(|table| table.name == table_name)?
+            .clone();
+        let foreign_key = definition.foreign_key.as_str();
+        let fields = table
+            .columns
+            .iter()
+            .filter(|column| !column.primary_key && !column.auto)
+            .filter(|column| {
+                column.name != foreign_key
+                    && storage_column_name(schema, &table_name, &column.name) != foreign_key
+            })
+            .filter(|column| {
+                table
+                    .tenant_scope
+                    .as_ref()
+                    .is_none_or(|scope| column.name != scope.column)
+            })
+            // Generated child grids are ordinary user-facing forms, so never
+            // expose authentication material even when a child model happens
+            // to contain credential-like columns.
+            .filter(|column| {
+                let name = column.name.to_ascii_lowercase();
+                !["password", "secret", "token", "hash"]
+                    .iter()
+                    .any(|part| name.contains(part))
+            })
+            .map(|column| zelyra_ast::FormField {
+                name: column.name.clone(),
+                ty: Some(column.ty.clone()),
+                label: None,
+                placeholder: None,
+                required: column.required,
+                min_length: None,
+                max: None,
+                min_value: None,
+                max_value: None,
+                choices: Vec::new(),
+                widget: None,
+                appearance: None,
+                readonly: false,
+                span: column.span,
+            })
+            .collect();
+        Some(zelyra_web::CrudChildFormRoute {
+            definition: definition.clone(),
+            table,
+            fields,
+        })
+    });
     let configured_fields = (!crud.view.fields.is_empty()).then_some(&crud.view.fields);
     let fields = table
         .columns
@@ -10719,6 +11030,11 @@ fn generated_crud_form(
         .filter(|column| crud.recipient_column.as_deref() != Some(column.name.as_str()))
         .filter(|column| crud.unread_column.as_deref() != Some(column.name.as_str()))
         .filter(|column| crud.expires_column.as_deref() != Some(column.name.as_str()))
+        .filter(|column| {
+            aggregate_targets
+                .iter()
+                .all(|target| target != &column.name)
+        })
         .filter(|column| !(edit && crud.table == "invoices" && column.name == "invoice_number"))
         .filter(|column| {
             configured_fields.is_none_or(|fields| fields.iter().any(|name| name == &column.name))
@@ -10806,6 +11122,10 @@ fn generated_crud_form(
             .iter()
             .map(|field| format!(":{}", field.name))
             .collect::<Vec<_>>();
+        for target in &aggregate_targets {
+            insert_columns.push(storage_column_name(schema, &crud.table, target));
+            insert_values.push("0".into());
+        }
         if let Some(tenant_column) = crud.tenant_column.as_deref() {
             insert_columns.push(storage_column_name(schema, &crud.table, tenant_column));
             insert_values.push(":zelyra_tenant_id".into());
@@ -10929,7 +11249,28 @@ fn generated_crud_form(
         }),
         audit_chain: context.audit_chain,
         layout_html: context.layout_html,
+        child_collection,
     }
+}
+
+fn table_name_for_model(model: &str, tables: &[zelyra_ast::TableDef]) -> Option<String> {
+    let lower = model.to_ascii_lowercase();
+    let mut snake = String::new();
+    for (index, character) in model.chars().enumerate() {
+        if character.is_ascii_uppercase() && index > 0 {
+            snake.push('_');
+        }
+        snake.push(character.to_ascii_lowercase());
+    }
+    let plural = if snake.ends_with('y') {
+        format!("{}ies", &snake[..snake.len() - 1])
+    } else {
+        format!("{snake}s")
+    };
+    tables
+        .iter()
+        .find(|table| table.name == lower || table.name == snake || table.name == plural)
+        .map(|table| table.name.clone())
 }
 
 fn generated_crud_action(
@@ -10988,6 +11329,7 @@ fn generated_crud_action(
             audit_event: Some(format!("crud.action.{}", action.name)),
             audit_chain: context.audit_chain,
             layout_html: context.layout_html,
+            child_collection: None,
         },
     }
 }

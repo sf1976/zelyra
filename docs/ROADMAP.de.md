@@ -228,10 +228,15 @@ abgeschlossen.
   Auswerter. Eigene Aktionen bleiben an typgeprüfte
   Funktionen mit Capabilityprüfung gebunden. Siehe das
   [Arbeitsprotokoll 1.2.21](release-plans/1.2.21-crud-lifecycle-policies.de.md).
-- [ ] **1.2.22 — transaktionales Master-Detail-CRUD:** Typisierte
-  Kinddatensätze, atomare Speicherung von Kopf und Positionen, deklarierte
-  Löschregeln und geprüfte Aggregate ergänzen. Der erste UI-Schnitt muss
-  CSRF, Tenant-Scope, Berechtigungen, Validierung und Rollback bewahren.
+- [~] **1.2.22 — transaktionales Master-Detail-CRUD:** Eine typisierte
+  `has_many`-Relation wird geprüft und auf Create/Edit als begrenzte,
+  serverseitig gerenderte Zeilen dargestellt. Eltern-/Kindschreibvorgänge,
+  Kindinvarianten und Aggregatberechnung teilen eine Transaktion. MariaDB-E2E
+  deckt ungültigen Submit mit Rollback, Anlegen, Bearbeiten/Neuberechnung und
+  Schema-Cascade ab. Mehrere Kindrelationen und mehr als 50 Zeilen pro Submit
+  sind noch nicht unterstützt. Umfang und Prüfung bereits vorhandener
+  Mandanten-, Invarianten- und Lifecycle-Funktionen
+  stehen im [Arbeitsplan 1.2.22](release-plans/1.2.22-business-invariants-and-master-detail.de.md).
 - [ ] **1.3.0 — kanonische Struktur und Bytecode-Standard:** Das optionale,
   versionierte Projektlayout (`routes/`, `domain/`, `schema/`, `public/`,
   `assets/`, `plugins/`), Architekturprüfungen und eine sichere

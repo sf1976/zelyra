@@ -212,10 +212,14 @@ security and compatibility gates stated for that milestone.
   declared rules skip that evaluator.
   Keep custom actions bound to typed, capability-checked functions. See the
   [1.2.21 work log](release-plans/1.2.21-crud-lifecycle-policies.en.md).
-- [ ] **1.2.22 — transactional master-detail CRUD:** Add typed child
-  collections, atomic parent/child persistence, declared delete behavior and
-  checked aggregates. The first UI slice must preserve CSRF, tenant scope,
-  authorization, validation and rollback semantics.
+- [~] **1.2.22 — transactional master-detail CRUD:** A typed `has_many`
+  collection is checked and rendered as bounded server-side rows on Create
+  and Edit. Parent/child writes, child invariants, and aggregate recomputation
+  share one transaction. MariaDB E2E covers invalid-submit rollback, create,
+  edit/recompute, and schema cascade. Multiple child collections and more than
+  50 rows per submit remain unsupported. Scope and the audit of implemented
+  tenant, invariant and lifecycle features are recorded in the
+  [1.2.22 work plan](release-plans/1.2.22-business-invariants-and-master-detail.en.md).
 - [ ] **1.3.0 — canonical structure and Bytecode default:** Complete the
   opt-in versioned project layout (`routes/`, `domain/`, `schema/`, `public/`,
   `assets/`, and `plugins/`), architecture checks, and safe layout migration

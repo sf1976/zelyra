@@ -313,7 +313,138 @@ fn form_route() -> FormRoute {
         audit_event: None,
         audit_chain: false,
         layout_html: None,
+        child_collection: None,
     }
+}
+
+fn child_collection_form_route() -> FormRoute {
+    let mut route = form_route();
+    let fields = vec![
+        zelyra_ast::FormField {
+            name: "sku".into(),
+            ty: Some(Type::String),
+            label: Some("SKU".into()),
+            placeholder: None,
+            required: true,
+            min_length: None,
+            max: None,
+            min_value: None,
+            max_value: None,
+            choices: Vec::new(),
+            widget: None,
+            appearance: None,
+            readonly: false,
+            span: zelyra_ast::Span::default(),
+        },
+        zelyra_ast::FormField {
+            name: "quantity".into(),
+            ty: Some(Type::Int),
+            label: Some("Quantity".into()),
+            placeholder: None,
+            required: true,
+            min_length: None,
+            max: None,
+            min_value: Some("1".into()),
+            max_value: None,
+            choices: Vec::new(),
+            widget: None,
+            appearance: None,
+            readonly: false,
+            span: zelyra_ast::Span::default(),
+        },
+    ];
+    route.child_collection = Some(CrudChildFormRoute {
+        definition: zelyra_ast::CrudChildRelationDef {
+            name: "items".into(),
+            model: "InvoiceItem".into(),
+            foreign_key: "invoice_id".into(),
+            order_by: Some("position".into()),
+            descending: false,
+            on_delete: Some(zelyra_ast::ReferentialAction::Cascade),
+            aggregates: Vec::new(),
+            span: zelyra_ast::Span::default(),
+        },
+        table: zelyra_ast::TableDef {
+            name: "invoice_items".into(),
+            columns: Vec::new(),
+            validations: Vec::new(),
+            indexes: Vec::new(),
+            uniques: Vec::new(),
+            access: Default::default(),
+            tenant_scope: None,
+            span: zelyra_ast::Span::default(),
+        },
+        fields,
+    });
+    route
+}
+
+#[test]
+fn renders_accessible_child_rows_and_escapes_submitted_values() {
+    let route = child_collection_form_route();
+    let values = HashMap::from([
+        ("_zelyra_child_count".into(), "2".into()),
+        ("items.0.sku".into(), "<script>alert(1)</script>".into()),
+        ("items.0.quantity".into(), "2".into()),
+        ("items.1.sku".into(), "SKU-2".into()),
+        ("items.1.quantity".into(), "3".into()),
+    ]);
+    let html = render_form(&route, &values, &[], None);
+    assert!(html.contains("<fieldset class=\"z-fieldset z-crud-child-collection\">"));
+    assert!(html.contains("name=\"items.0.sku\""));
+    assert!(html.contains("name=\"items.1.quantity\""));
+    assert!(html.contains("value=\"&lt;script&gt;alert(1)&lt;/script&gt;\""));
+    assert!(!html.contains("value=\"<script>"));
+    assert!(html.contains("value=\"add\""));
+    assert!(html.contains("value=\"remove:1\""));
+    assert_eq!(html.matches("<form ").count(), 1);
+}
+
+#[test]
+fn child_row_add_remove_actions_are_bounded_and_preserve_values() {
+    let route = child_collection_form_route();
+    let child = route.child_collection.as_ref().unwrap();
+    let mut values = HashMap::from([
+        ("_zelyra_child_count".into(), "2".into()),
+        ("items.0.sku".into(), "A".into()),
+        ("items.1.sku".into(), "B".into()),
+    ]);
+    assert!(mutate_child_form_rows(&mut values, child, "add"));
+    assert_eq!(
+        values.get("_zelyra_child_count").map(String::as_str),
+        Some("3")
+    );
+    values.insert("items.2.sku".into(), "C".into());
+    assert!(mutate_child_form_rows(&mut values, child, "remove:1"));
+    assert_eq!(values.get("items.1.sku").map(String::as_str), Some("C"));
+    assert_eq!(
+        values.get("_zelyra_child_count").map(String::as_str),
+        Some("2")
+    );
+    values.insert("_zelyra_child_count".into(), "50".into());
+    assert!(!mutate_child_form_rows(&mut values, child, "add"));
+    assert!(!mutate_child_form_rows(&mut values, child, "remove:0"));
+}
+
+#[test]
+fn child_field_names_are_isolated_from_parent_form_validation() {
+    let route = child_collection_form_route();
+    assert!(is_crud_child_input_name(
+        route.child_collection.as_ref(),
+        "items.0.sku"
+    ));
+    assert!(is_crud_child_input_name(
+        route.child_collection.as_ref(),
+        "items.12.quantity"
+    ));
+    assert!(!is_crud_child_input_name(
+        route.child_collection.as_ref(),
+        "items.0.unknown"
+    ));
+    assert!(!is_crud_child_input_name(
+        route.child_collection.as_ref(),
+        "sku"
+    ));
 }
 
 #[test]
@@ -483,6 +614,7 @@ fn monetary_form_and_query_parameters_preserve_every_digit() {
         let value = page_query_value(&ty, text).unwrap();
         assert!(matches!(value, QueryValue::Decimal(value) if value == text));
     }
+
     let column = zelyra_database::Column {
         name: "price".into(),
         sql_type: "DECIMAL(18,2)".into(),
@@ -5212,6 +5344,7 @@ fn execute_form_action_rejects_postgres_chained_audit() {
         expected_snapshot: None,
         tenant_context: None,
         validation_program: None,
+        table_validation_functions: &[],
         crud_policy_functions: &[],
         granted_permissions: &[],
     };

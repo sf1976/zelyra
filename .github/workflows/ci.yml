@@ -461,6 +461,15 @@ jobs:
           ZELYRA_E2E_DB_PASSWORD: root
           ZELYRA_BIN: target/debug/zelyra
         run: ./tests/mariadb-tenant-relations-e2e.sh
+      - name: Create isolated master-detail CRUD test database
+        env:
+          MYSQL_PWD: root
+        run: mariadb --protocol=tcp --host=127.0.0.1 --port=3306 --user=root --batch --skip-column-names -e "CREATE DATABASE IF NOT EXISTS zelyra_master_detail_test_ci"
+      - name: Verify atomic master-detail CRUD and aggregates
+        env:
+          DATABASE_URL: mariadb://root:root@127.0.0.1:3306/zelyra_master_detail_test_ci
+          ZELYRA_BIN: target/debug/zelyra
+        run: ./tests/mariadb-master-detail-crud-e2e.sh
       - name: Create isolated notification-center test database
         env:
           MYSQL_PWD: root

@@ -500,7 +500,35 @@ pub struct CrudDef {
     pub conditional_permissions: Vec<CrudConditionalPermissionDef>,
     /// Lifecycle conditions that prevent edits or deletes when true.
     pub guards: Vec<CrudGuardDef>,
+    /// Typed direct child collections rendered and saved by generated CRUD.
+    pub children: Vec<CrudChildRelationDef>,
     pub actions: Vec<FormAction>,
+    pub span: Span,
+}
+
+#[derive(Clone, Debug)]
+pub struct CrudChildRelationDef {
+    /// Collection name used for labels and form grouping.
+    pub name: String,
+    /// Child model/table type as written in the declaration.
+    pub model: String,
+    /// Child-side foreign-key field referencing the CRUD parent.
+    pub foreign_key: String,
+    /// Optional stable ordering field and direction.
+    pub order_by: Option<String>,
+    pub descending: bool,
+    /// Optional assertion that must agree with the schema foreign-key action.
+    pub on_delete: Option<ReferentialAction>,
+    /// Parent columns recalculated from child rows after save.
+    pub aggregates: Vec<CrudAggregateDef>,
+    pub span: Span,
+}
+
+#[derive(Clone, Debug)]
+pub struct CrudAggregateDef {
+    pub target: String,
+    /// Restricted to pure arithmetic over child fields by CRUD validation.
+    pub expression: Expr,
     pub span: Span,
 }
 

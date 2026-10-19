@@ -375,6 +375,9 @@ pub(super) fn render_form_with_language(
         }
         html.push_str("</div>");
     }
+    if let Some(child) = &route.child_collection {
+        render_child_collection(&mut html, child, values, errors, relation_options, language);
+    }
     html.push_str("<button class=\"z-button z-button--primary\" type=\"submit\">");
     let default_submit = form_kind
         .map(|(_, submit_key)| tr(language, submit_key))
@@ -399,6 +402,184 @@ pub(super) fn render_form_with_language(
         html.push_str("</section>");
     }
     html
+}
+
+pub(super) const MAX_CRUD_CHILD_ROWS: usize = 50;
+
+fn render_child_collection(
+    html: &mut String,
+    child: &CrudChildFormRoute,
+    values: &HashMap<String, String>,
+    errors: &[FieldError],
+    relation_options: &HashMap<String, Vec<SelectOption>>,
+    language: UiLanguage,
+) {
+    let count = values
+        .get("_zelyra_child_count")
+        .and_then(|value| value.parse::<usize>().ok())
+        .unwrap_or(1)
+        .clamp(1, MAX_CRUD_CHILD_ROWS);
+    html.push_str("<fieldset class=\"z-fieldset z-crud-child-collection\"><legend>");
+    html.push_str(&html_escape(&localized_identifier_reference(
+        language,
+        &child.definition.name,
+    )));
+    html.push_str("</legend>");
+    for row in 0..count {
+        html.push_str("<fieldset class=\"z-crud-child-row\"><legend>");
+        html.push_str(&html_escape(&format!(
+            "{} {}",
+            localized_identifier_reference(language, &child.definition.name),
+            row + 1
+        )));
+        html.push_str("</legend>");
+        for field in &child.fields {
+            let key = crud_child_value_key(&child.definition.name, row, &field.name);
+            let input_type = child_field_input_type(field);
+            let value = if input_type == "password" {
+                ""
+            } else {
+                values.get(&key).map(String::as_str).unwrap_or("")
+            };
+            let label = field
+                .label
+                .as_deref()
+                .map(|label| localize_user_text(language, label))
+                .unwrap_or_else(|| localized_identifier_reference(language, &field.name));
+            let field_errors = errors
+                .iter()
+                .filter(|error| error.field == key)
+                .collect::<Vec<_>>();
+            html.push_str(
+                "<div class=\"z-field zelyra-field\"><label class=\"z-field__label\" for=\"",
+            );
+            html.push_str(&html_escape(&key));
+            html.push_str("\">");
+            html.push_str(&html_escape_preserving_locale_references(&label));
+            html.push_str("</label>");
+            if let Some(options) = relation_options.get(&field.name) {
+                html.push_str("<select class=\"z-select\" id=\"");
+                html.push_str(&html_escape(&key));
+                html.push_str("\" name=\"");
+                html.push_str(&html_escape(&key));
+                html.push('"');
+                if field.required {
+                    html.push_str(" required");
+                }
+                if !field_errors.is_empty() {
+                    html.push_str(" aria-invalid=\"true\"");
+                }
+                html.push('>');
+                if !field.required {
+                    html.push_str("<option value=\"\">-- ");
+                    html.push_str(&html_escape(&tr(language, "action.select")));
+                    html.push_str(" --</option>");
+                }
+                for option in options {
+                    html.push_str("<option value=\"");
+                    html.push_str(&html_escape(&option.value));
+                    html.push('"');
+                    if option.value == value {
+                        html.push_str(" selected");
+                    }
+                    html.push('>');
+                    html.push_str(&html_escape(&option.label));
+                    html.push_str("</option>");
+                }
+                html.push_str("</select>");
+            } else {
+                html.push_str("<input class=\"");
+                html.push_str(if input_type == "checkbox" {
+                    "z-check"
+                } else {
+                    "z-input"
+                });
+                html.push_str("\" id=\"");
+                html.push_str(&html_escape(&key));
+                html.push_str("\" name=\"");
+                html.push_str(&html_escape(&key));
+                html.push_str("\" type=\"");
+                html.push_str(input_type);
+                html.push('"');
+                if input_type == "checkbox" {
+                    html.push_str(" value=\"true\"");
+                    if matches!(value, "true" | "1") {
+                        html.push_str(" checked");
+                    }
+                } else {
+                    html.push_str(" value=\"");
+                    html.push_str(&html_escape(value));
+                    html.push('"');
+                }
+                if field.required {
+                    html.push_str(" required");
+                }
+                if input_type == "number" && matches!(field.ty, Some(Type::Float | Type::Decimal)) {
+                    html.push_str(" step=\"any\"");
+                }
+                if input_type == "number"
+                    && (matches!(field.ty.as_ref(), Some(Type::Decimal))
+                        || matches!(field.ty.as_ref(), Some(Type::Named(name)) if name == "Money"))
+                {
+                    html.push_str(" inputmode=\"decimal\"");
+                }
+                if !field_errors.is_empty() {
+                    html.push_str(" aria-invalid=\"true\"");
+                }
+                html.push('>');
+            }
+            for error in field_errors {
+                html.push_str("<p class=\"z-field__error zelyra-error\">");
+                html.push_str(&html_escape_preserving_locale_references(
+                    &localized_validation_message(language, &error.message),
+                ));
+                html.push_str("</p>");
+            }
+            html.push_str("</div>");
+        }
+        if row > 0 {
+            html.push_str("<button class=\"z-button z-button--secondary\" type=\"submit\" name=\"_zelyra_child_action\" value=\"remove:");
+            html.push_str(&row.to_string());
+            html.push_str("\"> ");
+            html.push_str(&html_escape(if language == UiLanguage::German {
+                "Position entfernen"
+            } else {
+                "Remove line"
+            }));
+            html.push_str("</button>");
+        }
+        html.push_str("</fieldset>");
+    }
+    html.push_str("<input type=\"hidden\" name=\"_zelyra_child_count\" value=\"");
+    html.push_str(&count.to_string());
+    html.push_str("\"><button class=\"z-button z-button--secondary\" type=\"submit\" name=\"_zelyra_child_action\" value=\"add\">");
+    html.push_str(&html_escape(if language == UiLanguage::German {
+        "Position hinzufügen"
+    } else {
+        "Add line"
+    }));
+    html.push_str("</button></fieldset>");
+}
+
+pub(super) fn crud_child_value_key(collection: &str, row: usize, field: &str) -> String {
+    format!("{collection}.{row}.{field}")
+}
+
+fn child_field_input_type(field: &zelyra_ast::FormField) -> &'static str {
+    match field.ty.as_ref().map(|ty| match ty {
+        Type::Option(inner) => inner.as_ref(),
+        other => other,
+    }) {
+        Some(Type::Int | Type::UInt | Type::Float | Type::Decimal) => "number",
+        Some(Type::Bool) => "checkbox",
+        Some(Type::Date) => "date",
+        Some(Type::Time) => "time",
+        Some(Type::Timestamp) => "datetime-local",
+        Some(Type::Named(name)) if name == "Money" => "number",
+        Some(Type::Named(name)) if name == "Email" => "email",
+        Some(Type::Named(name)) if name == "Url" => "url",
+        _ => "text",
+    }
 }
 
 fn form_field_appearance_classes(field: &zelyra_ast::FormField, control: &str) -> String {

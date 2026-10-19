@@ -56,6 +56,7 @@ fuzz_target!(|input: &[u8]| {
         layout_html: None,
         tenant_column: None,
         tenant_membership_table: None,
+        child_collection: None,
     };
     let values = HashMap::from([("comment".to_owned(), text.clone())]);
     let errors = [FieldError {

@@ -1335,6 +1335,36 @@ archive, restore, and custom actions write events in the same MariaDB
 transaction. Passwords, tokens, secrets, and hashes are removed from change
 details.
 
+### Master-detail forms with `has_many`
+
+🧪 A CRUD can generate one direct child collection on its Create and Edit
+forms. The child model must declare a foreign key to the CRUD parent. Rows are
+server-rendered; at most 50 rows can be submitted at once. Child IDs, parent
+foreign keys, and tenant keys are not accepted from the browser.
+
+~~~zelyra
+crud Invoice -> invoices {
+    view { fields { invoice_date } }
+
+    has_many items: InvoiceItem {
+        foreign_key: invoice_id
+        order_by: position asc
+        cascade: delete
+        aggregates {
+            net_amount: sum(total_net)
+            gross_amount: sum(total_gross)
+        }
+    }
+}
+~~~
+
+The parent and child writes, child table invariants, and aggregate updates run
+inside one transaction. On Edit, the current children are loaded for the
+parent, then replaced atomically with the submitted collection. Schema
+foreign-key behavior controls deletion. This version supports one direct
+collection per CRUD; multiple child collections, nested collections, and
+client-authoritative aggregate values are not supported.
+
 ## 13. Authentication and permissions
 
 🧪 Zelyra supports Argon2 login, persistent MariaDB sessions, logout, route

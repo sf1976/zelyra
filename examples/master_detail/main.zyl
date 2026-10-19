@@ -1,0 +1,49 @@
+database main {
+    engine: mariadb
+}
+
+table invoices {
+    id: Id primary auto
+    invoice_date: Date required
+    net_amount: Decimal(12, 2) required default 0
+    tax_amount: Decimal(12, 2) required default 0
+    gross_amount: Decimal(12, 2) required default 0
+}
+
+table invoice_items {
+    id: Id primary auto
+    invoice: Invoice required on_delete cascade
+    position: Int required
+    description: String(160) required
+    total_net: Decimal(12, 2) required
+    total_gross: Decimal(12, 2) required
+
+    validate {
+        total_gross >= total_net: "Line total cannot be below its net amount."
+    }
+}
+
+crud Invoice -> invoices {
+    title: "Invoices"
+
+    view {
+        fields { invoice_date }
+        form {
+            title: "Invoice"
+            submit: "Save invoice"
+        }
+    }
+
+    has_many items: InvoiceItem {
+        foreign_key: invoice_id
+        order_by: position asc
+        cascade: delete
+        aggregates {
+            net_amount: sum(total_net)
+            tax_amount: sum(total_gross - total_net)
+            gross_amount: sum(total_gross)
+        }
+    }
+}
+
+fn main() {}
