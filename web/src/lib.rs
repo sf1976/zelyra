@@ -10067,6 +10067,14 @@ fn evaluate_table_validations(
     table_name: &str,
     values: &HashMap<String, String>,
 ) -> Result<Vec<FieldError>, String> {
+    if !mappings.iter().any(|mapping| {
+        program
+            .tables
+            .get(mapping.table_index)
+            .is_some_and(|table| table.name == table_name)
+    }) {
+        return Ok(Vec::new());
+    }
     let Some((table_index, table)) = program
         .tables
         .iter()
@@ -10595,9 +10603,7 @@ fn runtime_value_for_type(
             .parse()
             .map(RuntimeValue::Timestamp)
             .map_err(|_| invalid()),
-        Type::Named(name)
-            if name == "Id" || program.tables.iter().any(|table| &table.name == name) =>
-        {
+        Type::Named(name) if name == "Id" || table_name_for_type(program, name).is_some() => {
             value.parse().map(RuntimeValue::Int).map_err(|_| invalid())
         }
         Type::Named(name) if name == "Money" => zelyra_ast::decimal::parse_scaled(value, 9)
@@ -10630,6 +10636,28 @@ fn runtime_value_for_type(
             "table validation does not support submitted type {other:?}"
         )),
     }
+}
+
+/// Resolve nominal table types using the same singular-to-table convention
+/// used by schema planning and relation fields (for example `Department` ->
+/// `departments`). Relation values submitted by forms are database IDs, so
+/// table validation evaluates them as integer identities.
+fn table_name_for_type(program: &Program, name: &str) -> Option<String> {
+    let name = name.rsplit("::").next()?;
+    let snake = name.to_ascii_lowercase();
+    if program.tables.iter().any(|table| table.name == snake) {
+        return Some(snake);
+    }
+    let plural = if snake.ends_with('y') {
+        format!("{}ies", &snake[..snake.len() - 1])
+    } else {
+        format!("{snake}s")
+    };
+    program
+        .tables
+        .iter()
+        .any(|table| table.name == plural)
+        .then_some(plural)
 }
 
 fn relation_target_for_field(form: &FormRoute, field: &zelyra_ast::FormField) -> Option<String> {

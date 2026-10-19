@@ -76,6 +76,7 @@ server_base_url_from_log() {
 }
 
 cleanup() {
+    local status=$?
     if [[ -n "${german_server_pid}" ]]; then
         kill "${german_server_pid}" 2>/dev/null || true
         wait "${german_server_pid}" 2>/dev/null || true
@@ -83,6 +84,9 @@ cleanup() {
     if [[ -n "${server_pid}" ]]; then
         kill "${server_pid}" 2>/dev/null || true
         wait "${server_pid}" 2>/dev/null || true
+    fi
+    if [[ "${status}" -ne 0 && -f "${temp_dir}/server.log" ]]; then
+        cat "${temp_dir}/server.log" >&2
     fi
     if command -v mariadb >/dev/null 2>&1; then
         MYSQL_PWD="${db_password}" mariadb \
@@ -97,6 +101,7 @@ SQL
             -e "DROP DATABASE IF EXISTS \`${db_name}\`;" >/dev/null 2>&1 || true
     fi
     rm -rf "${temp_dir}"
+    return "${status}"
 }
 trap cleanup EXIT
 

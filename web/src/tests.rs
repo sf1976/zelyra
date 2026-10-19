@@ -41,6 +41,45 @@ fn table_validation_predicate_runs_before_form_writes_and_returns_declared_messa
 }
 
 #[test]
+fn table_validation_converts_relation_fields_to_database_identity_values() {
+    let source = r#"
+        table departments { id: Int primary auto name: String required }
+        table machines {
+            department: Department required
+            validate { department == department: "A department is required." }
+        }
+        fn main() {}
+    "#;
+    let program = zelyra_parser::parse(&zelyra_lexer::lex(source).unwrap()).unwrap();
+    zelyra_runtime::check(&program).expect("relation field and validation are well typed");
+    let (lowered, mappings) = zelyra_ast::lower_table_validation_functions(&program);
+    let values = HashMap::from([("department".to_owned(), "1".to_owned())]);
+
+    assert!(
+        evaluate_table_validations(&lowered, &mappings, "machines", &values)
+            .unwrap()
+            .is_empty()
+    );
+    assert!(matches!(
+        runtime_value_for_type(&lowered, &Type::Named("Department".into()), "1"),
+        Ok(RuntimeValue::Int(1))
+    ));
+    assert!(runtime_value_for_type(&lowered, &Type::Named("UnknownRecord".into()), "1").is_err());
+}
+
+#[test]
+fn tables_without_invariants_do_not_require_validation_form_values() {
+    let source = "table machines { number: String required } fn main() {}";
+    let program = zelyra_parser::parse(&zelyra_lexer::lex(source).unwrap()).unwrap();
+    let (lowered, mappings) = zelyra_ast::lower_table_validation_functions(&program);
+    assert!(
+        evaluate_table_validations(&lowered, &mappings, "machines", &HashMap::new())
+            .unwrap()
+            .is_empty()
+    );
+}
+
+#[test]
 fn auto_dialog_ids_are_repeatable_and_unique_inside_collection_loops() {
     let template = r#"
 <ul>
