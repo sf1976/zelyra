@@ -72,6 +72,13 @@ impl<'a> Parser<'a> {
     fn at_word(&self, word: &str) -> bool {
         matches!(&self.current().kind, TokenKind::Ident(name) if name == word)
     }
+    fn at_word_followed_by(&self, word: &str, kind: &TokenKind) -> bool {
+        self.at_word(word)
+            && self
+                .tokens
+                .get(self.pos + 1)
+                .is_some_and(|token| &token.kind == kind)
+    }
     fn advance(&mut self) -> &'a Token {
         let token = self.current();
         if !matches!(&token.kind, TokenKind::Eof) {
@@ -444,6 +451,7 @@ impl<'a> Parser<'a> {
         let mut requires_auth = false;
         let mut permissions = Vec::new();
         let mut input = Vec::new();
+        let mut validates_table = None;
         let mut output = None;
         let mut errors = Vec::new();
         let mut version = None;
@@ -462,6 +470,15 @@ impl<'a> Parser<'a> {
             } else if self.at(&TokenKind::Permits) {
                 self.advance();
                 permissions.push(self.string_value("API permission")?);
+            } else if self.at_word("validates") {
+                let (_, validates_span) = self.ident("`validates`")?;
+                if validates_table.is_some() {
+                    return Err(ParseError {
+                        message: "API validation table may only be declared once".into(),
+                        span: validates_span,
+                    });
+                }
+                validates_table = Some(self.ident("table name after `validates`")?.0);
             } else if self.at(&TokenKind::Version) {
                 self.advance();
                 if version.is_some() {
@@ -567,7 +584,7 @@ impl<'a> Parser<'a> {
                 self.expect(TokenKind::RBrace, "`}` after API errors")?;
             } else {
                 return self
-                    .error("expected `handler`, `requires auth`, `permits`, `version`, `deprecated`, `rate_limit`, `input`, `output`, or `errors` in API definition");
+                    .error("expected `handler`, `requires auth`, `permits`, `validates`, `version`, `deprecated`, `rate_limit`, `input`, `output`, or `errors` in API definition");
             }
             self.skip_newlines();
         }
@@ -582,6 +599,7 @@ impl<'a> Parser<'a> {
             requires_auth,
             permissions,
             input,
+            validates_table,
             output,
             errors,
             version,
@@ -2206,6 +2224,7 @@ impl<'a> Parser<'a> {
         };
         self.expect(TokenKind::LBrace, "`{` after table name")?;
         let mut columns = Vec::new();
+        let mut validations = Vec::new();
         let mut indexes = Vec::new();
         let mut uniques = Vec::new();
         let mut access = zelyra_ast::TableAccessDef::default();
@@ -2220,6 +2239,8 @@ impl<'a> Parser<'a> {
                     return self.error("a table may declare its access contract only once");
                 }
                 access = self.table_access_definition()?;
+            } else if self.at_word_followed_by("validate", &TokenKind::LBrace) {
+                validations.extend(self.table_validation_block()?);
             } else {
                 columns.push(self.column_definition()?);
             }
@@ -2229,12 +2250,48 @@ impl<'a> Parser<'a> {
         Ok(TableDef {
             name,
             columns,
+            validations,
             indexes,
             uniques,
             access,
             tenant_scope,
             span: start.join(end),
         })
+    }
+
+    fn table_validation_block(
+        &mut self,
+    ) -> Result<Vec<zelyra_ast::TableValidationDef>, ParseError> {
+        let (_, start) = self.ident("`validate`")?;
+        self.expect(TokenKind::LBrace, "`{` after table validation")?;
+        let mut validations = Vec::new();
+        self.skip_newlines();
+        while !self.at(&TokenKind::RBrace) && !self.at(&TokenKind::Eof) {
+            let condition = self.expression()?;
+            self.expect(TokenKind::Colon, "`:` before validation error message")?;
+            let (message, message_span) = match &self.current().kind {
+                TokenKind::String(message) => {
+                    let message = message.clone();
+                    let span = self.advance().span;
+                    (message, span)
+                }
+                _ => return self.error("validation error message must be a string literal"),
+            };
+            validations.push(zelyra_ast::TableValidationDef {
+                span: condition.span.join(message_span),
+                condition,
+                message,
+            });
+            self.skip_newlines();
+        }
+        let end = self.expect(TokenKind::RBrace, "`}` after table validations")?;
+        if validations.is_empty() {
+            return Err(ParseError {
+                message: "a table validation block must contain at least one rule".into(),
+                span: start.join(end),
+            });
+        }
+        Ok(validations)
     }
 
     fn table_access_definition(&mut self) -> Result<zelyra_ast::TableAccessDef, ParseError> {
@@ -5114,6 +5171,36 @@ mod tests {
     }
 
     #[test]
+    fn parses_table_validation_rules_with_static_messages() {
+        let source = r#"
+            table invoices {
+                invoice_date: Date required
+                due_date: Date?
+                validate {
+                    match due_date {
+                        Some(due) => due >= invoice_date
+                        None => true
+                    }: "The due date must not precede the invoice date."
+                }
+            }
+        "#;
+        let program = parse(&lex(source).unwrap()).unwrap();
+        let validations = &program.tables[0].validations;
+        assert_eq!(validations.len(), 1);
+        assert_eq!(
+            validations[0].message,
+            "The due date must not precede the invoice date."
+        );
+        assert!(validations[0].span.start < validations[0].span.end);
+
+        let interpolated = source.replace(
+            "\"The due date must not precede the invoice date.\"",
+            "\"Due date {invoice_date}\"",
+        );
+        assert!(parse(&lex(&interpolated).unwrap()).is_err());
+    }
+
+    #[test]
     fn parses_tenant_scoped_table_column_and_identity_type() {
         let program = parse(
             &lex("table invoices scoped by tenant_id: TenantId { id: Id primary auto tenant_id: TenantId required }\n")
@@ -5866,6 +5953,14 @@ mod tests {
         assert!(!program.apis[0].requires_auth);
         assert_eq!(program.apis[0].input[0].name, "id");
         assert_eq!(program.apis[0].errors[1].status, 404);
+    }
+
+    #[test]
+    fn parses_api_table_validation_binding() {
+        let program = parse(
+            &lex(r#"api POST "/invoices" { validates invoices input { amount: Int } output Result<Int, String> errors { 422 ValidationError: String } } fn main() { }"#).unwrap(),
+        ).unwrap();
+        assert_eq!(program.apis[0].validates_table.as_deref(), Some("invoices"));
     }
 
     #[test]

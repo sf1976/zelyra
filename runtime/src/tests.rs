@@ -1765,6 +1765,48 @@ fn api_error_payload_requires_a_result_output() {
 }
 
 #[test]
+fn api_table_validation_requires_safe_boundary_and_matching_contract() {
+    let valid = parse(
+        &lex(r#"
+            table invoices { id: Id primary auto amount: Int required validate { amount > 0: "Amount must be positive" } }
+            api POST "/invoices" { handler create_invoice validates invoices input { amount: Int } output Result<Int, String> errors { 422 ValidationError: String } }
+            fn create_invoice(amount: Int) -> Result<Int, String> { return Ok(amount) }
+            fn main() { }
+        "#).unwrap(),
+    ).unwrap();
+    check_apis(&valid).expect("well-formed unscoped API validation binding");
+
+    let scoped = parse(
+        &lex(r#"
+            type TenantId = Id
+            table invoices scoped by tenant_id: TenantId { id: Id primary auto tenant_id: TenantId required amount: Int required validate { amount > 0: "Invalid amount" } }
+            api POST "/invoices" { handler create_invoice validates invoices input { tenant_id: TenantId amount: Int } output Result<Int, String> errors { 422 ValidationError: String } }
+            fn create_invoice(tenant_id: TenantId, amount: Int) -> Result<Int, String> { return Ok(amount) }
+            fn main() { }
+        "#).unwrap(),
+    ).unwrap();
+    let errors =
+        check_apis(&scoped).expect_err("tenant scope cannot come from untrusted API input");
+    assert!(errors
+        .iter()
+        .any(|error| error.message.contains("authenticated tenant context")));
+
+    let missing_contract = parse(
+        &lex(r#"
+            table invoices { amount: Int required validate { amount > 0: "Invalid amount" } }
+            api POST "/invoices" { validates invoices input { amount: Int } output Int }
+            fn main() { }
+        "#)
+        .unwrap(),
+    )
+    .unwrap();
+    let errors = check_apis(&missing_contract).expect_err("422 error contract is required");
+    assert!(errors
+        .iter()
+        .any(|error| error.message.contains("422 ValidationError")));
+}
+
+#[test]
 fn declared_non_unit_return_types_require_all_reachable_paths_to_return() {
     for source in [
         "fn answer() -> Int { } fn main() { }",
@@ -2446,6 +2488,69 @@ fn tenant_scope_requires_a_required_nominal_id_column() {
             "unexpected diagnostics for {source}: {errors:?}"
         );
     }
+}
+
+#[test]
+fn table_validation_rules_are_typechecked_in_a_pure_table_field_scope() {
+    let valid = r#"
+        table invoices {
+            invoice_date: Date required
+            due_date: Date?
+            validate {
+                match due_date {
+                    Some(due) => due >= invoice_date
+                    None => true
+                }: "Due date must not precede invoice date."
+            }
+        }
+        fn main() {}
+    "#;
+    let program = parse(&lex(valid).unwrap()).unwrap();
+    check(&program).expect("table field references and Option patterns are typed");
+    check_capabilities(&program).expect("pure predicates require no extra capabilities");
+
+    let invalid_condition = valid.replace("due >= invoice_date", "due + invoice_date");
+    let program = parse(&lex(&invalid_condition).unwrap()).unwrap();
+    let errors = check(&program).expect_err("a numeric result is not a Boolean invariant");
+    assert!(errors.iter().any(|error| error.span.start > 0));
+
+    let unknown_field = valid.replace("due >= invoice_date", "due >= issued_at");
+    let program = parse(&lex(&unknown_field).unwrap()).unwrap();
+    let errors = check(&program).expect_err("unknown table fields must not become globals");
+    assert!(errors
+        .iter()
+        .any(|error| { error.span.start > 0 && error.message.contains("issued_at") }));
+
+    let effectful = r#"
+        fn network_predicate() -> Bool uses Network { return true }
+        table invoices {
+            amount: Int required
+            validate { network_predicate(): "Not allowed" }
+        }
+        fn main() {}
+    "#;
+    let program = parse(&lex(effectful).unwrap()).unwrap();
+    check(&program).expect("the helper call is type-correct");
+    let errors = check_capabilities(&program)
+        .expect_err("table predicates must not inherit undeclared capabilities");
+    assert!(
+        errors
+            .iter()
+            .any(|error| error.message.contains("capability")),
+        "an effectful helper call must be rejected for a table predicate"
+    );
+}
+
+#[test]
+fn table_validation_check_does_not_clone_unrelated_deep_function_bodies() {
+    let expression = std::iter::repeat_n("1", 5_000)
+        .collect::<Vec<_>>()
+        .join(" + ");
+    let source = format!(
+        "table invoices {{ amount: Int required validate {{ amount > 0: \"Must be positive\" }} }} fn main() {{ print({expression}) }}"
+    );
+    let program = parse(&lex(&source).unwrap()).unwrap();
+    check(&program).expect("the invariant and unrelated long expression are checked");
 }
 
 #[test]

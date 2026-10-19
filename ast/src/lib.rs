@@ -165,6 +165,96 @@ pub struct Program {
     pub functions: Vec<Function>,
 }
 
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct TableValidationFunction {
+    pub table_index: usize,
+    pub rule_index: usize,
+    pub function_name: String,
+}
+
+/// Expands table validation expressions to ordinary private Boolean functions
+/// so the compiler's normal scope, type, effect, and diagnostic checks remain
+/// authoritative. Returns the lowered program and the stable mapping needed
+/// by web runtimes to evaluate the checked rules.
+pub fn lower_table_validation_functions(
+    program: &Program,
+) -> (Program, Vec<TableValidationFunction>) {
+    let mut lowered = program.clone();
+    let (functions, mappings) = build_table_validation_functions(program);
+    lowered.functions.extend(functions);
+    (lowered, mappings)
+}
+
+/// Ownership-taking counterpart for runtime preparation, which avoids cloning
+/// the whole source program when it has already been transferred to the web
+/// application.
+pub fn lower_table_validation_functions_owned(
+    mut program: Program,
+) -> (Program, Vec<TableValidationFunction>) {
+    let (functions, mappings) = build_table_validation_functions(&program);
+    program.functions.extend(functions);
+    (program, mappings)
+}
+
+/// Builds the checked Boolean functions for table invariants without cloning
+/// unrelated program bodies. The type checker uses this to avoid deep-cloning
+/// large ASTs merely to validate a table rule.
+pub fn build_table_validation_functions(
+    program: &Program,
+) -> (Vec<Function>, Vec<TableValidationFunction>) {
+    let mut names = program
+        .functions
+        .iter()
+        .map(|function| function.name.clone())
+        .collect::<std::collections::HashSet<_>>();
+    let mut functions = Vec::new();
+    let mut mappings = Vec::new();
+    for (table_index, table) in program.tables.iter().enumerate() {
+        for (rule_index, rule) in table.validations.iter().enumerate() {
+            let base_name = format!("__zelyra_table_validation_{table_index}_{rule_index}");
+            let mut function_name = base_name.clone();
+            let mut suffix = 0usize;
+            while !names.insert(function_name.clone()) {
+                suffix += 1;
+                function_name = format!("{base_name}_{suffix}");
+            }
+            functions.push(Function {
+                name: function_name.clone(),
+                is_public: false,
+                type_params: Vec::new(),
+                params: table
+                    .columns
+                    .iter()
+                    .filter(|column| !column.auto)
+                    .map(|column| Param {
+                        name: column.name.clone(),
+                        ty: column.ty.clone(),
+                        span: column.span,
+                    })
+                    .collect(),
+                return_type: Some(Type::Bool),
+                capabilities: Vec::new(),
+                requires: Vec::new(),
+                ensures: Vec::new(),
+                body: Block {
+                    statements: vec![Stmt::Return {
+                        value: Some(rule.condition.clone()),
+                        span: rule.span,
+                    }],
+                    span: rule.span,
+                },
+                span: rule.span,
+            });
+            mappings.push(TableValidationFunction {
+                table_index,
+                rule_index,
+                function_name,
+            });
+        }
+    }
+    (functions, mappings)
+}
+
 /// A named process entry that can be inspected and invoked by the Zelyra CLI.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct CommandDef {
@@ -568,6 +658,9 @@ pub struct ApiDef {
     pub requires_auth: bool,
     pub permissions: Vec<String>,
     pub input: Vec<ApiField>,
+    /// Applies the named table's cross-field validation rules to the typed
+    /// request values before invoking the API handler.
+    pub validates_table: Option<String>,
     pub output: Type,
     pub errors: Vec<ApiError>,
     pub version: Option<String>,
@@ -609,12 +702,22 @@ pub struct DatabaseDef {
 pub struct TableDef {
     pub name: String,
     pub columns: Vec<ColumnDef>,
+    pub validations: Vec<TableValidationDef>,
     pub indexes: Vec<IndexDef>,
     pub uniques: Vec<IndexDef>,
     pub access: TableAccessDef,
     /// Declares a nominal tenant identity column. Until checked tenant-aware
     /// query expressions are available, raw SQL access to this table is denied.
     pub tenant_scope: Option<TenantScopeDef>,
+    pub span: Span,
+}
+
+#[derive(Clone, Debug)]
+pub struct TableValidationDef {
+    /// A pure Boolean expression evaluated against the submitted table fields.
+    pub condition: Expr,
+    /// Static user-facing message shown when the condition is false.
+    pub message: String,
     pub span: Span,
 }
 

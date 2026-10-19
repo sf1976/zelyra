@@ -3,6 +3,44 @@ use std::net::TcpListener;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
 #[test]
+fn table_validation_predicate_runs_before_form_writes_and_returns_declared_message() {
+    let source = r#"
+        table invoices {
+            invoice_date: Date required
+            due_date: Date?
+            validate {
+                match due_date {
+                    Some(due) => due >= invoice_date
+                    None => true
+                }: "Due date must not precede invoice date."
+            }
+        }
+        fn main() {}
+    "#;
+    let program = zelyra_parser::parse(&zelyra_lexer::lex(source).unwrap()).unwrap();
+    zelyra_runtime::check(&program).expect("the rule is statically checked");
+    let (lowered, mappings) = zelyra_ast::lower_table_validation_functions(&program);
+
+    let invalid = HashMap::from([
+        ("invoice_date".to_owned(), "2026-10-20".to_owned()),
+        ("due_date".to_owned(), "2026-10-19".to_owned()),
+    ]);
+    let errors = evaluate_table_validations(&lowered, &mappings, "invoices", &invalid).unwrap();
+    assert_eq!(errors.len(), 1);
+    assert_eq!(errors[0].message, "Due date must not precede invoice date.");
+
+    let valid = HashMap::from([
+        ("invoice_date".to_owned(), "2026-10-20".to_owned()),
+        ("due_date".to_owned(), "2026-10-21".to_owned()),
+    ]);
+    assert!(
+        evaluate_table_validations(&lowered, &mappings, "invoices", &valid)
+            .unwrap()
+            .is_empty()
+    );
+}
+
+#[test]
 fn auto_dialog_ids_are_repeatable_and_unique_inside_collection_loops() {
     let template = r#"
 <ul>
@@ -237,6 +275,150 @@ fn form_route() -> FormRoute {
         audit_chain: false,
         layout_html: None,
     }
+}
+
+#[test]
+fn table_validation_execution_has_a_hard_step_limit() {
+    let source = r#"
+        fn expensive() -> Bool {
+            mutable i = 0
+            while i < 20000 { i = i + 1 }
+            return true
+        }
+        table invoices {
+            amount: Int required
+            validate { expensive(): "Value rejected" }
+        }
+        fn main() {}
+    "#;
+    let program = zelyra_parser::parse(&zelyra_lexer::lex(source).unwrap()).unwrap();
+    zelyra_runtime::check(&program).unwrap();
+    zelyra_runtime::check_capabilities(&program).unwrap();
+    let (lowered, mappings) = zelyra_ast::lower_table_validation_functions(&program);
+    let values = HashMap::from([("amount".to_owned(), "5".to_owned())]);
+    let error = evaluate_table_validations(&lowered, &mappings, "invoices", &values)
+        .expect_err("form validation must stop after its bounded execution budget");
+    assert!(error.contains("execution step budget exceeded"));
+}
+
+#[test]
+fn table_validation_rejects_invalid_form_before_action_execution() {
+    let source = r#"
+        table invoices {
+            invoice_date: Date required
+            due_date: Date?
+            validate {
+                match due_date {
+                    Some(due) => due >= invoice_date
+                    None => true
+                }: "Due date must not precede invoice date."
+            }
+        }
+        fn main() {}
+    "#;
+    let program = zelyra_parser::parse(&zelyra_lexer::lex(source).unwrap()).unwrap();
+    zelyra_runtime::check(&program).unwrap();
+    let (lowered, mappings) = zelyra_ast::lower_table_validation_functions(&program);
+    let table = program.tables[0].clone();
+
+    let mut route = form_route();
+    route.form.name = "InvoiceCreate".into();
+    route.form.table = Some("invoices".into());
+    route.form.fields = vec![
+        zelyra_ast::FormField {
+            name: "invoice_date".into(),
+            ty: Some(Type::Date),
+            label: Some("Invoice date".into()),
+            placeholder: None,
+            required: true,
+            min_length: None,
+            max: None,
+            min_value: None,
+            max_value: None,
+            choices: Vec::new(),
+            widget: None,
+            appearance: None,
+            readonly: false,
+            span: zelyra_ast::Span::default(),
+        },
+        zelyra_ast::FormField {
+            name: "due_date".into(),
+            ty: Some(Type::Option(Box::new(Type::Date))),
+            label: Some("Due date".into()),
+            placeholder: None,
+            required: false,
+            min_length: None,
+            max: None,
+            min_value: None,
+            max_value: None,
+            choices: Vec::new(),
+            widget: None,
+            appearance: None,
+            readonly: false,
+            span: zelyra_ast::Span::default(),
+        },
+    ];
+    route.form.actions = vec![zelyra_ast::FormAction {
+        name: "save".into(),
+        label: None,
+        icon: None,
+        confirm: None,
+        confirm_page: None,
+        success_page: None,
+        error_page: None,
+        fields: Vec::new(),
+        requires_auth: false,
+        permissions: Vec::new(),
+        statements: vec![zelyra_ast::Stmt::Expr(zelyra_ast::Expr {
+            kind: zelyra_ast::ExprKind::Sql {
+                result_type: Type::Unit,
+                query: "INSERT INTO invoices (invoice_date, due_date) VALUES (:invoice_date, :due_date)".into(),
+            },
+            span: zelyra_ast::Span::default(),
+        })],
+        success: None,
+        redirect: None,
+        span: zelyra_ast::Span::default(),
+    }];
+    route.table = Some(table);
+
+    let request = parse_request("POST /forms/CustomerCreate HTTP/1.1\r\nHost: localhost\r\nOrigin: http://localhost\r\n\r\n_zelyra_csrf=csrf-token&invoice_date=2026-10-20&due_date=2026-10-19").unwrap();
+    let response = dispatch_form_with_language(
+        &route,
+        &request,
+        &HashMap::new(),
+        None,
+        FormDispatchContext {
+            actor_user_id: None,
+            tenant_context: None,
+            language: UiLanguage::English,
+            validation_program: Some(&lowered),
+            table_validation_functions: &mappings,
+        },
+    );
+    assert_eq!(response.status, 422);
+    assert!(response
+        .body
+        .contains("Due date must not precede invoice date."));
+
+    let valid_request = parse_request("POST /forms/CustomerCreate HTTP/1.1\r\nHost: localhost\r\nOrigin: http://localhost\r\n\r\n_zelyra_csrf=csrf-token&invoice_date=2026-10-20&due_date=2026-10-21").unwrap();
+    let valid_response = dispatch_form_with_language(
+        &route,
+        &valid_request,
+        &HashMap::new(),
+        None,
+        FormDispatchContext {
+            actor_user_id: None,
+            tenant_context: None,
+            language: UiLanguage::English,
+            validation_program: Some(&lowered),
+            table_validation_functions: &mappings,
+        },
+    );
+    assert_eq!(
+        valid_response.status, 503,
+        "the valid request reaches the configured write action and requires a database"
+    );
 }
 
 #[test]
@@ -832,6 +1014,7 @@ fn relation_form_route() -> FormRoute {
     });
     route.table = Some(zelyra_ast::TableDef {
         name: "customers".into(),
+        validations: Vec::new(),
         tenant_scope: None,
         columns: vec![zelyra_ast::ColumnDef {
             name: "department".into(),
@@ -891,6 +1074,7 @@ fn formats_crud_audit_changes_without_exposing_sensitive_values() {
     let mut route = form_route();
     route.table = Some(zelyra_ast::TableDef {
         name: "customers".into(),
+        validations: Vec::new(),
         tenant_scope: None,
         columns: Vec::new(),
         indexes: Vec::new(),

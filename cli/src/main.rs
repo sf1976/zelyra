@@ -10502,6 +10502,7 @@ fn serve_command(mut args: impl Iterator<Item = String>) -> ExitCode {
     };
     println!("Zelyra server listening on http://{actual_address}");
     let app = WebApp::with_database_url(routes, form_routes, database_url_from_program(&program))
+        .with_validation_program(program)
         .with_ui_settings(ui_language, ui_level)
         .with_ui_stylesheet_css(ui_stylesheet_css)
         .with_project_theme_css(theme_css)
@@ -10881,13 +10882,16 @@ fn generated_api_routes(
     runtime_policy: Option<&RuntimePolicy>,
 ) -> Vec<ApiRoute> {
     let database_url = database_url_from_program(program);
+    let (lowered_program, table_validation_functions) =
+        zelyra_ast::lower_table_validation_functions(program);
     program
         .apis
         .iter()
         .filter_map(|api| {
             let handler = api.handler.as_ref()?.clone();
             let api = api.clone();
-            let program = program.clone();
+            let program = lowered_program.clone();
+            let table_validation_functions = table_validation_functions.clone();
             let database_url = database_url.clone();
             let capability_grants = capability_grants.cloned();
             let runtime_policy = runtime_policy.cloned();
@@ -10911,6 +10915,7 @@ fn generated_api_routes(
                                 database_url: database_url.as_deref(),
                                 capability_grants: capability_grants.as_ref(),
                                 runtime_policy: runtime_policy.as_ref(),
+                                table_validation_functions: &table_validation_functions,
                             },
                         )
                     },
@@ -10931,8 +10936,10 @@ fn dispatch_api(
     path_params: &HashMap<String, String>,
     database_url: Option<&str>,
 ) -> Response {
+    let (lowered_program, table_validation_functions) =
+        zelyra_ast::lower_table_validation_functions(program);
     dispatch_api_with_capabilities(
-        program,
+        &lowered_program,
         api,
         handler,
         request,
@@ -10941,6 +10948,7 @@ fn dispatch_api(
             database_url,
             capability_grants: None,
             runtime_policy: None,
+            table_validation_functions: &table_validation_functions,
         },
     )
 }
@@ -10950,6 +10958,7 @@ struct ApiRuntimeContext<'a> {
     database_url: Option<&'a str>,
     capability_grants: Option<&'a HashSet<String>>,
     runtime_policy: Option<&'a RuntimePolicy>,
+    table_validation_functions: &'a [zelyra_ast::TableValidationFunction],
 }
 
 fn dispatch_api_with_capabilities(
@@ -11015,6 +11024,46 @@ fn dispatch_api_with_capabilities(
         match api_value_json(value, &field.ty, program) {
             Ok(value) => arguments.push(value),
             Err(error) => return api_error_response(400, "BadRequest", &error),
+        }
+    }
+    if let Some(table_name) = &api.validates_table {
+        let submitted = api
+            .input
+            .iter()
+            .zip(&arguments)
+            .map(|(field, value)| (field.name.clone(), value.clone()))
+            .collect::<HashMap<_, _>>();
+        match zelyra_web::validate_table_runtime_values(
+            program,
+            context.table_validation_functions,
+            table_name,
+            &submitted,
+        ) {
+            Ok(messages) if messages.is_empty() => {}
+            Ok(messages) => {
+                let message = messages.join(" ");
+                let payload = RuntimeValue::String(message.clone());
+                if let Some(declaration) = api
+                    .errors
+                    .iter()
+                    .find(|error| error.status == 422 && error.name == "ValidationError")
+                {
+                    return api_error_response_with_details(
+                        422,
+                        &declaration.name,
+                        &message,
+                        declaration.payload.as_ref().map(|_| &payload),
+                    );
+                }
+                return api_error_response(
+                    500,
+                    "InternalServerError",
+                    "API validation error contract is missing",
+                );
+            }
+            Err(error) => {
+                return api_error_response(500, "InternalServerError", &error);
+            }
         }
     }
     match execute_function_with_capabilities_and_policies(

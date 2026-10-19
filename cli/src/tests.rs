@@ -2815,6 +2815,64 @@ fn dispatches_json_api_input_to_a_typed_handler() {
 }
 
 #[test]
+fn evaluates_declared_table_validation_before_api_handler() {
+    let program = parse(
+        &lex(r#"
+            table invoices {
+                id: Id primary auto
+                amount: Int required
+                validate { amount > 0: "Amount must be positive" }
+            }
+            api POST "/invoices" {
+                handler create_invoice
+                input { amount: Int }
+                validates invoices
+                output Result<Int, String>
+                errors { 422 ValidationError: String }
+            }
+            fn create_invoice(amount: Int) -> Result<Int, String> { return Ok(amount) }
+            fn main() { }
+        "#)
+        .unwrap(),
+    )
+    .unwrap();
+    check_apis(&program).expect("API validation contract must type-check");
+    let api = &program.apis[0];
+
+    let invalid = zelyra_web::parse_request(
+        "POST /invoices HTTP/1.1\r\nContent-Type: application/json\r\n\r\n{\"amount\":0}",
+    )
+    .unwrap();
+    let response = dispatch_api(
+        &program,
+        api,
+        "create_invoice",
+        &invalid,
+        &HashMap::new(),
+        None,
+    );
+    assert_eq!(response.status, 422);
+    let body: serde_json::Value = serde_json::from_str(&response.body).unwrap();
+    assert_eq!(body["error"]["code"], "ValidationError");
+    assert_eq!(body["error"]["details"], "Amount must be positive");
+
+    let valid = zelyra_web::parse_request(
+        "POST /invoices HTTP/1.1\r\nContent-Type: application/json\r\n\r\n{\"amount\":42}",
+    )
+    .unwrap();
+    let response = dispatch_api(
+        &program,
+        api,
+        "create_invoice",
+        &valid,
+        &HashMap::new(),
+        None,
+    );
+    assert_eq!(response.status, 200);
+    assert_eq!(response.body, "42");
+}
+
+#[test]
 fn enforces_scoped_database_effects_in_generated_api_handlers() {
     let program = parse(
         &lex(
@@ -2840,6 +2898,7 @@ fn enforces_scoped_database_effects_in_generated_api_handlers() {
             database_url: Some(database_url),
             capability_grants: Some(&no_grants),
             runtime_policy: None,
+            table_validation_functions: &[],
         },
     );
     assert_eq!(denied.status, 500);
@@ -2857,6 +2916,7 @@ fn enforces_scoped_database_effects_in_generated_api_handlers() {
             database_url: Some(database_url),
             capability_grants: Some(&read_grant),
             runtime_policy: None,
+            table_validation_functions: &[],
         },
     );
     assert_eq!(allowed.status, 500);
@@ -2888,6 +2948,7 @@ fn project_step_budget_applies_to_executed_api_handlers() {
                 step_budget: Some(30),
                 ..RuntimePolicy::default()
             }),
+            table_validation_functions: &[],
         },
     );
     assert_eq!(response.status, 500);

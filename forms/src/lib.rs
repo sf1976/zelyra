@@ -966,6 +966,7 @@ mod tests {
         };
         let table = TableDef {
             name: "customers".into(),
+            validations: Vec::new(),
             tenant_scope: None,
             columns: vec![ColumnDef {
                 name: "name".into(),

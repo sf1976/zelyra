@@ -484,6 +484,27 @@ This creates a composite unique key `(tenant_id, customer_number)`. Plain
 schema plans for existing tables require review and check for duplicate rows
 before applying the new index.
 
+The 1.2.20 development branch is adding typed rules across table fields:
+
+~~~zelyra
+table invoices {
+    invoice_date: Date required
+    due_date: Date?
+    validate {
+        match due_date {
+            Some(due) => due >= invoice_date
+            None => true
+        }: "The due date must not precede the invoice date."
+    }
+}
+~~~
+
+Declarative form and CRUD write actions check this rule before writing.
+Arbitrary API handlers are not yet bound to a declared table write target and
+are not automatically covered by this rule. This feature is not released yet.
+See [`table-invariants.en.md`](../../table-invariants.en.md) for details and
+limits.
+
 Foreign-key delete behavior can be made explicit on a relation column:
 
 ~~~zelyra
@@ -1585,6 +1606,33 @@ The response retains `error.code` and `error.message` and adds the serialized
 payload as `error.details`. OpenAPI includes the details schema, while the
 generated client exposes it through `ZelyraApiErrorPayloads` and the generic
 `ZelyraApiError.details` field. Existing untyped API errors remain compatible.
+
+A write API may explicitly validate its request before the handler runs.
+`validates` binds named request fields to a table using their declared types;
+the API must cover every non-auto required table field. A failed rule returns
+the declared HTTP 422 error contract:
+
+~~~zelyra
+table invoices {
+    id: Id primary auto
+    amount: Int required
+    validate { amount > 0: "Amount must be positive." }
+}
+
+api POST "/invoices" {
+    handler create_invoice
+    input { amount: Int }
+    validates invoices
+    output Result<Int, String>
+    errors { 422 ValidationError: String }
+}
+~~~
+
+This binding supports POST, PUT, and PATCH. Tables with tenant scope are
+rejected until the API runtime can provide a verified tenant context. The
+check covers submitted values, not later handler transformations or direct
+SQL writes. Database constraints are still required for invariants that must
+hold for every writer.
 
 Browser access is disabled by default. Enable exact origins in the project
 configuration when a separate frontend needs to call an API:

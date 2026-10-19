@@ -535,6 +535,28 @@ Modifier ist noch nicht in einem Release veröffentlicht; Schema-Pläne für
 bestehende Tabellen verlangen Prüfung und prüfen vorhandene Duplikate vor dem
 Anlegen des Index.
 
+Der Entwicklungszweig für 1.2.20 ergänzt derzeit typgeprüfte Regeln über
+Tabellenfelder:
+
+~~~zelyra
+table invoices {
+    invoice_date: Date required
+    due_date: Date?
+    validate {
+        match due_date {
+            Some(due) => due >= invoice_date
+            None => true
+        }: "Das Fälligkeitsdatum darf nicht vor dem Rechnungsdatum liegen."
+    }
+}
+~~~
+
+Deklarative Formular- und CRUD-Schreibaktionen prüfen diese Regel vor dem
+Schreiben. Beliebige API-Handler sind noch nicht an ein Tabellenschreibziel
+gebunden und werden von dieser Regel derzeit nicht automatisch abgedeckt.
+Die Funktion ist noch nicht veröffentlicht. Details und Grenzen stehen in
+[`table-invariants.de.md`](../../table-invariants.de.md).
+
 Das Löschverhalten eines Fremdschlüssels kann am Relationsfeld festgelegt
 werden:
 
@@ -1714,6 +1736,35 @@ serialisierten Payload als `error.details`. OpenAPI enthält das Details-Schema;
 der erzeugte Client stellt es über `ZelyraApiErrorPayloads` und das generische
 Feld `ZelyraApiError.details` bereit. Bestehende ungetypte API-Fehler bleiben
 kompatibel.
+
+Für eine ausdrückliche Tabelleninvariante kann ein schreibender API-Endpunkt
+seine Eingabe vor dem Handler prüfen lassen. `validates` bindet die benannten
+Request-Felder typisiert an die Tabelle; die Tabelle muss alle nicht
+automatischen Pflichtfelder abdecken. Ein Verstoß liefert den deklarierten
+HTTP-422-Fehlervertrag:
+
+~~~zelyra
+table invoices {
+    id: Id primary auto
+    amount: Int required
+    validate { amount > 0: "Der Betrag muss positiv sein." }
+}
+
+api POST "/invoices" {
+    handler create_invoice
+    input { amount: Int }
+    validates invoices
+    output Result<Int, String>
+    errors { 422 ValidationError: String }
+}
+~~~
+
+Diese Bindung ist für POST, PUT und PATCH verfügbar. Tabellen mit
+Mandantenscope werden abgewiesen, bis die API-Laufzeit einen verifizierten
+Tenant-Kontext bereitstellt. Die Prüfung deckt die eingereichten Werte ab,
+nicht nachfolgende Handler-Transformationen oder direkte SQL-Schreibzugriffe.
+Für Invarianten, die für jeden Schreiber gelten müssen, sind weiterhin
+Datenbank-Constraints erforderlich.
 
 Browserzugriff ist standardmäßig deaktiviert. Wenn ein separates Frontend
 eine API aufrufen soll, werden exakte Origins in der Projektkonfiguration

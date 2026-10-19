@@ -9,6 +9,7 @@ zelyra-ast.workspace = true
 zelyra-database.workspace = true
 zelyra-forms.workspace = true
 zelyra-mail.workspace = true
+zelyra-runtime.workspace = true
 argon2 = "0.5"
 blake2 = "0.10"
 rand_core.workspace = true
@@ -18,3 +19,7 @@ ring.workspace = true
 subtle.workspace = true
 zeroize.workspace = true
 url.workspace = true
+
+[dev-dependencies]
+zelyra-lexer.workspace = true
+zelyra-parser.workspace = true

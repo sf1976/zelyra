@@ -124,6 +124,84 @@ pub fn check_apis(program: &Program) -> Result<(), Vec<ApiDiagnostic>> {
                 });
             }
         }
+        if let Some(table_name) = &api.validates_table {
+            if api.handler.is_none() {
+                errors.push(ApiDiagnostic {
+                    message: "API table validation requires a handler".into(),
+                    span: api.span,
+                });
+            }
+            let Some(table) = program
+                .tables
+                .iter()
+                .find(|table| &table.name == table_name)
+            else {
+                errors.push(ApiDiagnostic {
+                    message: format!("API validation refers to unknown table `{table_name}`"),
+                    span: api.span,
+                });
+                continue;
+            };
+            if !matches!(api.method.as_str(), "POST" | "PUT" | "PATCH") {
+                errors.push(ApiDiagnostic {
+                    message: "table validation is only supported for POST, PUT, or PATCH APIs"
+                        .into(),
+                    span: api.span,
+                });
+            }
+            if table.tenant_scope.is_some() {
+                errors.push(ApiDiagnostic {
+                    message: format!(
+                        "API table validation for scoped table `{table_name}` requires an authenticated tenant context, which this API route does not currently expose"
+                    ),
+                    span: api.span,
+                });
+            }
+            if table.validations.is_empty() {
+                errors.push(ApiDiagnostic {
+                    message: format!("table `{table_name}` has no validation rules"),
+                    span: api.span,
+                });
+            }
+            for column in table.columns.iter().filter(|column| !column.auto) {
+                let Some(input) = api.input.iter().find(|field| field.name == column.name) else {
+                    if !matches!(column.ty, Type::Option(_)) && column.default.is_none() {
+                        errors.push(ApiDiagnostic {
+                            message: format!(
+                                "API validating `{table_name}` must declare required field `{}` in input",
+                                column.name
+                            ),
+                            span: api.span,
+                        });
+                    }
+                    continue;
+                };
+                if input.ty != column.ty {
+                    errors.push(ApiDiagnostic {
+                        message: format!(
+                            "API validation field `{}` has type `{}`, expected `{}` from table `{table_name}`",
+                            column.name, input.ty, column.ty
+                        ),
+                        span: input.span,
+                    });
+                }
+            }
+            if !api.errors.iter().any(|error| {
+                error.status == 422
+                    && error.name == "ValidationError"
+                    && error
+                        .payload
+                        .as_ref()
+                        .is_some_and(|payload| compatible(payload, &Type::String))
+            }) {
+                errors.push(ApiDiagnostic {
+                    message:
+                        "API table validation requires `errors { 422 ValidationError: String }`"
+                            .into(),
+                    span: api.span,
+                });
+            }
+        }
         if !api_type_known(&api.output, &known_types, &generic_arities) {
             errors.push(ApiDiagnostic {
                 message: format!("unknown API output type `{}`", api.output),

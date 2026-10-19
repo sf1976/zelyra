@@ -13,11 +13,12 @@ use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 use zelyra_ast::{
     CrudDeleteViewDef, CrudDetailViewDef, CrudDetailViewMode, CrudErrorViewDef, CrudFormViewDef,
-    CrudFormViewMode, CrudListViewDef, CrudListViewMode, CrudLoadingViewDef, FormDef, TableDef,
-    Type,
+    CrudFormViewMode, CrudListViewDef, CrudListViewMode, CrudLoadingViewDef, FormDef, Program,
+    TableDef, Type,
 };
 use zelyra_database::{QueryValue, Schema};
 use zelyra_forms::{validate, FieldError};
+use zelyra_runtime::Value as RuntimeValue;
 mod edit_snapshot;
 mod forms;
 mod http;
@@ -676,6 +677,14 @@ struct FormExecutionContext<'a> {
     tenant_context: Option<&'a TenantContext>,
 }
 
+struct FormDispatchContext<'a> {
+    actor_user_id: Option<i64>,
+    tenant_context: Option<&'a TenantContext>,
+    language: UiLanguage,
+    validation_program: Option<&'a Program>,
+    table_validation_functions: &'a [zelyra_ast::TableValidationFunction],
+}
+
 fn tenant_selector(request: &Request) -> Result<Option<String>, u16> {
     let header_zelyra = request
         .headers
@@ -991,6 +1000,8 @@ pub struct WebApp {
     pub routes: Vec<Route>,
     pub apis: Vec<ApiRoute>,
     pub forms: Vec<FormRoute>,
+    validation_program: Option<Arc<Program>>,
+    table_validation_functions: Vec<zelyra_ast::TableValidationFunction>,
     pub cruds: Vec<CrudRoute>,
     pub tableviews: Vec<TableViewRoute>,
     pub database_url: Option<String>,
@@ -1021,6 +1032,8 @@ impl WebApp {
             routes,
             apis: Vec::new(),
             forms,
+            validation_program: None,
+            table_validation_functions: Vec::new(),
             cruds: Vec::new(),
             tableviews: Vec::new(),
             database_url: None,
@@ -1055,6 +1068,8 @@ impl WebApp {
             routes,
             apis: Vec::new(),
             forms,
+            validation_program: None,
+            table_validation_functions: Vec::new(),
             cruds: Vec::new(),
             tableviews: Vec::new(),
             database_url,
@@ -1082,6 +1097,15 @@ impl WebApp {
 
     pub fn with_cruds(mut self, cruds: Vec<CrudRoute>) -> Self {
         self.cruds = cruds;
+        self
+    }
+
+    /// Installs the compiler-lowered, statically checked table invariants used
+    /// by generated and declarative form submissions.
+    pub fn with_validation_program(mut self, program: Program) -> Self {
+        let (lowered, mappings) = zelyra_ast::lower_table_validation_functions_owned(program);
+        self.validation_program = Some(Arc::new(lowered));
+        self.table_validation_functions = mappings;
         self
     }
 
@@ -1617,19 +1641,23 @@ impl WebApp {
                             request,
                             &path_params,
                             self.database_url.as_deref(),
-                            tenant_context
-                                .as_ref()
-                                .map(|context| context.user_id)
-                                .or_else(|| {
-                                    session_from_request(
-                                        self,
-                                        request,
-                                        self.database_url.as_deref(),
-                                    )
-                                    .and_then(|session| session.user_id)
-                                }),
-                            tenant_context.as_ref(),
-                            self.ui_language,
+                            FormDispatchContext {
+                                actor_user_id: tenant_context
+                                    .as_ref()
+                                    .map(|context| context.user_id)
+                                    .or_else(|| {
+                                        session_from_request(
+                                            self,
+                                            request,
+                                            self.database_url.as_deref(),
+                                        )
+                                        .and_then(|session| session.user_id)
+                                    }),
+                                tenant_context: tenant_context.as_ref(),
+                                language: self.ui_language,
+                                validation_program: self.validation_program.as_deref(),
+                                table_validation_functions: &self.table_validation_functions,
+                            },
                         ),
                         form.layout_html.as_deref(),
                     ),
@@ -1716,19 +1744,23 @@ impl WebApp {
                                 request,
                                 &path_params,
                                 self.database_url.as_deref(),
-                                tenant_context
-                                    .as_ref()
-                                    .map(|context| context.user_id)
-                                    .or_else(|| {
-                                        session_from_request(
-                                            self,
-                                            request,
-                                            self.database_url.as_deref(),
-                                        )
-                                        .and_then(|session| session.user_id)
-                                    }),
-                                tenant_context.as_ref(),
-                                self.ui_language,
+                                FormDispatchContext {
+                                    actor_user_id: tenant_context
+                                        .as_ref()
+                                        .map(|context| context.user_id)
+                                        .or_else(|| {
+                                            session_from_request(
+                                                self,
+                                                request,
+                                                self.database_url.as_deref(),
+                                            )
+                                            .and_then(|session| session.user_id)
+                                        }),
+                                    tenant_context: tenant_context.as_ref(),
+                                    language: self.ui_language,
+                                    validation_program: self.validation_program.as_deref(),
+                                    table_validation_functions: &self.table_validation_functions,
+                                },
                             ),
                             action.form.layout_html.as_deref(),
                         ),
@@ -5901,9 +5933,13 @@ fn dispatch_form(
         request,
         path_params,
         database_url,
-        actor_user_id,
-        None,
-        UiLanguage::English,
+        FormDispatchContext {
+            actor_user_id,
+            tenant_context: None,
+            language: UiLanguage::English,
+            validation_program: None,
+            table_validation_functions: &[],
+        },
     )
 }
 
@@ -5912,10 +5948,15 @@ fn dispatch_form_with_language(
     request: &Request,
     path_params: &HashMap<String, String>,
     database_url: Option<&str>,
-    actor_user_id: Option<i64>,
-    tenant_context: Option<&TenantContext>,
-    language: UiLanguage,
+    context: FormDispatchContext<'_>,
 ) -> Response {
+    let FormDispatchContext {
+        actor_user_id,
+        tenant_context,
+        language,
+        validation_program,
+        table_validation_functions,
+    } = context;
     if form.tenant_column.is_some() && tenant_context.is_none() {
         return Response::html(403, "<h1>403 Forbidden</h1>");
     }
@@ -6059,6 +6100,37 @@ fn dispatch_form_with_language(
     );
     let mut errors = validation.errors;
     validate_relation_values(form, &relation_options, &values, &mut errors);
+    if errors.is_empty() {
+        if let (Some(program), Some(table_name)) = (validation_program, form.form.table.as_deref())
+        {
+            let mut validation_values = values.clone();
+            if let (Some(tenant_context), Some(table)) = (
+                tenant_context,
+                program.tables.iter().find(|table| table.name == table_name),
+            ) {
+                if let Some(scope) = &table.tenant_scope {
+                    validation_values
+                        .entry(scope.column.clone())
+                        .or_insert_with(|| tenant_context.tenant_id.to_string());
+                }
+            }
+            match evaluate_table_validations(
+                program,
+                table_validation_functions,
+                table_name,
+                &validation_values,
+            ) {
+                Ok(validation_errors) => errors.extend(validation_errors),
+                Err(error) => {
+                    eprintln!("zelyra web: table validation could not be evaluated: {error}");
+                    return Response::html(
+                        500,
+                        "<h1>500 Internal Server Error</h1><p>Table validation could not be evaluated.</p>",
+                    );
+                }
+            }
+        }
+    }
     if !errors.is_empty() {
         return Response::html(
             422,
@@ -9475,6 +9547,274 @@ fn validate_relation_values(
                 message: "selected value does not exist".into(),
             });
         }
+    }
+}
+
+fn evaluate_table_validations(
+    program: &Program,
+    mappings: &[zelyra_ast::TableValidationFunction],
+    table_name: &str,
+    values: &HashMap<String, String>,
+) -> Result<Vec<FieldError>, String> {
+    let Some((table_index, table)) = program
+        .tables
+        .iter()
+        .enumerate()
+        .find(|(_, table)| table.name == table_name)
+    else {
+        return Ok(Vec::new());
+    };
+    let mut args = Vec::with_capacity(table.columns.len());
+    for column in &table.columns {
+        if column.auto {
+            continue;
+        }
+        args.push(runtime_value_for_column(
+            program,
+            column,
+            values.get(&column.name).map(String::as_str),
+        )?);
+    }
+    let mut errors = Vec::new();
+    let validation_policy = zelyra_runtime::RuntimePolicy {
+        step_budget: Some(10_000),
+        ..zelyra_runtime::RuntimePolicy::default()
+    };
+    for mapping in mappings
+        .iter()
+        .filter(|mapping| mapping.table_index == table_index)
+    {
+        let result = zelyra_runtime::execute_function_with_capabilities_and_policies(
+            program,
+            &mapping.function_name,
+            args.clone(),
+            None,
+            None,
+            Some(&validation_policy),
+        )
+        .map_err(|error| error.message)?;
+        match result {
+            RuntimeValue::Bool(true) => {}
+            RuntimeValue::Bool(false) => {
+                let message = table
+                    .validations
+                    .get(mapping.rule_index)
+                    .map(|validation| validation.message.clone())
+                    .unwrap_or_else(|| "table validation failed".into());
+                errors.push(FieldError {
+                    field: String::new(),
+                    message,
+                });
+            }
+            other => {
+                return Err(format!(
+                    "table validation returned {:?}, expected Bool",
+                    other.ty()
+                ))
+            }
+        }
+    }
+    Ok(errors)
+}
+
+/// Evaluate a table's declared cross-field rules against already type-checked
+/// request values. This is used by API boundaries; callers must not use
+/// untrusted values for tenant scope columns.
+pub fn validate_table_runtime_values(
+    program: &Program,
+    mappings: &[zelyra_ast::TableValidationFunction],
+    table_name: &str,
+    submitted: &HashMap<String, RuntimeValue>,
+) -> Result<Vec<String>, String> {
+    let Some((table_index, table)) = program
+        .tables
+        .iter()
+        .enumerate()
+        .find(|(_, table)| table.name == table_name)
+    else {
+        return Err(format!("unknown validation table `{table_name}`"));
+    };
+    let mut args = Vec::with_capacity(table.columns.len());
+    for column in &table.columns {
+        if column.auto {
+            continue;
+        }
+        let value = match submitted.get(&column.name) {
+            Some(value) => value.clone(),
+            None if column.default.is_some() => runtime_value_for_default(
+                program,
+                &column.ty,
+                column.default.as_ref().expect("checked default"),
+            )?,
+            None if matches!(column.ty, Type::Option(_)) => RuntimeValue::Option(None),
+            None => return Err(format!("missing validation field `{}`", column.name)),
+        };
+        args.push(value);
+    }
+    let mut messages = Vec::new();
+    let policy = zelyra_runtime::RuntimePolicy {
+        step_budget: Some(10_000),
+        ..zelyra_runtime::RuntimePolicy::default()
+    };
+    for mapping in mappings
+        .iter()
+        .filter(|mapping| mapping.table_index == table_index)
+    {
+        let result = zelyra_runtime::execute_function_with_capabilities_and_policies(
+            program,
+            &mapping.function_name,
+            args.clone(),
+            None,
+            None,
+            Some(&policy),
+        )
+        .map_err(|error| error.message)?;
+        match result {
+            RuntimeValue::Bool(true) => {}
+            RuntimeValue::Bool(false) => messages.push(
+                table
+                    .validations
+                    .get(mapping.rule_index)
+                    .map(|validation| validation.message.clone())
+                    .unwrap_or_else(|| "table validation failed".into()),
+            ),
+            other => {
+                return Err(format!(
+                    "table validation returned {:?}, expected Bool",
+                    other.ty()
+                ))
+            }
+        }
+    }
+    Ok(messages)
+}
+
+fn runtime_value_for_column(
+    program: &Program,
+    column: &zelyra_ast::ColumnDef,
+    submitted: Option<&str>,
+) -> Result<RuntimeValue, String> {
+    let value = match (&column.ty, submitted) {
+        (Type::Option(_), Some("")) => return Ok(RuntimeValue::Option(None)),
+        (Type::Option(inner), Some(value)) => RuntimeValue::Option(Some(Box::new(
+            runtime_value_for_type(program, inner, value)?,
+        ))),
+        (Type::Option(inner), None) => match &column.default {
+            None => RuntimeValue::Option(None),
+            Some(default) => RuntimeValue::Option(Some(Box::new(runtime_value_for_default(
+                program, inner, default,
+            )?))),
+        },
+        (_, Some(value)) => runtime_value_for_type(program, &column.ty, value)?,
+        (_, None) => match &column.default {
+            Some(default) => runtime_value_for_default(program, &column.ty, default)?,
+            None if column.auto => {
+                return Err(format!(
+                    "cannot validate auto-generated field `{}` before insertion",
+                    column.name
+                ))
+            }
+            None => {
+                return Err(format!(
+                    "missing value for table validation field `{}`",
+                    column.name
+                ))
+            }
+        },
+    };
+    Ok(value)
+}
+
+fn runtime_value_for_default(
+    program: &Program,
+    ty: &Type,
+    default: &zelyra_ast::DefaultValue,
+) -> Result<RuntimeValue, String> {
+    match default {
+        zelyra_ast::DefaultValue::Int(value) => {
+            runtime_value_for_type(program, ty, &value.to_string())
+        }
+        zelyra_ast::DefaultValue::Bool(value) => {
+            runtime_value_for_type(program, ty, if *value { "true" } else { "false" })
+        }
+        zelyra_ast::DefaultValue::String(value) | zelyra_ast::DefaultValue::Ident(value) => {
+            runtime_value_for_type(program, ty, value)
+        }
+    }
+}
+
+fn runtime_value_for_type(
+    program: &Program,
+    ty: &Type,
+    value: &str,
+) -> Result<RuntimeValue, String> {
+    let invalid = || format!("value `{value}` cannot be converted to table validation type {ty:?}");
+    match ty {
+        Type::Int => value.parse().map(RuntimeValue::Int).map_err(|_| invalid()),
+        Type::UInt => value.parse().map(RuntimeValue::UInt).map_err(|_| invalid()),
+        Type::Float => value
+            .parse()
+            .map(RuntimeValue::Float)
+            .map_err(|_| invalid()),
+        Type::Decimal => zelyra_ast::decimal::parse_scaled(value, 9)
+            .map(RuntimeValue::Decimal)
+            .ok_or_else(invalid),
+        Type::Bool => match value {
+            "true" | "1" | "on" => Ok(RuntimeValue::Bool(true)),
+            "false" | "0" | "" => Ok(RuntimeValue::Bool(false)),
+            _ => Err(invalid()),
+        },
+        Type::String => Ok(RuntimeValue::String(value.to_owned())),
+        Type::Char => {
+            let mut chars = value.chars();
+            let Some(character) = chars.next() else {
+                return Err(invalid());
+            };
+            if chars.next().is_some() {
+                return Err(invalid());
+            }
+            Ok(RuntimeValue::Char(character))
+        }
+        Type::Date => Ok(RuntimeValue::Date(value.to_owned())),
+        Type::Time => Ok(RuntimeValue::Time(value.to_owned())),
+        Type::Timestamp => value
+            .parse()
+            .map(RuntimeValue::Timestamp)
+            .map_err(|_| invalid()),
+        Type::Named(name)
+            if name == "Id" || program.tables.iter().any(|table| &table.name == name) =>
+        {
+            value.parse().map(RuntimeValue::Int).map_err(|_| invalid())
+        }
+        Type::Named(name) if name == "Money" => zelyra_ast::decimal::parse_scaled(value, 9)
+            .map(RuntimeValue::Decimal)
+            .ok_or_else(invalid),
+        Type::Named(name) if matches!(name.as_str(), "Email" | "Url" | "Uuid") => {
+            Ok(RuntimeValue::String(value.to_owned()))
+        }
+        Type::Named(name) => {
+            if let Some(alias) = program
+                .types
+                .iter()
+                .find(|definition| definition.name == *name)
+            {
+                runtime_value_for_type(program, &alias.target, value)
+            } else {
+                Err(invalid())
+            }
+        }
+        Type::Option(inner) => {
+            if value.is_empty() {
+                Ok(RuntimeValue::Option(None))
+            } else {
+                Ok(RuntimeValue::Option(Some(Box::new(
+                    runtime_value_for_type(program, inner, value)?,
+                ))))
+            }
+        }
+        other => Err(format!(
+            "table validation does not support submitted type {other:?}"
+        )),
     }
 }
 

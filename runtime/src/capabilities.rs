@@ -61,16 +61,22 @@ fn analyze_capabilities(
     program: &Program,
     grants: Option<&HashSet<String>>,
 ) -> (Vec<CapabilityError>, Vec<CapabilityUse>) {
-    let functions = program
+    let (validation_functions, _) = zelyra_ast::build_table_validation_functions(program);
+    let all_functions = program
         .functions
         .iter()
+        .chain(validation_functions.iter())
+        .collect::<Vec<_>>();
+    let functions = all_functions
+        .iter()
+        .copied()
         .map(|function| (function.name.as_str(), function))
         .collect::<HashMap<_, _>>();
     let known = KNOWN_CAPABILITIES.iter().copied().collect::<HashSet<_>>();
     let mut errors = Vec::new();
     let mut uses = Vec::new();
 
-    for function in &program.functions {
+    for function in all_functions {
         let mut declared = HashSet::new();
         for capability in &function.capabilities {
             if !known.contains(capability.as_str()) {

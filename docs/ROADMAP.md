@@ -183,15 +183,20 @@ security and compatibility gates stated for that milestone.
   bytecode differential corpus for tuples, conditional expressions, record
   updates, closures and guarded matches. Experimental backends remain opt-in;
   this milestone does not imply full language parity.
-- [ ] **1.2.19 — tenant-scoped unique values:** Add `unique within tenant` for
+- [~] **1.2.19 — tenant-scoped unique values:** Add `unique within tenant` for
   scoped tables. It generates a composite unique index, rejects ambiguous
   declarations, and requires review plus a duplicate-row preflight when
   changing an existing schema. Existing-row repair remains an explicit
   operator task.
-- [ ] **1.2.20 — table and form invariants:** Add typed cross-field validation
+- [~] **1.2.20 — table and form invariants:** Add typed cross-field validation
   with source-mapped diagnostics and consistent generated CRUD/API checks
   before database writes. A backend that cannot preserve the checked
   validation semantics must reject that path.
+  Declarative forms and generated CRUD run rules before write actions; APIs can
+  explicitly bind POST/PUT/PATCH input to unscoped tables and return a typed
+  HTTP 422 error. Scoped API bindings are rejected until a verified tenant
+  context is available, and raw SQL writes are not covered. See
+  [`table-invariants.en.md`](table-invariants.en.md).
 - [ ] **1.2.21 — lifecycle guards and row-conditioned CRUD policies:** Add
   checked update/delete guards and conditional edit/delete permissions, with
   the same server-side decision used by rendered actions and direct requests.
