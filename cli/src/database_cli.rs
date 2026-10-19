@@ -1620,6 +1620,10 @@ fn database_query(path: &str, args: &[String]) -> ExitCode {
             eprintln!("error[E-CLI-DB-003]: --limit is only supported for read-only queries");
             return ExitCode::from(2);
         }
+        if !matches!(first_sql_keyword(&sql).as_str(), "SELECT" | "WITH") {
+            eprintln!("error[E-CLI-DB-003]: --limit is supported only for SELECT and WITH queries");
+            return ExitCode::from(2);
+        }
         let statement = strip_sql_terminator(&sql);
         sql = format!("SELECT * FROM (\n{statement}\n) AS _zelyra_query_limit LIMIT {limit}");
     }
@@ -1672,6 +1676,11 @@ fn read_only_statement(sql: &str) -> bool {
         "FOR UPDATE",
         "LOCK IN SHARE MODE",
         "LOAD_FILE(",
+        "GET_LOCK(",
+        "RELEASE_LOCK(",
+        "IS_FREE_LOCK(",
+        "IS_USED_LOCK(",
+        ":=",
     ]
     .iter()
     .any(|unsafe_clause| upper.contains(unsafe_clause))
@@ -2117,6 +2126,8 @@ mod tests {
         assert!(!read_only_statement("DELETE FROM users"));
         assert!(!read_only_statement("UPDATE users SET active = false"));
         assert!(!read_only_statement("SELECT id FROM users FOR UPDATE"));
+        assert!(!read_only_statement("SELECT GET_LOCK('name', 0)"));
+        assert!(!read_only_statement("SELECT @value := 1"));
         assert!(transactional_dml_statement("INSERT INTO users VALUES (1)"));
         assert!(!transactional_dml_statement("DROP TABLE users"));
     }

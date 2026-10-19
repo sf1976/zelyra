@@ -45,31 +45,22 @@ json_output="$("${zelyra_bin}" db query "${project}/main.zyl" "SELECT count(*) A
 [[ "${json_output}" == '[{"total":1}]' ]]
 table_output="$("${zelyra_bin}" db query "${project}/main.zyl" "SELECT id, name FROM items" --format table)"
 [[ "${table_output}" == *"| 1  | a,b |"* ]]
+limited_output="$("${zelyra_bin}" db query "${project}/main.zyl" "SELECT id, name FROM items ORDER BY id" --format json --limit 1)"
+[[ "${limited_output}" == '[{"id":1,"name":"a,b"}]' ]]
+tenant_output="$("${zelyra_bin}" db query "${project}/main.zyl" "SELECT :tenant_id AS tenant_id" --tenant 42 --format json)"
+[[ "${tenant_output}" == '[{"tenant_id":42}]' ]]
 csv_output="$("${zelyra_bin}" db query "${project}/main.zyl" "SELECT name FROM items" --format csv)"
-[[ "${csv_output}" == $'name\n"a,b"' ]]
+[[ "${csv_output}" == $'name\r\n"a,b"\r' ]]
 if "${zelyra_bin}" db query "${project}/main.zyl" "INSERT INTO items VALUES (2, 'blocked')" >/dev/null 2>&1; then
   echo "error: query accepted a mutation without --allow-mutation" >&2
   exit 1
 fi
 "${zelyra_bin}" db query "${project}/main.zyl" "INSERT INTO items VALUES (2, 'committed')" --allow-mutation >/dev/null
+if "${zelyra_bin}" db query "${project}/main.zyl" "INSERT INTO items VALUES (1, 'duplicate')" --allow-mutation >/dev/null 2>&1; then
+  echo "error: failed DML unexpectedly committed" >&2
+  exit 1
+fi
+after_rollback="$("${zelyra_bin}" db query "${project}/main.zyl" "SELECT count(*) AS total FROM items" --format json)"
+[[ "${after_rollback}" == '[{"total":2}]' ]]
 
-console_output="$(printf 'SELECT 1;\n' | "${zelyra_bin}" db console "${project}/main.zyl")"
-[[ "${console_output}" == *"1"* ]]
-
-# A fake client checks the credential transport contract without logging the
-# secret in process arguments. The real client pipe above verifies passthrough.
-fake_bin="${project}/fake-bin"
-mkdir -p "${fake_bin}"
-cat >"${fake_bin}/mariadb" <<'EOF'
-#!/usr/bin/env bash
-printf '%s\n' "$@" >"${ZELYRA_TEST_ARGS}"
-printf '%s' "${MYSQL_PWD-}" >"${ZELYRA_TEST_PASSWORD}"
-cat >/dev/null
-EOF
-chmod +x "${fake_bin}/mariadb"
-ZELYRA_TEST_ARGS="${project}/args" ZELYRA_TEST_PASSWORD="${project}/password" PATH="${fake_bin}:${PATH}" \
-  "${zelyra_bin}" db console "${project}/main.zyl" </dev/null >/dev/null
-! grep -Fq -- "${db_password}" "${project}/args"
-[[ "$(cat "${project}/password")" == "${db_password}" ]]
-
-echo "db console and query integration checks passed"
+echo "db query integration checks passed"

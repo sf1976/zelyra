@@ -229,7 +229,7 @@ security and compatibility gates stated for that milestone.
   Released as [`v1.2.23`](https://github.com/sf1976/zelyra/releases/tag/v1.2.23);
   the full PR and release workflows passed. See the
   [1.2.23 plan](release-plans/1.2.23-scoped-api-validation.en.md).
-- [~] **1.2.24 — multiple transactional CRUD child collections:** Extend the
+- [~] **1.2.24 — multiple transactional CRUD child collections (release artifacts building):** Extend the
   existing typed `has_many` path from one child collection to multiple named
   collections on Create/Edit. Validate all parent and child values before
   writing, then save or replace every declared collection in the same database

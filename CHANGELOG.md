@@ -1,5 +1,18 @@
 ## Unreleased
 
+## 1.2.25 — 2026-10-19
+
+- Add `zelyra db console` for host MariaDB/MySQL and PostgreSQL clients, with
+  project `.env` resolution and passwords passed through client environment
+  variables. Add `zelyra db query` with read-only transactions by default,
+  explicit transactional DML, SQL parameter binding, and table/JSON/CSV
+  output. / `zelyra db console` für MariaDB-/MySQL- und PostgreSQL-Clients auf
+  dem Host ergänzen, einschließlich Projekt-`.env`-Auflösung und
+  Passwortübergabe über Client-Umgebungsvariablen. `zelyra db query` mit
+  standardmäßig schreibgeschützten Transaktionen, ausdrücklich freigegebenem
+  transaktionalem DML, SQL-Parameterbindung sowie Tabellen-/JSON-/CSV-Ausgabe
+  ergänzen.
+
 ## 1.2.24 — 2026-10-19
 
 - Support multiple direct `has_many` collections in generated CRUD Create/Edit
