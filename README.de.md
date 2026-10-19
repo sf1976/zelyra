@@ -11,36 +11,18 @@ Business-, Datenbank- und Webanwendungen. Schemaabhängiges SQL, Formulare,
 CRUD, Views und Geschäftslogik greifen ineinander; gewöhnlicher Programmcode
 und natives SQL bleiben jederzeit möglich.
 
-> **Release 1.2.6 · Sprachkompatibilitätslinie: 0.1** · [GitHub-Release](https://github.com/sf1976/zelyra/releases/tag/v1.2.6)
+> **Release 1.2.26 · Sprachkompatibilitätslinie: 0.1** · [GitHub-Release](https://github.com/sf1976/zelyra/releases/tag/v1.2.26)
 >
 > Die Compilerprüfung und der Verifier decken klar abgegrenzte Bereiche ab. Sie beweisen nicht die Korrektheit beliebiger Anwendungen. Prüfe vor dem Einsatz die unterstützten Abläufe und Grenzen in der jeweiligen Dokumentation.
 
-Zelyra 1.2.6 ergänzt wiederherstellbare Registry-Pakettransaktionen über
-`zelyra package recover`. Es baut auf der signierten Paket-Registry, dem
-Linux-Dienst mit festem Port und residentem Scheduler sowie den geschützten
-statischen Dateien aus `public/` von 1.2.5 auf. Siehe die
-[Release-Notizen 1.2.6](docs/release-notes/1.2.6.de.md), den
-[Paketleitfaden](docs/packages.de.md) und den
-[Deployment-Leitfaden](docs/deployment.de.md). Zelyra 1.1.5 ergänzte den
-lokalen Offline-Paketablauf mit deterministischen Lockfiles und typisierten
-Paketeinstellungen. Zelyra 1.1.2 entfernte den experimentellen Laravel-Analysator und Gerüstbefehl; siehe die [Release-Notizen 1.1.2](docs/release-notes/1.1.2.de.md). Zelyra 1.1.1 enthält die Studio-Korrekturen aus den
-[Release-Notizen 1.1.1](docs/release-notes/1.1.1.de.md). Zelyra 1.1.0 ergänzte
-ein offlinefähiges, eingebettetes Studio mit Sprachdiensten und einen
-eigenständigen LSP sowie typgeprüfte
-Stringinterpolation und ausdrücklich aktivierte In-place-Änderungen lokaler
-Arrays. Die Sprachfunktionen aus 1.0.7 bleiben verfügbar. Details stehen in
-den [Release-Notizen 1.1.0](docs/release-notes/1.1.0.de.md), im
-[UI-Leitfaden](docs/ui.de.md), in der
-[Datenbank-Supportmatrix](docs/database-support.de.md) und der
-[Implementierungsübersicht](docs/implemented.de.md).
-
+Zelyra 1.2.26 ergänzt `zelyra console`, eine inkrementelle AST-Sprachkonsole mit persistenten typisierten Bindungen und einer standardmäßig zurückrollenden MariaDB-/MySQL-Sandbox. Siehe die [Release-Notizen 1.2.26](docs/release-notes/1.2.26.de.md) und die [Anleitung zur Sprachkonsole](docs/language-console.de.md). Frühere Releases ergänzten signierte Pakete, den residenten Scheduler und geschützte `public/`-Dateien.
 Die Sprachkompatibilitätslinie bleibt `0.1`; Compiler-Releases ändern sie nicht automatisch. „Korrektheit beweisen“ ist ein Entwicklungsziel: Der Verifier unterscheidet geprüfte, zur Laufzeit geprüfte und nicht bewiesene Bereiche, ist aber kein allgemeiner Theorembeweiser.
 
-## Was Zelyra 1.2.6 bietet
+## Was Zelyra bietet
 
 Zelyra verbindet Sprache, Compiler, Datenbank, Webanwendung und Studio in
-einem Arbeitsablauf. Release 1.2.6 behält die bisherigen Funktionen bei und
-ergänzt die sichere Wiederherstellung von Paketoperationen:
+einem Arbeitsablauf. Neuere Releases ergänzen die sichere Wiederherstellung
+von Paketoperationen und die interaktive Sprachkonsole:
 
 - statisch geprüfte Geschäftslogik und schemaabhängiges SQL;
 - MariaDB als primäre Laufzeit sowie geprüfte MySQL- und PostgreSQL-Abläufe;
@@ -83,7 +65,7 @@ ergänzt die sichere Wiederherstellung von Paketoperationen:
   Muster, Tupel, Stringinterpolation und ausdrücklich veränderliche lokale
   Arrays; `--max-steps` stoppt unbeschränkte Auswertung mit quellgenauer Diagnose.
 - Die Grenzen dieses Releases sind in den
-  [Release-Notizen 1.2.6](docs/release-notes/1.2.6.de.md) beschrieben; ein
+  [Release-Notizen 1.2.26](docs/release-notes/1.2.26.de.md) beschrieben; ein
   allgemeines transaktionales Job- und Query-System ist noch nicht enthalten.
 - Lokales Text-PDF-Rendering und geprüfte PDF-Outbox-Anhänge mit Größen- und
   Zeilenlimits. Das Renderer-PDF übernimmt keine CSS-Layouts, Bilder oder

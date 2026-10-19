@@ -1,5 +1,19 @@
 ## Unreleased
 
+## 1.2.26 — 2026-10-20
+
+- Add `zelyra console` with persistent typed bindings, incremental parsing and
+  evaluation, recoverable diagnostics, terminal history/completion, project
+  metadata commands, and a real MariaDB/MySQL transaction sandbox with
+  per-input savepoints, explicit commit/rollback, and rollback on exit.
+  PostgreSQL sandboxing and a bytecode REPL backend remain unsupported. /
+  `zelyra console` mit persistenten typisierten Bindungen, inkrementellem
+  Parsen und Auswerten, fortsetzbaren Diagnosen, Terminalverlauf und
+  Vervollständigung, Projektmetabefehlen sowie echter MariaDB-/MySQL-
+  Transaktionssandbox mit Eingabe-Savepoints, ausdrücklichem Commit/Rollback
+  und Rollback beim Beenden ergänzen. PostgreSQL-Sandbox und Bytecode-REPL
+  bleiben nicht unterstützt.
+
 ## 1.2.25 — 2026-10-19
 
 - Add `zelyra db console` for host MariaDB/MySQL and PostgreSQL clients, with

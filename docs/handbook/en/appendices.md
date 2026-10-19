@@ -121,9 +121,17 @@ page "/items" {
 | `zelyra init` | `[--mariadb]` | Initializes current directory as Zelyra project |
 | `zelyra check <file.zyl>` | `[--format json]` | Statically checks syntax, types, contracts, and capabilities |
 | `zelyra run <file.zyl>` | | Compiles and executes a Zelyra program |
+| `zelyra console [entry.zyl]` | `[--sandbox|--persist] [--tenant <id>]` | Starts the interactive AST language console; MariaDB/MySQL writes roll back by default |
+| `zelyra db console [file.zyl]` | | Starts the native database client with project credentials |
+| `zelyra db query <file.zyl> <SQL>` | `[--format table|json|csv]` | Runs a checked query read-only by default |
 | `zelyra serve <file.zyl>` | `[host:port]` | Starts the built-in HTTP web server |
+See the [language console guide](../../language-console.en.md) for REPL commands, transaction boundaries, and limitations.
+
+| `zelyra module plan <entry> <module-or-resource>` | | Experimental read-only preview of known module dependencies |
+| `zelyra module bundle <entry> <module-or-resource>` | `--output <dir> [--dry-run] [--docker --compiler-ref <commit>]` | Writes a checked experimental bundle or previews its JSON file plan; not a completeness claim |
+| | `--docker --compiler-ref <40-character-commit>` | Generates Dockerfile, Compose app, and `.env.example`; closure remains incomplete |
+| `zelyra setup` | `[--database]` | Starts Docker Compose / MariaDB |
 | `zelyra routes <entry.zyl>` | `[--format human\|json]` | Lists recognized routes with HTTP methods and source locations; same-method overlaps fail with `E-ROUTE-001` |
-| `zelyra setup` | `[--database]` | MariaDB |
 | | `[--schema]` | Starts environment and applies database schema |
 | | `[--all]` | Executes configuration, container startup, and schema migration |
 | | `[--host-port <p>] [--db-host-port <p>]` | Enforces exact host ports for new `.env` |
@@ -172,6 +180,8 @@ page "/items" {
 | `zelyra migrate-layout --check` | `[entry.zyl] [--format human\|json]` | Verifies compliance with the canonical standard project layout |
 | `zelyra db history <file.zyl>` | | Displays applied database migration history |
 | `zelyra update` | `[--check]` | Checks or installs the stable release |
+
+See the [language console guide](../../language-console.en.md) for REPL commands, transaction boundaries, and limitations.
 
 ---
 

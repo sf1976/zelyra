@@ -243,7 +243,10 @@ pub fn execute_function_with_host_services_and_capabilities_and_policies(
             database_url,
             grants,
             policy,
-            host_services,
+            RuntimeServices {
+                host_services,
+                database_transaction: None,
+            },
         );
         result
     })
@@ -290,7 +293,10 @@ pub fn execute_function_captured_with_host_services_and_capabilities_and_policie
             database_url,
             grants,
             policy,
-            host_services,
+            RuntimeServices {
+                host_services,
+                database_transaction: None,
+            },
         ))
     }) {
         Ok((Ok(value), output)) => FunctionExecutionOutcome {
@@ -311,6 +317,55 @@ pub fn execute_function_captured_with_host_services_and_capabilities_and_policie
     }
 }
 
+/// Execute one function with an interactive MariaDB transaction shared by all
+/// database operations in that function. The caller owns transaction lifetime.
+pub fn execute_function_captured_with_mariadb_transaction(
+    program: &Program,
+    name: &str,
+    args: Vec<Value>,
+    database_url: &str,
+    grants: Option<&HashSet<String>>,
+    policy: Option<&RuntimePolicy>,
+    transaction: Arc<Mutex<zelyra_database::MariaDbInteractiveTransaction>>,
+) -> FunctionExecutionOutcome {
+    let depth = effective_call_depth(policy.and_then(|policy| policy.max_stack_depth));
+    match run_on_runtime_stack(runtime_stack_size(depth), || {
+        Ok(execute_function_on_runtime_stack(
+            program,
+            name,
+            args,
+            Some(database_url),
+            grants,
+            policy,
+            RuntimeServices {
+                host_services: Arc::new(SystemHostServices),
+                database_transaction: Some(transaction),
+            },
+        ))
+    }) {
+        Ok((Ok(value), output)) => FunctionExecutionOutcome {
+            output,
+            value: Some(value),
+            error: None,
+        },
+        Ok((Err(error), output)) => FunctionExecutionOutcome {
+            output,
+            value: None,
+            error: Some(error),
+        },
+        Err(error) => FunctionExecutionOutcome {
+            output: Vec::new(),
+            value: None,
+            error: Some(error),
+        },
+    }
+}
+
+struct RuntimeServices {
+    host_services: Arc<dyn HostServices>,
+    database_transaction: Option<Arc<Mutex<zelyra_database::MariaDbInteractiveTransaction>>>,
+}
+
 fn execute_function_on_runtime_stack(
     program: &Program,
     name: &str,
@@ -318,7 +373,7 @@ fn execute_function_on_runtime_stack(
     database_url: Option<&str>,
     grants: Option<&HashSet<String>>,
     policy: Option<&RuntimePolicy>,
-    host_services: Arc<dyn HostServices>,
+    services: RuntimeServices,
 ) -> (Result<Value, RuntimeError>, Vec<String>) {
     let mut interpreter = Interpreter {
         functions: program
@@ -340,6 +395,7 @@ fn execute_function_on_runtime_stack(
         ),
         call_depth: 0,
         database_url: database_url.map(str::to_owned),
+        database_transaction: services.database_transaction,
         storage_schema: zelyra_database::build_schema(program),
         storage_checked: false,
         scoped_tables: program
@@ -354,7 +410,7 @@ fn execute_function_on_runtime_stack(
         process_policy: policy.and_then(|policy| policy.process.clone()),
         mail_policy: policy.and_then(|policy| policy.mail.clone()),
         package_settings: policy.and_then(|policy| policy.package_settings.clone()),
-        host_services,
+        host_services: services.host_services,
         sql_record_definitions: sql_results::definitions(program),
         record_definitions: program
             .records
@@ -520,6 +576,7 @@ fn execute_internal_on_runtime_stack(
         ),
         call_depth: 0,
         database_url,
+        database_transaction: None,
         storage_schema: zelyra_database::build_schema(program),
         storage_checked: false,
         scoped_tables: program

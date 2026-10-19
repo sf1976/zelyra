@@ -358,11 +358,32 @@ impl<'program> Interpreter<'program> {
                 };
                 let queries = transaction_queries(self, body, env, *span)?;
                 self.ensure_database_storage(*span)?;
-                self.host_services
-                    .execute_database_batch(&database_url, &queries, true)
-                    .map_err(|error| {
-                        self.runtime_error(*span, format!("database transaction failed: {error}"))
-                    })?;
+                if let Some(transaction) = &self.database_transaction {
+                    transaction
+                        .lock()
+                        .map_err(|_| {
+                            self.runtime_error(
+                                *span,
+                                "interactive database transaction is unavailable",
+                            )
+                        })?
+                        .execute_batch(&queries)
+                        .map_err(|error| {
+                            self.runtime_error(
+                                *span,
+                                format!("database transaction failed: {error}"),
+                            )
+                        })?;
+                } else {
+                    self.host_services
+                        .execute_database_batch(&database_url, &queries, true)
+                        .map_err(|error| {
+                            self.runtime_error(
+                                *span,
+                                format!("database transaction failed: {error}"),
+                            )
+                        })?;
+                }
                 Ok(Flow::Continue)
             }
             Stmt::Parallel { body, span } => self.exec_parallel(body, *span, env),

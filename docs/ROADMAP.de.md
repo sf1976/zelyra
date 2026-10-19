@@ -260,7 +260,7 @@ abgeschlossen.
   [Arbeitsplan 1.2.24](release-plans/1.2.24-multiple-crud-children.en.md).
   Veröffentlicht als [`v1.2.24`](https://github.com/sf1976/zelyra/releases/tag/v1.2.24);
   Linux- und Windows-Pakete, SHA-256-Dateien und SPDX-SBOMs sind verfügbar.
-- [~] **1.2.25 — native Datenbankkonsole und Abfragebefehle:** Native
+- [x] **1.2.25 — native Datenbankkonsole und Abfragebefehle:** Native
   Clientweiterleitung für MariaDB/MySQL und PostgreSQL, Verbindungsauflösung
   aus benannten Projekt-URLs und `.env` sowie direkte Einzelabfragen mit
   Tabellen-, JSON- und CSV-Ausgabe. Abfragen laufen standardmäßig in einer
@@ -268,16 +268,19 @@ abgeschlossen.
   eine sichtbare Freigabe. `--tenant` bindet nur ausdrücklich angegebene
   Parameter und aktiviert keine automatische Zeilenfilterung. Siehe den
   [Arbeitsplan 1.2.25](release-plans/1.2.25-db-cli-console-query.en.md).
-- [ ] **1.2.26 — interaktive Zelyra-Sprachkonsole:** Eine inkrementelle
+  Veröffentlicht als [`v1.2.25`](https://github.com/sf1976/zelyra/releases/tag/v1.2.25).
+- [~] **1.2.26 — interaktive Zelyra-Sprachkonsole:** Eine inkrementelle
   AST-Interpreter-Sitzung mit persistenten typisierten Bindungen,
   mehrzeiliger Eingabe, fortsetzbaren Diagnosen und sicherem Projektkontext
   ergänzen. AST-/Bytecode-Auswahl nur dort anbieten, wo das gewählte Backend
   gleichwertige Semantik unterstützt. Schreibzugriffe müssen in einer echten
   Datenbanktransaktion laufen und beim Verlassen standardmäßig zurückgerollt
-  werden; `--persist` muss die bewusste Ausnahme sein. `:commit` und
-  `:rollback` bleiben verborgen, bis die Runtime eine echte Transaktion über
-  Eingaben hinweg halten und erneuern kann. Compiler-, Capability-, Contract-,
-  Schrittbudget- und Stacktiefenprüfungen bleiben aktiv. Siehe den
+  werden; `--persist` ist die bewusste Ausnahme. `:commit` und `:rollback`
+  nutzen eine festgehaltene MariaDB-/MySQL-Transaktion und eröffnen danach eine
+  neue. PostgreSQL-Sandbox und Bytecode-REPL bleiben nicht unterstützt;
+  `--tenant` stellt `tenant_id` bereit, aktiviert aber keine automatische
+  Zeilenfilterung. Compiler-, Capability-, Contract-, Schrittbudget- und
+  Stacktiefenprüfungen bleiben aktiv. Siehe [Sprachkonsolen-Anleitung](language-console.de.md) und den
   [Arbeitsplan 1.2.26](release-plans/1.2.26-interactive-language-console.en.md).
 - [ ] **1.2.27 — typisierte CRUD-Domain-Actions:** Einen typgeprüften
   Ausführungskontext mit expliziten Datensatz-, Benutzer- und verifizierten

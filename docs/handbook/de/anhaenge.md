@@ -121,6 +121,9 @@ page "/items" {
 | `zelyra init` | `[--mariadb]` | Initialisiert das aktuelle Verzeichnis als Zelyra-Projekt |
 | `zelyra check <file.zyl>` | `[--format json]` | Prüft Syntax, Typen, Verträge und Capabilities statisch |
 | `zelyra run <file.zyl>` | | Kompiliert und führt ein Zelyra-Programm aus |
+| `zelyra console [entry.zyl]` | `[--sandbox|--persist] [--tenant <id>]` | Startet die interaktive AST-Sprachkonsole; MariaDB/MySQL-Schreibvorgänge werden standardmäßig zurückgerollt |
+| `zelyra db console [file.zyl]` | | Startet den nativen Datenbankclient mit Projektverbindung |
+| `zelyra db query <file.zyl> <SQL>` | `[--format table|json|csv]` | Führt eine geprüfte Abfrage standardmäßig schreibgeschützt aus |
 | `zelyra serve <file.zyl>` | `[host:port]` | Startet den integrierten HTTP-Webserver |
 | `zelyra routes <entry.zyl>` | `[--format human\|json]` | Listet erkannte Routen mit HTTP-Methode und Quellfundstelle; Kollisionen derselben Methode melden `E-ROUTE-001` |
 | `zelyra setup` | `[--database]` | Startet Docker Compose |
@@ -172,6 +175,8 @@ page "/items" {
 | `zelyra migrate-layout --check` | `[entry.zyl] [--format human\|json]` | Prüft die Konformität mit dem kanonischen Standard-Layout |
 | `zelyra db history <file.zyl>` | | Zeigt die angewendete Schema-Migrationshistorie |
 | `zelyra update` | `[--check]` | Prüft oder installiert das stabile Release |
+
+Weitere REPL-Befehle, Transaktionsgrenzen und Einschränkungen: [Sprachkonsole](../../language-console.de.md).
 
 ---
 

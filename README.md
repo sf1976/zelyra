@@ -11,30 +11,14 @@ for database-backed business and web applications. It brings schema-aware SQL,
 forms, CRUD, views, and application logic together while keeping ordinary code
 and native SQL available.
 
-> **Release 1.2.6 · language compatibility line: 0.1** · [GitHub release](https://github.com/sf1976/zelyra/releases/tag/v1.2.6)
+> **Release 1.2.26 · language compatibility line: 0.1** · [GitHub release](https://github.com/sf1976/zelyra/releases/tag/v1.2.26)
 >
 > Compiler checks and the verifier cover defined scopes. They do not prove arbitrary applications correct. Review the documented support and limits for each workflow before deployment.
 
-Zelyra 1.2.6 adds recoverable registry package transactions through
-`zelyra package recover`. It builds on the signed package registry, fixed-port
-Linux service and resident scheduler, and confined `public/` assets from 1.2.5.
-See the [1.2.6 release notes](docs/release-notes/1.2.6.en.md),
-[package guide](docs/packages.en.md), and [deployment guide](docs/deployment.en.md).
-Zelyra 1.1.5 added the local offline package workflow with deterministic locks
-and typed settings. Zelyra 1.1.2 removed the experimental
-Laravel analyzer and scaffold command; see the [1.1.2 release notes](docs/release-notes/1.1.2.en.md). Zelyra 1.1.1
-includes the Studio fixes described in the
-[1.1.1 release notes](docs/release-notes/1.1.1.en.md). Zelyra 1.1.0 added
-offline, embedded Studio language services and a standalone
-LSP, plus typed string interpolation and opt-in in-place mutation for local
-arrays. The 1.0.7 language features remain available. See the
-[1.1.0 release notes](docs/release-notes/1.1.0.en.md),
-[UI guide](docs/ui.en.md), [database support matrix](docs/database-support.en.md),
-and [implementation inventory](docs/implemented.en.md).
-
+Zelyra 1.2.26 adds `zelyra console`, an incremental AST language console with persistent typed bindings and a rollback-by-default MariaDB/MySQL sandbox. See the [1.2.26 release notes](docs/release-notes/1.2.26.en.md) and [language console guide](docs/language-console.en.md). Earlier releases added durable packages, a resident scheduler, and confined `public/` assets.
 The language compatibility line remains `0.1`; compiler releases do not change it automatically. “Prove correctness” is a design goal: the verifier distinguishes proven, runtime-checked, and unproven scopes, but is not a general-purpose theorem prover.
 
-## What Zelyra 1.2.6 provides
+## What Zelyra provides
 
 Zelyra connects its language, compiler, database, web application, and Studio in
 one workflow. Release 1.2.6 retains the previous capabilities and adds safe
@@ -77,7 +61,7 @@ recovery for package operations:
 - if expressions, record updates, typed lambdas, guarded nested patterns,
   tuples, string interpolation, and opt-in mutable local arrays;
   `--max-steps` stops unbounded evaluation with a source diagnostic;
-- release limits are listed in the [1.2.6 release notes](docs/release-notes/1.2.6.en.md);
+- release limits are listed in the [1.2.26 release notes](docs/release-notes/1.2.26.en.md);
   a general transactional job and query system is not included yet;
 - local text-PDF rendering and checked PDF outbox attachments with byte and
   row limits. The renderer does not preserve CSS layout, images, or charts;

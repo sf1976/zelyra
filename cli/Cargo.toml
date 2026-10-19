@@ -36,6 +36,8 @@ zelyra-mir.workspace = true
 zelyra-mail.workspace = true
 zelyra-web.workspace = true
 zelyra-forms.workspace = true
+reedline = "0.52.1"
+nu-ansi-term = "0.50"
 
 [dev-dependencies]
 

@@ -190,6 +190,9 @@ pub(super) fn run() -> ExitCode {
         }
         return lsp::command();
     }
+    if command == "console" {
+        return console::command(args);
+    }
     if command == "setup" {
         let mut path = ".".to_owned();
         let mut path_given = false;

@@ -217,7 +217,8 @@ pub use ast_interpreter::execution_api::{
     execute_captured_with_database_and_host_services, execute_captured_with_host_services,
     execute_function, execute_function_captured_with_capabilities_and_policies,
     execute_function_captured_with_host_services_and_capabilities_and_policies,
-    execute_function_with_capabilities, execute_function_with_capabilities_and_filesystem_policy,
+    execute_function_captured_with_mariadb_transaction, execute_function_with_capabilities,
+    execute_function_with_capabilities_and_filesystem_policy,
     execute_function_with_capabilities_and_policies,
     execute_function_with_host_services_and_capabilities_and_policies, execute_with_capabilities,
     execute_with_capabilities_and_filesystem_policy, execute_with_capabilities_and_policies,
@@ -241,6 +242,7 @@ mod mail;
 mod operators;
 mod package_settings;
 mod policies;
+mod repl;
 pub use policies::{FileSystemPolicy, MailPolicy, NetworkPolicy, ProcessPolicy, RuntimePolicy};
 mod pdf;
 mod pdf_template;
@@ -251,6 +253,7 @@ pub use operators::{evaluate_binary_value, evaluate_unary_value};
 pub use package_settings::PackageSettings;
 use pdf_template::interpolate_pdf_data;
 pub use pure_builtins::{execute_pure_builtin, is_pure_builtin};
+pub use repl::{ReplError, ReplEvaluation, ReplSession};
 pub use step_budget::{StepBudget, StepBudgetError};
 
 /// Render a declared view with supplied record data without executing project code.
@@ -839,6 +842,7 @@ fn json_codec_interpreter(
         call_depth_limit: MAX_FUNCTION_CALL_DEPTH,
         call_depth: 0,
         database_url: None,
+        database_transaction: None,
         storage_schema: Ok(zelyra_database::Schema {
             database: None,
             tables: Vec::new(),

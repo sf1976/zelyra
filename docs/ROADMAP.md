@@ -242,22 +242,23 @@ security and compatibility gates stated for that milestone.
   [1.2.24 work plan](release-plans/1.2.24-multiple-crud-children.en.md).
   Released as [`v1.2.24`](https://github.com/sf1976/zelyra/releases/tag/v1.2.24);
   Linux and Windows packages, SHA-256 sidecars, and SPDX SBOMs are available.
-- [~] **1.2.25 — native database console and query commands:** Add host client
+- [x] **1.2.25 — native database console and query commands:** Add host client
   passthrough for MariaDB/MySQL and PostgreSQL, credential lookup from the
   project's named database URL and `.env`, and direct single-statement queries
   with table/JSON/CSV output. Queries default to database-enforced read-only
   transactions; mutation is a visible opt-in. Tenant ids bind only to explicit
   parameters and never imply automatic row filtering. See the
   [1.2.25 work plan](release-plans/1.2.25-db-cli-console-query.en.md).
-- [ ] **1.2.26 — interactive language console:** Add an incremental AST
+  Released as [`v1.2.25`](https://github.com/sf1976/zelyra/releases/tag/v1.2.25).
+- [~] **1.2.26 — interactive language console:** Add an incremental AST
   interpreter session with persistent typed bindings, line continuation,
-  recoverable diagnostics, safe project context, and explicit AST/Bytecode
-  backend selection only where the selected backend supports equivalent
-  semantics. Sandbox writes inside a database transaction and roll them back
-  on exit unless `--persist` is explicit. Do not expose a `:commit` or
-  `:rollback` command until the runtime can hold and rotate a genuine database
-  transaction across inputs. The console must preserve compiler, capability,
-  contract, step-budget, and stack-depth checks.
+  recoverable diagnostics, safe project context, and explicit backend selection
+  only where equivalent semantics are implemented. Sandbox writes inside a
+  pinned MariaDB/MySQL transaction and roll them back on exit unless `--persist`
+  is explicit. `:commit` and `:rollback` rotate the pinned transaction after
+  each explicit operation. PostgreSQL sandbox and bytecode REPL remain
+  unsupported. Preserve compiler, capability, contract, step-budget, and stack
+  depth checks.
 - [ ] **1.2.27 — typed CRUD domain actions:** Add a checked execution context
   for action statements with explicit row, authenticated user, and verified
   tenant values. Reuse the language type/effect checker, require explicit

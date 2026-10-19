@@ -221,12 +221,27 @@ impl<'program> Interpreter<'program> {
                     sql: query.clone(),
                     params,
                 };
-                let result = execute_database_query_with_host(
-                    &database_url,
-                    &database_query,
-                    self.host_services.as_ref(),
-                    expr.span,
-                )?;
+                let result = if let Some(transaction) = &self.database_transaction {
+                    transaction
+                        .lock()
+                        .map_err(|_| {
+                            self.runtime_error(
+                                expr.span,
+                                "interactive database transaction is unavailable",
+                            )
+                        })?
+                        .execute(&database_query)
+                        .map_err(|error| {
+                            self.runtime_error(expr.span, format!("database query failed: {error}"))
+                        })?
+                } else {
+                    execute_database_query_with_host(
+                        &database_url,
+                        &database_query,
+                        self.host_services.as_ref(),
+                        expr.span,
+                    )?
+                };
                 Ok(Value::Rows {
                     columns: result.columns,
                     rows: result.rows,
