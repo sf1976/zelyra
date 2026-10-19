@@ -9024,10 +9024,6 @@ fn validate_crud_child_relation(
     let fail = |message: String| {
         diagnostic_with_span(path, "E-CRUD-009", &message, child.span);
     };
-    if crud.children.len() > 1 {
-        fail("this CRUD currently supports one direct `has_many` collection".into());
-        return false;
-    }
     let model = child.model.to_ascii_lowercase();
     let mut snake = String::new();
     for (index, character) in child.model.chars().enumerate() {
@@ -9053,6 +9049,42 @@ fn validate_crud_child_relation(
         ));
         return false;
     };
+    if crud
+        .children
+        .iter()
+        .any(|other| !std::ptr::eq(other, child) && other.name == child.name)
+    {
+        fail(format!(
+            "child collection name `{}` may be declared only once in a CRUD resource",
+            child.name
+        ));
+        return false;
+    }
+    if crud.children.iter().any(|other| {
+        !std::ptr::eq(other, child)
+            && table_name_for_model(&other.model, &program.tables).as_deref()
+                == Some(child_table_name)
+    }) {
+        fail(format!(
+            "child table `{child_table_name}` may be declared only once in a CRUD resource"
+        ));
+        return false;
+    }
+    let child_aggregate_targets = child
+        .aggregates
+        .iter()
+        .map(|aggregate| aggregate.target.as_str())
+        .collect::<HashSet<_>>();
+    if crud.children.iter().any(|other| {
+        !std::ptr::eq(other, child)
+            && other
+                .aggregates
+                .iter()
+                .any(|aggregate| child_aggregate_targets.contains(aggregate.target.as_str()))
+    }) {
+        fail("a parent aggregate target may be assigned by only one child collection".into());
+        return false;
+    }
     let Some(child_definition) = program
         .tables
         .iter()
@@ -10431,7 +10463,7 @@ fn serve_command(mut args: impl Iterator<Item = String>) -> ExitCode {
             audit_event: None,
             audit_chain: false,
             layout_html: None,
-            child_collection: None,
+            child_collections: Vec::new(),
         });
     }
     for crud in &program.cruds {
@@ -10967,60 +10999,69 @@ fn generated_crud_form(
         .collect::<Vec<_>>();
     aggregate_targets.sort();
     aggregate_targets.dedup();
-    let child_collection = crud.children.first().and_then(|definition| {
-        let table_name = table_name_for_model(&definition.model, &program.tables)?;
-        let table = program
-            .tables
-            .iter()
-            .find(|table| table.name == table_name)?
-            .clone();
-        let foreign_key = definition.foreign_key.as_str();
-        let fields = table
-            .columns
-            .iter()
-            .filter(|column| !column.primary_key && !column.auto)
-            .filter(|column| {
-                column.name != foreign_key
-                    && storage_column_name(schema, &table_name, &column.name) != foreign_key
+    let child_collections = crud
+        .children
+        .iter()
+        .filter_map(|definition| {
+            let table_name = table_name_for_model(&definition.model, &program.tables)?;
+            let table = program
+                .tables
+                .iter()
+                .find(|table| table.name == table_name)?
+                .clone();
+            let foreign_key = definition.foreign_key.as_str();
+            let fields = table
+                .columns
+                .iter()
+                .filter(|column| !column.primary_key && !column.auto)
+                .filter(|column| {
+                    column.name != foreign_key
+                        && storage_column_name(schema, &table_name, &column.name) != foreign_key
+                })
+                .filter(|column| {
+                    table
+                        .tenant_scope
+                        .as_ref()
+                        .is_none_or(|scope| column.name != scope.column)
+                })
+                // Generated child grids are ordinary user-facing forms, so never
+                // expose authentication material even when a child model happens
+                // to contain credential-like columns.
+                .filter(|column| {
+                    let name = column.name.to_ascii_lowercase();
+                    !["password", "secret", "token", "hash"]
+                        .iter()
+                        .any(|part| name.contains(part))
+                })
+                .map(|column| zelyra_ast::FormField {
+                    name: column.name.clone(),
+                    ty: Some(column.ty.clone()),
+                    label: None,
+                    placeholder: None,
+                    required: column.required,
+                    min_length: None,
+                    max: None,
+                    min_value: None,
+                    max_value: None,
+                    choices: Vec::new(),
+                    widget: None,
+                    appearance: None,
+                    readonly: false,
+                    span: column.span,
+                })
+                .collect();
+            Some(zelyra_web::CrudChildFormRoute {
+                definition: definition.clone(),
+                table,
+                fields,
+                count_key: if crud.children.len() == 1 {
+                    "_zelyra_child_count".into()
+                } else {
+                    format!("_{}_zelyra_child_count", definition.name)
+                },
             })
-            .filter(|column| {
-                table
-                    .tenant_scope
-                    .as_ref()
-                    .is_none_or(|scope| column.name != scope.column)
-            })
-            // Generated child grids are ordinary user-facing forms, so never
-            // expose authentication material even when a child model happens
-            // to contain credential-like columns.
-            .filter(|column| {
-                let name = column.name.to_ascii_lowercase();
-                !["password", "secret", "token", "hash"]
-                    .iter()
-                    .any(|part| name.contains(part))
-            })
-            .map(|column| zelyra_ast::FormField {
-                name: column.name.clone(),
-                ty: Some(column.ty.clone()),
-                label: None,
-                placeholder: None,
-                required: column.required,
-                min_length: None,
-                max: None,
-                min_value: None,
-                max_value: None,
-                choices: Vec::new(),
-                widget: None,
-                appearance: None,
-                readonly: false,
-                span: column.span,
-            })
-            .collect();
-        Some(zelyra_web::CrudChildFormRoute {
-            definition: definition.clone(),
-            table,
-            fields,
         })
-    });
+        .collect::<Vec<_>>();
     let configured_fields = (!crud.view.fields.is_empty()).then_some(&crud.view.fields);
     let fields = table
         .columns
@@ -11249,7 +11290,7 @@ fn generated_crud_form(
         }),
         audit_chain: context.audit_chain,
         layout_html: context.layout_html,
-        child_collection,
+        child_collections,
     }
 }
 
@@ -11329,7 +11370,7 @@ fn generated_crud_action(
             audit_event: Some(format!("crud.action.{}", action.name)),
             audit_chain: context.audit_chain,
             layout_html: context.layout_html,
-            child_collection: None,
+            child_collections: Vec::new(),
         },
     }
 }

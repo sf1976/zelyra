@@ -476,6 +476,15 @@ jobs:
           DATABASE_URL: mariadb://root:root@127.0.0.1:3306/zelyra_master_detail_test_ci
           ZELYRA_BIN: target/debug/zelyra
         run: ./tests/mariadb-master-detail-crud-e2e.sh
+      - name: Create isolated multiple-child CRUD test database
+        env:
+          MYSQL_PWD: root
+        run: mariadb --protocol=tcp --host=127.0.0.1 --port=3306 --user=root --batch --skip-column-names -e "CREATE DATABASE IF NOT EXISTS zelyra_multiple_children_test_ci"
+      - name: Verify atomic multiple-child CRUD and parent isolation
+        env:
+          DATABASE_URL: mariadb://root:root@127.0.0.1:3306/zelyra_multiple_children_test_ci
+          ZELYRA_BIN: target/debug/zelyra
+        run: ./tests/mariadb-multiple-crud-children-e2e.sh
       - name: Create isolated notification-center test database
         env:
           MYSQL_PWD: root

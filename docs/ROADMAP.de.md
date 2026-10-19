@@ -27,7 +27,7 @@ Ressourcendisziplin und ehrliche Beweisaussagen leiten jede Phase. Das
 [Manifest](MANIFESTO.de.md) beschreibt die Prinzipien; die Roadmap kennzeichnet
 den tatsächlich implementierten Stand.
 
-Das aktuelle stabile Release ist 1.2.22 und wurde unter https://github.com/sf1976/zelyra/releases/tag/v1.2.22 veröffentlicht. **Aktuelle Meilensteine** ist die
+Das aktuelle stabile Release ist 1.2.23 und wurde unter https://github.com/sf1976/zelyra/releases/tag/v1.2.23 veröffentlicht. **Aktuelle Meilensteine** ist die
 verbindliche Übersicht der nächsten Vorhaben. Ältere, nummerierte Release-
 Abschnitte bleiben als historische Planung und Nachweise erhalten; sie legen
 für sich keine aktuellen Releaseziele fest. Langfristige Ideen stehen im
@@ -236,15 +236,46 @@ abgeschlossen.
   Bearbeiten/Neuberechnung und Schema-Cascade ab. Mehrere Kindrelationen und
   mehr als 50 Zeilen pro Submit sind nicht unterstützt. Siehe den
   [Arbeitsplan 1.2.22](release-plans/1.2.22-business-invariants-and-master-detail.de.md).
-- [~] **1.2.23 — authentifizierte Mandanten-API-Invarianten:** `validates`
+- [x] **1.2.23 — authentifizierte Mandanten-API-Invarianten (veröffentlicht):** `validates`
   bindet Regeln mandantengebundener Tabellen nur in authentifizierten APIs mit
   aktiver Mitgliedschaftstabelle. Zelyra weist Mandantenschlüssel in
   Request-Eingaben ab, prüft die Auswahl gegen Sitzung und Mitgliedschaften,
   wertet Regeln mit dem verifizierten Mandanten aus und übergibt ihn als letzten
   typisierten Handlerparameter. Fehlender oder nicht autorisierter Kontext
   bricht vor dem Handler ab. Geprüft werden deklarierte Eingaben, nicht beliebige
-  Handler-Transformationen oder rohe SQL-Schreibzugriffe. Siehe den
+  Handler-Transformationen oder rohe SQL-Schreibzugriffe. Veröffentlicht als
+  [`v1.2.23`](https://github.com/sf1976/zelyra/releases/tag/v1.2.23); PR- und
+  Release-Workflows waren erfolgreich. Siehe den
   [Arbeitsplan 1.2.23](release-plans/1.2.23-scoped-api-validation.en.md).
+- [~] **1.2.24 — mehrere transaktionale CRUD-Kindkollektionen:** Den
+  typisierten `has_many`-Pfad von einer auf mehrere benannte Kollektionen pro
+  Create/Edit erweitern. Eltern- und Kindwerte vor dem Schreiben prüfen, alle
+  deklarierten Kollektionen in derselben Datenbanktransaktion speichern oder
+  ersetzen, Aggregate je Kollektion neu berechnen und bei einem Fehler alles
+  zurückrollen. Mandantenscope, Tabelleninvarianten, Zeilenlimits und das
+  bestehende Verhalten für eine Kindkollektion erhalten. Keine beliebige CRUD-
+  Aktionslogik ergänzen. Ein MariaDB-HTTP-E2E muss zwei Kollektionen, Rollback
+  bei ungültiger zweiter Kollektion und Bearbeiten ohne Zugriff auf fremde
+  Eltern belegen. Siehe den
+  [Arbeitsplan 1.2.24](release-plans/1.2.24-multiple-crud-children.en.md).
+- [ ] **1.2.25 — typisierte CRUD-Domain-Actions:** Einen typgeprüften
+  Ausführungskontext mit expliziten Datensatz-, Benutzer- und verifizierten
+  Mandantenwerten ergänzen. Den Sprach-Typ- und Effektprüfer wiederverwenden,
+  explizite Berechtigungen verlangen, transaktionssicheres SQL und erlaubte
+  typisierte Funktionsaufrufe unterstützen und Action-Guards unter einer
+  Datensatzsperre auswerten. Fachänderung und Audit-Eintrag bleiben in einer
+  Transaktion. Vorhandene Schreibweisen und Effekte verwenden:
+  `hash_sha256`, `now()`, PDF-Rendering und Outbox-Mail mit deren bestehenden
+  Einschränkungen. Kein impliziter Namespace `crypto::` und keine ungeprüfte
+  SQL-Interpolation.
+- [ ] **1.2.26 — begrenzte sichere Datei-Uploads (Design-Gate):** Vor einem
+  `File`-Formularfeld Multipart-Größenlimits, Metadatentypen, Inhaltsprüfung,
+  Mandantenzuordnung, private Ablage außerhalb von `public/`, autorisierte
+  Downloads, Rollback-Aufräumen sowie Backup- und Löschverhalten festlegen und
+  testen. Die Freigabe scheitert, wenn Uploads Größenlimits, Pfadgrenzen,
+  Berechtigungen oder Aufräumregeln umgehen können. Falls diese Garantien bis
+  dahin nicht vollständig erreichbar sind, werden Uploads ausdrücklich über
+  1.3.0 hinaus verschoben statt teilweise ausgeliefert.
 - [ ] **1.3.0 — kanonische Struktur und Bytecode-Standard:** Das optionale,
   versionierte Projektlayout (`routes/`, `domain/`, `schema/`, `public/`,
   `assets/`, `plugins/`), Architekturprüfungen und eine sichere

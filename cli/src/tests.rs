@@ -3385,6 +3385,11 @@ fn checks_crud_child_foreign_key_order_and_numeric_aggregates() {
             total_net: Decimal required
             total_gross: Decimal required
         }
+        table invoice_attachments {
+            id: Id primary auto
+            invoice: Invoice required on_delete cascade
+            file_name: String(255) required
+        }
         crud Invoice -> invoices {
             has_many items: InvoiceItem {
                 foreign_key: invoice_id
@@ -3394,6 +3399,10 @@ fn checks_crud_child_foreign_key_order_and_numeric_aggregates() {
                     net_amount: sum(total_net)
                     tax_amount: sum(total_gross - total_net)
                 }
+            }
+            has_many attachments: InvoiceAttachment {
+                foreign_key: invoice_id
+                cascade: delete
             }
         }
     "#;
@@ -3423,7 +3432,8 @@ fn checks_crud_child_foreign_key_order_and_numeric_aggregates() {
             audit_chain: false,
         },
     );
-    let child_form = generated.child_collection.as_ref().unwrap();
+    assert_eq!(generated.child_collections.len(), 2);
+    let child_form = generated.child_collections.first().unwrap();
     assert_eq!(child_form.definition.name, "items");
     assert_eq!(
         child_form
@@ -3438,11 +3448,38 @@ fn checks_crud_child_foreign_key_order_and_numeric_aggregates() {
         .fields
         .iter()
         .all(|field| field.name != "net_amount" && field.name != "tax_amount"));
+    assert_eq!(
+        generated.child_collections[0].count_key,
+        "_items_zelyra_child_count"
+    );
+    assert_eq!(
+        generated.child_collections[1].definition.name,
+        "attachments"
+    );
+    assert_eq!(
+        generated.child_collections[1].count_key,
+        "_attachments_zelyra_child_count"
+    );
 
     let invalid_source = source.replace("foreign_key: invoice_id", "foreign_key: missing");
     let program = parse(&lex(&invalid_source).unwrap()).unwrap();
     let schema = build_schema(&program).unwrap();
     assert!(!validate_cruds("invoice.zyl", &program, &schema));
+
+    let duplicate_child_table_source = source.replace(
+        "has_many attachments: InvoiceAttachment",
+        "has_many attachments: InvoiceItem",
+    );
+    let program = parse(&lex(&duplicate_child_table_source).unwrap()).unwrap();
+    let schema = build_schema(&program).unwrap();
+    assert!(!validate_cruds("invoice.zyl", &program, &schema));
+
+    let duplicate_child_name_source = source.replace(
+        "has_many attachments: InvoiceAttachment",
+        "has_many items: InvoiceAttachment",
+    );
+    let tokens = lex(&duplicate_child_name_source).unwrap();
+    assert!(parse(&tokens).is_err());
 
     let invalid_cascade = source.replace("cascade: delete", "cascade: restrict");
     let program = parse(&lex(&invalid_cascade).unwrap()).unwrap();

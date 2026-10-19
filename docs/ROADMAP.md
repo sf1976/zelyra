@@ -25,7 +25,7 @@ telemetry, explicit effects, portable data, resource discipline, and honest
 proof claims guide every phase. The [manifesto](MANIFESTO.md) states the
 principles; the roadmap below tracks what is actually implemented.
 
-The current stable release is 1.2.22, published at https://github.com/sf1976/zelyra/releases/tag/v1.2.22. **Current milestones** is the source of
+The current stable release is 1.2.23, published at https://github.com/sf1976/zelyra/releases/tag/v1.2.23. **Current milestones** is the source of
 near-term commitments. Older numbered release sections below are retained as
 historical planning and evidence; they do not by themselves define current
 release targets. Longer-term ideas remain in the post-1.0 evolution section.
@@ -219,14 +219,44 @@ security and compatibility gates stated for that milestone.
   rollback, create, edit/recompute, and schema cascade. Multiple child
   collections and more than 50 rows per submit remain unsupported. See the
   [1.2.22 work plan](release-plans/1.2.22-business-invariants-and-master-detail.en.md).
-- [~] **1.2.23 — authenticated tenant-scoped API invariants:** `validates`
+- [x] **1.2.23 — authenticated tenant-scoped API invariants (released):** `validates`
   binds scoped table rules only on authenticated APIs with a configured active
   membership table. Zelyra rejects tenant keys from request input, resolves the
   selected tenant against the session and memberships, evaluates the rule with
   that verified tenant, and passes it as a typed final handler parameter.
   Missing or unauthorized context fails before the handler. This validates
   declared inputs, not arbitrary handler transformations or raw SQL writes.
-  See the [1.2.23 plan](release-plans/1.2.23-scoped-api-validation.en.md).
+  Released as [`v1.2.23`](https://github.com/sf1976/zelyra/releases/tag/v1.2.23);
+  the full PR and release workflows passed. See the
+  [1.2.23 plan](release-plans/1.2.23-scoped-api-validation.en.md).
+- [~] **1.2.24 — multiple transactional CRUD child collections:** Extend the
+  existing typed `has_many` path from one child collection to multiple named
+  collections on Create/Edit. Validate all parent and child values before
+  writing, then save or replace every declared collection in the same database
+  transaction, recompute each collection's aggregates, and roll back all rows
+  when any collection fails. Preserve tenant scoping, per-table invariants,
+  row limits, and existing single-collection behavior. Do not add arbitrary
+  CRUD action code as part of this change. Require a MariaDB HTTP E2E covering
+  two collections, an invalid second collection with full rollback, and edit
+  replacement without cross-parent access. See the
+  [1.2.24 work plan](release-plans/1.2.24-multiple-crud-children.en.md).
+- [ ] **1.2.25 — typed CRUD domain actions:** Add a checked execution context
+  for action statements with explicit row, authenticated user, and verified
+  tenant values. Reuse the language type/effect checker, require explicit
+  permissions, support transaction-safe SQL plus allowlisted typed calls, and
+  evaluate an action guard while holding the target row lock. Retain one
+  transaction for business writes and audit insertion. Use the existing
+  `hash_sha256` and `now()` spellings and their capability rules; PDF rendering
+  and mail outbox calls must follow their existing transaction and attachment
+  restrictions. No implicit `crypto::` namespace or raw SQL interpolation.
+- [ ] **1.2.26 — bounded secure file upload foundation (subject to design
+  gate):** Specify and test multipart size limits, file metadata types,
+  content validation, tenant ownership, private storage outside `public/`,
+  authorized downloads, rollback cleanup, and backup/delete behavior before
+  exposing a `File` field. Reject the release if uploads can bypass request
+  limits, path containment, authorization, or cleanup guarantees. If those
+  guarantees cannot be completed by this milestone, defer uploads explicitly
+  past 1.3.0 rather than shipping a partial file API.
 - [ ] **1.3.0 — canonical structure and Bytecode default:** Complete the
   opt-in versioned project layout (`routes/`, `domain/`, `schema/`, `public/`,
   `assets/`, and `plugins/`), architecture checks, and safe layout migration

@@ -554,8 +554,8 @@ pub struct FormRoute {
     pub audit_chain: bool,
     /// Pre-composed named view layout for generated CRUD forms.
     pub layout_html: Option<String>,
-    /// Optional generated direct-child editor owned by this CRUD form.
-    pub child_collection: Option<CrudChildFormRoute>,
+    /// Generated direct-child editors owned by this CRUD form.
+    pub child_collections: Vec<CrudChildFormRoute>,
 }
 
 #[derive(Clone, Debug)]
@@ -563,6 +563,7 @@ pub struct CrudChildFormRoute {
     pub definition: zelyra_ast::CrudChildRelationDef,
     pub table: TableDef,
     pub fields: Vec<zelyra_ast::FormField>,
+    pub count_key: String,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -6197,7 +6198,8 @@ fn dispatch_form_with_language(
     }
     let rendered_form = form_with_path_params(form, path_params);
     if request.method == "GET" {
-        let options = match load_relation_options(&rendered_form, database_url, tenant_context) {
+        let options = match load_crud_relation_options(&rendered_form, database_url, tenant_context)
+        {
             Ok(options) => options,
             Err(error) => return relation_options_error(database_url, error),
         };
@@ -6216,7 +6218,7 @@ fn dispatch_form_with_language(
         } else {
             EditValues::default()
         };
-        if let Some(child) = rendered_form.child_collection.as_ref() {
+        for child in &rendered_form.child_collections {
             if is_edit_form(form) {
                 let Some(database_url) = database_url else {
                     return Response::html(503, "<h1>503 Service Unavailable</h1>");
@@ -6241,9 +6243,7 @@ fn dispatch_form_with_language(
                     }
                 }
             } else {
-                values
-                    .values
-                    .insert("_zelyra_child_count".into(), "1".into());
+                values.values.insert(child.count_key.clone(), "1".into());
             }
         }
         if is_edit_form(form) {
@@ -6371,14 +6371,14 @@ fn dispatch_form_with_language(
         None
     };
     if let Some(child_action) = values.remove("_zelyra_child_action") {
-        let Some(child) = form.child_collection.as_ref() else {
+        if form.child_collections.is_empty() {
             return Response::html(400, "<h1>400 Bad Request</h1>");
-        };
-        if !mutate_child_form_rows(&mut values, child, &child_action) {
+        }
+        if !mutate_child_form_rows(&mut values, &form.child_collections, &child_action) {
             return Response::html(400, "<h1>400 Bad Request</h1>");
         }
         let relation_options =
-            match load_relation_options(&rendered_form, database_url, tenant_context) {
+            match load_crud_relation_options(&rendered_form, database_url, tenant_context) {
                 Ok(options) => options,
                 Err(error) => return relation_options_error(database_url, error),
             };
@@ -6408,7 +6408,7 @@ fn dispatch_form_with_language(
                     return Response::html(500, "<h1>500 Internal Server Error</h1>");
                 }
             };
-            if let Some(child) = rendered_form.child_collection.as_ref() {
+            for child in &rendered_form.child_collections {
                 match load_existing_child_values(
                     &rendered_form,
                     child,
@@ -6532,11 +6532,11 @@ fn dispatch_form_with_language(
         };
         values.insert("invoice_number".into(), format!("RE-PENDING-{nonce}"));
     }
-    let relation_options = match load_relation_options(&rendered_form, database_url, tenant_context)
-    {
-        Ok(options) => options,
-        Err(error) => return relation_options_error(database_url, error),
-    };
+    let relation_options =
+        match load_crud_relation_options(&rendered_form, database_url, tenant_context) {
+            Ok(options) => options,
+            Err(error) => return relation_options_error(database_url, error),
+        };
     let mut validation_form = form.form.clone();
     if generate_invoice_number {
         if let Some(field) = validation_form
@@ -6547,12 +6547,15 @@ fn dispatch_form_with_language(
             field.readonly = false;
         }
     }
-    let parent_values = if form.child_collection.is_some() {
+    let parent_values = if !form.child_collections.is_empty() {
         values
             .iter()
             .filter(|(name, _)| {
                 *name != "_zelyra_child_count"
-                    && !is_crud_child_input_name(form.child_collection.as_ref(), name)
+                    && !form
+                        .child_collections
+                        .iter()
+                        .any(|child| is_crud_child_input_name(child, name))
             })
             .map(|(name, value)| (name.clone(), value.clone()))
             .collect::<HashMap<_, _>>()
@@ -6567,7 +6570,8 @@ fn dispatch_form_with_language(
     );
     let mut errors = validation.errors;
     validate_relation_values(form, &relation_options, &values, &mut errors);
-    let child_rows = if let Some(child) = form.child_collection.as_ref() {
+    let mut child_rows = HashMap::new();
+    for child in &form.child_collections {
         let child_route = crud_child_route(form, child);
         let options = match load_relation_options(&child_route, database_url, tenant_context) {
             Ok(options) => options,
@@ -6576,7 +6580,7 @@ fn dispatch_form_with_language(
         match validate_crud_child_rows(&child_route, child, &values, &options) {
             Ok((rows, child_errors)) => {
                 errors.extend(child_errors);
-                rows
+                child_rows.insert(child.definition.name.clone(), rows);
             }
             Err(error) => {
                 return Response::html(
@@ -6585,9 +6589,7 @@ fn dispatch_form_with_language(
                 );
             }
         }
-    } else {
-        Vec::new()
-    };
+    }
     if errors.is_empty() {
         if let (Some(program), Some(table_name)) = (validation_program, form.form.table.as_deref())
         {
@@ -6735,9 +6737,9 @@ fn dispatch_form_with_language(
     )
 }
 
-fn is_crud_child_input_name(child: Option<&CrudChildFormRoute>, name: &str) -> bool {
-    child.is_some_and(|child| {
-        child.fields.iter().any(|field| {
+fn is_crud_child_input_name(child: &CrudChildFormRoute, name: &str) -> bool {
+    child.count_key == name
+        || child.fields.iter().any(|field| {
             name.strip_prefix(&format!("{}.", child.definition.name))
                 .is_some_and(|suffix| {
                     suffix
@@ -6745,7 +6747,6 @@ fn is_crud_child_input_name(child: Option<&CrudChildFormRoute>, name: &str) -> b
                         .is_some_and(|(_, field_name)| field_name == field.name)
                 })
         })
-    })
 }
 
 fn form_with_path_params(form: &FormRoute, path_params: &HashMap<String, String>) -> FormRoute {
@@ -6758,11 +6759,27 @@ fn form_with_path_params(form: &FormRoute, path_params: &HashMap<String, String>
 
 fn mutate_child_form_rows(
     values: &mut HashMap<String, String>,
-    child: &CrudChildFormRoute,
+    children: &[CrudChildFormRoute],
     action: &str,
 ) -> bool {
+    let (child, action) = if let Some(child) = children
+        .iter()
+        .find(|child| action.starts_with(&format!("{}:", child.definition.name)))
+    {
+        (
+            child,
+            action
+                .strip_prefix(&format!("{}:", child.definition.name))
+                .unwrap_or_default(),
+        )
+    } else {
+        let Some(child) = children.first() else {
+            return false;
+        };
+        (child, action)
+    };
     let mut count = values
-        .get("_zelyra_child_count")
+        .get(&child.count_key)
         .and_then(|value| value.parse::<usize>().ok())
         .unwrap_or(1);
     if count == 0 || count > forms::MAX_CRUD_CHILD_ROWS {
@@ -6802,7 +6819,7 @@ fn mutate_child_form_rows(
     } else {
         return false;
     }
-    values.insert("_zelyra_child_count".into(), count.to_string());
+    values.insert(child.count_key.clone(), count.to_string());
     true
 }
 
@@ -6827,7 +6844,7 @@ fn crud_child_route(parent: &FormRoute, child: &CrudChildFormRoute) -> FormRoute
     route.record_context_fields.clear();
     route.form_context_fields.clear();
     route.field_content_html.clear();
-    route.child_collection = None;
+    route.child_collections.clear();
     route
 }
 
@@ -6840,7 +6857,7 @@ fn validate_crud_child_rows(
     relation_options: &HashMap<String, Vec<SelectOption>>,
 ) -> CrudChildValidationResult {
     let count = submitted
-        .get("_zelyra_child_count")
+        .get(&child.count_key)
         .and_then(|value| value.parse::<usize>().ok())
         .ok_or_else(|| "child row count is missing or invalid".to_owned())?;
     if count == 0 || count > forms::MAX_CRUD_CHILD_ROWS {
@@ -7163,7 +7180,7 @@ fn decode_crud_child_values(
     let count = result.rows.len().max(1);
     values
         .values
-        .insert("_zelyra_child_count".into(), count.to_string());
+        .insert(child.count_key.clone(), count.to_string());
     if result.rows.is_empty() {
         for field in &child.fields {
             values.values.insert(
@@ -10699,6 +10716,26 @@ fn load_relation_options(
     Ok(options)
 }
 
+fn load_crud_relation_options(
+    form: &FormRoute,
+    database_url: Option<&str>,
+    tenant_context: Option<&TenantContext>,
+) -> Result<HashMap<String, Vec<SelectOption>>, String> {
+    let mut options = load_relation_options(form, database_url, tenant_context)?;
+    for child in &form.child_collections {
+        let child_form = crud_child_route(form, child);
+        for (field, field_options) in
+            load_relation_options(&child_form, database_url, tenant_context)?
+        {
+            options.insert(
+                format!("{}.{}", child.definition.name, field),
+                field_options,
+            );
+        }
+    }
+    Ok(options)
+}
+
 fn validate_relation_values(
     form: &FormRoute,
     options: &HashMap<String, Vec<SelectOption>>,
@@ -11382,7 +11419,7 @@ fn execute_form_action(
         form,
         action,
         values,
-        &[],
+        &HashMap::new(),
         path_params,
         database_url,
         context,
@@ -11393,7 +11430,7 @@ fn execute_form_action_with_children(
     form: &FormRoute,
     action: &zelyra_ast::FormAction,
     values: &HashMap<String, String>,
-    child_rows: &[HashMap<String, String>],
+    child_rows: &HashMap<String, Vec<HashMap<String, String>>>,
     path_params: &HashMap<String, String>,
     database_url: &str,
     context: FormExecutionContext<'_>,
@@ -11611,7 +11648,7 @@ fn execute_form_action_with_children(
                     },
                 });
             };
-            if let Some(child) = form.child_collection.as_ref() {
+            for child in &form.child_collections {
                 let child_query = crud_child_select_query(
                     form,
                     child,
@@ -11693,7 +11730,48 @@ fn execute_form_action_with_children(
         for query in &queries {
             transaction.execute(query)?;
         }
-        if let Some(child) = form.child_collection.as_ref() {
+        let created_parent_id = if !is_edit_form(form)
+            && (!form.child_collections.is_empty() || is_automatic_invoice_number_form(form))
+        {
+            let table_name = form.form.table.as_deref().ok_or_else(|| {
+                zelyra_database::DatabaseError {
+                    message: "CRUD child form has no parent table".into(),
+                }
+            })?;
+            let table_literal = table_name.replace('\'', "''");
+            let identity_sql = if is_postgres {
+                format!("SELECT currval(pg_get_serial_sequence('{table_literal}', 'id')) AS id")
+            } else if form
+                .schema
+                .as_ref()
+                .is_some_and(|schema| schema.backend() == zelyra_database::Backend::Sqlite)
+            {
+                "SELECT last_insert_rowid() AS id".into()
+            } else {
+                "SELECT LAST_INSERT_ID() AS id".into()
+            };
+            let result = transaction.execute(&zelyra_database::Query {
+                sql: identity_sql,
+                params: Vec::new(),
+            })?;
+            Some(
+                result
+                    .rows
+                    .first()
+                    .and_then(|row| row.first())
+                    .and_then(|value| value.parse::<i64>().ok())
+                    .ok_or_else(|| zelyra_database::DatabaseError {
+                        message: "could not read the generated CRUD parent ID".into(),
+                    })?,
+            )
+        } else {
+            None
+        };
+        for child in &form.child_collections {
+            let child_rows = child_rows
+                .get(&child.definition.name)
+                .map(Vec::as_slice)
+                .unwrap_or_default();
             let parent_id = if is_edit_form(form) {
                 path_params
                     .get("id")
@@ -11702,35 +11780,9 @@ fn execute_form_action_with_children(
                         message: "edit form path parameter `id` is invalid".into(),
                     })?
             } else {
-                let table_name = form.form.table.as_deref().ok_or_else(|| {
-                    zelyra_database::DatabaseError {
-                        message: "CRUD child form has no parent table".into(),
-                    }
-                })?;
-                let table_literal = table_name.replace('\'', "''");
-                let identity_sql = if is_postgres {
-                    format!("SELECT currval(pg_get_serial_sequence('{table_literal}', 'id')) AS id")
-                } else if form
-                    .schema
-                    .as_ref()
-                    .is_some_and(|schema| schema.backend() == zelyra_database::Backend::Sqlite)
-                {
-                    "SELECT last_insert_rowid() AS id".into()
-                } else {
-                    "SELECT LAST_INSERT_ID() AS id".into()
-                };
-                let result = transaction.execute(&zelyra_database::Query {
-                    sql: identity_sql,
-                    params: Vec::new(),
-                })?;
-                result
-                    .rows
-                    .first()
-                    .and_then(|row| row.first())
-                    .and_then(|value| value.parse::<i64>().ok())
-                    .ok_or_else(|| zelyra_database::DatabaseError {
-                        message: "could not read the generated CRUD parent ID".into(),
-                    })?
+                created_parent_id.ok_or_else(|| zelyra_database::DatabaseError {
+                    message: "generated CRUD parent ID is unavailable".into(),
+                })?
             };
             let child_route = crud_child_route(form, child);
             let child_table = child.table.name.as_str();
@@ -11890,18 +11942,9 @@ fn execute_form_action_with_children(
             }
         }
         if is_automatic_invoice_number_form(form) {
-            let identity_query = zelyra_database::Query {
-                sql: if is_postgres {
-                    "SELECT currval(pg_get_serial_sequence('invoices', 'id')) AS id".into()
-                } else {
-                    "SELECT LAST_INSERT_ID() AS id".into()
-                },
-                params: Vec::new(),
-            };
-            let identity = transaction.execute(&identity_query)?;
-            let id = identity.rows.first().and_then(|row| row.first())
-                .and_then(|value| value.parse::<i64>().ok())
-                .ok_or_else(|| zelyra_database::DatabaseError { message: "could not read generated invoice ID".into() })?;
+            let id = created_parent_id.ok_or_else(|| zelyra_database::DatabaseError {
+                message: "generated invoice ID is unavailable".into(),
+            })?;
             let base = format!("RE-{id:06}");
             let mut sequence = 0_u32;
             let invoice_number = loop {
