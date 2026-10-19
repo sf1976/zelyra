@@ -19,6 +19,24 @@ that point at another tenant's row. For these relations, `RESTRICT` is the
 explicit default; `on_delete set_null` is rejected because it would also null
 the required tenant key.
 
+On a table declared with `scoped by`, `unique within tenant` declares a
+composite unique index over the scope column and the selected field:
+
+```zelyra
+customer_number: String(50) required unique within tenant
+```
+
+For a `customers` table scoped by `tenant_id`, this produces
+`UNIQUE (tenant_id, customer_number)`: different tenants may use the same
+number, while a duplicate in one tenant is rejected by the database. Plain
+`unique` remains global. The two modifiers cannot be combined, and
+`unique within tenant` is rejected on an unscoped table or on the scope field
+itself. Existing-table plans mark index creation for review and include a
+duplicate-row preflight; they do not silently approve or repair existing
+duplicates. SQL's normal NULL behavior applies to optional indexed values.
+This new shorthand is being validated against the MariaDB integration matrix;
+it is not a claim of cross-backend migration parity.
+
 The field names `type` and `version` are already accepted contextually in field
 positions; `order`, `group`, and `status` are ordinary identifiers. Use the
 existing `storage_name "type"` syntax when a logical field needs a different

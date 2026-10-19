@@ -189,6 +189,46 @@ abgeschlossen.
   sowie der Linux-Artefakttest bestanden. Windows-CI und Releaseworkflow stehen
   noch aus. Es entstehen weder freie SQL-Abfragen noch Schreibaktionen oder
   Zugriff auf nicht deklarierte Ergebnisfelder.
+- [x] **1.2.17 — mandantensichere Relationen:** Optionale Tabellenrelationen
+  erzeugen nullable Fremdschlüsselspalten. Relationen zwischen Tabellen mit
+  derselben Mandantenidentität verwenden den zusammengesetzten Schlüssel
+  `(tenant_id, relation_id) -> (tenant_id, id)`; inkompatible Identitäten und
+  `SET NULL` auf dem Mandantenschlüssel werden abgewiesen. Der
+  MariaDB-Ende-zu-Ende-Test prüft die Ablehnung mandantenübergreifender Links.
+- [~] **1.2.18 — Backend-Differentialtests:** Den begrenzten MIR- und
+  Bytecode-Differentialkorpus für Tupel, bedingte Ausdrücke, Record-Updates,
+  Closures und Match-Guards erweitern. Experimentelle Backends bleiben
+  opt-in; dieses Release behauptet keine vollständige Sprachparität.
+- [~] **1.2.19 — mandantenbezogene eindeutige Werte:** `unique within tenant`
+  für scoped Tabellen ergänzen. Die Syntax erzeugt einen zusammengesetzten
+  Unique-Index, weist mehrdeutige Deklarationen ab und verlangt bei
+  Schemaänderungen Prüfung samt Duplikat-Preflight. Das Beheben bestehender
+  Daten bleibt eine ausdrückliche Betreiberaufgabe.
+- [~] **1.2.20 — Tabellen- und Formularinvarianten:** Typgeprüfte,
+  feldübergreifende Validierung mit source-mapped Diagnosen und konsistenten
+  Prüfungen vor Datenbankänderungen in generiertem CRUD und APIs ergänzen.
+  Backends, die die geprüfte Semantik nicht erhalten, müssen den Pfad abweisen.
+  Der aktuelle Branch prüft deklarative Formulare und generiertes CRUD vor
+  Schreibaktionen; die Bindung beliebiger APIs an Tabellen ist noch offen.
+  Siehe [`table-invariants.de.md`](table-invariants.de.md).
+- [~] **1.2.21 — Lifecycle-Guards und datensatzabhängige CRUD-Rechte:**
+  Parser und Typprüfung senken Datensatzbedingungen jetzt auf gewöhnliche,
+  typgeprüfte Bool-Funktionen ab. Edit-Guards und bedingte Rechte werden beim
+  Öffnen des Formulars und erneut unter der Zeilensperre der Edit-Transaktion
+  geprüft; Delete-Guards und -Rechte innerhalb der Löschtransaktion. Der
+  Bearbeiten-Link auf der Detailseite und ausdrücklich zugeordnete
+  TableView-Bearbeiten-/Löschen-Slots verwenden denselben Auswerter.
+  TableView-Slots müssen ihr CRUD-Modell nennen und die vollständige typisierte
+  Zeile auswählen; unvollständige Policy-Zeilen weist der Compiler ab.
+  MariaDB-Integrationstests für direkte Requests und die Zeilensperren-Race-Case
+  laufen jetzt im CI-Workflow; lokal sind sie bestanden, der vollständige
+  externe PR-CI-Lauf steht noch aus. Eigene Aktionen bleiben an typgeprüfte
+  Funktionen mit Capabilityprüfung gebunden. Siehe das
+  [Arbeitsprotokoll 1.2.21](release-plans/1.2.21-crud-lifecycle-policies.de.md).
+- [ ] **1.2.22 — transaktionales Master-Detail-CRUD:** Typisierte
+  Kinddatensätze, atomare Speicherung von Kopf und Positionen, deklarierte
+  Löschregeln und geprüfte Aggregate ergänzen. Der erste UI-Schnitt muss
+  CSRF, Tenant-Scope, Berechtigungen, Validierung und Rollback bewahren.
 - [ ] **1.3.0 — kanonische Struktur und Bytecode-Standard:** Das optionale,
   versionierte Projektlayout (`routes/`, `domain/`, `schema/`, `public/`,
   `assets/`, `plugins/`), Architekturprüfungen und eine sichere

@@ -407,6 +407,46 @@ Datenbankdaten müssen über vorhandene CSRF- und berechtigungsgeprüfte CRUD-
 Aktionen laufen. Beliebiges CSS/HTML oder freie Klassen werden dadurch nicht
 allgemein statisch geprüft.
 
+Datensatzabhängige CRUD-Rechte können ausdrücklich gekennzeichnete
+TableView-Aktionen steuern. `crud: Modell` ordnet die Aktionen zu; Inhalte für
+Bearbeiten und Löschen stehen in getrennten Slots. Das Ergebnis muss
+`Modell[]` sein, und alle Modellfelder müssen in `columns` oder `row_fields`
+ausgewählt werden:
+
+```zelyra
+crud Invoice -> invoices {
+    permits edit "invoices.manage" when status == "draft"
+    guard delete when locked == true {
+        error: "Festgeschriebene Rechnungen dürfen nicht gelöscht werden."
+    }
+}
+
+tableview InvoiceRows {
+    source sql<Invoice[]> { SELECT id, status, locked FROM invoices }
+    columns { status }
+    view {
+        row_fields { id locked }
+        row_actions {
+            item: invoice
+            crud: Invoice
+            edit { html { <a href="/invoices/{invoice.id}/edit">Bearbeiten</a> } }
+            delete { html { <button type="button">Löschen</button> } }
+        }
+    }
+}
+```
+
+Nicht klassifizierte `html`-Aktionen bleiben aus Kompatibilitätsgründen
+unterstützt. Zelyra kann bei beliebigem Markup nicht erkennen, ob es eine
+Bearbeiten- oder Löschen-Aktion darstellt; solche Inhalte werden daher nicht
+automatisch anhand von Datensatzrechten ausgeblendet. Direkte Requests werden
+weiterhin serverseitig geprüft.
+
+Das ausführbare, compilergeprüfte Beispiel liegt unter
+[`examples/crud_lifecycle_policies/main.zyl`](../examples/crud_lifecycle_policies/main.zyl).
+MariaDB-Prüfungen für Requests, Zeilensperre und gerenderte Aktionen enthält
+[`tests/mariadb-crud-lifecycle-policies-e2e.sh`](../tests/mariadb-crud-lifecycle-policies-e2e.sh).
+
 Ein vollständiges, compilergeprüftes Beispiel mit Formularhilfen und einem
 Dialog je Tabellenzeile liegt unter
 [`examples/generated_page_customization/main.zyl`](../examples/generated_page_customization/main.zyl).

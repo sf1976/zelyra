@@ -1,0 +1,42 @@
+table invoices {
+    id: Id primary auto
+    status: String(20) required default "draft"
+    locked: Bool required default false
+}
+
+crud Invoice -> invoices {
+    guard edit when locked == true {
+        error: "Festgeschriebene Rechnungen dürfen nicht bearbeitet werden."
+    }
+    guard delete when locked == true {
+        error: "Festgeschriebene Rechnungen dürfen nicht gelöscht werden."
+    }
+    list { id status locked }
+}
+
+tableview InvoiceRows {
+    source sql<Invoice[]> {
+        SELECT id, status, locked FROM invoices
+    }
+    columns { status }
+    view {
+        row_fields { id locked }
+        row_actions {
+            item: invoice
+            crud: Invoice
+            edit {
+                html {
+                    <a href="/invoices/{invoice.id}/edit">Bearbeiten</a>
+                }
+            }
+            delete {
+                html {
+                    <button type="button">Löschen</button>
+                }
+            }
+        }
+    }
+}
+
+fn main() {
+}

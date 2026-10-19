@@ -2070,6 +2070,44 @@ fn validates_tableview_hidden_row_fields_and_column_content_context() {
 }
 
 #[test]
+fn validates_policy_scoped_tableview_actions_against_complete_crud_rows() {
+    let source = r#"
+        table invoices {
+            id: Id primary auto
+            status: String(20) required
+            locked: Bool required
+        }
+        struct Invoice { id: Id status: String locked: Bool }
+        crud Invoice -> invoices {
+            guard edit when locked == true { error: "Locked" }
+            guard delete when locked == true { error: "Locked" }
+        }
+        tableview InvoiceRows {
+            source sql<Invoice[]> { SELECT id, status, locked FROM invoices }
+            columns { status }
+            view {
+                row_fields { id locked }
+                row_actions {
+                    item: invoice
+                    crud: Invoice
+                    edit { html { <a href="/invoices/{invoice.id}/edit">Edit</a> } }
+                    delete { html { <button type="button">Delete</button> } }
+                }
+            }
+        }
+    "#;
+    let program = parse(&lex(source).unwrap()).unwrap();
+    assert!(validate_components("policy-tableview.zyl", &program));
+
+    let incomplete = source.replace("row_fields { id locked }", "row_fields { id }");
+    let program = parse(&lex(&incomplete).unwrap()).unwrap();
+    assert!(!validate_components(
+        "policy-tableview-incomplete.zyl",
+        &program
+    ));
+}
+
+#[test]
 fn rejects_saved_record_in_create_and_unavailable_or_sensitive_fields() {
     let source = r#"
         table customers { id: Id primary auto name: String(100) password_hash: String(255) }
@@ -2815,6 +2853,64 @@ fn dispatches_json_api_input_to_a_typed_handler() {
 }
 
 #[test]
+fn evaluates_declared_table_validation_before_api_handler() {
+    let program = parse(
+        &lex(r#"
+            table invoices {
+                id: Id primary auto
+                amount: Int required
+                validate { amount > 0: "Amount must be positive" }
+            }
+            api POST "/invoices" {
+                handler create_invoice
+                input { amount: Int }
+                validates invoices
+                output Result<Int, String>
+                errors { 422 ValidationError: String }
+            }
+            fn create_invoice(amount: Int) -> Result<Int, String> { return Ok(amount) }
+            fn main() { }
+        "#)
+        .unwrap(),
+    )
+    .unwrap();
+    check_apis(&program).expect("API validation contract must type-check");
+    let api = &program.apis[0];
+
+    let invalid = zelyra_web::parse_request(
+        "POST /invoices HTTP/1.1\r\nContent-Type: application/json\r\n\r\n{\"amount\":0}",
+    )
+    .unwrap();
+    let response = dispatch_api(
+        &program,
+        api,
+        "create_invoice",
+        &invalid,
+        &HashMap::new(),
+        None,
+    );
+    assert_eq!(response.status, 422);
+    let body: serde_json::Value = serde_json::from_str(&response.body).unwrap();
+    assert_eq!(body["error"]["code"], "ValidationError");
+    assert_eq!(body["error"]["details"], "Amount must be positive");
+
+    let valid = zelyra_web::parse_request(
+        "POST /invoices HTTP/1.1\r\nContent-Type: application/json\r\n\r\n{\"amount\":42}",
+    )
+    .unwrap();
+    let response = dispatch_api(
+        &program,
+        api,
+        "create_invoice",
+        &valid,
+        &HashMap::new(),
+        None,
+    );
+    assert_eq!(response.status, 200);
+    assert_eq!(response.body, "42");
+}
+
+#[test]
 fn enforces_scoped_database_effects_in_generated_api_handlers() {
     let program = parse(
         &lex(
@@ -2840,6 +2936,7 @@ fn enforces_scoped_database_effects_in_generated_api_handlers() {
             database_url: Some(database_url),
             capability_grants: Some(&no_grants),
             runtime_policy: None,
+            table_validation_functions: &[],
         },
     );
     assert_eq!(denied.status, 500);
@@ -2857,6 +2954,7 @@ fn enforces_scoped_database_effects_in_generated_api_handlers() {
             database_url: Some(database_url),
             capability_grants: Some(&read_grant),
             runtime_policy: None,
+            table_validation_functions: &[],
         },
     );
     assert_eq!(allowed.status, 500);
@@ -2888,6 +2986,7 @@ fn project_step_budget_applies_to_executed_api_handlers() {
                 step_budget: Some(30),
                 ..RuntimePolicy::default()
             }),
+            table_validation_functions: &[],
         },
     );
     assert_eq!(response.status, 500);

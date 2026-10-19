@@ -101,13 +101,21 @@ pub(super) fn render_form_with_language(
         html.push_str(&html_escape(&tr(language, "validation.summary")));
         html.push_str("</h2><ul>");
         for error in errors {
-            html.push_str("<li><a href=\"#");
-            html.push_str(&html_escape(&error.field));
-            html.push_str("\">");
-            html.push_str(&html_escape_preserving_locale_references(
-                &localized_validation_message(language, &error.message),
+            let message = html_escape_preserving_locale_references(&localized_validation_message(
+                language,
+                &error.message,
             ));
-            html.push_str("</a></li>");
+            if error.field.is_empty() {
+                html.push_str("<li>");
+                html.push_str(&message);
+                html.push_str("</li>");
+            } else {
+                html.push_str("<li><a href=\"#");
+                html.push_str(&html_escape(&error.field));
+                html.push_str("\">");
+                html.push_str(&message);
+                html.push_str("</a></li>");
+            }
         }
         html.push_str("</ul></div>");
     }

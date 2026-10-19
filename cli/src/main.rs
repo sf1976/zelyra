@@ -4292,6 +4292,104 @@ fn validate_components(path: &str, program: &zelyra_ast::Program) -> bool {
                 );
                 valid = false;
             }
+            let operation_templates = [
+                ("edit", actions.edit_html.as_deref()),
+                ("delete", actions.delete_html.as_deref()),
+            ];
+            if actions.edit_html.is_some() || actions.delete_html.is_some() {
+                let Some(model_name) = actions.crud_model.as_deref() else {
+                    diagnostic_with_span(
+                        path,
+                        "E-VIEW-037",
+                        "operation-scoped TableView row actions require `crud: Model`",
+                        actions.span,
+                    );
+                    valid = false;
+                    continue;
+                };
+                let Some(crud) = program.cruds.iter().find(|crud| crud.name == model_name) else {
+                    diagnostic_with_span(
+                        path,
+                        "E-VIEW-037",
+                        &format!(
+                            "TableView row actions reference unknown CRUD model `{model_name}`"
+                        ),
+                        actions.span,
+                    );
+                    valid = false;
+                    continue;
+                };
+                let result_model = match &tableview.result_type {
+                    Type::Array(inner) => inner.as_ref(),
+                    other => other,
+                };
+                if !matches!(result_model, Type::Named(name) if name == model_name) {
+                    diagnostic_with_span(
+                        path,
+                        "E-VIEW-037",
+                        &format!("policy-scoped row actions require result type `{model_name}[]`"),
+                        actions.span,
+                    );
+                    valid = false;
+                }
+                let available = tableview
+                    .columns
+                    .iter()
+                    .chain(tableview.view.row_fields.iter())
+                    .cloned()
+                    .collect::<HashSet<_>>();
+                if let Some(table) = program.tables.iter().find(|table| table.name == crud.table) {
+                    for column in &table.columns {
+                        if !available.contains(&column.name) {
+                            diagnostic_with_span(
+                                path,
+                                "E-VIEW-037",
+                                &format!("policy-scoped row actions must select `{}` in columns or row_fields", column.name),
+                                actions.span,
+                            );
+                            valid = false;
+                        }
+                    }
+                } else {
+                    diagnostic_with_span(
+                        path,
+                        "E-VIEW-037",
+                        &format!("CRUD model `{model_name}` has no table definition"),
+                        actions.span,
+                    );
+                    valid = false;
+                }
+            }
+            for (operation, html) in operation_templates {
+                let Some(html) = html else { continue };
+                valid &= validate_component_template(
+                    path,
+                    program,
+                    html,
+                    actions.span.line,
+                    actions.span.column,
+                    &bindings,
+                );
+                valid &= validate_record_template_fields_for_root(
+                    path,
+                    html,
+                    &actions.item,
+                    &available,
+                    actions.span,
+                );
+                if html_contains_element(&expand_view_components(program, html.to_owned()), "form")
+                {
+                    diagnostic_with_span(
+                        path,
+                        "E-VIEW-035",
+                        &format!(
+                            "tableview `{operation}` row action content must not contain a form"
+                        ),
+                        actions.span,
+                    );
+                    valid = false;
+                }
+            }
         }
         if let Some(result_fields) = tableview_template_fields(&tableview.result_type, program) {
             let mut selected = tableview.columns.iter().cloned().collect::<HashSet<_>>();
@@ -10312,6 +10410,32 @@ fn serve_command(mut args: impl Iterator<Item = String>) -> ExitCode {
                     expand_view_components(&program, row.html.clone()),
                 )
             }),
+            policy_row_actions: tableview.view.row_actions.as_ref().and_then(|row| {
+                let model = row.crud_model.as_deref()?;
+                let crud_index = program.cruds.iter().position(|crud| crud.name == model)?;
+                let crud = &program.cruds[crud_index];
+                Some(zelyra_web::TableViewPolicyRowActions {
+                    crud_index,
+                    item: row.item.clone(),
+                    edit_html: row
+                        .edit_html
+                        .as_deref()
+                        .map(|html| expand_view_components(&program, html.to_owned())),
+                    delete_html: row
+                        .delete_html
+                        .as_deref()
+                        .map(|html| expand_view_components(&program, html.to_owned())),
+                    requires_auth: crud.requires_auth,
+                    edit_permissions: effective_crud_permissions(
+                        &crud.permissions,
+                        &crud.edit_permissions,
+                    ),
+                    delete_permissions: effective_crud_permissions(
+                        &crud.permissions,
+                        &crud.delete_permissions,
+                    ),
+                })
+            }),
             filters: tableview
                 .filters
                 .iter()
@@ -10502,6 +10626,7 @@ fn serve_command(mut args: impl Iterator<Item = String>) -> ExitCode {
     };
     println!("Zelyra server listening on http://{actual_address}");
     let app = WebApp::with_database_url(routes, form_routes, database_url_from_program(&program))
+        .with_validation_program(program)
         .with_ui_settings(ui_language, ui_level)
         .with_ui_stylesheet_css(ui_stylesheet_css)
         .with_project_theme_css(theme_css)
@@ -10881,13 +11006,16 @@ fn generated_api_routes(
     runtime_policy: Option<&RuntimePolicy>,
 ) -> Vec<ApiRoute> {
     let database_url = database_url_from_program(program);
+    let (lowered_program, table_validation_functions) =
+        zelyra_ast::lower_table_validation_functions(program);
     program
         .apis
         .iter()
         .filter_map(|api| {
             let handler = api.handler.as_ref()?.clone();
             let api = api.clone();
-            let program = program.clone();
+            let program = lowered_program.clone();
+            let table_validation_functions = table_validation_functions.clone();
             let database_url = database_url.clone();
             let capability_grants = capability_grants.cloned();
             let runtime_policy = runtime_policy.cloned();
@@ -10911,6 +11039,7 @@ fn generated_api_routes(
                                 database_url: database_url.as_deref(),
                                 capability_grants: capability_grants.as_ref(),
                                 runtime_policy: runtime_policy.as_ref(),
+                                table_validation_functions: &table_validation_functions,
                             },
                         )
                     },
@@ -10931,8 +11060,10 @@ fn dispatch_api(
     path_params: &HashMap<String, String>,
     database_url: Option<&str>,
 ) -> Response {
+    let (lowered_program, table_validation_functions) =
+        zelyra_ast::lower_table_validation_functions(program);
     dispatch_api_with_capabilities(
-        program,
+        &lowered_program,
         api,
         handler,
         request,
@@ -10941,6 +11072,7 @@ fn dispatch_api(
             database_url,
             capability_grants: None,
             runtime_policy: None,
+            table_validation_functions: &table_validation_functions,
         },
     )
 }
@@ -10950,6 +11082,7 @@ struct ApiRuntimeContext<'a> {
     database_url: Option<&'a str>,
     capability_grants: Option<&'a HashSet<String>>,
     runtime_policy: Option<&'a RuntimePolicy>,
+    table_validation_functions: &'a [zelyra_ast::TableValidationFunction],
 }
 
 fn dispatch_api_with_capabilities(
@@ -11015,6 +11148,46 @@ fn dispatch_api_with_capabilities(
         match api_value_json(value, &field.ty, program) {
             Ok(value) => arguments.push(value),
             Err(error) => return api_error_response(400, "BadRequest", &error),
+        }
+    }
+    if let Some(table_name) = &api.validates_table {
+        let submitted = api
+            .input
+            .iter()
+            .zip(&arguments)
+            .map(|(field, value)| (field.name.clone(), value.clone()))
+            .collect::<HashMap<_, _>>();
+        match zelyra_web::validate_table_runtime_values(
+            program,
+            context.table_validation_functions,
+            table_name,
+            &submitted,
+        ) {
+            Ok(messages) if messages.is_empty() => {}
+            Ok(messages) => {
+                let message = messages.join(" ");
+                let payload = RuntimeValue::String(message.clone());
+                if let Some(declaration) = api
+                    .errors
+                    .iter()
+                    .find(|error| error.status == 422 && error.name == "ValidationError")
+                {
+                    return api_error_response_with_details(
+                        422,
+                        &declaration.name,
+                        &message,
+                        declaration.payload.as_ref().map(|_| &payload),
+                    );
+                }
+                return api_error_response(
+                    500,
+                    "InternalServerError",
+                    "API validation error contract is missing",
+                );
+            }
+            Err(error) => {
+                return api_error_response(500, "InternalServerError", &error);
+            }
         }
     }
     match execute_function_with_capabilities_and_policies(

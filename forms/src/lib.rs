@@ -966,6 +966,7 @@ mod tests {
         };
         let table = TableDef {
             name: "customers".into(),
+            validations: Vec::new(),
             tenant_scope: None,
             columns: vec![ColumnDef {
                 name: "name".into(),
@@ -977,6 +978,7 @@ mod tests {
                 primary_key: false,
                 auto: false,
                 unique: false,
+                unique_within_tenant: false,
                 default: Some(DefaultValue::String("".into())),
                 on_delete: None,
                 span: Span::default(),

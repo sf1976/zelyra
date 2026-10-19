@@ -425,6 +425,14 @@ fn check_program(
     for function in &program.functions {
         checker.check_function(function);
     }
+    let (validation_functions, _) = zelyra_ast::build_table_validation_functions(program);
+    for function in &validation_functions {
+        checker.check_function(function);
+    }
+    let (crud_policy_functions, _) = zelyra_ast::build_crud_policy_functions(program);
+    for function in &crud_policy_functions {
+        checker.check_function(function);
+    }
     if checker.errors.is_empty() {
         checker.inferred_expression_types.sort_by_key(|inferred| {
             (

@@ -385,6 +385,44 @@ control. Database changes must go through existing CSRF-protected,
 authorized CRUD actions. This does not claim general static checking for
 arbitrary CSS, HTML, or classes.
 
+Record-conditioned CRUD permissions can govern explicitly classified
+TableView actions. Set `crud: Model` and place edit/delete content in separate
+slots. The result must be `Model[]`, and all model fields must be selected in
+`columns` or `row_fields`:
+
+```zelyra
+crud Invoice -> invoices {
+    permits edit "invoices.manage" when status == "draft"
+    guard delete when locked == true {
+        error: "Locked invoices cannot be deleted."
+    }
+}
+
+tableview InvoiceRows {
+    source sql<Invoice[]> { SELECT id, status, locked FROM invoices }
+    columns { status }
+    view {
+        row_fields { id locked }
+        row_actions {
+            item: invoice
+            crud: Invoice
+            edit { html { <a href="/invoices/{invoice.id}/edit">Edit</a> } }
+            delete { html { <button type="button">Delete</button> } }
+        }
+    }
+}
+```
+
+Legacy unclassified `html` actions remain supported. Zelyra cannot infer
+whether arbitrary markup is an edit or delete action, so those fragments are
+not automatically filtered by row policies. Direct requests are still checked
+server-side.
+
+The runnable compiler-checked example is
+[`examples/crud_lifecycle_policies/main.zyl`](../examples/crud_lifecycle_policies/main.zyl).
+Its MariaDB request, row-lock, and rendered-action checks are in
+[`tests/mariadb-crud-lifecycle-policies-e2e.sh`](../tests/mariadb-crud-lifecycle-policies-e2e.sh).
+
 A complete compiler-checked example with field help and a dialog per table row
 is available at
 [`examples/generated_page_customization/main.zyl`](../examples/generated_page_customization/main.zyl).

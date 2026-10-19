@@ -3,6 +3,83 @@ use std::net::TcpListener;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
 #[test]
+fn table_validation_predicate_runs_before_form_writes_and_returns_declared_message() {
+    let source = r#"
+        table invoices {
+            invoice_date: Date required
+            due_date: Date?
+            validate {
+                match due_date {
+                    Some(due) => due >= invoice_date
+                    None => true
+                }: "Due date must not precede invoice date."
+            }
+        }
+        fn main() {}
+    "#;
+    let program = zelyra_parser::parse(&zelyra_lexer::lex(source).unwrap()).unwrap();
+    zelyra_runtime::check(&program).expect("the rule is statically checked");
+    let (lowered, mappings) = zelyra_ast::lower_table_validation_functions(&program);
+
+    let invalid = HashMap::from([
+        ("invoice_date".to_owned(), "2026-10-20".to_owned()),
+        ("due_date".to_owned(), "2026-10-19".to_owned()),
+    ]);
+    let errors = evaluate_table_validations(&lowered, &mappings, "invoices", &invalid).unwrap();
+    assert_eq!(errors.len(), 1);
+    assert_eq!(errors[0].message, "Due date must not precede invoice date.");
+
+    let valid = HashMap::from([
+        ("invoice_date".to_owned(), "2026-10-20".to_owned()),
+        ("due_date".to_owned(), "2026-10-21".to_owned()),
+    ]);
+    assert!(
+        evaluate_table_validations(&lowered, &mappings, "invoices", &valid)
+            .unwrap()
+            .is_empty()
+    );
+}
+
+#[test]
+fn table_validation_converts_relation_fields_to_database_identity_values() {
+    let source = r#"
+        table departments { id: Int primary auto name: String required }
+        table machines {
+            department: Department required
+            validate { department == department: "A department is required." }
+        }
+        fn main() {}
+    "#;
+    let program = zelyra_parser::parse(&zelyra_lexer::lex(source).unwrap()).unwrap();
+    zelyra_runtime::check(&program).expect("relation field and validation are well typed");
+    let (lowered, mappings) = zelyra_ast::lower_table_validation_functions(&program);
+    let values = HashMap::from([("department".to_owned(), "1".to_owned())]);
+
+    assert!(
+        evaluate_table_validations(&lowered, &mappings, "machines", &values)
+            .unwrap()
+            .is_empty()
+    );
+    assert!(matches!(
+        runtime_value_for_type(&lowered, &Type::Named("Department".into()), "1"),
+        Ok(RuntimeValue::Int(1))
+    ));
+    assert!(runtime_value_for_type(&lowered, &Type::Named("UnknownRecord".into()), "1").is_err());
+}
+
+#[test]
+fn tables_without_invariants_do_not_require_validation_form_values() {
+    let source = "table machines { number: String required } fn main() {}";
+    let program = zelyra_parser::parse(&zelyra_lexer::lex(source).unwrap()).unwrap();
+    let (lowered, mappings) = zelyra_ast::lower_table_validation_functions(&program);
+    assert!(
+        evaluate_table_validations(&lowered, &mappings, "machines", &HashMap::new())
+            .unwrap()
+            .is_empty()
+    );
+}
+
+#[test]
 fn auto_dialog_ids_are_repeatable_and_unique_inside_collection_loops() {
     let template = r#"
 <ul>
@@ -237,6 +314,154 @@ fn form_route() -> FormRoute {
         audit_chain: false,
         layout_html: None,
     }
+}
+
+#[test]
+fn table_validation_execution_has_a_hard_step_limit() {
+    let source = r#"
+        fn expensive() -> Bool {
+            mutable i = 0
+            while i < 20000 { i = i + 1 }
+            return true
+        }
+        table invoices {
+            amount: Int required
+            validate { expensive(): "Value rejected" }
+        }
+        fn main() {}
+    "#;
+    let program = zelyra_parser::parse(&zelyra_lexer::lex(source).unwrap()).unwrap();
+    zelyra_runtime::check(&program).unwrap();
+    zelyra_runtime::check_capabilities(&program).unwrap();
+    let (lowered, mappings) = zelyra_ast::lower_table_validation_functions(&program);
+    let values = HashMap::from([("amount".to_owned(), "5".to_owned())]);
+    let error = evaluate_table_validations(&lowered, &mappings, "invoices", &values)
+        .expect_err("form validation must stop after its bounded execution budget");
+    assert!(error.contains("execution step budget exceeded"));
+}
+
+#[test]
+fn table_validation_rejects_invalid_form_before_action_execution() {
+    let source = r#"
+        table invoices {
+            invoice_date: Date required
+            due_date: Date?
+            validate {
+                match due_date {
+                    Some(due) => due >= invoice_date
+                    None => true
+                }: "Due date must not precede invoice date."
+            }
+        }
+        fn main() {}
+    "#;
+    let program = zelyra_parser::parse(&zelyra_lexer::lex(source).unwrap()).unwrap();
+    zelyra_runtime::check(&program).unwrap();
+    let (lowered, mappings) = zelyra_ast::lower_table_validation_functions(&program);
+    let table = program.tables[0].clone();
+
+    let mut route = form_route();
+    route.form.name = "InvoiceCreate".into();
+    route.form.table = Some("invoices".into());
+    route.form.fields = vec![
+        zelyra_ast::FormField {
+            name: "invoice_date".into(),
+            ty: Some(Type::Date),
+            label: Some("Invoice date".into()),
+            placeholder: None,
+            required: true,
+            min_length: None,
+            max: None,
+            min_value: None,
+            max_value: None,
+            choices: Vec::new(),
+            widget: None,
+            appearance: None,
+            readonly: false,
+            span: zelyra_ast::Span::default(),
+        },
+        zelyra_ast::FormField {
+            name: "due_date".into(),
+            ty: Some(Type::Option(Box::new(Type::Date))),
+            label: Some("Due date".into()),
+            placeholder: None,
+            required: false,
+            min_length: None,
+            max: None,
+            min_value: None,
+            max_value: None,
+            choices: Vec::new(),
+            widget: None,
+            appearance: None,
+            readonly: false,
+            span: zelyra_ast::Span::default(),
+        },
+    ];
+    route.form.actions = vec![zelyra_ast::FormAction {
+        name: "save".into(),
+        label: None,
+        icon: None,
+        confirm: None,
+        confirm_page: None,
+        success_page: None,
+        error_page: None,
+        fields: Vec::new(),
+        requires_auth: false,
+        permissions: Vec::new(),
+        statements: vec![zelyra_ast::Stmt::Expr(zelyra_ast::Expr {
+            kind: zelyra_ast::ExprKind::Sql {
+                result_type: Type::Unit,
+                query: "INSERT INTO invoices (invoice_date, due_date) VALUES (:invoice_date, :due_date)".into(),
+            },
+            span: zelyra_ast::Span::default(),
+        })],
+        success: None,
+        redirect: None,
+        span: zelyra_ast::Span::default(),
+    }];
+    route.table = Some(table);
+
+    let request = parse_request("POST /forms/CustomerCreate HTTP/1.1\r\nHost: localhost\r\nOrigin: http://localhost\r\n\r\n_zelyra_csrf=csrf-token&invoice_date=2026-10-20&due_date=2026-10-19").unwrap();
+    let response = dispatch_form_with_language(
+        &route,
+        &request,
+        &HashMap::new(),
+        None,
+        FormDispatchContext {
+            actor_user_id: None,
+            tenant_context: None,
+            language: UiLanguage::English,
+            validation_program: Some(&lowered),
+            table_validation_functions: &mappings,
+            crud_policy_functions: &[],
+            granted_permissions: Vec::new(),
+        },
+    );
+    assert_eq!(response.status, 422);
+    assert!(response
+        .body
+        .contains("Due date must not precede invoice date."));
+
+    let valid_request = parse_request("POST /forms/CustomerCreate HTTP/1.1\r\nHost: localhost\r\nOrigin: http://localhost\r\n\r\n_zelyra_csrf=csrf-token&invoice_date=2026-10-20&due_date=2026-10-21").unwrap();
+    let valid_response = dispatch_form_with_language(
+        &route,
+        &valid_request,
+        &HashMap::new(),
+        None,
+        FormDispatchContext {
+            actor_user_id: None,
+            tenant_context: None,
+            language: UiLanguage::English,
+            validation_program: Some(&lowered),
+            table_validation_functions: &mappings,
+            crud_policy_functions: &[],
+            granted_permissions: Vec::new(),
+        },
+    );
+    assert_eq!(
+        valid_response.status, 503,
+        "the valid request reaches the configured write action and requires a database"
+    );
 }
 
 #[test]
@@ -523,6 +748,7 @@ fn default_shell_covers_standalone_forms_and_tableviews_but_not_custom_pages() {
         before_content_html: None,
         after_content_html: None,
         row_actions: None,
+        policy_row_actions: None,
         filters: Vec::new(),
         searchable: false,
         sortable: false,
@@ -832,6 +1058,7 @@ fn relation_form_route() -> FormRoute {
     });
     route.table = Some(zelyra_ast::TableDef {
         name: "customers".into(),
+        validations: Vec::new(),
         tenant_scope: None,
         columns: vec![zelyra_ast::ColumnDef {
             name: "department".into(),
@@ -843,6 +1070,7 @@ fn relation_form_route() -> FormRoute {
             primary_key: false,
             auto: false,
             unique: false,
+            unique_within_tenant: false,
             default: None,
             on_delete: None,
             span: zelyra_ast::Span::default(),
@@ -890,6 +1118,7 @@ fn formats_crud_audit_changes_without_exposing_sensitive_values() {
     let mut route = form_route();
     route.table = Some(zelyra_ast::TableDef {
         name: "customers".into(),
+        validations: Vec::new(),
         tenant_scope: None,
         columns: Vec::new(),
         indexes: Vec::new(),
@@ -3088,6 +3317,7 @@ fn renders_tableview_with_escaped_values_and_pagination_state() {
         before_content_html: None,
         after_content_html: None,
         row_actions: None,
+        policy_row_actions: None,
         filters: Vec::new(),
         searchable: true,
         sortable: true,
@@ -3103,6 +3333,7 @@ fn renders_tableview_with_escaped_values_and_pagination_state() {
     let html = render_tableview(
         &tableview,
         &[vec!["1".into(), "<unsafe>".into()]],
+        &[vec![false, false]],
         TableViewRenderState {
             query_values: &query_values,
             search: "CNC machine",
@@ -3112,6 +3343,13 @@ fn renders_tableview_with_escaped_values_and_pagination_state() {
             per_page: 1,
         },
         UiLanguage::English,
+        TableViewPolicyContext {
+            program: None,
+            functions: &[],
+            granted_permissions: Vec::new(),
+            edit_permission_granted: true,
+            delete_permission_granted: true,
+        },
     );
     let html = localize_html(&html, UiLanguage::English);
     assert!(html.contains("&lt;unsafe&gt;"));
@@ -3169,6 +3407,7 @@ fn renders_tableview_row_actions_for_each_row_and_escapes_dynamic_content() {
         before_content_html: Some("<p>Before</p>".into()),
         after_content_html: Some("<p>After</p>".into()),
         row_actions: Some(("customer".into(), "<button type=\"button\" data-name=\"{customer.name}\" data-z-dialog-auto-open=\"customer-dialog\">Open</button><dialog id=\"z-dialog-auto-0000000000\" data-z-dialog data-z-dialog-auto=\"z-dialog-auto-0000000000\" aria-labelledby=\"z-dialog-auto-0000000000-title\"><h2 id=\"z-dialog-auto-0000000000-title\">Details for {customer.name}</h2></dialog>".into())),
+        policy_row_actions: None,
         filters: Vec::new(),
         searchable: false,
         sortable: false,
@@ -3182,6 +3421,7 @@ fn renders_tableview_row_actions_for_each_row_and_escapes_dynamic_content() {
             vec!["1".into(), "<North>".into()],
             vec!["2".into(), "South".into()],
         ],
+        &[vec![false, false], vec![false, false]],
         TableViewRenderState {
             query_values: &HashMap::new(),
             search: "",
@@ -3191,6 +3431,13 @@ fn renders_tableview_row_actions_for_each_row_and_escapes_dynamic_content() {
             per_page: 25,
         },
         UiLanguage::English,
+        TableViewPolicyContext {
+            program: None,
+            functions: &[],
+            granted_permissions: Vec::new(),
+            edit_permission_granted: true,
+            delete_permission_granted: true,
+        },
     );
     assert!(html.contains("<p>Before</p>"));
     assert!(html.contains("<button type=\"button\" data-name=\"&lt;North&gt;\" data-z-dialog-auto-open=\"customer-dialog-r0\">Open</button>"));
@@ -3221,6 +3468,7 @@ fn renders_hidden_tableview_row_fields_as_escaped_column_supporting_content() {
         before_content_html: None,
         after_content_html: None,
         row_actions: None,
+        policy_row_actions: None,
         filters: Vec::new(),
         searchable: false,
         sortable: false,
@@ -3238,6 +3486,7 @@ fn renders_hidden_tableview_row_fields_as_escaped_column_supporting_content() {
             vec!["SKU-7".into(), "<Customer 18>".into()],
             vec!["SKU-8".into(), "Customer 19".into()],
         ],
+        &[vec![false, false], vec![false, false]],
         TableViewRenderState {
             query_values: &HashMap::new(),
             search: "",
@@ -3247,6 +3496,13 @@ fn renders_hidden_tableview_row_fields_as_escaped_column_supporting_content() {
             per_page: 25,
         },
         UiLanguage::English,
+        TableViewPolicyContext {
+            program: None,
+            functions: &[],
+            granted_permissions: Vec::new(),
+            edit_permission_granted: true,
+            delete_permission_granted: true,
+        },
     );
     assert!(html.contains("<td>SKU-7<small>Customer: &lt;Customer 18&gt;</small><button"));
     assert!(!html.contains("<td><Customer 18>"));
@@ -3272,6 +3528,7 @@ fn renders_typed_tableview_filters_and_preserves_state() {
         before_content_html: None,
         after_content_html: None,
         row_actions: None,
+        policy_row_actions: None,
         filters: vec![TableViewFilter {
             name: "orders".into(),
             kind: TableViewFilterKind::Numeric,
@@ -3289,6 +3546,7 @@ fn renders_typed_tableview_filters_and_preserves_state() {
     let html = render_tableview(
         &tableview,
         &[vec!["1".into(), "3".into()]],
+        &[vec![false, false]],
         TableViewRenderState {
             query_values: &query_values,
             search: "",
@@ -3298,6 +3556,13 @@ fn renders_typed_tableview_filters_and_preserves_state() {
             per_page: 25,
         },
         UiLanguage::English,
+        TableViewPolicyContext {
+            program: None,
+            functions: &[],
+            granted_permissions: Vec::new(),
+            edit_permission_granted: true,
+            delete_permission_granted: true,
+        },
     );
     let html = localize_html(&html, UiLanguage::English);
     assert!(html.contains(
@@ -4946,6 +5211,9 @@ fn execute_form_action_rejects_postgres_chained_audit() {
         actor_user_id: Some(1),
         expected_snapshot: None,
         tenant_context: None,
+        validation_program: None,
+        crud_policy_functions: &[],
+        granted_permissions: &[],
     };
     let err = execute_form_action(
         &form,
@@ -4959,4 +5227,126 @@ fn execute_form_action_rejects_postgres_chained_audit() {
     assert!(err
         .unwrap_err()
         .contains("PostgreSQL does not support chained audit tables"));
+}
+
+#[test]
+fn crud_row_policy_evaluation_distinguishes_guard_and_conditional_permission() {
+    let source = r#"
+        table invoices {
+            id: Int primary auto
+            status: String(20) required
+            locked: Bool required
+        }
+        crud Invoice -> invoices {
+            permits edit "invoices.manage" when status == "draft"
+            guard edit when locked == true { error: "Locked invoices cannot be edited." }
+            guard delete when locked == true { error: "Locked invoices cannot be deleted." }
+        }
+    "#;
+    let program = zelyra_parser::parse(&zelyra_lexer::lex(source).unwrap()).unwrap();
+    let (functions, mappings) = zelyra_ast::build_crud_policy_functions(&program);
+    let mut executable = program.clone();
+    executable.functions.extend(functions);
+    let query_result = |status: &str, locked: bool| zelyra_database::QueryResult {
+        columns: vec!["id".into(), "status".into(), "locked".into()],
+        rows: vec![vec!["7".into(), status.into(), locked.to_string()]],
+        nulls: vec![vec![false; 3]],
+        column_types: Vec::new(),
+    };
+
+    let allowed = evaluate_crud_operation_policies(
+        &executable,
+        &mappings,
+        0,
+        zelyra_ast::CrudRecordAction::Edit,
+        &query_result("draft", false),
+    )
+    .unwrap();
+    assert!(check_crud_policy_result(allowed, &["invoices.manage".into()]).is_ok());
+
+    let denied_permission = evaluate_crud_operation_policies(
+        &executable,
+        &mappings,
+        0,
+        zelyra_ast::CrudRecordAction::Edit,
+        &query_result("draft", false),
+    )
+    .unwrap();
+    assert!(check_crud_policy_result(denied_permission, &[])
+        .unwrap_err()
+        .contains("invoices.manage"));
+
+    let guarded = evaluate_crud_operation_policies(
+        &executable,
+        &mappings,
+        0,
+        zelyra_ast::CrudRecordAction::Edit,
+        &query_result("draft", true),
+    )
+    .unwrap();
+    assert!(
+        check_crud_policy_result(guarded, &["invoices.manage".into()])
+            .unwrap_err()
+            .contains("Locked invoices cannot be edited.")
+    );
+
+    let tableview = TableViewRoute {
+        path: "/views/invoice-rows".into(),
+        title: "Invoice rows".into(),
+        layout_html: None,
+        source: "SELECT id, status, locked FROM invoices".into(),
+        columns: vec!["status".into()],
+        row_fields: vec!["id".into(), "locked".into()],
+        column_content: Vec::new(),
+        before_content_html: None,
+        after_content_html: None,
+        row_actions: None,
+        policy_row_actions: Some(TableViewPolicyRowActions {
+            crud_index: 0,
+            item: "invoice".into(),
+            edit_html: Some("<a href=\"/invoices/{invoice.id}/edit\">Edit</a>".into()),
+            delete_html: Some("<button type=\"button\">Delete</button>".into()),
+            requires_auth: false,
+            edit_permissions: Vec::new(),
+            delete_permissions: Vec::new(),
+        }),
+        filters: Vec::new(),
+        searchable: false,
+        sortable: false,
+        page_size: Some(10),
+        requires_auth: false,
+        permissions: Vec::new(),
+    };
+    let render_policy_row = |status: &str, locked: bool| {
+        render_tableview(
+            &tableview,
+            &[vec![status.into(), "7".into(), locked.to_string()]],
+            &[vec![false; 3]],
+            TableViewRenderState {
+                query_values: &HashMap::new(),
+                search: "",
+                sort: "status",
+                order: "ASC",
+                page: 1,
+                per_page: 10,
+            },
+            UiLanguage::English,
+            TableViewPolicyContext {
+                program: Some(&executable),
+                functions: &mappings,
+                granted_permissions: vec!["invoices.manage".into()],
+                edit_permission_granted: true,
+                delete_permission_granted: true,
+            },
+        )
+    };
+    let editable_html = render_policy_row("draft", false);
+    assert!(editable_html.contains("/invoices/7/edit"));
+    assert!(editable_html.contains(">Delete</button>"));
+    let non_draft_html = render_policy_row("sent", false);
+    assert!(!non_draft_html.contains("/invoices/7/edit"));
+    assert!(non_draft_html.contains(">Delete</button>"));
+    let locked_html = render_policy_row("draft", true);
+    assert!(!locked_html.contains("/invoices/7/edit"));
+    assert!(!locked_html.contains(">Delete</button>"));
 }

@@ -2320,7 +2320,10 @@ dependencies = [
  "zelyra-ast",
  "zelyra-database",
  "zelyra-forms",
+ "zelyra-lexer",
  "zelyra-mail",
+ "zelyra-parser",
+ "zelyra-runtime",
  "zeroize",
 ]
 

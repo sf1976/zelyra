@@ -21,6 +21,25 @@ anderen Mandanten referenzieren. Bei solchen Relationen ist `RESTRICT` der
 explizite Standard; `on_delete set_null` wird abgewiesen, weil dadurch auch der
 erforderliche Tenant-Schlüssel null würde.
 
+Auf einer mit `scoped by` deklarierten Tabelle erzeugt `unique within tenant`
+einen zusammengesetzten Unique-Index aus Scope-Spalte und ausgewähltem Feld:
+
+```zelyra
+customer_number: String(50) required unique within tenant
+```
+
+Für eine Tabelle `customers` mit Scope `tenant_id` entsteht
+`UNIQUE (tenant_id, customer_number)`: verschiedene Mandanten dürfen dieselbe
+Nummer verwenden, Duplikate innerhalb eines Mandanten weist die Datenbank
+zurück. Das einfache `unique` bleibt global. Beide Modifier dürfen nicht
+kombiniert werden. `unique within tenant` ist bei unscoped Tabellen und auf
+der Scope-Spalte selbst ungültig. Bei bestehenden Tabellen verlangt die
+Indexänderung eine Prüfung und plant einen Duplikat-Preflight; vorhandene
+Duplikate werden weder still genehmigt noch automatisch repariert. Für optionale
+Indexwerte gilt das normale NULL-Verhalten der Datenbank. Die neue Kurzsyntax
+wird gegen die MariaDB-Integrationsmatrix geprüft; daraus folgt keine Zusage
+zur migrationsübergreifenden Backendparität.
+
 Die Feldnamen `type` und `version` sind in Feldpositionen bereits
 kontextbezogen zulässig; `order`, `group` und `status` sind reguläre
 Bezeichner. Ein abweichender physischer SQL-Spaltenname wird mit der
