@@ -69,7 +69,7 @@ oder Cargo installiert werden. Das gewählte Archiv wird über HTTPS geladen und
 per SHA-256 geprüft:
 
 ~~~bash
-./install.sh --release v1.1.0
+./install.sh --release v1.0.5
 ~~~
 
 Unter Windows steht `install.ps1` für PowerShell und `install.cmd` für die
@@ -85,7 +85,7 @@ zelyra --version
 Das Release-Archiv unter Windows:
 
 ~~~powershell
-.\install.ps1 -Release v1.1.0
+.\install.ps1 -Release v1.0.5
 ~~~
 
 Danach:
@@ -231,58 +231,8 @@ cd maschinenverwaltung
 
 Dadurch entstehen `main.zyl`, `.env.example`, `Dockerfile` und `docker-compose.mariadb.yml` sowie direkt eine geschützte `.env` mit sicheren Zufallspasswörtern.
 
-Ein mit `zelyra init` ohne `--mariadb` angelegtes Minimalprojekt braucht
-`zelyra setup` nicht: `zelyra run main.zyl` genügt. Der Setup-Befehl legt die
-MariaDB-Umgebung für ein entsprechend konfiguriertes Projekt an. Verzeichnisse
-werden relativ zum aktuellen Ordner angegeben, zum Beispiel
-`zelyra setup ./maschinenverwaltung`. Ein Pfad wie `/maschinenverwaltung` ist
-auf Linux ein absoluter Pfad ab dem Dateisystemstamm. Existiert stattdessen
-`./maschinenverwaltung`, weist die CLI auf diesen wahrscheinlichen Pfad hin.
-
 **Automatische Portvergabe bei Konflikten:**
 Sind die Standardports `3000` (Web) oder `3306` (MariaDB) auf dem Rechner belegt, ermitteln `zelyra new`, `zelyra init` und `zelyra setup` automatisch den nächsten freien Host-Port und tragen ihn in die neue `.env` ein. Mit den optionalen Flags `--web-port <p>`, `--host-port <p>` und `--db-host-port <p>` können Ports verbindlich vorgegeben werden.
-
-### Standardordner ausdrücklich aktivieren
-
-Neue Projekte können das schrittweise eingeführte Standardlayout aktivieren:
-
-~~~bash
-zelyra new rechnungsbuero --layout standard
-cd rechnungsbuero
-zelyra check main.zyl
-zelyra run main.zyl
-~~~
-
-Dieses Minimalprojekt erstellt `routes/`, `domain/`, `schema/`, `public/` und
-`assets/` und setzt in `[project]` der `zelyra.toml` `layout = "standard"`.
-`check`, `run` und `serve` prüfen, dass jeder dieser Stammordner ein echtes
-Verzeichnis innerhalb des Projekts ist. Projekte ohne diese Einstellung
-bleiben im bisherigen Modus. MariaDB-Vorlagen und weitergehende
-Callgraph-Architekturregeln werden noch entwickelt. Die read-only Vorschau
-`zelyra migrate-layout --check main.zyl [--format human|json]` ordnet geparste
-Quelldateien vorläufig den Bereichen zu; gemischte, unbekannte oder fehlerhafte
-Quellen erfordern manuelle Prüfung. Sie verschiebt keine Dateien. Innerhalb
-dieses Profils akzeptiert die bestehende
-Importsyntax auch Projektnamensräume, die ohne `../../` auf Zelyra-Dateien
-zeigen:
-
-~~~zelyra
-import "schema::tables" as schema
-import "domain::invoices::actions" as invoice_actions
-import "routes::web" as web
-~~~
-
-Zulässige Namensraumwurzeln sind `schema`, `domain` und `routes`. Jedes Segment
-muss ein einfacher Modulname sein; der Loader hält die Auflösung innerhalb des
-Projektordners. Namespace-Imports benötigen das aktivierte Profil. Paketmodule
-verwenden weiterhin projektbezogene Datei- oder `pkg:`-Importe. Ausdrückliche
-Dateiimporte bleiben möglich. Die separate Syntax `use schema::...` gehört
-nicht zur Sprache. Mit `strict_architecture = true` prüft `zelyra check`, ob
-importierte Module unter den passenden `schema/`, `domain/` und `routes/`
-liegen und ob ihre Deklarationstypen zum jeweiligen Bereich passen. Die
-Zuordnung ist eine Strukturprüfung; sie beweist keine vollständige Trennung
-von Netzwerk- und Datenbankzugriffen. Die Option wirkt nur zusammen mit `layout = "standard"`. Legacyprojekte ohne
-diese Einstellung bleiben unverändert.
 
 ### ✅ Zelyra-Setup-Assistent (Konsole und Browser)
 
@@ -304,6 +254,35 @@ zelyra setup --host-port 18080 --db-host-port 3308
 - `zelyra setup --database`: Startet die Docker-Compose-Dienste (MariaDB und Zelyra-App). Erkennt automatisch `docker compose` oder den Legacy-Befehl `docker-compose`.
 - `zelyra setup --schema`: Startet die Umgebung und wendet das Schema aus `main.zyl` sicher an.
 - `zelyra setup --all`: Führt alle Schritte vollautomatisch in einem Zug aus.
+
+Wähle den Projekttyp vor dem Setup:
+
+- Ein minimales Projekt ohne Datenbank braucht kein `setup`:
+
+  ~~~bash
+  zelyra init ./test_a
+  cd ./test_a
+  zelyra check main.zyl
+  zelyra run main.zyl
+  ~~~
+
+- Für ein neues MariaDB-Projekt erzeugt `zelyra new test_a --mariadb` die
+  benötigten Compose- und Konfigurationsdateien. Danach kannst du mit
+  `cd test_a && zelyra setup --all` Datenbank und Schema einrichten. Alternativ
+  unterstützt `zelyra init ./test_a --mariadb` die MariaDB-Option beim Init.
+
+Projektpfade sind relativ oder absolut, nicht austauschbar:
+
+~~~bash
+zelyra setup ./test_a
+zelyra setup /test_a
+~~~
+
+Der erste Aufruf sucht ein Unterverzeichnis des aktuellen Ordners, der zweite
+das Verzeichnis `/test_a` im Wurzelverzeichnis. Existiert
+der angegebene Pfad nicht, meldet Zelyra `E-SETUP-001`; wenn ein gleichnamiges
+relatives Verzeichnis existiert, schlägt die Meldung den passenden relativen
+Aufruf vor.
 
 #### Setup im lokalen Browser (`zelyra setup --web`)
 
@@ -336,6 +315,27 @@ zelyra new maschinenverwaltung --template mariadb-crud
 cd maschinenverwaltung
 zelyra setup --all
 ~~~
+
+### Prüfen, ausführen, formatieren und verifizieren
+
+Das dokumentierte, benutzerseitige Kommandozeilenprogramm heißt `zelyra`.
+Mit `zelyra check <file.zyl>` prüfst du Syntax, Typen, Verträge und
+Capabilities, bevor du ein Programm mit `zelyra run <file.zyl>` ausführst.
+`zelyra fmt <file.zyl>` formatiert den Quelltext; `--check` prüft die
+Formatierung, ohne die Datei zu ändern. `zelyra verify <file.zyl>` führt die
+unterstützten Vertrags- und Invariantenprüfungen aus.
+
+Die aktuelle CLI-Referenz führt keinen Unterbefehl `zelyra test` auf.
+Projektbezogene Testroutinen kannst du in einer ausführbaren Quelldatei
+ablegen und mit `zelyra run` starten; assertionsbasierte Prüfungen beschreibt
+Kapitel 19. Ebenso dokumentiert die Referenz kein separates Programm
+`zelyrac build`: Der Compiler wird über `zelyra check` und `zelyra run`
+aufgerufen.
+
+LSP steht für Language Server Protocol und bezeichnet den Standard für die
+Kommunikation zwischen Editor und Sprachserver. Der dokumentierte Einstieg in
+den Editor ist `zelyra editor`, das Studio lokal startet. Einen separaten
+Unterbefehl `zelyra lsp` führt die aktuelle CLI-Referenz nicht auf.
 
 ## 5. Variablen, Typen und Funktionen
 
@@ -372,72 +372,14 @@ fn available_capacity(total: Int, reserved: Int) -> Int {
 }
 ~~~
 
-Lambdas können als Funktionswerte gespeichert, zurückgegeben und an
-Funktionen wie `map`, `filter`, `find` und `reduce` übergeben werden. Bei einer
-typisierten Variable liefert der Funktionstyp den erwarteten Parameter- und
-Rückgabetyp für die Lambda:
-
-~~~zelyra
-fn make_adder(base: Int) -> Function<(Int) -> Int> {
-    mutable offset = base
-    callback: Function<(Int) -> Int> = |value| value + offset
-    offset = offset + 100
-    return callback
-}
-
-fn main() {
-    add = make_adder(20)
-    print(add(2))
-}
-~~~
-
-Die Ausgabe ist `22`: Die Closure behält den Wert von `offset` beim Erzeugen
-der Lambda als Snapshot. Für Bytecode gelten zusätzlich dessen dokumentierte
-Untermenge und die ausdrückliche Backend-Auswahl.
-
-Effekte einer gespeicherten Lambda müssen auch im Funktionswerttyp stehen.
-Der Typ `Function<(Int) -> Timestamp> uses {Clock}` darf `now()` aufrufen;
-ohne `uses {Clock}` weist der Typprüfer die Lambda mit `E-TYPE-FUNCTION-001`
-zurück. Dieselbe Prüfung gilt für Aufrufe anderer Funktionen mit deklarierten
-Capabilities. So kann eine Closure einen Effekt nicht hinter einem
-effektfreien Callback-Typ verbergen.
-
-Nominale IDs verhindern Verwechslungen:
+Typnamen dokumentieren die fachliche Bedeutung von IDs:
 
 ~~~zelyra
 type MachineId = Id
 type OrderId = Id
 ~~~
 
-Eine `OrderId` ist dadurch nicht automatisch eine `MachineId`, auch wenn beide
-intern ähnlich aussehen. Fachlich falsch bleibt fachlich falsch.
-
-Bedingungen mit flachen `else if`-Kaskaden (Neu in 1.0.3):
-
-~~~zelyra
-fn evaluate_capacity(cap: Int) -> String {
-    if cap > 100 {
-        return "HIGH"
-    } else if cap > 50 {
-        return "MEDIUM"
-    } else {
-        return "LOW"
-    }
-}
-~~~
-
-Pipeline-Operator `|>` (Neu in 1.0.3):
-
-Zelyra unterstützt den Forward-Pipeline-Operator `|>`. Ausdrücke fließen von links nach rechts durch Transformationsketten:
-
-~~~zelyra
-fn format_title(input: String) -> String {
-    return input |> text_trim() |> text_to_upper()
-}
-~~~
-
-Erweiterte Standardbibliothek (Neu in 1.0.3):
-Zelyra 1.0.3 ergänzt Builtin-Funktionen für Mathematik (`abs`, `min`, `max`, `clamp`, `sqrt`, `round`), Strings (`text_split`, `text_replace`, `text_pad_left`), Arrays (`sort`, `unique`, `chunk`, `zip`), Mengen (`set_union`), Maps (`has_key`, `get_or`, `entries`), Datumsarithmetik (`date_add_days`), Hashing und Web-Encodings (`hash_sha256`, `base64_encode`, `url_encode`, `uuid_v4`) sowie Pfade (`path_join`, `file_exists`). Die vollständigen Signaturen und Laufzeitgrenzen stehen in [Anhang D: Standardbibliothek](anhaenge.md#anhang-d-die-standardbibliothek-im-überblick-zelyra-103).
+Diese Aliase besitzen keine eigene Runtimeidentität. Prüfe ID-Zuordnungen und Mandantengrenzen in der Geschäftslogik; die Bezeichnung allein beweist keinen Zugriffsschutz.
 
 ## 6. Option, Result und Pattern Matching
 
@@ -459,16 +401,6 @@ match email {
 Pattern Matching muss vollständig sein. Sonst erinnert dich der Compiler an
 den Fall, den der Freitagabend-Deploy vermutlich gefunden hätte.
 
-`match` ist auch ein Ausdruck. Alle Zweige müssen einen kompatiblen Werttyp
-liefern; Pattern-Bindings gelten nur innerhalb ihres Zweigs:
-
-~~~zelyra
-status = match load_order(order_id) {
-    Ok(order) => "Bestellung " + json_encode(order.id)
-    Err(_) => "Bestellung nicht gefunden"
-}
-~~~
-
 Fehler werden als Teil der Funktionssignatur sichtbar. Der aktuelle Sprachkern
 verwendet dafür `Result<T, E>` mit `Ok` oder `Err`:
 
@@ -480,13 +412,6 @@ fn load_number(found: Bool) -> Result<Int, String> {
     return Err("nicht gefunden")
 }
 ~~~
-
-Option- und Result-Hilfsfunktionen (Neu in 1.0.3):
-
-Ergebnisse und Optionen lassen sich ohne zwingendes `match` auf ihren Zustand prüfen oder sicher entpacken:
-- `is_ok(result)` / `is_err(result)`: Liefert `true`, wenn die Operation erfolgreich bzw. fehlgeschlagen ist.
-- `is_some(option)` / `is_none(option)`: Prüft auf Anwesenheit eines Wertes.
-- `unwrap_or(option, default)`: Entpackt `Some(value)` oder gibt den Standardwert `default` zurück.
 
 ## 7. MariaDB und Tabellen
 
@@ -516,76 +441,6 @@ table machines {
 
 Zelyra erkennt die Beziehung zwischen Maschine und Abteilung. Daraus können
 Foreign Keys, Formulare und Auswahlfelder entstehen.
-
-Im Arbeitszweig für Version 1.2.19 können scoped Tabellen Werte deklarieren,
-die je Mandant eindeutig sind:
-
-~~~zelyra
-type TenantId = Id
-table customers scoped by tenant_id: TenantId {
-    id: Id primary auto
-    tenant_id: TenantId required
-    customer_number: String(50) required unique within tenant
-}
-~~~
-
-Daraus entsteht ein zusammengesetzter Unique-Key
-`(tenant_id, customer_number)`. Einfaches `unique` bleibt global. Der neue
-Modifier ist noch nicht in einem Release veröffentlicht; Schema-Pläne für
-bestehende Tabellen verlangen Prüfung und prüfen vorhandene Duplikate vor dem
-Anlegen des Index.
-
-Der Entwicklungszweig für 1.2.20 ergänzt derzeit typgeprüfte Regeln über
-Tabellenfelder:
-
-~~~zelyra
-table invoices {
-    invoice_date: Date required
-    due_date: Date?
-    validate {
-        match due_date {
-            Some(due) => due >= invoice_date
-            None => true
-        }: "Das Fälligkeitsdatum darf nicht vor dem Rechnungsdatum liegen."
-    }
-}
-~~~
-
-Deklarative Formular- und CRUD-Schreibaktionen prüfen diese Regel vor dem
-Schreiben. Beliebige API-Handler sind noch nicht an ein Tabellenschreibziel
-gebunden und werden von dieser Regel derzeit nicht automatisch abgedeckt.
-Die Funktion ist noch nicht veröffentlicht. Details und Grenzen stehen in
-[`table-invariants.de.md`](../../table-invariants.de.md).
-
-Das Löschverhalten eines Fremdschlüssels kann am Relationsfeld festgelegt
-werden:
-
-~~~zelyra
-table invoices {
-    customer: Customer required on_delete cascade
-    template: Template on_delete set_null
-}
-~~~
-
-Unterstützte Aktionen sind `no_action`, `restrict`, `cascade`, `set_null` und
-`set_default`. `set_null` erfordert eine optionale Relation; `set_default`
-erfordert einen Spalten-Default und wird für MariaDB abgelehnt, weil dieses
-Backend die SQL-Aktion nicht unterstützt. Die Aktion fließt in erzeugtes DDL,
-Datenbankinspektion und Schema-Diff-Planung ein. Änderungen an der Aktion
-benötigen wie andere Fremdschlüsseländerungen Prüfung und Vorabkontrolle.
-
-Wenn der physische Fremdschlüsselname nicht dem Standard `<feld>_id`
-entspricht, kann er ausdrücklich angegeben werden:
-
-~~~zelyra
-table vacation_requests {
-    approved_by: User storage_name "approved_by" on_delete set_null
-}
-~~~
-
-`storage_name` wird als portable Datenbankspalte geprüft. Relationsfeld,
-Fremdschlüssel und SQL verwenden diesen Namen; Typprüfung und Löschregel
-bleiben erhalten.
 
 Typische Abbildung:
 
@@ -643,45 +498,6 @@ Container bleibt MariaDB auf `3306`. Von einem anderen Compose-Service ist der
 Host der Servicename `mariadb` und der Port weiterhin `3306`; vom Host ist es
 `127.0.0.1` plus der veröffentlichte Port.
 
-### Eine übersichtliche Datenbankstruktur planen
-
-Ordne Tabellen nach fachlichen Bereichen und halte ihre Zelyra-Deklarationen
-bei den Modulen, die diese Daten fachlich besitzen. Beispielsweise können
-Kunden, Aufträge und Lager jeweils eigene Module bilden. Ein Modul darf die
-Tabellen anderer Bereiche verwenden, sollte diese aber nicht nebenbei neu
-deklarieren. So bleiben Tabellen, SQL und Zuständigkeit im Quellcode auffindbar.
-
-Verwende eine einheitliche Sprache und Benennung, aussagekräftige Tabellen- und
-Spaltennamen, explizite Primär- und Fremdschlüssel sowie nur tatsächlich
-benötigte Indizes. Vermeide technische Präfixe wie `tbl_`, Sammel-Tabellen für
-verschiedene Fachbereiche und eine Aufteilung allein nach Webseiten oder
-Formularen. Ergänze Zeitstempel oder Statusfelder nur mit klarer fachlicher
-Bedeutung. Kleine Lookup-Tabellen und Zuordnungstabellen sind sinnvoll, wenn
-die Datenbeziehung sie erfordert.
-
-Nutze zunächst eine Datenbankverbindung für die Anwendung und Module als
-Ordnung im Zelyra-Quellcode. Datenbankschemas oder getrennte Datenbanken pro
-Bereich sind eine bewusste Betriebsentscheidung, keine automatische Folge der
-Modulaufteilung; ihre Bedeutung unterscheidet sich außerdem zwischen
-Datenbank-Backends. Vorhandene Tabellen müssen nicht umbenannt werden, um sie
-in Zelyra zu verwenden.
-
-`zelyra db map src/main.zyl` bietet eine schreibgeschützte Übersicht der nach
-Quellmodul gruppierten Tabellendeklarationen, erkannten Fremdschlüssel,
-deklarierten, aber in der Live-Datenbank fehlenden Tabellen und Live-Tabellen
-ohne Quelldeklaration. Bei zugeordneten Tabellen stellt er deklarierte und live
-gefundene Spalten und Fremdschlüssel gegenüber. `--format=json` liefert
-deterministische strukturierte Ausgabe. Der Befehl zeigt niemals die
-Verbindungs-URL und ändert das Schema nicht. Eine Modulzuordnung ist ein
-organisatorischer Hinweis, keine Datenbankberechtigung und keine erzwungene
-Eigentumsregel. `db inspect` liest; `db plan` zeigt Unterschiede; Änderungen
-erfolgen weiterhin nur über den ausdrücklich geprüften `db apply`-Ablauf.
-
-~~~bash
-zelyra db map src/main.zyl
-zelyra db map src/main.zyl --format=json
-~~~
-
 ### Das Adressschema kontrollieren
 
 Für das Beispiel erzeugt `zelyra db create src/main.zyl` derzeit sinngemäß:
@@ -731,9 +547,6 @@ zelyra db inspect src/main.zyl
 Die native SQL-Runtime wird weiterhin hauptsächlich mit MariaDB eingesetzt.
 Ein vorhandenes Schema-Backend ist daher nicht automatisch ein Beleg dafür,
 dass jede Runtime-Abfrage mit jedem Backend gleich funktioniert.
-Die versionierten Server und konkret geprüften Abläufe stehen in der
-[Datenbankmatrix](../../database-support.de.md); sie unterscheidet bewusst
-zwischen getestetem Teilausschnitt und vollständiger Laufzeitparität.
 
 ## 8. Schema prüfen und anwenden
 
@@ -752,30 +565,6 @@ Die Verbindung kommt ausschließlich aus der Prozessumgebung:
 ~~~bash
 export DATABASE_URL='mariadb://zelyra:HIER_LOKALES_PASSWORT_EINTRAGEN@127.0.0.1:3307/adressverwaltung'
 ~~~
-
-Der MariaDB-Client verwendet ein Verbindungszeitlimit und native
-Runtime-Abfragen ein MariaDB-Statement-Zeitlimit. Beide Werte können über die
-Prozessumgebung angepasst werden:
-
-~~~bash
-export ZELYRA_DB_CONNECT_TIMEOUT_SECS=10
-export ZELYRA_DB_QUERY_TIMEOUT_SECS=30
-~~~
-
-Der Standard für den Verbindungsaufbau beträgt 10 Sekunden; erlaubt sind
-Ganzzahlen von 1 bis 300. Das Statement-Limit beträgt standardmäßig 30 Sekunden
-und akzeptiert 1 bis 3600. Ungültige Werte werden abgelehnt, ohne den Eingabewert
-in die Diagnose aufzunehmen. Das Statement-Limit wird von MariaDB selbst
-durchgesetzt; es ist kein allgemeines Zeitlimit für das Übertragen sehr großer
-Ergebnisdaten. Schemaänderungen durch `db apply` erhalten dieses
-Statement-Limit derzeit nicht, damit ein abgebrochener DDL-Befehl nicht als
-sicher zurückgerollt dargestellt wird.
-
-Der CLI-Aufruf setzt außerdem `--skip-reconnect`: Der MariaDB-Client darf eine
-abgebrochene Verbindung nicht unbemerkt neu herstellen und ein Statement
-automatisch wiederholen. Zelyra implementiert hier keine automatischen Retries
-und keinen Connection-Pool; jede DB-Operation startet weiterhin einen
-MariaDB-Client-Prozess.
 
 ⚠️ Zelyra lädt `.env` derzeit **nicht automatisch**. Eine `.env` ist eine
 sichere lokale Ablage, aber die Variablen müssen vor dem CLI-Aufruf in die
@@ -820,56 +609,6 @@ zelyra db apply src/main.zyl --allow-destructive
 
 Dieses Flag bedeutet nicht „wird schon gutgehen“. Es bedeutet „ich habe den
 Plan gelesen, ein Backup und einen vernünftigen Puls“.
-
-MariaDB speichert jeden `db apply`-Plan und jeden abgeschlossenen DDL-Schritt
-in `_zelyra_schema_history`. Prüfe den Verlauf nach einem Deployment oder
-Abbruch:
-
-~~~bash
-zelyra db history src/main.zyl
-zelyra db history src/main.zyl --format=json
-~~~
-
-Wenn ein Prozess zwischen DDL-Schritten stoppt, prüfe das Live-Schema, erstelle
-einen neuen Plan, kontrolliere ihn und wende ihn an. Der Verlauf zeigt den
-letzten Prüfpunkt; bei einem Abbruch während eines SQL-Befehls kann er nicht
-feststellen, ob das Schema teilweise geändert wurde. Die reservierte
-Verlaufstabelle erscheint nicht in der normalen Schemaansicht.
-
-### Direkte Datenbankabfragen und Datenbankkonsole
-
-`zelyra db console` startet den passenden MariaDB-/MySQL- oder PostgreSQL-
-Client auf dem Host. Zelyra löst die Verbindung über
-`ZELYRA_DATABASE_<NAME>_URL`, danach über `DATABASE_URL`, jeweils zuerst aus
-der Prozessumgebung und dann aus der Projekt-`.env`. Passwörter werden über
-`MYSQL_PWD` beziehungsweise `PGPASSWORD` an den Client übergeben und nicht als
-Argument angezeigt. Das Clientprogramm muss lokal installiert sein.
-
-~~~bash
-zelyra db console src/main.zyl
-~~~
-
-Für einzelne Abfragen gibt `db query` standardmäßig eine schreibgeschützte
-Datenbanktransaktion vor. `--allow-mutation` ist eine ausdrückliche Freigabe;
-die einzelne Abfrage wird dann transaktional ausgeführt und festgeschrieben.
-Mehrere SQL-Anweisungen in einem Aufruf sind nicht erlaubt.
-
-~~~bash
-zelyra db query src/main.zyl "SELECT id, email FROM customers" --format table
-zelyra db query src/main.zyl "SELECT count(*) AS total FROM customers" --format json
-zelyra db query src/main.zyl "SELECT id, name FROM customers" --format csv --limit 100
-zelyra db query src/main.zyl "SELECT id FROM invoices WHERE tenant_id = :tenant_id" --tenant 42
-~~~
-
-`--format` unterstützt `table`, `json` und RFC-4180-CSV. `--limit` begrenzt
-die ausgegebenen Zeilen durch eine umschließende Abfrage. `--tenant` bindet
-nur den ausdrücklich geschriebenen Parameter `:tenant_id`; die Option ergänzt
-keine Mandantenbedingung und macht beliebiges SQL nicht automatisch
-mandantensicher. Für Schreibzugriffe muss `--allow-mutation` bewusst ergänzt
-werden. Damit sind transaktionale `INSERT`-, `UPDATE`-, `DELETE`- und
-`REPLACE`-Anweisungen möglich. DDL und administrative SQL-Befehle werden hier
-abgewiesen, weil Datenbank-DDL je nach Engine implizit Transaktionen festschreibt;
-verwende dafür `db apply` oder die interaktive Clientkonsole.
 
 `db setup` und sein Alias `db bootstrap` versuchen bei MariaDB zuerst die
 Datenbank anzulegen und wenden anschließend das generierte Schema an. Dafür
@@ -1049,7 +788,7 @@ Dann beispielsweise:
 http://127.0.0.1:3000/machines/Presse-7
 ~~~
 
-URL-kodierte Pfadparameter werden segmentweise UTF-8-dekodiert; ein `+` bleibt im Pfad ein Pluszeichen. Ungültige Kodierungen sowie kodierte Schrägstriche, Backslashes, NUL-Bytes und dekodierte `.`-/`..`-Segmente werden abgewiesen, damit die Dekodierung keine neue Pfadstruktur oder Traversal erzeugt. Pfadwerte werden beim Rendern standardmäßig HTML-escaped. Der Web Core umfasst GET-Routen, Pfadparameter, Query-String-Behandlung, HTTP-Parsing und HTML-Antworten.
+Pfadwerte werden standardmäßig HTML-escaped. Der derzeitige Web Core umfasst GET-Routen, Pfadparameter, Query-String-Behandlung, HTTP-Parsing und HTML-Antworten.
 
 ### Typisierte Datenbindung und Collections in Views
 
@@ -1166,13 +905,6 @@ page "/dashboard" {
 
 *Hinweis:* Verschachtelte Komponenten-Slots innerhalb einer Komponentenverwendung benötigen nicht fälschlich ein übergeordnetes Seiten-`view:`-Layout.
 
-**Zelyra UI (eingeführt in 1.0.6, stabil in 1.0.7):** Die mitgelieferte Bibliothek wird explizit mit
-`import "zelyra/ui" as ui` aktiviert. Sie stellt ein responsives Geschäftslayout,
-geprüfte Komponentenvarianten, Formular- und Tabellenbausteine sowie Druck-,
-Diagramm- und E-Mail-Client-Aktionen bereit. Sie gehört zum stabilen Release.
-Die vollständige Eigenschafts-/Slotreferenz und ihre Grenzen stehen in der
-[Zelyra-UI-Dokumentation](../../ui.de.md).
-
 ## 11. Formulare
 
 ✅ Formulare können Regeln aus Tabellen übernehmen:
@@ -1195,26 +927,11 @@ form ContactForm {
     field email: Email {
         label: "E-Mail"
         required
-        min_length: 5
         max: 255
         widget: email
     }
-    field status: String {
-        required
-        choices: ["draft", "issued", "paid"]
-    }
-    field total: Decimal {
-        min_value: "0.01"
-        max_value: "9999.99"
-    }
 }
 ~~~
-
-`choices` rendert eine feste Auswahlliste und wird bei POST zusätzlich
-serverseitig geprüft. `min_length`/`max` begrenzen Textlängen;
-`min_value`/`max_value` begrenzen Zahlen inklusive der angegebenen Grenze.
-Decimal-Grenzen werden exakt geprüft. Die HTML-Eingabehilfe ersetzt keine
-Servervalidierung.
 
 Werte ohne Server prüfen:
 
@@ -1247,9 +964,7 @@ form CustomerCreate -> customers {
 
 Formularaktionen können eine eigene Autorisierung deklarieren. Die
 Berechtigung wird beim Anzeigen des Formulars und erneut vor dem Absenden
-geprüft. `redirect` akzeptiert nur sichere lokale absolute Pfade wie
-`/customers`; externe oder protocol-relative Ziele sowie Backslashes und
-Steuerzeichen weist `zelyra check` mit `E-FORM-007` zurück.
+geprüft.
 
 ## 12. CRUD
 
@@ -1313,9 +1028,8 @@ Das System befüllt die benannten Slots `title`, `nav`, `content` und `actions` 
 
 Erzeugte CRUD- und Tableview-Steuerungen verwenden semantische Fieldsets und getrennte Beschriftungen für Operator und Wert jedes Filters. Filterverarbeitung und bewahrte Pagination-URLs verwenden eine deterministische Reihenfolge.
 
-✅ Zelyra UI ist eine mitgelieferte, typisierte Komponentenbibliothek (eingeführt in 1.0.6, stabil in 1.0.7).
-Beliebiges CSS, HTML-Attribute und freie Klassen werden weiterhin nicht
-allgemein compilergeprüft.
+🗺️ Vollständig eigene typisierte Komponenten und feingranulare View-Overrides
+sind Teil der weiteren View-Roadmap.
 
 ### CRUD-Ansichten, Aktionen und Soft Delete
 
@@ -1373,82 +1087,30 @@ Beispiel mit `name email active`), verlinkt Zelyra in generierten CRUD-Listen
 automatisch das erste angezeigte Feld (`name`) mit der Detailseite des
 Datensatzes. Das gilt sowohl für Tabellen- als auch für Kachel-Layouts.
 
-### Create- und Edit-Seiten erweitern
-
-`form` enthält gemeinsame Texte. Die getrennten `create`- und `edit`-Blöcke
-überschreiben diese Werte jeweils nur auf ihrer eigenen Route. `before_form`
-und `after_form` fügen geprüftes HTML samt vorhandenen Komponenten außerhalb
-des erzeugten Formulars ein. `field_content` platziert Zusatztext, Links oder
-Komponenten direkt unter einem Formularfeld:
+Eigene fachliche Aktionen bleiben POST-only, parametrisiert und geschützt. Eine Action kann mehrere SQL-Anweisungen bündeln, die in einer gemeinsamen MariaDB-Transaktion atomar ausgeführt werden:
 
 ~~~zelyra
-crud Customer -> customers {
-    view {
-        fields { customer_number name email }
-        form { title: "Kundenkonto" submit: "Speichern" }
-        create {
-            title: "Neues Kundenkonto"
-            field_content {
-                customer_number {
-                    html {
-                        <small>Aktuelle Eingabe: {values.customer_number}</small>
-                        <a href="/customers">Kundennummern prüfen</a>
-                    }
-                }
-            }
-        }
-        edit {
-            submit: "Änderungen speichern"
-            after_form { html { <p>Bearbeitet: {record.name}</p> } }
-        }
-    }
-}
-~~~
-
-`values.feld` ist der aktuelle typisierte Formularwert. `record.feld` gibt es
-nur im Edit-Kontext und nur für sichere, tatsächlich verfügbare Formularfelder;
-Create hat keinen gespeicherten Datensatz. IDs, Mandanten-/Besitzerschlüssel
-sowie sensible Passwort-, Token-, Secret- und Hash-Felder sind nicht verfügbar.
-Beim ersten Aufruf enthält `record` die geladenen Formularwerte. Nach einem
-Validierungsfehler enthält es dieselben erhaltenen Eingaben wie `values`, damit
-Zusatzinhalte den sichtbaren Formularstand abbilden.
-HTML-Formulare innerhalb eigener Bereiche werden mit `E-CRUD-016` abgewiesen.
-Ein eigener Button innerhalb von `field_content` muss `type="button"` tragen;
-sonst weist der Compiler ihn mit `E-CRUD-019` ab, damit er das generierte
-Formular nicht versehentlich absendet.
-Die CRUD-Route behält Validierung, CSRF, Berechtigungen und Speicherung.
-
-Tableviews unterstützen ebenfalls Inhaltsbereiche und eine typisierte
-`row_actions`-Zelle je Zeile. Die vollständige Syntax mit Dialogbeispiel steht
-in der [UI-Referenz](../../ui.de.md#generierte-crud--und-tableview-seiten-gezielt-erweitern).
-
-🧪 Edit-Formulare, deren Name auf `Edit` endet, enthalten nun einen signierten
-Stand der angezeigten Werte. Beim Absenden sperrt Zelyra die Zeile in derselben
-MariaDB-Transaktion wie Formularaktion und Audit-Einträge. Wurde ein Wert seit
-dem Laden geändert, antwortet Zelyra mit `409 Conflict` und führt die Aktion
-nicht aus. Dies schützt den erzeugten Bearbeitungspfad vor veralteten
-Übermittlungen; Schreibzugriffe außerhalb der Formularaktion sind davon nicht
-abgedeckt, und es entsteht kein allgemeiner Transaktionsvertrag für die
-Anwendung.
-
-Eigene fachliche Aktionen bleiben POST-only, parametrisiert und geschützt:
-
-~~~zelyra
-crud Customer -> customers {
-    action deactivate {
-        label: "Kunden deaktivieren"
-        confirm: "Diesen Kunden wirklich deaktivieren?"
-        permits "customers.edit"
+crud Invoice -> invoices {
+    action lock {
+        label: "Festschreiben (GoBD)"
+        confirm: "Möchten Sie diese Rechnung unwiderruflich festschreiben?"
+        permits "invoices.lock"
+        field reason: String required
         sql {
-            UPDATE customers
-            SET active = false
-            WHERE id = :id
+            UPDATE invoices SET is_locked = true WHERE id = :id
+            INSERT INTO invoice_audit_logs (invoice_id, action, message) VALUES (:id, "locked", :reason)
         }
-        success "Kunde deaktiviert."
-        redirect "/customers"
+        success "Rechnung wurde festgeschrieben."
+        redirect "/invoices"
     }
 }
 ~~~
+
+#### Ausführungsmodell und Transaktionsverhalten von Actions
+
+- **Atomare Datenbanktransaktion:** Alle SQL-Anweisungen innerhalb von `sql { ... }` laufen gebündelt in einer einzigen MariaDB-Transaktion (`with_decision_transaction`). Schlägt eine Anweisung fehl (z. B. durch einen Constraint-Fehler), wird die gesamte Transaktion atomar zurückgerollt.
+- **Parameterbindung:** Parameter wie `:id` werden automatisch aus dem URL-Pfad der CRUD-Ressource gebunden. Über `field <name>: <Typ>` deklarierte Zusatzfelder werden im Bestätigungsdialog als typisierte Eingabefelder gerendert, vorab geprüft und als Parameter `:name` an die SQL-Statements übergeben.
+- **Aktueller Ausführungsumfang:** Der Inhalt einer CRUD-Action ist in Version 1.2.24 strikt auf SQL-Statements begrenzt (`form actions may contain only SQL statements`). Beliebige Zelyra-Funktionsaufrufe (wie `hash_sha256`), Ausdrücke oder Datensatz-/Sitzungsobjekte (`row`, `session`) können innerhalb von Actions noch nicht direkt ausgeführt werden.
 
 Die Laufzeit erzwingt für solche Aktionen Datenbank-Capability,
 CSRF-Schutz, Authentifizierung und die deklarierte Berechtigung. Aktionen
@@ -1480,47 +1142,6 @@ Wenn eine Auth-Definition eine Audit-Tabelle angibt, schreiben CRUD-Erstellen,
 Ereignisse in derselben MariaDB-Transaktion. Passwörter, Tokens, Geheimnisse
 und Hashes werden aus Änderungsdetails entfernt.
 
-### Master-Detail-Formulare mit `has_many`
-
-🧪 Ein CRUD kann auf Create und Edit mehrere direkte Kinddatensammlungen
-erzeugen. Jedes Kindmodell muss einen Fremdschlüssel zum CRUD-Elternmodell
-deklarieren. Die Zeilen werden serverseitig gerendert; pro Sammlung sind
-höchstens 50 Zeilen je Submit zulässig. Kind-IDs, Elternfremdschlüssel und
-Tenant-Schlüssel werden nicht aus dem Browser übernommen. Eine Kindtabelle
-darf pro CRUD nur einmal vorkommen; ein Aggregatziel darf nur einer Sammlung
-zugeordnet sein.
-
-~~~zelyra
-crud Invoice -> invoices {
-    view { fields { invoice_date } }
-
-    has_many items: InvoiceItem {
-        foreign_key: invoice_id
-        order_by: position asc
-        cascade: delete
-        aggregates {
-            net_amount: sum(total_net)
-            gross_amount: sum(total_gross)
-        }
-    }
-
-    has_many attachments: InvoiceAttachment {
-        foreign_key: invoice_id
-        order_by: file_name asc
-        cascade: delete
-    }
-}
-~~~
-
-Eltern- und Kindschreibvorgänge, Kindtabellen-Invarianten und
-Aggregataktualisierungen laufen in einer Transaktion. Bei Edit werden die
-vorhandenen Zeilen aller Sammlungen zum Elternsatz geladen und beim Speichern
-atomar ersetzt. Scheitert eine Prüfung oder ein Schreibvorgang, werden sämtliche
-Änderungen zurückgerollt. Das Schema bestimmt das Löschverhalten. Verschachtelte
-Sammlungen und clientseitig maßgebliche Aggregate werden nicht unterstützt.
-Ein vollständiges, compilergeprüftes und mit MariaDB getestetes Beispiel liegt
-unter [`examples/multiple_children/main.zyl`](../../../examples/multiple_children/main.zyl).
-
 ## 13. Authentifizierung und Berechtigungen
 
 🧪 Zelyra unterstützt Argon2-Login, persistente MariaDB-Sessions, Logout,
@@ -1528,107 +1149,6 @@ Routenschutz und datenbankgestützte Berechtigungsprüfungen. Fünf
 Fehlversuche für dieselbe normalisierte E-Mail-Adresse innerhalb von 15
 Minuten lösen eine 60-sekündige HTTP-429-Sperre aus. Ein erfolgreicher Login
 rotiert das vorherige Session-Token dieses Browsers und entwertet es.
-
-### Optionale lokale TOTP-MFA (experimentelle Vorschau)
-
-Die aktuelle experimentelle Vorschau bietet optionale TOTP-MFA für
-MariaDB-gestützte Authentifizierung. Deklariere beide dedizierten MFA-Tabellen und ergänze die
-persistent gespeicherte Sitzung um das nicht-nullbare boolesche Feld
-`mfa_verified`. Die Faktorzeile eines Kontos verwendet `user_id` als Schlüssel;
-Wiederherstellungscodes haben eine eigene Primärschlüsselspalte `id`:
-
-~~~zelyra
-auth users {
-    table: users
-    sessions: auth_sessions
-    audit: auth_audit_log
-    mfa: user_mfa
-    mfa_recovery: user_mfa_recovery
-}
-
-table auth_sessions {
-    id: Id primary auto
-    user: User required
-    token_hash: String(64) required unique
-    expires_at: Timestamp required
-    mfa_verified: Bool required default false
-}
-
-table user_mfa {
-    user_id: Int primary
-    secret_ciphertext: String(1024) required
-    enabled_at: Timestamp?
-    last_totp_step: Int?
-    failed_attempts: Int required default 0
-    locked_until: Timestamp?
-    enrollment_expires_at: Timestamp?
-}
-
-table user_mfa_recovery {
-    id: Id primary auto
-    user_id: Int required
-    code_hash: String(255) required
-    used_at: Timestamp?
-}
-
-table auth_audit_log {
-    id: Id primary auto
-    actor_user_id: Int?
-    event: String(100) required
-    target_user_id: Int?
-    details: String(1000) required
-    created_at: Timestamp default now
-}
-~~~
-
-Setze `ZELYRA_MFA_ENCRYPTION_KEY` in der Serverprozess-Umgebung auf 64
-hexadezimale Zeichen aus einer vom Betreiber verwalteten Geheimnisquelle (zum
-Beispiel `openssl rand -hex 32`). Zum Laden aus der Projekt-`.env` in einer
-Unix-Shell die Datei vor dem Serverstart exportieren: `set -a; . ./.env; set
-+a`. Committe den Wert nicht und bewahre ihn nicht in Datenbank-Backups auf,
-auf die die Anwendungsdatenbank Zugriff hat. Geht der Schlüssel verloren, sind die
-gespeicherten Faktoren nicht lesbar; bei einer Datenbankwiederherstellung muss
-derselbe Schlüssel ebenfalls wiederhergestellt werden. MFA benötigt persistente
-MariaDB-Sessions und eine Audit-Tabelle für Login- und Faktoränderungsereignisse.
-Passwort-Sessions gelten bis zu einem gültigen TOTP- oder
-unbenutzten Wiederherstellungscode als ungeprüft. Einrichtung, Deaktivierung
-und Erneuerung der Codes verlangen Passwort und einen aktuellen TOTP-Code.
-Wiederherstellungscodes werden einmal angezeigt und nur als Argon2-Hashes
-gespeichert.
-
-Die Notfallwiederherstellung für ein Konto, das Authenticator und
-Wiederherstellungscodes verloren hat, ist ein Betreiberverfahren über die
-Datenbank und keine Anwendungsseite. Genehmigung und betroffenes Konto
-dokumentieren, dann in einem Wartungsfenster die konfigurierten Tabellennamen
-und die numerische Benutzer-ID einsetzen:
-
-~~~sql
-START TRANSACTION;
-DELETE FROM user_mfa_recovery WHERE user_id = 123;
-DELETE FROM user_mfa WHERE user_id = 123;
-DELETE FROM auth_sessions WHERE user_id = 123;
-COMMIT;
-~~~
-
-Damit werden Faktor und Recovery-Prüfsummen entfernt und die Sessions des
-Kontos widerrufen. Danach kann sich das Konto mit Passwort anmelden und MFA
-erneut einrichten. Bei Verlust des Verschlüsselungsschlüssels gilt das für alle
-betroffenen Konten. Einen Betreiber-Audit-Eintrag aufbewahren. Verschlüsselte
-Faktoren nicht als Wiederherstellungsmethode kopieren oder exportieren.
-
-Dieser Branch ist noch in Arbeit. Integrationstests, eine Probe des
-Betreiber-Recovery-Verfahrens und ein unabhängiges Sicherheitsreview sind offene
-Release-Gates; dieser Abschnitt ist keine Produktions-Sicherheitszusage.
-
-Der Login-Grenzwert und die Sperrdauer lassen sich in `auth` konfigurieren:
-`login_rate_limit: 5 per 900` setzt fünf Fehler je 900 Sekunden,
-`login_block_seconds: 60` eine Sperre von 60 Sekunden. Das sind die Defaults.
-Zeitfenster und Sperrdauer dürfen jeweils 1 bis 86400 Sekunden betragen; die
-Versuchsanzahl darf 1 bis 1000 sein. Die Begrenzung liegt im Prozessspeicher,
-wird beim Neustart zurückgesetzt und ersetzt keinen verteilten
-Betriebs-Limiter. Die Tabelle ist auf 4096 Schlüssel begrenzt; bei voller
-Tabelle werden neue Schlüssel abgelehnt, bis abgelaufene Zeitfenster bereinigt
-wurden.
 
 Jedes schreibende Browserformular benötigt sein CSRF-Token sowie einen
 gleichursprünglichen `Origin`- oder `Referer`-Header, der zu `Host` und dem
@@ -1757,21 +1277,6 @@ customer = CustomerInput {
 print(customer.address.city)
 ~~~
 
-Für Algorithmen können lokale Arrays ausdrücklich veränderlich deklariert
-werden. Dann sind typgeprüfte Indexzuweisungen sowie `push_mut` und `pop_mut`
-verfügbar; `pop_mut` liefert `Option<T>`. Ein Indexupdate liest und schreibt
-direkt das gewählte Element. Normale Arrays bleiben wertbasiert.
-
-~~~zelyra
-fn main() {
-    mutable totals: Int[] = [0, 0]
-    totals[0] += 1
-    push_mut(totals, 3)
-    removed = pop_mut(totals)
-    print(len(totals))
-}
-~~~
-
 Die Array-Iteration verwendet `for ... in`; die Schleifenvariable ist
 unveränderlich und nur im Schleifenkörper sichtbar. `break` und `continue`
 werden unterstützt.
@@ -1813,41 +1318,6 @@ der erzeugte Client stellt es über `ZelyraApiErrorPayloads` und das generische
 Feld `ZelyraApiError.details` bereit. Bestehende ungetypte API-Fehler bleiben
 kompatibel.
 
-Für eine ausdrückliche Tabelleninvariante kann ein schreibender API-Endpunkt
-seine Eingabe vor dem Handler prüfen lassen. `validates` bindet die benannten
-Request-Felder typisiert an die Tabelle; die Tabelle muss alle nicht
-automatischen Pflichtfelder abdecken. Ein Verstoß liefert den deklarierten
-HTTP-422-Fehlervertrag:
-
-~~~zelyra
-table invoices {
-    id: Id primary auto
-    amount: Int required
-    validate { amount > 0: "Der Betrag muss positiv sein." }
-}
-
-api POST "/invoices" {
-    handler create_invoice
-    input { amount: Int }
-    validates invoices
-    output Result<Int, String>
-    errors { 422 ValidationError: String }
-}
-~~~
-
-Diese Bindung ist für POST, PUT und PATCH verfügbar. Bei einer Tabelle mit
-Mandantenscope muss die API `requires auth` deklarieren und der Projekt-
-Auth-Block aktive Mandantenmitgliedschaften konfigurieren. Der Mandantenschlüssel
-darf nicht als Client-Eingabe deklariert werden: Zelyra leitet ihn aus der
-authentifizierten Sitzung ab und übergibt ihn als letzten typisierten
-Handlerparameter. Ein Mandantenschlüssel im Request-Body wird abgewiesen; die
-Auswahl wird vor dem Handler gegen aktive Mitgliedschaften geprüft. Siehe das
-[vollständige API-Beispiel](../../../examples/tenant_api_validation.zyl).
-Geprüft werden Eingabewerte und verifizierter Mandantenkontext, nicht spätere
-Handler-Transformationen oder rohe SQL-Schreibzugriffe. Für Invarianten, die
-für jeden Schreiber gelten müssen, sind weiterhin Datenbank-Constraints
-erforderlich.
-
 Browserzugriff ist standardmäßig deaktiviert. Wenn ein separates Frontend
 eine API aufrufen soll, werden exakte Origins in der Projektkonfiguration
 freigegeben:
@@ -1877,25 +1347,6 @@ Ein ausgeblendeter Button ist keine Sicherheitsgrenze. Berechtigungen müssen
 serverseitig an der Aktion geprüft werden. Der Browser ist kreativ, besonders
 wenn man ihm vertraut.
 
-### Routenübersicht
-
-`zelyra routes` prüft ein Projekt und zeigt deklarierte Seiten und APIs sowie
-die daraus erzeugten Formular-, CRUD-, Tableview- und Authentifizierungsrouten
-mit Methode, Pfad und Quelldatei/Zeile. Die JSON-Ausgabe ist deterministisch
-und eignet sich für Werkzeuge:
-
-~~~bash
-zelyra routes src/main.zyl
-zelyra routes src/main.zyl --format=json
-~~~
-
-Gleiche Routenmuster mit derselben HTTP-Methode werden bereits von
-`zelyra check`, `build`, `run` und `serve` mit `E-ROUTE-001` abgelehnt. Derselbe
-Pfad mit verschiedenen Methoden ist zulässig. Dynamische Parameternamen werden
-normalisiert: `/customers/{id}` und `/customers/{slug}` sind dasselbe
-Routenmuster. Importierte
-Ressourcen erscheinen ebenfalls in der Übersicht.
-
 ### API-Eingaben und sichere Antwort-Defaults
 
 API-Bodies für Methoden außer `GET` und `DELETE` dürfen aktuell
@@ -1908,29 +1359,6 @@ Der HTTP-Parser prüft `Content-Length`, liest vollständige Bodies auch über
 mehrere Netzwerk-Reads ein und begrenzt Request-Bodies auf 1 MiB. Header sind
 auf 64 KiB begrenzt. Ein zu großer Body wird vor dem Handler mit HTTP 413
 abgelehnt.
-
-Eine API kann Versions- und Deprecation-Metadaten sowie ein begrenztes
-Kontingent je Client deklarieren:
-
-~~~zelyra
-api GET "/api/v1/customers" {
-    version "v1"
-    deprecated
-    rate_limit 100 per 60
-    output Customer[]
-}
-~~~
-
-Antworten geben Version und Deprecation über `X-Zelyra-API-Version` und
-`X-Zelyra-API-Deprecated` aus; `zelyra doc --openapi` nimmt dieselben Angaben
-auf. Das Kontingent gilt je Route und TCP-Client-IP im aktuellen Prozess. Bei
-Überschreitung liefert Zelyra HTTP 429 und `Retry-After`. Zulässig sind 1 bis
-1000000 Anfragen pro 1 bis 86400 Sekunden. Der Server vertraut
-`X-Forwarded-For` nicht; Clients hinter einem Reverse-Proxy teilen daher dessen
-Kontingent. Die Kontingente liegen im Speicher und werden beim Neustart
-zurückgesetzt.
-Die Tabelle ist auf 4096 Client-/Routenpaare begrenzt; solange sie voll ist,
-erhalten neue Paare HTTP 429, bis ein Kontingentfenster abläuft.
 
 Alle HTML-, JSON-, Redirect-, Fehler- und Preflight-Antworten erhalten diese
 sicheren Standard-Header:
@@ -2026,32 +1454,8 @@ fn load_machines() -> Machine[]
 Bekannte Capabilities:
 
 ~~~text
-Database Database(read) Database(write) Network FileSystem Environment Process Clock Random Console
+Database Network FileSystem Environment Process Clock Random Console Email
 ~~~
-
-Für Funktions-SQL erlaubt `Database(read)` geprüfte `SELECT`-Anweisungen;
-`Database(write)` erlaubt geprüfte `INSERT`-, `UPDATE`- und `DELETE`-
-Anweisungen. Nicht klassifizierbares SQL benötigt die breite Capability
-`Database`. Die breite Form bleibt für bestehende Projekte verfügbar und
-erfüllt beide engeren Effekte. Projekte können die Effekte einzeln freigeben:
-
-~~~zelyra
-fn maschinen_liste() -> Machine[] uses Database(read) {
-    return sql<Machine[]> {
-        SELECT id, number, name FROM machines
-    }
-}
-~~~
-
-~~~toml
-[capabilities]
-database_read = true
-database_write = false
-~~~
-
-Das sind Quellfreigaben des Compilers und der Runtime, keine Rechte eines
-MariaDB-Kontos. Framework-CRUD, Formulare, Authentifizierung und Page-Daten
-benötigen weiterhin `Database`.
 
 Aufrufende Funktionen müssen benötigte Capabilities weiterführen. Projekte
 können sie in `zelyra.toml` freigeben:
@@ -2163,101 +1567,6 @@ Records, verschachtelte Records, Arrays, Optionen und Skalarwerte.
 unbekannte Record-Felder und fehlende Pflichtfelder werden als ausdrückliche
 Laufzeitfehler gemeldet.
 
-Der opake Typ `Json` bewahrt JSON-Objekte, Arrays und Skalare ohne Umwandlung in
-einen anwendungsspezifischen Record. Er kann mit `json_decode<Json>` geprüft,
-mit `json_encode` serialisiert und in typisierten SQL-Ergebnissen für JSON-
-Spalten verwendet werden. Die Datenbankabbildung ist backendabhängig:
-MariaDB verwendet seinen JSON/LONGTEXT-Speicher mit `JSON_VALID`-Prüfung,
-PostgreSQL `JSONB`, SQLite `TEXT` mit Runtime-Validierung.
-
-Für tabellarische Textdateien unterstützt Zelyra
-verschachtelte Arraytypen wie `String[][]` sowie typisierte CSV- und
-Festkomma-APIs:
-
-~~~zelyra
-fn parse_catalog(text: String) -> Result<String[][], String> {
-    return csv_decode_result(text, ';')
-}
-
-fn read_price(text: String) -> Result<Int, String> {
-    return decimal_scaled_result(text, 2)
-}
-~~~
-
-`csv_decode_result(text, delimiter)` liefert jede CSV-Zeile als `String[]` und
-erhält getrennte Spalten, doppelte Anführungszeichen, UTF-8, LF/CRLF und
-Zeilenumbrüche innerhalb zitierter Felder. Ein UTF-8-BOM am Dateianfang wird
-akzeptiert. Nicht geschlossene Quotes, Quotes in unzitierten Feldern, Zeichen
-nach einem schließenden Quote und einzelne CR-Zeichen außerhalb eines zitierten
-Felds ergeben `Err(String)`. Eine leere Datei ergibt eine leere Zeilenliste;
-die Anwendung prüft Kopfzeilen und Feldanzahl selbst.
-
-`csv_encode(rows, delimiter)` maskiert Trennzeichen, Quotes und Zeilenumbrüche
-und verdoppelt Quotes innerhalb zitierter Felder. Beide CSV-Funktionen liefern
-`Result`, damit ungültige Trennzeichen als Datenfehler behandelt werden können.
-Sie verarbeiten den gesamten Text im Speicher und sind keine Streaming-API.
-
-Geldwerte bleiben für exakte Berechnungen ganzzahlige Einheiten, zum Beispiel
-Cent. `decimal_scaled_result(text, scale)` konvertiert eine Dezimalzahl ohne
-binäre Gleitkommazahl in eine skalierte `Int`; Punkt oder Komma sind als
-einzelnes Dezimaltrennzeichen zulässig, höchstens `scale` Nachkommastellen.
-`format_scaled_result(value, scale)` erzeugt die feste Dezimalschreibweise für
-den Export. Beide Funktionen erlauben Skalen von 0 bis 9 und melden ungültige
-Texte, zu viele Stellen oder Überläufe als `Err(String)`. Fachliche Regeln wie
-„Preis darf nicht negativ sein“ prüft die Anwendung nach der Konvertierung. `decimal_quantize_result`, `decimal_scaled_result` und `format_scaled_result` teilen ihre reine Runtime-Implementierung über AST, MIR und Bytecode; die Backend-Differenzialtests prüfen half-even-Rundung und feste Geldformatierung.
-
-Das vollständige Beispiel `examples/csv_catalog` erzeugt eine UTF-8-Datei,
-importiert und validiert Artikel, schreibt gültige und fehlerhafte Datensätze
-getrennt zurück und testet den Export-/Import-Roundtrip.
-
-`assert(bedingung)` und `assert(bedingung, nachricht)` sind für ausführbare
-Prüfungen gedacht. Ist die Bedingung falsch, bricht der Programmlauf mit einem
-Laufzeitfehler ab. Dadurch können Beispiel- und Anwendungstests nicht mehr
-fälschlich erfolgreich enden, nachdem sie nur eine `FAIL`-Zeile ausgegeben
-haben.
-
-`text_trim(text)` entfernt Unicode-Leerraum am Anfang und Ende eines Textes,
-ohne Inhalte dazwischen zu verändern. Das ist hilfreich, um CSV-Eingaben vor
-der Typumwandlung zu normalisieren und nur aus Leerraum bestehende Pflichtfelder
-abzuweisen.
-
-Der Vorwärtspipeline-Operator übergibt den Wert links als erstes Argument an
-den nächsten benannten Funktionsaufruf. Die Stufen laufen von links nach rechts
-und verwenden jeweils die normale Typ- und Effektprüfung eines Aufrufs:
-
-~~~zelyra
-normalisiert = "  ZELYRA  " |> trim |> to_lower
-teile = "eins,zwei" |> text_split(",")
-~~~
-
-`trim`, `to_lower` und `to_upper` sind Pipeline-Aliase für `text_trim`,
-`text_to_lower` und `text_to_upper`. Weitere Argumente folgen dem übergebenen
-Wert, zum Beispiel `text |> text_replace("alt", "neu")`.
-
-`text_ucfirst(text)` entspricht der PHP-8.2+-Regel von `ucfirst`: Nur ein
-anfänglicher ASCII-Buchstabe `a` bis `z` wird großgeschrieben. Ein nicht-ASCII-
-Anfang wie `ä` und der übrige Text bleiben unverändert. Die Funktion ist von
-`text_capitalize` getrennt, das Unicode-Zeichen berücksichtigt.
-
-`text_chars(text)` liefert die Unicode-Codepoints eines Textes als `String[]`.
-So lassen sich Raster und andere zeichenweise Textformate mit normalen,
-typisierten Zelyra-Arrays verarbeiten. Die Aufteilung erfolgt nach Unicode-
-Codepoints, nicht nach zusammengesetzten Graphem-Clustern.
-
-`format_text(wert)` wandelt skalare Zahlen, Wahrheitswerte, Zeichen, Datums-,
-Zeit- und Dauerwerte ausdrücklich in Anzeigetext um. Beispiel:
-`label = "Kunde " + format_text(customer.id)`. Das ist keine implizite
-Typumwandlung und keine JSON-Serialisierung. Für Geldbeträge mit fester Skala
-verwendet die Anwendung `format_scaled_result`; `format_text` lässt bei
-`Decimal` bedeutungslose Nullen am Ende weg. Records, Sammlungen und Varianten
-werden abgewiesen, damit ihre Darstellung kein unbeabsichtigtes Austauschformat
-wird.
-
-Das mehrteilige Labyrinthbeispiel
-[`examples/labyrinth_solver`](../../../examples/labyrinth_solver/README.md)
-zeigt die Rasterverarbeitung zusammen mit Datei-APIs, Maps, Arrays und einer
-Breitensuche.
-
 Für einen vollständigen typisierten JSON-Request-/Response-Ablauf gibt es
 `http_json` mit getrennten Request- und Response-Typargumenten:
 
@@ -2366,10 +1675,7 @@ Fortsetzung in Quelltextreihenfolge zusammengeführt. Ein Fehler in einem Zweig
 lässt den gesamten Block fehlschlagen, nachdem die gestarteten Zweige beendet
 wurden. `await` außerhalb eines `parallel`-Blocks weist der Type Checker ab.
 Die aktuelle Runtime verwendet einen Worker-Thread pro Zweig; Abbruch und die
-Verwendung eines Datenbank-Connection-Pools sind noch nicht umgesetzt. Ein
-`parallel`-Block darf höchstens vier Zweige enthalten. Type Checker, MIR-/
-Bytecode-Verifier und Runtime erzwingen dieselbe Grenze vor dem Start; sie
-begrenzt die reservierte Worker-Stackgröße.
+Verwendung eines Datenbank-Connection-Pools sind noch nicht umgesetzt.
 
 ## 15. Contracts und Verify
 
@@ -2481,7 +1787,7 @@ Projektkonfiguration gehört in `zelyra.toml`, Geheimnisse nicht:
 ~~~toml
 [project]
 name = "maschinenverwaltung"
-version = "0.1.50"
+version = "0.9.9"
 zelyra = "0.1"
 
 [capabilities]
@@ -2537,15 +1843,13 @@ zelyra config main.zyl
 zelyra config main.zyl --format=json
 ~~~
 
-### Vollständige `.env`-Referenz des aktuellen Codes
+### `.env`-Werte des generierten Projekts
 
 | Variable | Standard im generierten Projekt | Verwendung | Geheim |
 |---|---:|---|---|
 | `ZELYRA_WEB_PORT` | `3000` | Port des internen Webservers im Container | nein |
 | `ZELYRA_HOST_PORT` | `3000` (oder autom. freier Port) | lokal veröffentlichter Webport | nein |
 | `ZELYRA_DB_HOST_PORT` | `3306` (oder autom. freier Port) | lokal veröffentlichter MariaDB-Port | nein |
-| `ZELYRA_DB_CONNECT_TIMEOUT_SECS` | `10` | MariaDB-Verbindungszeitlimit in Sekunden; gültig `1`–`300` | nein |
-| `ZELYRA_DB_QUERY_TIMEOUT_SECS` | `30` | MariaDB-Runtime-Statement-Limit in Sekunden; gültig `1`–`3600`; kein Pool- oder Ergebnisübertragungs-Limit | nein |
 | `DATABASE_URL` | projektabhängig | MariaDB-Verbindungs-URI (`mariadb://user:pass@host:port/db`) | ja |
 | `MARIADB_DATABASE` | `zelyra_app` | Compose: Datenbankname | nein |
 | `MARIADB_USER` | `zelyra` | Compose: Anwendungsbenutzer | nein |
@@ -2693,9 +1997,9 @@ Tests, die nur deshalb grün sind, weil sie nie liefen, sind Dekoration.
 Die wichtigsten geplanten Bereiche:
 
 - typisierte, vollständig anpassbare View-Komponenten;
-- E-Mail-Vorlagen und SMTP;
-- Benachrichtigungszentrum;
-- Hintergrundaufgaben und transaktionale Outbox;
+- sichere benannte E-Mail-Vorlagen und Anhänge;
+- persönliche Lesebestätigungen und Empfängerautorisierung im Benachrichtigungszentrum;
+- allgemeine Hintergrundaufgaben über die vorhandene begrenzte MariaDB-Outbox hinaus;
 - Activity-, Audit- und technische Logs;
 - typisierte Connections und Secret Provider;
 - ODBC und externe Read-only-Datenbanken;
@@ -2732,9 +2036,10 @@ vom eigenen Zelyra-Lexer und -Parser gelesen, in eigene AST-/HIR-Strukturen
 
 Die Ähnlichkeit bei `fn`, geschweiften Klammern, `if`, `match` oder statischer
 Typisierung ist eine Designentscheidung, aber kein Abstammungsnachweis. Entschei-
-dend sind Grammatik, Semantik und Programmiermodell. Zelyra 1.1.0 ist ein stabiles Release mit einem eigenen Typ- und Laufzeitmodell.
-Die Statusangaben in diesem Kapitel benennen verfügbare, eingeschränkte und noch
-geplante Sprachmerkmale.
+dend sind Grammatik, Semantik und Programmiermodell. Zelyra ist derzeit noch
+ein experimenteller Prototyp; die Eigenständigkeit wächst mit der Umsetzung des
+eigenen Typsystems, der SQL-Prüfung, der Runtime und der Zelyra-spezifischen
+Konstrukte.
 
 Die Aussagen in diesem Kapitel wurden gegen den aktuellen Quellcode geprüft:
 Lexer und `TokenKind` definieren die Zelyra-Tokens, der Parser erzeugt eigene
@@ -2764,18 +2069,18 @@ ausführbare Spracheigenschaft ausgegeben.
 | MariaDB-Schema | nicht Aufgabe der Rust-Sprache | Tabellen werden in Zelyra beschrieben | Generator erzeugt sichtbares SQL | 🧪 |
 | Formulare | Framework, Templates und Validierung selbst verbinden | `form`-Konstrukt und Tabellenregeln | Standardpfad ist Teil des Sprachmodells | 🧪 |
 | CRUD | muss programmiert oder über Frameworks erzeugt werden | deklaratives `crud Name -> table` mit gemeinsamem View-Feldprofil | aktuelle Runtime stellt CRUD-Routen bereit | 🧪 |
-| Views | externe Bibliotheken oder Frameworks | `page`/`html`, benannte `view`-Layouts, typisierte `component`-Bausteine und Default-/benannte Slots sind vorhanden; Zelyra UI gehört zum stabilen 1.0.7 (seit 1.0.6) | keine allgemeine statische Prüfung beliebiger HTML-Klassen oder CSS | 🧪 |
+| Views | externe Bibliotheken oder Frameworks | `page`/`html`, benannte `view`-Layouts, typisierte `component`-Bausteine und benannte Slots mit Fallbacks sind vorhanden | kein Rust-Äquivalent; freie Styling-Komponenten fehlen noch | 🧪 |
 | Quellformatierung | `cargo fmt`, `rustfmt` | `zelyra fmt <file.zyl> [--check]` | deterministischer Zelyra-Formatter, schützt SQL und HTML | ✅ |
 | Refactoring/Wirkungsanalyse | `rust-analyzer`, Compiler-APIs | `zelyra impact`, `zelyra edit` | versionierte, atomare JSON-Maschinenschnittstellen | 🧪 |
 | Authentifizierung | externe Web-/Auth-Crates | Auth-Definition, Sessions und Berechtigungsprüfungen im Webmodul | Zelyra bündelt den Standardfall | 🧪 |
 | Berechtigungen | selbst entworfene Typen und Middleware | `requires auth`, `permits` und CRUD-Aktionsrechte | deklarative Regeln werden serverseitig geprüft | 🧪 |
 | Contracts | manuell oder über Bibliotheken | native `requires {}` und `ensures {}` plus `verify` | Contract-Syntax gehört zu Zelyra | ✅ |
 | Capabilities | APIs und Bibliotheken regeln Effekte | `uses Database`, `uses Network` usw. | sichtbare Effektdeklaration ist Sprachbestandteil | ✅ |
-| E-Mails | externe SMTP-/Mail-Crates | `mail_queue`, explizite `Email`-Capability, transaktionale MariaDB-Outbox und konfigurierbarer SMTP-Worker sind vorhanden; Zelyra 1.0.7 ergänzt einen geprüften PDF-Anhang | Zustellung mindestens einmalig; grafisches PDF-Rendering und volle PostgreSQL-Parität fehlen | 🧪 |
+| E-Mails | externe SMTP-/Mail-Crates | `mail_queue`, `mail_deliver`, `uses Email` | MariaDB-Outbox, TLS, Hostfreigabe und ausdrücklich gestarteter Worker | 🧪 |
 | Jobs | externe Job-/Queue-Systeme | kein Hintergrundjob-Konstrukt | keine stabile Job-Syntax | ❌ |
 | Audit | externe Logs oder Audit-Crates | Audit-Tabelle, CLI-Auswertung und optionale Hash-Kette | an Auth/CRUD gebunden und noch experimentell | 🧪 |
 | Deployment | Cargo, Container, CI und Infrastruktur frei wählbar | generierte Docker-/Compose-Vorlage vorhanden | Vorlage ist Entwicklungsstart, keine Produktionsplattform | 🧪 |
-| Produktionsreife | Rust ist breit produktiv eingesetzt | Zelyra 1.1.0 ist ein stabiles Release mit engerem Ökosystem und begrenzten Nachweisen je Ablauf | Reife und Ökosystem sind nicht vergleichbar | 🧪 |
+| Produktionsreife | Rust ist breit produktiv eingesetzt | Zelyra ist experimentell | Reife und Ökosystem sind nicht vergleichbar | 🧪 |
 | Ökosystem | sehr groß: Crates, Tools, Frameworks | kleines eigenes Repository und wenige Integrationen | Zelyra kann Rust-Crates nicht direkt importieren | 🧪 |
 
 Rust ist also das technische Fundament, nicht die Anwendungssprache hinter
@@ -2800,32 +2105,29 @@ geplante oder derzeit nicht verfügbare Sprachmerkmale.
 | unveränderliche Variable | `value = 1` | `let value = 1;` | Zelyra bindet ohne `mutable` unveränderlich | ✅ |
 | veränderliche Variable | `mutable value = 1` | `let mut value = 1;` | Veränderbarkeit wird anders markiert | ✅ |
 | Ganzzahl | `Int` oder `UInt` | `i32`, `i64`, `u32`, `u64` | Rust verlangt konkrete Breite; Zelyra abstrahiert derzeit | ✅ |
-| Dezimalzahl | `Float` oder `Decimal` | `f64` oder Festkomma | `Decimal` hat neun Nachkommastellen; Division kürzt Richtung null; Überläufe liefern Runtimefehler | ✅ |
+| Dezimalzahl | `Float` oder `Decimal` | `f64` oder `f32` | Größe und genaue Überlaufregeln von Zelyra sind noch nicht vollständig spezifiziert | 🧪 |
 | Boolean | `true`, `false`, `Bool` | `true`, `false`, `bool` | eigenes Zelyra-Basistypmodell | ✅ |
 | Zeichenkette | `String` und Zeichenliterale | `String`, `&str`, Zeichenliterale | Rust unterscheidet Besitz und Borrowing | ✅ |
-| String-Escapes | `\n`, `\r`, `\t`, `\0`, `\v`, `\\`, `\"`, `\'` | Rust-String-Escapes | Zelyra dekodiert diese Sequenzen in normalen Stringliteralen | ✅ |
 | optionale Werte | `Email?` oder `Option<String>` | `Option<String>` | `?` ist Zelyras Kurzform für Option | ✅ |
 | fehlender Wert | `None` | `None` | gleiche Bezeichnung in verschiedenem Enum-Modell | ✅ |
 | Listen/Arrays | `Int[]`, `[1, 2, 3]` | `Vec<i64>`, `vec![1, 2, 3]` | Zelyra bietet keine Rust-Makrosyntax | ✅ |
-| benannte Datentypen | `type CustomerId = Id`, `struct Customer<T> { ... }`, `enum Event<T> { ... }` | `type CustomerId = u64`, `struct Customer<T> { ... }` | Zelyra-Records und Rust-Structs sind nicht austauschbar; Typargumente werden statisch geprüft | ✅ |
-| Bedingungen | `if ok { ... }` | `if ok { ... } else { ... }` | If-Ausdrücke liefern einen geprüften Wert; Anweisungsblöcke behalten ihre Kontrollflusssemantik | ✅ |
+| benannte Datentypen | `type CustomerId = Id`, `struct Customer { ... }` | `type CustomerId = u64`, `struct Customer { ... }` | Zelyra-Records und Rust-Structs sind nicht austauschbar | ✅ |
+| Bedingungen | `if ok { ... }` | `if ok { ... }` | Blocksemantik und Ausdrucksregeln unterscheiden sich | ✅ |
 | `else` | `else { ... }` | `else { ... }` | ähnliche Kontrollflussform | ✅ |
-| `match` | `match value { Some(x) => ... None => ... }` | `match value { Some(x) => ..., None => ... }` | Zelyra verlangt vollständige Fälle; Record-Muster und Guards werden geprüft, Guards beweisen allein keine Vollständigkeit | ✅ |
-| Record-Update | `Customer { ..old, active: true }` | Rust Struct-Update-Ausdruck | Zelyra kopiert Records mit Wertsemantik und prüft die aktualisierten Felder | ✅ |
+| `match` | `match value { Some(x) => ... None => ... }` | `match value { Some(x) => ..., None => ... }` | Zelyra verlangt ebenfalls vollständige Fälle | ✅ |
 | Schleifen | `for item in items`, `while`, `loop` | `for item in items`, `while`, `loop` | Zelyra unterstützt keine Rust-Iteratortraits | ✅ |
 | Funktionsaufrufe | `add(1, 2)` | `add(1, 2)` | gleiche Oberfläche, andere Auflösung | ✅ |
 | Ausgabe | `print(value)` | `println!("{}", value);` | Rust verwendet ein Makro mit `!` | ✅ |
-| Kommentare | `# Kommentar`, alleinstehendes `##` als Blockanfang/-ende | `// Kommentar`, `/* ... */` | `//` bleibt aus Kompatibilitätsgründen zulässig; `##` muss allein in der Zeile stehen und Blockkommentare dürfen nicht verschachtelt werden | 🧪 |
+| Kommentare | `# Kommentar`, alleinstehendes `##` als Blockgrenze | `// Kommentar`, `/* ... */` | `#` ist Standard; `//` bleibt kompatibel; `##`-Blöcke sind nicht verschachtelt | ✅ |
 | Zeilenumbrüche | meist Trennzeichen; nach Operatoren fortsetzbar | meist Whitespace | Parserregeln sind eigenständig | ✅ |
 | Semikolons | werden als Statementtrenner akzeptiert, aber nicht benötigt | häufig Statementtrenner | Zelyra ist nicht semikolonpflichtig | ✅ |
 | Blockstruktur | `{ ... }` | `{ ... }` | Klammern bestimmen in beiden die Blöcke | ✅ |
 | Einrückung | Lesbarkeit, keine Blocksemantik | Lesbarkeit, keine Blocksemantik | Leerzeichen/Tabs werden nicht zu Python-Blöcken | ✅ |
 | Fehlerbehandlung | `Result<T, E>`, `Some`/`None` | `Result<T, E>`, `?`, `panic!` | Zelyra hat keinen Rust-Operator `?` | ✅ |
-| Stringinterpolation | `message = "Kunde {customer.name} (ID: {customer.id})"`; `{{` und `}}` erzeugen geschweifte Klammern | `format!("{name}")` oder `println!("{}", name)` | Ausdrücke werden geprüft und als Text konvertiert. Das Ergebnis ist kein HTML: HTML-Ausgabe muss an der bestehenden View-Grenze escaped werden. | ✅ |
-| Module | `pub fn`, `pub view`, `pub component` und weitere Deklarationen in importierten Dateien | `mod name {}`, Dateien und Module | unterstützt mit dokumentierten Grenzen; UI-Sichtbarkeit und Namespace-Auflösung bleiben eingeschränkt | 🧪 |
-| Imports | `import "src/math.zyl" as math`, `math::add()` | `use crate::module::Item;` | projektlokale Importe laden den expliziten Graphen in `check`, `build`, `run`, `serve`, `context`, `verify` und `impact`; unveröffentlichte Arbeit zu 1.1.5 ergänzt lokale Offlinepakete über `pkg:` und `zelyra.lock`, typisierte Einstellungen und optionale CLI-Kompatibilitätsvorgaben (siehe [lokale Pakete](../../packages.de.md)) | 🧪 |
-| Generics | `fn identity<T>(...)`, `struct Box<T>`, `enum Maybe<T>` | allgemeine Generics und Traits | eigene Funktionen, Records und Enums unterstützen Inferenz/Typangaben; allgemeine Constraints, generische Aliase und generische Funktionsreferenzen fehlen | 🧪 |
-| Funktionswerte | `callback: Function<(Int) -> Int>`, `&increment` | `fn(Int) -> Int` | Zelyra 1.0.7 ergänzt typisierte lexikalische Lambdas und Closures für `map`, `filter`, `find` und `reduce`; generische Funktionsreferenzen bleiben eingeschränkt | 🧪 |
+| Stringinterpolation | HTML kann `{name}` in `html`-Bodies verwenden | `format!("{name}")` oder `println!("{}", name)` | keine allgemeine Zelyra-Stringinterpolation dokumentieren | 🧪 |
+| Module | Noch nicht festgelegt | `mod name {}`, Dateien und Module | keine `mod`-Syntax im Zelyra-Parser | ❌ |
+| Imports | Noch nicht festgelegt | `use crate::module::Item;` | keine Importsyntax | ❌ |
+| Generics | `Option<T>`, `Result<T, E>` und begrenzte Built-in-Typargumente | allgemeine Generics und Traits | keine benutzerdefinierten Zelyra-Generics | 🧪 |
 | asynchrone Funktionen | `async fn` nicht vorhanden; `await`/`parallel` nur eingeschränkt | `async fn`, `.await`, Futures | kein stabiles Zelyra-Async-Modell | 🧪 |
 | Tabellen | `table customers { ... }` | kein Sprachkonstrukt | Zelyra verbindet Tabelle und Schema | ✅ |
 | Datenbanktypen | `Id`, `String(100)`, `Email`, `Bool` | Rust-Typen und externe Mapping-Crates | Zelyra erzeugt SQL-Typen aus der Tabelle | ✅ |
@@ -2833,12 +2135,12 @@ geplante oder derzeit nicht verfügbare Sprachmerkmale.
 | SQL-Abfragen | `sql<Customer[]> { SELECT ... }` | String/Makro einer DB-Crate | Zelyra prüft Schema, Parameter und Ergebnis | ✅ |
 | Formulare | `form CustomerCreate -> customers { ... }` | kein natives Formular | Webframework und Validierung nötig | ✅ |
 | CRUD | `crud Customer -> customers` | kein natives CRUD | Zelyra-Runtime stellt Standardrouten bereit | 🧪 |
-| Views | `page`, `view SiteShell` und `component Badge` | kein natives View-Konstrukt | benannte Views, verschachtelte Komponenten und Slots sind vorhanden; `input`/`render`/`??` bleiben Zielsyntax; Zelyra UI gehört zu 1.0.7 (seit 1.0.6) | 🧪 |
+| Views | `page`, `view SiteShell` und `component Badge` | kein natives View-Konstrukt | benannte Views/Komponenten sind vorhanden; `input`/`render`/`??` bleiben Zielsyntax | 🧪 |
 | Vorbedingungen | `requires { amount > 0 }` | kein eingebautes Äquivalent | Contract ist Teil der Zelyra-Funktion | ✅ |
 | Nachbedingungen | `ensures { result >= 0 }` | kein eingebautes Äquivalent | Verifier und Runtime kennen Zelyra-Contracts | ✅ |
 | Zugriff auf alte Werte | Noch nicht festgelegt; `old(...)` nicht geparst | ebenfalls kein allgemeiner eingebauter Contractstandard | keine `old`-Syntax vortäuschen | ❌ |
 | Capabilities | `uses Database` | kein identisches Sprachkonstrukt | Effekte werden in Zelyra sichtbar deklariert | ✅ |
-| E-Mails | SMTP-/Mail-API und Outbox | `mail_queue` mit `uses Email` sowie expliziter SMTP-Worker; Zelyra 1.0.7 kann ein lokal gerendertes PDF anhängen | begrenzte Outbox; Zustellungs- und Datenbankgrenzen dokumentiert | 🧪 |
+| E-Mails | `mail_queue` und `mail_deliver` | externe Crate/API | `Email`-Capability; Einreihen in `transaction` mit `Database(write)` | 🧪 |
 | Hintergrundjobs | Noch nicht festgelegt | externe Queue-/Runtime-Crate | keine Job-Syntax | ❌ |
 | Audit | `auth users { audit: auth_audit_log }` | externe Logging-/Audit-Crate | Zelyra bindet Audit an Auth- und CRUD-Ereignisse | 🧪 |
 | API-Definitionen | `api GET "/customers" { ... }` | Router, Handler und Typen separat | Zelyra bündelt Vertrag und Route | ✅ |
@@ -3019,9 +2321,9 @@ page "/customers/{name}" {
 
 Rust besitzt keine eingebaute HTML- oder Komponenten-Syntax; dort kommen
 Templates und Webframeworks hinzu. Zelyras `page`/`html`-Form sowie benannte
-Views, mehrere Default-/benannte Slots und verschachtelte typisierte Komponenten
-sind implementiert. Zelyra UI gehört zum stabilen Release 1.0.7 (eingeführt in 1.0.6). Die Zielsyntax
-`input`/`render` und `??` ist nicht implementiert.
+Views und typisierte Komponenten sind vorhanden. Mehrere Slots, verschachtelte
+Komponenten und die Zielsyntax mit `input`/`render` sind noch nicht stabil;
+`??` ist keine implementierte Zelyra-Operation.
 
 ### Verträge
 
@@ -3064,7 +2366,7 @@ fn load_customers() -> Customer[] uses Database {
 `Console` sind im
 aktuellen Runtime-Code bekannte Capabilities. Rust besitzt kein identisches
 eingebautes Capability-System; dort werden Zugriffe typischerweise über Typen,
-Werte und Bibliotheks-APIs organisiert. `Email` ist keine Zelyra-Capability.
+Werte und Bibliotheks-APIs organisiert. `Email` ist die Capability für Anwendungs-Mail. `mail_queue` benötigt zusätzlich `Database(write)` und eine Transaktion; die SMTP-Zustellung prüft den erlaubten Host.
 
 ### Was Rust-Kenner in Zelyra nicht suchen sollten
 
@@ -3101,9 +2403,10 @@ Records/Enums, klare Grenzen, reproduzierbares Tooling und formale Prüfungen.
 > technische Fundament des Compilers – nicht die Sprache, die
 > Zelyra-Anwendungsentwickler schreiben.
 
-> **Status:** Zelyra 1.1.0 ist ein stabiles Release. Einige Sprachmerkmale
-> sind eingeschränkt oder geplant; die Statusangaben an den Beispielen grenzen
-> den tatsächlich verfügbaren Umfang ab.
+> **Status:** Zelyra ist derzeit ein experimenteller Sprachprototyp. Einige
+> gezeigte Sprachmerkmale beschreiben das verbindliche Zielbild und sind noch
+> nicht vollständig implementiert. Der Status an jedem Beispiel zeigt, was
+> heute im Code tatsächlich vorhanden und geprüft ist.
 
 Weiterführend: [Einführung](#1-was-zelyra-anders-macht),
 [Sprachgrundlagen](#5-variablen-typen-und-funktionen),
@@ -3111,7 +2414,7 @@ Weiterführend: [Einführung](#1-was-zelyra-anders-macht),
 [Formulare](#11-formulare), [Views/Webseiten](#10-webseiten), [CRUD](#12-crud),
 [Contracts](#15-contracts-und-verify),
 [Capabilities](#14-capabilities), [Implementierungsstatus](#17-diagnosen-und-fehlersuche)
-und [Roadmap](#22-roadmap-aus-dem-aktuellen-repository). Der laufende Repository-Stand steht
+und [Roadmap](#22-unterstutzung-und-technische-nachweise). Der laufende Repository-Stand steht
 zusätzlich auf der [Statusseite](https://siedelmann.com/status).
 
 ## 21. Positionierung und aktueller Entwicklungsstand
@@ -3144,42 +2447,19 @@ zusammen gedacht sind.
    sollen den Lern- und Entwicklungsweg ohne Apache, PHP oder ein verpflichtendes
    Framework-Bündel ermöglichen.
 
-Zelyra 1.1.0 ist ein stabiles Release mit einem engeren Funktionsumfang und
-dokumentierten Grenzen. Die Roadmap beschreibt geplante Erweiterungen; aus dem
-Release-Status folgt keine allgemeine Produktionsgarantie.
+Der aktuelle Stand ist trotzdem ein experimenteller Prototyp. Die Roadmap und
+die einzelnen Statuszeichen sind deshalb wichtiger als eine allgemeine
+Produktbehauptung.
 
-## 22. Roadmap aus dem aktuellen Repository
+## 22. Unterstützung und technische Nachweise
 
-Die folgende Zusammenfassung stammt aus `docs/ROADMAP.de.md` im aktuellen
-Zelyra-Repository. Sie ist eine Entwicklungsplanung, keine Zusage für ein
-Release-Datum.
+Wähle den Backendpfad anhand der [Datenbankmatrix](https://github.com/sf1976/zelyra/blob/main/docs/database-support.de.md). MariaDB 11.4.13 (sowie 10.11.19, 11.8.9 und 12.3.3), MySQL Server 8.4.11 und PostgreSQL 16.15 bilden die verifizierte Multi-Backend-Servermatrix. Relationales CRUD mit echten Fremdschlüsseln (`fk_...`), Preflight-Waisenabweisung (`error[E-DB-005]`) unter Datenerhalt, relationalen Joins und restriktivem Löschschutz (RESTRICT-Delete-Policy) ist für alle drei Engines dokumentiert und getestet. Auf MySQL sind Schreibsperren über `innodb_lock_wait_timeout` dynamisch an Transaktions-Deadlines gebunden. Native Entscheidungstransaktionen (`with_decision_transaction`) sichern Rollback, Unwind und Deadlines auf einer geliehenen Verbindung ab. SQLite ergänzt lokale Schema- und grundlegende CRUD-Abläufe.
 
-| Bereich | Aktueller Schwerpunkt | Noch offene Ausbaustufen |
-|---|---|---|
-| Einstieg und Distribution | Quellcode- und Release-Installer (Linux/Windows x86_64 per SHA-256), `zelyra new/init` mit Starter-Templates (`minimal`, `mariadb-crud`, `mariadb-auth`, `mariadb-business`), Docker-/DB-Ports, `zelyra setup`, `zelyra doctor`, E2E-Tests | signierte Binaries, interaktiver Verbindungsassistent, Reverse-Proxy-Automatisierung |
-| Sprache und Compiler | Lexer, Parser, AST/HIR, Typprüfung, `Option`, `Result`, payloadtragende und generische Enums/Records, benannte Funktionswerte, projektlokale Importe und kanonisches `zelyra fmt`; Zelyra 1.0.7 ergänzt If-Ausdrücke, Record-Updates, Lambdas, Match-Guards und Tupelbindung | umfassendere Tooling-Integration, generische Constraints/Aliase, deklarative Lücken und vollständige formale Verifikation |
-| Datenbankplattform | MariaDB, SQLite und PostgreSQL im Schema-CLI; typisiertes SQL | weitere Schemaabdeckung, robustere Produktionsabläufe |
-| Views und Web | Seiten, benannte Views, Komponenten, Default- und benannte Slots mit Fallback-Inhalten, Zelyra UI, Projekt-Themes und sicherer Output | View-Vererbung und allgemeine statische Prüfung beliebiger CSS-Klassen |
-| Formulare und CRUD | Validierung, CSRF, Suche, Filter, Pagination, Aktionen, Soft Delete, gemeinsames CRUD-View-Feldprofil (`view.fields`) | permanente Löschung, Aufbewahrung, Archivierung und breitere View-Anpassung |
-| Authentifizierung und Audit | Login, Sessions, Rollen, Berechtigungen, Browser-Admin, Audit und Hash-Kette | Self-Service, noch umfassendere Policy-Verwaltung und Archivstrategien |
-| APIs und Integration | typisierte APIs, OpenAPI, TypeScript-Client und CORS | Versionierung, Rate Limits und OAuth-/Integrationsbausteine |
-| Verifikation und Betrieb | Contracts, Capability-Prüfung und erste Nebenläufigkeitsbausteine | Abbruch, Timeouts, Datenbank-Pool-Integration und belastbare Performancepfade |
-| KI-native Schnittstellen | `zelyra fmt` (Stufe B ✅), Ausdrucks-Lücken `_` (Stufe C 🧪), `zelyra impact` mit `--symbol` (Stufe D 🧪), `zelyra edit` Umbenennung (Stufe E 🧪) | Lücken in Deklarationen, Schema-/Laufzeit-Impact, komplexere Edit-Operationen, KI-Benchmark |
-| Qualität und Governance | Tests, Dokumentation und reproduzierbare Prüfungen | breitere Akzeptanzanwendungen und Produktionshärtung |
+Diese Nachweise gelten für die genannten Abläufe, nicht für beliebige Datenbankfunktionen. Erweiterte Authentifizierungsmerkmale, Mail-Outbox und Benachrichtigungsbeispiele verwenden vorrangig MariaDB und MySQL.
 
-Die stabile Version 1.0.7 enthält E-Mail-Outbox und einen Browserdruck-/PDF-
-Ablauf. Sie ergänzt serverseitig erzeugte, rein textbasierte PDFs als
-begrenzte Mail-Anhänge. Nicht verfügbar bleiben
-Hintergrundjobs, vollständige Module/Imports, allgemeine CSS-Prüfung und
-automatische Produktionsmigration. Geplante Funktionen werden nur dann als
-verfügbar bezeichnet, wenn CLI und Runtime sie tatsächlich tragen.
+Installation, Upgrade, Rollback, Migration und Wiederherstellung müssen zur eingesetzten Plattform und Serverversion passen. Prüfsummen, SBOMs und Attestierungen helfen, das Release-Artefakt zuzuordnen. Sie bestätigen nicht die fachliche Korrektheit einer Anwendung. Die [Betriebs- und Prüfziele](https://github.com/sf1976/zelyra/blob/main/docs/release-plans/0.9.9.de.md) verlangen reproduzierbare Proben; ein Ziel allein ist kein bestandener Nachweis.
 
-Die sinnvollste Reihenfolge für ein eigenes Lernprojekt bleibt daher:
-
-1. `check` und `run` für die Sprachgrundlagen;
-2. `db create`, `db inspect`, `db plan` und kontrolliertes `db apply`;
-3. eine kleine `page`-, `form`- oder `crud`-Anwendung;
-4. erst danach Authentifizierung, Rollen, Audit und API-Integration.
+Für ein Lernprojekt empfiehlt sich: zuerst `check` und `run`, dann Schema-Vorschau und Plan, danach Seiten/Formulare/CRUD und schließlich Authentifizierung, Mail und Integrationen.
 
 ## 23. KI-native Entwicklung
 
@@ -3230,9 +2510,9 @@ zelyra fmt examples/fibonacci.zyl
 zelyra fmt examples/fibonacci.zyl --check
 ~~~
 
-Der Formatter bewahrt Zeilen- und Blockkommentare und behandelt SQL- und
-HTML-Blöcke als opaken Quelltext. Er ist idempotent: Ein bereits formatiertes
-Dokument erzeugt byte-identisch dieselbe Ausgabe.
+Der Formatter bewahrt Zeilenkommentare und behandelt SQL- und HTML-Blöcke als
+opaken Quelltext. Er ist idempotent: Ein bereits formatiertes Dokument erzeugt
+byte-identisch dieselbe Ausgabe.
 
 #### Typisierte Lücken (Typed Holes)
 
@@ -3261,18 +2541,7 @@ zelyra context examples/auth_crud_api.zyl --format=json
 ~~~
 
 Sie meldet deklarierte Funktionen, Tabellen, SQL-Abfragen, CRUD-Ressourcen,
-Formulare, APIs und Source-Spans. Im aktuellen Modulgraphen
-enthält `database` außerdem die Datenbankdeklaration, das besitzende
-Provider-Modul und je datenbanknutzendem Modul dessen direkte oder transitive
-Importbindung. Sichtbar ist nur der Name der Umgebungsvariablen, etwa
-`ZELYRA_DATABASE_MAIN_URL` – niemals der Verbindungswert oder ein Passwort.
-Bei einer benannten Datenbank weist `fallback_connection_environment` zusätzlich
-auf den von der Laufzeit akzeptierten Fallback `DATABASE_URL` hin. Gibt es keine
-`database`-Deklaration, ist `DATABASE_URL` die primäre Variable; der Kontext
-kennzeichnet die Bindung als `legacy_project_environment` und lässt
-`configuration` auf `null`.
-Der Bericht weist ausdrücklich eine Verbindung pro Prozess aus; er aktiviert
-kein Routing mehrerer Datenbanken.
+Formulare, APIs und Source-Spans.
 
 #### Deterministische Wirkungsanalyse
 
@@ -3285,19 +2554,15 @@ zelyra impact examples/auth_crud_api.zyl --symbol table:customers --format=json
 
 Die Wirkungsantwort meldet quelltextbasierte Tabellen, SQL, Formulare, CRUD-
 Ressourcen, Views, APIs, Berechtigungen, Contracts und eine deterministische
-`references`-Kantenliste für bekannte Beziehungen. Für geladene Projekte listet
-sie außerdem Pfad, Importe, Exporte und Deklarationen jedes Moduls sowie
-`module_import`-Kanten. Modul-Kanten stammen aus dem validierten Projektgraphen
-und haben in dieser Version keine Quelltextspanne. Andere Quelltext-Kanten
-enthalten Quelle, Ziel, Art und Quelltextspanne. E-Mail-, Job-, Test- und
+`references`-Kantenliste für bekannte Beziehungen. Jede bekannte Kante enthält
+Quelle, Ziel, Art und Quelltextspanne. E-Mail-, Job-, Test- und
 Live-Schemaauswirkungen bleiben ausdrücklich leer oder nicht verfügbar; der
 Befehl verbindet sich nie mit MariaDB.
 
 Mit `--symbol <kind:name>` kann die Ausgabe auf einen bekannten Knoten wie
-`table:customers` oder `module:src/storage.zyl` fokussiert werden. Die
-fokussierte Antwort enthält nur direkt verbundene Referenzen und zugehörige
-Knoten-IDs. Unbekannte Knoten liefern `E-IMPACT-001` und einen Exit-Code
-ungleich null.
+`table:customers` fokussiert werden. Die fokussierte Antwort enthält nur direkt
+verbundene Referenzen und zugehörige Knoten-IDs. Unbekannte Knoten liefern
+`E-IMPACT-001` und einen Exit-Code ungleich null.
 
 #### Atomare semantische Änderungen
 
@@ -3324,14 +2589,7 @@ zelyra edit --format=json change.json
 Die Anfrage ist versioniert und darf nur auf eine existierende `.zyl`-Datei
 innerhalb der aufgelösten Zelyra-Projektwurzel zeigen. Quelltext vor und nach
 der Änderung muss die Compilerprüfungen bestehen. Das Ergebnis meldet die
-genauen Token-Spans und einen deterministischen Quelltext-Fingerprint. Es
-meldet außerdem `affected_files`; da diese Version pro Anfrage eine Quelldatei
-ändert, enthält die Liste die Entry-Datei. Abhängige Tests und Schema-Referenzen
-berechnet die Edit-Vorschau noch nicht. Bei
-Funktionsumbenennungen listet `affected_effects` die deklarierten Capabilities
-der umbenannten Funktion und betroffener aufrufender Funktionen derselben
-Quelldatei. Die Umbenennung selbst ändert diese Deklarationen nicht;
-modulübergreifende Effekte sind nicht enthalten.
+genauen Token-Spans und einen deterministischen Quelltext-Fingerprint.
 
 Für `--apply` muss die Anfrage den Fingerprint aus der Vorschau enthalten; so
 wird eine zwischenzeitlich geänderte Datei nicht überschrieben (Stale-Source-
@@ -3374,39 +2632,1914 @@ Es gibt noch keine veröffentlichten Vergleichsergebnisse. Ein Secret-Leak oder
 eine nicht freigegebene destruktive Änderung bleibt ein Sicherheitsfehler und
 wird nicht durch vermeintliche Produktivität aufgewogen.
 
-## 24. Anwendungs-E-Mail (0.9.5)
+---
 
-Zelyra bietet `mail_queue` zum Einreihen von Text und optionalen HTML-
-Alternativen innerhalb einer Datenbank-`transaction`. Der Outbox-Eintrag wird
-atomar mit den Geschäftsänderungen gespeichert. `mail_deliver(event_id,
-payload_json)` ist für einen ausdrücklich gestarteten Outbox-Handler bestimmt
-und liefert `Result<Unit, String>`; Erfolg quittiert den Eintrag, ein Fehler
-plant einen Retry.
+## 24. Verbindliche Quellen und Compiler-Prüfung (Source Authority)
 
-Diese erste API verwendet die MariaDB-/MySQL-Outbox. PostgreSQL-Outbox wird
-noch nicht unterstützt; die Runtime weist entsprechende Mail-Queues vor dem
-Outbox-SQL ab. Die Zustellung erfolgt mindestens einmal. Ein Ausfall zwischen
-SMTP-Annahme und Outbox-Quittierung kann daher ein Duplikat verursachen.
+> **Grundsatz:** Zelyra ist eine eigenständige Sprache. Parser und geprüfte Tests entscheiden, was existiert.
 
-SMTP-Einstellungen verwenden `ZELYRA_SMTP_HOST`, `ZELYRA_SMTP_PORT`,
-`ZELYRA_SMTP_SECURITY`, `ZELYRA_SMTP_FROM` und optionale Benutzer-/Passwort-
-Variablen. `implicit_tls` und `starttls` prüfen Zertifikate und wechseln nie
-auf Klartext. Eine private CA kann über `ZELYRA_SMTP_CA_CERT` ergänzt werden;
-die Hostnamenprüfung bleibt aktiv. Klartext ist auf Loopback begrenzt und
-verträgt keine Zugangsdaten. Der konfigurierte Host muss auch in der
-Netzwerk-Allowlist stehen. Text- und HTML-Body sind zusammen auf 64 KiB
-begrenzt. Zelyra 1.0.7 ergänzt `mail_queue` um einen PDF-Anhang,
-der direkt aus `render_pdf("ViewName", record)` stammen muss. Dateigröße und
-Outbox-Payload sind begrenzt; CSS, Bilder und Diagramme werden nicht als PDF-
-Layout gerendert.
-Einrichtung, Workerbeispiel und lokaler TLS-SMTP-Test stehen in
-[`docs/mail.de.md`](../../mail.de.md).
+Bei Widersprüchen gilt immer folgende verbindliche Reihenfolge:
 
-### Startreihenfolge bei `setup --all`
+1. **[Formale Sprachspezifikation](https://github.com/sf1976/zelyra/blob/main/docs/specification.de.md) und Phasendokumente**
+2. **Compiler-Code:** Lexer-, AST-, Parser-, Namensauflösungs-, Typprüfungs- und semantischer Code in den Crates `lexer`, `parser`, `ast`, `hir`, `cli`, `runtime`, `database`, `web` und `forms`
+3. **Offizielle automatisierte Sprach- und Integrationstests:** Workspace-Tests (`cargo test --workspace`), Machine-Interface-Tests und E2E-Shellskripte in `tests/`
+4. **Die offizielle Standardbibliothek:** (sobald eigenständig strukturiert)
+5. **Offizielle Zelyra-Beispiele:** `.zyl`-Dateien in `examples/`, die mit dem aktuellen Compiler erfolgreich verifiziert wurden
+6. **Dokumentation und Handbuch**
 
-`--database` startet ausschließlich MariaDB. `--schema` baut das Anwendungsbild
-und führt `db apply` in einem separaten, anschließend entfernten Container aus;
-ein bereits laufender Webserver ist nicht erforderlich. `--all` startet den
-Webdienst erst nach erfolgreicher Schemaanwendung und gibt dann seine Adresse
-aus. Schemapläne mit Freigabepflicht bleiben gesperrt; diese Reihenfolge umgeht
-keine Präzisions- oder Migrationsprüfung.
+### Wichtige Invarianten für Entwickler und KI-Assistenten
+
+- **Roadmap ist Planung, keine Syntax:** Zukünftige Phasenvorschläge dürfen erst nach Implementierung in Lexer/Parser als verfügbare Syntax dargestellt werden.
+- **Compiler-Implementierungssprache Rust ist kein Zelyra:** Zelyra wird in Rust entwickelt, aber Rust-Syntax in einer `.zyl`-Datei ist ungültig, es sei denn, die Zelyra-Grammatik definiert sie ausdrücklich.
+- **Keine erfundenen Befehle:** Alle CLI-Befehle müssen in `cli/src/main.rs` existieren.
+- **Prüfzyklus:** Jede Erweiterung durchläuft Formatierung (`cargo fmt`), Typ- und Crate-Prüfung (`cargo check`), Linter (`cargo clippy`) und Tests (`cargo test`).
+
+---
+
+## 25. Anwendungs-Mail und SMTP
+
+Anwendungs-Mail wird in derselben MariaDB-Transaktion wie eine Geschäftsänderung eingereiht. Der Webrequest wartet nicht auf SMTP. Ein separater Worker stellt fällige Nachrichten zu.
+
+### Projekt und Transport konfigurieren
+
+```toml
+[capabilities]
+email = true
+database = true
+
+[network]
+allowed_hosts = ["smtp.example.test"]
+```
+
+```dotenv
+ZELYRA_SMTP_HOST=smtp.example.test
+ZELYRA_SMTP_SECURITY=starttls
+ZELYRA_SMTP_PORT=587
+ZELYRA_SMTP_FROM="Zelyra <noreply@example.test>"
+ZELYRA_SMTP_USERNAME=app-user
+ZELYRA_SMTP_PASSWORD=durch-ein-secret-ersetzen
+```
+
+`implicit_tls` ist der Standard und verwendet Port 465; `starttls` verwendet Port 587. Zertifikats- und Hostnamenprüfung bleiben aktiv. Optional ergänzt `ZELYRA_SMTP_CA_CERT` ein PEM-Wurzelzertifikat aus einer regulären Datei ohne Symlink bis 128 KiB. `local_plaintext` ist nur für Loopback ohne Zugangsdaten zulässig. Der genaue SMTP-Host muss in der Allowlist stehen. Speichere Zugangsdaten in der lokalen `.env` oder Prozessumgebung; übernimm sie nicht in die Versionsverwaltung.
+
+### Nachrichten einreihen
+
+Speichere folgendes Beispiel als `main.zyl` in einem entsprechend konfigurierten MariaDB-Projekt:
+
+```zelyra
+pub fn deliver_mail(event_id: String, event_type: String, payload_json: String) -> Bool uses Email {
+  if event_type == "zelyra.mail.send" {
+    match mail_deliver(event_id, payload_json) {
+      Ok(_) => { return true }
+      Err(_) => { return false }
+    }
+  }
+  return false
+}
+
+fn main() uses Email, Database(write) {
+  transaction {
+    mail_queue(
+      "customer@example.test",
+      "Your Zelyra order",
+      "Your order has been recorded.",
+      "<p>Your order has been recorded.</p>"
+    )
+  }
+}
+```
+
+`mail_queue(to, subject, text, html?)` ist eine Anweisung direkt innerhalb von `transaction`. Die Funktion benötigt `Email` und `Database(write)`. Die API prüft Header-Injection und Größen; Argumente müssen Werte oder nebenwirkungsfreie String-Ausdrücke sein. Bei einer zurückgerollten Transaktion bleibt keine zugehörige Mail eingereiht. HTML-Inhalte musst du vor dem Einreihen passend escapen, wenn sie nicht vertrauenswürdig sind.
+
+### Outbox und Worker
+
+```bash
+zelyra outbox setup main.zyl
+zelyra run main.zyl
+zelyra outbox list main.zyl --limit 25
+zelyra outbox run main.zyl --handler zelyra.mail.send=deliver_mail --once
+```
+
+Richte die Outbox vor dem ersten Programmlauf ein. `--once` verarbeitet einen fälligen Eintrag; ohne diese Option verarbeitet der Worker zugeordnete fällige Ereignisse, bis keines mehr ansteht. `mail_deliver(event_id, payload_json)` liefert einen `Result`; der Handler bestätigt Erfolg mit `true` und erlaubt Wiederholung mit `false`. Der SMTP-Transport hat ein Zeitlimit von fünf Sekunden und gibt redigierte Fehler aus.
+
+Zustellung erfolgt mindestens einmal. Nach SMTP-Annahme und vor Outbox-Quittierung kann ein Worker ausfallen; dadurch sind Duplikate möglich. Die Ereignis-ID wird als stabile Nachrichten-ID verwendet, garantiert aber keine einmalige Zustellung. Die dokumentierte API unterstützt Text-/HTML-Alternativen über die MariaDB-Outbox. Benannte Templates, Anhänge und PostgreSQL-Mail-Outbox sind nicht als verfügbare API belegt. Siehe die [Mail-Referenz](https://github.com/sf1976/zelyra/blob/main/docs/mail.de.md).
+
+### Persistente Passwort-Reset-Quoten
+
+Zur Härtung gegen Brute-Force- und Denial-of-Service-Angriffe speichert Zelyra Passwort-Reset-Anfragen neustartsicher in der Tabelle `password_reset_limits`. Die Drosselung bleibt auch bei Prozessneustarts aktiv. Abgelaufene Zeitfenster werden in Batch-Zyklen automatisch aufgeräumt, während Diagnoseausgaben für Operatoren strikt sanitisiert bleiben, um keine E-Mail-Adressen oder Tokens im Protokoll preiszugeben.
+
+## 26. Mandantengebundene Benachrichtigungen
+
+Das In-App-Zentrum funktioniert ohne SMTP. Es verwendet authentifizierte Mandantenzugehörigkeit, eine gemeinsame Benachrichtigungstabelle und eine mandantengebundene CRUD-Ressource. Der aktive Mandant begrenzt Listen, direkte Zugriffe und den ungelesenen Zähler. Abgelaufene und archivierte Einträge werden ausgeblendet.
+
+### Vollständiges MariaDB-Beispiel
+
+Speichere das Beispiel in einem MariaDB-Projekt mit aktivierten Datenbank-, Web-, CRUD- und Auth-Funktionen. Richte Schema, Benutzer, Passwort-Hash, Mandantenzugehörigkeit und Berechtigungen ein, bevor du die Anwendung im Browser verwendest:
+
+```zelyra
+# Tenant-scoped notification inbox starter for MariaDB projects.
+# Every generated notification route verifies the authenticated membership.
+
+auth users {
+    table: users
+    sessions: auth_sessions
+    permissions: user_permissions
+    memberships: tenant_memberships
+}
+
+table users {
+    id: Id primary auto
+    email: Email required unique
+    password_hash: String(255) required
+    active: Bool default true
+}
+
+table auth_sessions {
+    id: Id primary auto
+    user: User required
+    token_hash: String(64) required unique
+    expires_at: Timestamp required
+}
+
+table user_permissions {
+    id: Id primary auto
+    user_id: Id required
+    permission: String(100) required
+}
+
+table tenant_memberships {
+    id: Id primary auto
+    user_id: Id required
+    tenant_id: Id required
+    active: Bool required
+}
+
+table notifications {
+    id: Id primary auto
+    tenant_id: Id required
+    title: String(160) required
+    message: String(4000) required
+    category: String(40) required
+    read_at: Timestamp?
+    archived_at: Timestamp?
+    expires_at: Timestamp?
+    created_at: Timestamp default now
+}
+
+crud Notification -> notifications {
+    title: "Notifications"
+    tenant: tenant_id
+    unread: read_at
+    expires: expires_at
+    requires auth
+    permits "notifications.view"
+    permits create "notifications.manage"
+    permits edit "notifications.manage"
+    permits delete "notifications.manage"
+
+    soft_delete {
+        column: archived_at
+    }
+
+    list {
+        title
+        category
+        created_at
+        read_at
+    }
+
+    search {
+        title
+        message
+    }
+
+    filter {
+        category
+        read_at
+    }
+
+    view {
+        fields {
+            title
+            message
+            category
+            read_at
+            expires_at
+        }
+    }
+}
+
+table notification_preferences {
+    id: Id primary auto
+    tenant_id: Id required
+    email_enabled: Bool default false
+    retention_days: Int default 90
+    updated_at: Timestamp default now
+}
+
+crud NotificationPreference -> notification_preferences {
+    title: "Notification preferences"
+    tenant: tenant_id
+    requires auth
+    permits "notifications.manage"
+    list {
+        email_enabled
+        retention_days
+        updated_at
+    }
+    view {
+        fields {
+            email_enabled
+            retention_days
+        }
+    }
+}
+
+fn main() {
+}
+```
+
+`tenant: tenant_id` bindet die Ressource an den aktiven Mandanten und seine Mitgliedschaft. `unread: read_at` stellt den ungelesenen Zähler bereit; `expires: expires_at` blendet abgelaufene Einträge aus. `soft_delete` archiviert über `archived_at`. `notifications.view` erlaubt Lesen, `notifications.manage` schützt Verwaltung und Änderungen. Ein Tenant-Feld allein ohne die Auth-/Mitgliedschaftskonfiguration ist keine Mandantenisolierung.
+
+### Lesestatus, Aufbewahrung und Mail
+
+`read_at` ist ein Zeitstempel am Benachrichtigungseintrag. Über die Empfängerbindung (`recipient: user_id`) wird sichergestellt, dass Benachrichtigungen nur für den berechtigten Benutzer sichtbar sind. Persönliche Lesebestätigungen werden mit CSRF-Schutz und atomarem Audit-Logging quittiert. Die Einstellungstabelle speichert `email_enabled` und `retention_days`. Ablauf wird beim Lesen berücksichtigt; Archivierung ist keine physische Löschung. Das [Beispiel](https://github.com/sf1976/zelyra/blob/main/examples/notification_center.zyl) zeigt den vorhandenen Umfang.
+
+### Lokales TOTP-MFA
+
+Für mehrstufige Authentifizierung unterstützt Zelyra zeitbasierte Einmalkennwörter (TOTP nach RFC 6238). Die geheimen Schlüssel werden mit AES-256-GCM verschlüsselt in der Datenbank abgelegt. Einmalige Wiederherstellungscodes werden mit Argon2id sicher gehasht. Das System wehrt Token-Wiederholungsangriffe (Replay Defense) sowie Rennbedingungen ab und sperrt Konten nach fünf aufeinanderfolgenden Fehlversuchen automatisch temporär (HTTP 429).
+
+## 27. Sprache, Laufzeit und PDF-Mail
+
+Dieses Kapitel dokumentiert die Spracherweiterungen aus Zelyra 1.0.7. Die Version erweitert
+Sprache und Runtime für gut prüfbare Businesslogik und ergänzt eine lokale,
+serverseitige Text-PDF-Pipeline für Views und transaktionale E-Mail-Anhänge.
+
+### Wertliefernde Ausdrücke und Record-Updates
+
+Ein `if`-Ausdruck liefert in beiden Zweigen denselben typgeprüften Wert. Records
+lassen sich mit `..old` funktional kopieren und selektiv aktualisieren:
+
+```zelyra
+fn invoice_label(paid: Bool) -> String {
+    return if paid { "Bezahlt" } else { "Offen" }
+}
+
+struct Customer {
+    id: Int
+    name: String
+    active: Bool
+    version: Int
+}
+
+fn activate_customer(c: Customer) -> Customer {
+    return Customer { ..c, active: true, version: c.version + 1 }
+}
+```
+
+### Typisierte Lambdas und Pipelines
+
+Lambdas sind lexikalische Closures. Der Compiler prüft Callback-Eingaben und
+Ergebnisse statisch; Pipelines bleiben synchron und deterministisch:
+
+```zelyra
+fn calculate_tax_totals(amounts: Int[]) -> Int[] {
+    return amounts
+        |> filter(|a| a > 0)
+        |> map(|a| a + (a * 19 / 100))
+}
+```
+
+### Verschachtelte Record-Muster, Match-Guards und Tupel
+
+`match` unterstützt verschachtelte Record-Muster und boolesche Wächter (Guards).
+Tupel können als reguläre Rückgabewerte dienen und mehrfach destrukturiert werden:
+
+```zelyra
+struct Order { status: String total: Int }
+
+fn inspect_order(order: Order) -> Tuple<String, Bool> {
+    return match order {
+        Order { status: "paid", total } if total >= 1000 => ("VIP-Grossauftrag", true)
+        Order { status: "paid", total }                  => ("Standardauftrag", true)
+        _                                                => ("Ausstehend", false)
+    }
+}
+```
+
+### Begrenzte Ausführung mit Step-Budget
+
+`zelyra run datei.zyl --max-steps N` begrenzt Anweisungen und
+Ausdrucksauswertungen über alle `parallel`-Zweige hinweg und meldet
+Überschreitungen als `E-RUNTIME-001` an der Quellstelle:
+
+```bash
+zelyra run main.zyl --max-steps 5000
+```
+
+### Serverseitiges Text-PDF und transaktionale Outbox-E-Mail
+
+`render_pdf("InvoicePrint", invoice)` rendert eine deklarierte View lokal in
+`Bytes`. Innerhalb derselben Datenbanktransaktion kann `mail_queue` einen
+PDF-Anhang in der MariaDB-Outbox einreihen:
+
+```zelyra
+fn send_invoice(recipient: String, invoice: Invoice) uses Email, Database(write) {
+    transaction {
+        mail_queue(
+            recipient,
+            "Rechnung " + invoice.number,
+            "Ihre Rechnung ist beigefügt.",
+            "invoice-" + invoice.number + ".pdf",
+            render_pdf("InvoicePrint", invoice)
+        )
+    }
+}
+```
+
+## 28. Systemd-Dienste, Scheduler und Jobs
+
+Zelyra integriert Betriebssystemdienste, permanente Hintergrund-Zeitpläne und asynchrone Jobs direkt in die Toolchain, ohne externe Cron-Dämonen oder unzuverlässige Skriptschleifen.
+
+### Linux-systemd-Dienstverwaltung
+
+Mit `zelyra service` wird für ein Projekt ein dedizierter Linux-systemd-Benutzerdienst eingerichtet. Der Service verwendet einen fest konfigurierten Port:
+
+```bash
+# Dienst auf festem Port 8080 installieren
+zelyra service install --port 8080
+
+# Status des Dienstes und HTTP-Erreichbarkeit prüfen
+zelyra service status
+
+# Dienst neu starten (wartet auf lokale Socket-Erreichbarkeit)
+zelyra service restart
+
+# Port unterbrechungsfrei und mit atomarem Rollback ändern
+zelyra service change --port 8081
+
+# Dienst stoppen und Unit-Datei entfernen
+zelyra service remove
+```
+
+Ist der angegebene Port belegt, schlägt die Installation fehl (`fail-closed`). Zelyra weicht niemals stillschweigend auf einen anderen Port aus. Bei `service change` wird die alte Unit erst dann überschrieben und der neue Dienst gestartet, wenn der Zielport frei ist; bei Fehlern wird der vorherige Zustand automatisch wiederhergestellt.
+
+### Residente Zeitpläne und MariaDB-Outbox-Jobs
+
+Zeitpläne werden deklarativ im Zelyra-Quellcode definiert:
+
+```zelyra
+schedule weekly_report {
+    cron: "0 8 * * 1"
+    timezone: "Europe/Berlin"
+    command: generate_reports
+}
+```
+
+Der residente Scheduler läuft ausschließlich innerhalb des aktiven Zelyra-Projektdienstes. An jeder Minutengrenze prüft er anstehende Ausführungen und reiht geplante Jobs transaktional in die MariaDB-Outbox ein. Ein serieller Worker übernimmt anstehende Aufgaben mit erneuerbaren Leases und begrenzten Wiederholungen.
+
+```bash
+# Alle anstehenden und ausgeführten Jobs des Projekts einsehen
+zelyra schedule jobs main.zyl
+
+# Status des residenten Schedulers abfragen
+zelyra schedule status main.zyl
+
+# Zeitpläne als crontab-kompatible Vorschau exportieren (z. B. für externe Systeme)
+zelyra schedule export main.zyl --format cron
+```
+
+## 29. Kanonische Projektstruktur und Vertical Slices
+
+Ab Version 1.2.13 unterstützt Zelyra ein verbindliches, feature-orientiertes Standard-Projektlayout (**Vertical Slice Architecture**), das in Version 1.3.0 zum Standard avanciert. Es trennt Routing strikt von Geschäfts- und Datenmodell.
+
+### Das Standardlayout anlegen
+
+```bash
+zelyra new mein-erp --layout standard
+```
+
+Ein Projekt mit Standard-Layout besitzt folgende verbindliche Struktur:
+
+```text
+mein-erp/
+├── zelyra.toml                 # Projekt-Manifest (layout = "standard")
+├── schema/                     # Single Source of Schema
+│   └── tables.zyl              # Tabellen, Indizes, Relationen
+├── domain/                     # Fachdomänen (Vertical Feature Slices)
+│   ├── invoices/               # Feature-Modul Rechnungen
+│   │   ├── actions.zyl         # Geschäftsvorfälle & Rechenregeln
+│   │   └── views.zyl           # UI-Komponenten & Ansichten
+│   └── customers/              # Feature-Modul Kunden
+│       ├── actions.zyl
+│       └── views.zyl
+├── routes/                     # Schlanke HTTP-Gatekeeper
+│   ├── web.zyl                 # Web-Routen & Formular-Handling
+│   └── api.zyl                 # REST-/JSON-Endpunkte
+├── public/                     # Statische Dateien (vom Server direkt ausgeliefert)
+└── assets/                     # Web-Assets (fließen in das Binary ein)
+    ├── css/
+    └── js/
+```
+
+### Namespace-Importe und strikte Architekturprüfung
+
+Im Standardlayout löst Zelyra Importe direkt über die Namensraumwurzeln auf:
+
+```zelyra
+use schema::tables::*
+use domain::invoices::actions as invoice_ops
+```
+
+Wird in der `zelyra.toml` der Schalter `strict_architecture = true` aktiviert, erzwingt der Zelyra-Linter folgende Kardinalregel:
+
+> **Keine direkten Datenbankmutationen in Routen-Dateien (`routes/*.zyl`).**
+
+Schreibende Operationen (`insert`, `update`, `delete`) innerhalb von Routen führen zum Abbruch mit dem Compilerfehler `E-ARCH-001`. Fachlogik muss in `domain/<feature>/actions.zyl` implementiert und getestet werden.
+
+```bash
+# Migrationsvorschau auf das Standardlayout prüfen (schreibgeschützt, verändert keine Dateien)
+zelyra migrate-layout --check main.zyl
+```
+
+## 30. Erweiterbare CRUD- und TableView-Seiten
+
+Zelyra 1.2.15 führt typgeprüfte Erweiterungspunkte für automatisch generierte CRUD-Seiten und Tabellenansichten ein. Entwickler können Standard-Masken flexibel anpassen, ohne das sichere Fundament aus Validierung, Berechtigungen und CSRF-Schutz aufgeben zu müssen.
+
+### Create- und Edit-Seiten anpassen
+
+Über `crud.view.create` und `crud.view.edit` lassen sich Seitentitel, Schaltflächentexte und ergänzende Inhaltsblöcke vor oder nach dem Formular einbinden:
+
+```zelyra
+crud KundenVerwaltung for Customer {
+    view create {
+        title: "Neuen Kunden registrieren"
+        submit_label: "Kundenkonto anlegen"
+        help: "Bitte prüfen Sie die USt-IdNr. vor dem Speichern."
+    }
+    view edit {
+        title: "Kundendaten aktualisieren"
+        submit_label: "Änderungen übernehmen"
+    }
+}
+```
+
+Zusätzliche Inhalte verwenden denselben sicheren Template-Kontext und unterliegen voller XSS-Escaping- und Typprüfung. Scheitert eine Formularvalidierung, bleiben die ergänzten Inhalte und Hinweistexte zusammen mit den Fehlermeldungen erhalten.
+
+### Erweiterte TableView-Listen und Zeilenaktionen
+
+Tabellenansichten (`tableview`) können mit Kopf- und Fußbereichen sowie individuellen Zeilenaktionen versehen werden:
+
+```zelyra
+tableview RechnungsListe for Invoice {
+    columns: [number, customer_name, total_gross, status]
+    row_actions: [
+        action "Details" -> "/invoices/show/{id}",
+        action "PDF" -> "/invoices/{id}/pdf"
+    ]
+}
+```
+
+Die Zeilenaktionen erzeugen saubere, auditierbare URLs. Sicherheitsprüfungen und Mandanten-Filter bleiben vollständig wirksam.
+
+## 31. Dual-Tier-Ausführungsmodell: AST, MIR und Bytecode-VM
+
+Auf dem Weg zu Version 1.3.0 implementiert Zelyra eine zukunftsweisende Zweipfad-Architektur, die sofortiges Feedback in der Entwicklung mit maximaler Geschwindigkeit in Produktionsumgebungen vereint.
+
+```text
+Quellcode (.zyl)
+      │
+      ▼
+Lexer & Parser
+      │
+      ▼
+AST mit Source-Spans
+      │
+Gemeinsame statische Prüfungen (Types, Contracts, Scopes)
+      │
+      ├───────────────────────────────┐
+      ▼                               ▼
+[1. AST-Referenzinterpreter]    [2. High-Speed Pipeline]
+- Schnelles Hot-Reloading       - HIR (Symbolauflösung)
+- Unbestechliches Test-Orakel   - Typisierte MIR (CFG, Basisblöcke)
+- Entwickler-Diagnostik         - MIR-Verifier
+                                - Bytecode-Compiler (Format v24)
+                                - Bytecode-VM (Iterative Rust-Callframes)
+```
+
+1. **AST-Referenz:** Dient während der Entwicklung als unverzüglich einsatzbereites Orakel und im Test-Harness als Prüfmaßstab.
+2. **Typisierte MIR:** Bildet den Kontrollflussgraph (CFG) in expliziten Basisblöcken ab und verifiziert SQL-Operationen (`E-MIR-VERIFY-004`), Typen und Capabilities.
+3. **Bytecode-VM v24:** Führt kompilierte Instruktionen in iterativen Schleifen auf nativer Rust-Ebene aus – ohne Rekursionsgrenzen und mit minimalem Arbeitsspeicherbedarf (< 45 MB RAM im Leerlauf).
+
+Differentialtests stellen sicher, dass AST und Bytecode-VM für dieselben Programme identische Ergebnisse, Fehlercodes und Nebeneffekte liefern.
+
+## 32. Mandantensicherheit und zusammengesetzte Fremdschlüssel
+
+In mandantenfähigen B2B-Anwendungen darf kein Datensatz ohne Tenant-Zugehörigkeit existieren, und Fremdschlüssel dürfen niemals mandantenübergreifend referenzieren. Zelyra verankert Mandantensicherheit direkt im Tabellenschema (`scoped by tenant_id: TenantId`).
+
+### Deklaration von Mandantentabellen
+
+```zelyra
+type TenantId = Id
+
+table customers scoped by tenant_id: TenantId {
+    id: Id primary auto
+    tenant_id: TenantId required
+    customer_number: String(50) required unique within tenant
+    name: String required
+}
+
+table invoices scoped by tenant_id: TenantId {
+    id: Id primary auto
+    tenant_id: TenantId required
+    invoice_number: String(50) required unique within tenant
+    customer: Customer?
+    total_net: Decimal(12, 2) required default 0
+    total_gross: Decimal(12, 2) required default 0
+}
+```
+
+### Automatische Integritätsgarantien auf Datenbankebene
+
+1. **Zusammengesetzter Primärschlüssel-Schutz:** Zelyra erzeugt automatisch `uq_{table}_tenant_id UNIQUE (tenant_id, id)`.
+2. **Mandantenisolierte Fremdschlüssel:** Verknüpfungen zwischen mandantenisolierten Tabellen (`customer: Customer?`) generieren automatisch zusammengesetzte Fremdschlüssel:
+   ```sql
+   FOREIGN KEY (tenant_id, customer_id) REFERENCES customers (tenant_id, id) ON DELETE RESTRICT
+   ```
+   Dadurch ist ein Cross-Tenant-Angriff (z. B. Zuweisen eines Kunden von Mandant A zu einer Rechnung von Mandant B) auf physischer Datenbankebene unmöglich.
+3. **Mandantenbezogene Eindeutigkeit:** Mit `unique within tenant` deklarierte Felder erzeugen `UNIQUE KEY (tenant_id, customer_number)`. Unterschiedliche Mandanten können dieselbe Belegnummer führen, innerhalb eines Mandanten sind Duplikate ausgeschlossen.
+4. **Optionale Relationen und kaufmännische Dezimalzahlen:** Optionale Verknüpfungen (`Customer?`) erzeugen typsicher `BIGINT NULL`. `Decimal(p, s)` (z. B. `Decimal(12, 2)`) garantiert exakte kaufmännische Rundung ohne Gleitkomma-Ungenauigkeiten.
+
+## 33. Tabelleninvarianten und Validierungsregeln
+
+Geschäftsregeln gehören direkt an die Datenstruktur. Statt Validierungsregeln in Controllern, Requests und Formularen redundant zu wiederholen, deklariert Zelyra typgeprüfte Invarianten im `table`-Block.
+
+### Deklaration von Tabelleninvarianten
+
+```zelyra
+table invoices scoped by tenant_id: TenantId {
+    id: Id primary auto
+    tenant_id: TenantId required
+    invoice_date: Date required
+    due_date: Date required
+    discount_days: Int required default 0
+
+    validate {
+        due_date >= invoice_date: "Das Fälligkeitsdatum muss am oder nach dem Rechnungsdatum liegen."
+        discount_days >= 0: "Skontofrist darf nicht negativ sein."
+    }
+}
+```
+
+### Durchsetzung in Formularen und APIs
+
+- **Deklaratives CRUD und Formulare:** Vor jedem Schreibvorgang (Create/Edit) evaluiert Zelyra die Invarianten atomar. Werden Invarianten verletzt, wird der Schreibvorgang verhindert und das Formular liefert die deklarierte Fehlermeldung mit HTTP-Status 422.
+- **Typisierte API-Eingabeprüfung:** APIs können Request-Bodies an Tabellen binden (`validates`). Die Validierung liefert standardisierte HTTP-422-Fehlerverträge, bevor der Handler ausgeführt wird.
+
+## 34. Lifecycle-Guards, Policies und Master-Detail-CRUD
+
+Revisionssicherheit (z. B. nach GoBD) verlangt, dass festgeschriebene Belege nicht mehr nachträglich verändert oder gelöscht werden dürfen. Gleichzeitig müssen komplexe Belege wie Rechnungen oder Aufträge Kopf- und Positionsdaten atomar erfassen.
+
+### Datensatzabhängige Lifecycle-Guards
+
+```zelyra
+table invoices scoped by tenant_id: TenantId {
+    id: Id primary auto
+    tenant_id: TenantId required
+    invoice_date: Date required
+    is_locked: Bool required default false
+}
+
+crud Invoice -> invoices {
+    title: "Rechnungen"
+
+    guard edit when is_locked == true {
+        error: "Festgeschriebene Rechnungen können nicht mehr bearbeitet werden (GoBD-Schutz)."
+    }
+
+    guard delete when is_locked == true {
+        error: "Festgeschriebene Rechnungen dürfen nicht gelöscht werden."
+    }
+}
+```
+
+- **Guard-Semantik als Abweisungsbedingung:** Ein Guard weist eine Aktion ab, wenn seine Bedingung **wahr** (`true`) ist. Für den Schutz vor unbefugter Bearbeitung oder Festschreibung prüft man daher `guard edit when is_locked == true`. Eine Bedingung wie `is_locked == false` würde fälschlicherweise noch offene Entwürfe abweisen.
+- **Transaktionale Prüfung:** Die Sperrbedingung wird nach Erwerb der Zeilensperre innerhalb der Schreibtransaktion evaluiert. Direkte POST-Requests können den Schutz nicht umgehen.
+- **UI-Integration:** In `tableview`-Aktionsslots und Detailansichten werden Bearbeiten- und Löschen-Aktionen abhängig vom Datensatzstatus automatisch deaktiviert oder ausgeblendet.
+
+### Zusammenspiel mit GoBD, Prüfsummen und Capabilities
+
+Reale Geschäftsanwendungen erfordern neben Lifecycle-Sperren weitere Bausteine, die Zelyra über die Standardbibliothek und Capabilities bereitstellt:
+
+1. **Kryptografische Prüfsummen (`hash_sha256`):**
+   Die Funktion `hash_sha256(text: String) -> String` aus der Standardbibliothek berechnet den SHA-256-Hash eines Strings. Sie dient dazu, den Inhalt eines Belegs bei der Festschreibung kryptografisch zu fixieren:
+   ```zelyra
+   fn beleg_hash(beleg_nr: String, brutto: Decimal) -> String {
+       return hash_sha256(beleg_nr + "#" + brutto)
+   }
+   ```
+2. **Revisionssichere Zeitstempel (`now()` und `uses Clock`):**
+   Funktionen, die die aktuelle Zeit ermitteln, müssen die Capability `Clock` deklarieren (`fn festschreiben(...) uses Clock`). Dadurch bleibt Zeitverhalten in Unittests deterministisch überprüfbar und reproduzierbar.
+3. **Beleg-PDFs und Outbox-Mail (`render_pdf` und `mail_queue`):**
+   Über `render_pdf("RechnungsDruck", invoice)` wird eine View serverseitig in PDF-Bytes umgewandelt. Innerhalb einer MariaDB-`transaction` reiht `mail_queue(to, subject, text, filename, pdf_bytes)` den Beleg atomar in die Outbox ein.
+4. **Grenzen in CRUD-Actions:**
+   Während diese Funktionen in Funktionskörpern und Transaktionsblöcken voll verfügbar sind, führen CRUD-Actions (`action`) in Version 1.2.24 ausschließlich SQL-Statements aus. Die Ausführung von typisierten Ausdrücken, Funktionsaufrufen und Datensatzkontexten (`row`, `session`) direkt in CRUD-Actions ist Gegenstand der kommenden Sprachversionen.
+
+### Transaktionale Master-Detail-CRUD-Formulare (`has_many`)
+
+Mit `has_many` deklarieren CRUD-Ressourcen direkte 1:N-Kinddatensammlungen:
+
+```zelyra
+table invoice_items scoped by tenant_id: TenantId {
+    id: Id primary auto
+    tenant_id: TenantId required
+    invoice: Invoice required on_delete cascade
+    position: Int required
+    description: String(160) required
+    total_net: Decimal(12, 2) required
+    total_gross: Decimal(12, 2) required
+
+    validate {
+        total_gross >= total_net: "Bruttobetrag darf nicht kleiner als der Nettobetrag sein."
+    }
+}
+
+crud Invoice -> invoices {
+    title: "Rechnungen"
+
+    view {
+        fields { invoice_date }
+        form {
+            title: "Rechnung"
+            submit: "Rechnung speichern"
+        }
+    }
+
+    has_many items: InvoiceItem {
+        foreign_key: invoice_id
+        order_by: position asc
+        cascade: delete
+        aggregates {
+            net_amount: sum(total_net)
+            tax_amount: sum(total_gross - total_net)
+            gross_amount: sum(total_gross)
+        }
+    }
+}
+```
+
+1. **Serverseitiges Rendering:** Kindzeilen werden serverseitig in HTML generiert. Zeilen können ohne Client-JavaScript hinzugefügt oder entfernt werden.
+2. **Atomare Transaktion:** Kopfdaten, Kindpositionen und berechnete Aggregate (`aggregates`) werden in einer einzigen Datenbanktransaktion gespeichert. Ein Fehler in einer Position rollt den gesamten Vorgang zurück.
+3. **Automatische Aggregation:** Summenfelder wie `net_amount` oder `gross_amount` werden serverseitig aus den Kindzeilen berechnet und atomar im Kopfsatz aktualisiert.
+
+### Mehrere Kind-Sammlungen pro CRUD-Ressource (ab Zelyra 1.2.24)
+
+Seit Zelyra 1.2.24 können generierte CRUD-Anlegen- und Bearbeiten-Formulare **mehrere direkte `has_many`-Sammlungen** desselben Elternsatzes verwalten (z. B. Positionen und Dateianhänge einer Rechnung in einem gemeinsamen Formular):
+
+```zelyra
+table invoices {
+    id: Id primary auto
+    reference: String(100) required
+    invoice_date: Date required
+    net_amount: Decimal(12, 2) required default 0
+    gross_amount: Decimal(12, 2) required default 0
+}
+
+table invoice_items {
+    id: Id primary auto
+    invoice: Invoice required on_delete cascade
+    position: Int required
+    description: String(160) required
+    total_net: Decimal(12, 2) required
+    total_gross: Decimal(12, 2) required
+
+    validate {
+        total_gross >= total_net: "Line gross amount cannot be below its net amount."
+    }
+}
+
+table invoice_attachments {
+    id: Id primary auto
+    invoice: Invoice required on_delete cascade
+    file_name: String(255) required
+    size_bytes: Int required
+
+    validate {
+        size_bytes > 0: "Attachment size must be positive."
+    }
+}
+
+crud Invoice -> invoices {
+    title: "Rechnungen mit Positionen und Anhängen"
+
+    view {
+        fields { reference invoice_date }
+        form {
+            title: "Rechnung"
+            submit: "Rechnung speichern"
+        }
+    }
+
+    has_many items: InvoiceItem {
+        foreign_key: invoice_id
+        order_by: position asc
+        cascade: delete
+        aggregates {
+            net_amount: sum(total_net)
+            gross_amount: sum(total_gross)
+        }
+    }
+
+    has_many attachments: InvoiceAttachment {
+        foreign_key: invoice_id
+        order_by: file_name asc
+        cascade: delete
+    }
+}
+```
+
+- **Unabhängige Abschnitte und Aktionen:** Jede Sammlung erscheint in einem eigenen Formularabschnitt mit eigener Zeilenanzahl und unabhängigen Zeilenaktionsnamen (`add_item`, `remove_item`, `add_attachment`, etc.).
+- **Unabhängiges Zeilenlimit:** Das serverseitige Limit von 50 Zeilen gilt pro deklarierter Sammlung separat.
+- **Atomare Validierung und Speicherung:** Zelyra validiert alle Sammlungen vor dem Schreiben. Elterndaten, alle Kindzeilen beider Sammlungen und deklarierte Aggregate werden in einer einzigen Datenbanktransaktion gespeichert. Ein Fehler in einer beliebigen Sammlung rollt den gesamten Vorgang atomar zurück.
+- **Eindeutigkeit von Kindtabellen:** Jede Kindtabelle darf nur einmal an eine CRUD-Ressource gebunden werden; mehrere Sammlungen dürfen dasselbe Aggregatziel nicht mehrdeutig beschreiben.
+
+
+## 35. Das Zelyra-Ökosystem: Pakete, Module und Einstellungen
+
+Das Zelyra-Modul- und Paketökosystem ermöglicht die saubere Modularisierung von Anwendungen in wiederverwendbare, unabhängig testbare und kryptografisch prüfbare Komponenten. Es verbindet Offline-First-Prinzipien mit strikter Typisierung und Compiler-Garantien.
+
+### Grundlagen und Philosophie des Zelyra-Ökosystems
+
+1. **Offline-First und Deterministisch:** Ein Zelyra-Projekt baut und prüft vollständig offline. Es gibt keine impliziten Downloads beim Kompilieren (`zelyra check` / `zelyra run`), keine unkontrollierten Netzwerkzugriffe und keine Ausführung beliebiger Build-Skripte von Drittanbietern.
+2. **Integrität und Lockfile:** Jede Abhängigkeit wird mit einer kryptografischen SHA-256-Prüfsumme in `zelyra.lock` fixiert. Änderungen an Quellcode oder Paketmanifest werden vom Compiler sofort erkannt und erfordern eine explizite Aktualisierung (`zelyra package lock --update`).
+3. **Kryptografisches Vertrauensmodell (Ed25519):** Für die Weitergabe und Registrierung nutzt Zelyra signierte `.zpkg`-Quellarchive. Ein Archiv wird mit dem privaten Ed25519-Schlüssel eines Herausgebers signiert. Empfänger hinterlegen autorisierte öffentliche Schlüssel in `zelyra.trust.toml`. Ohne explizites Vertrauen verweigert Zelyra die Installation.
+4. **Compiler-Effektobergrenzen (`effects`):** Ein Paket kann im Manifest deklarieren, welche Capabilities seine Funktionen maximal beanspruchen dürfen (z. B. `effects = ["Database(read)"]` oder `effects = []` für rein rechnerische Bibliotheken). Überschreitet eine Funktion im Paket diese Obergrenze, meldet der Compiler einen Fehler.
+
+### Ein neues Modul erstellen: zelyra module init
+
+Ein neues Modulpaket wird mit dem CLI-Befehl `zelyra module init` initialisiert:
+
+```sh
+zelyra module init packages/finanz_tools --name finanz_tools --version 0.1.0
+```
+
+Der Befehl erstellt die Standardstruktur ohne Netzwerkverbindung und ohne bestehende Dateien zu überschreiben:
+
+```
+packages/finanz_tools/
+├── zelyra.toml
+├── README.md
+└── src/
+    └── lib.zyl
+```
+
+### Das Paketmanifest: zelyra.toml
+
+Das Manifest `zelyra.toml` deklariert die Identität, Versionskompatibilität und Effektobergrenzen des Pakets:
+
+```toml
+[package]
+name = "finanz_tools"
+version = "0.1.0"
+entry = "src/lib.zyl"
+zelyra = ">=1.1.0, <2.0.0"
+effects = ["Database(read)"]
+
+[settings.api_timeout]
+type = "Int"
+required = false
+default = 15
+description = "Zeitlimit für externe Abfragen in Sekunden"
+
+[settings.api_token]
+type = "String"
+required = true
+secret = true
+description = "Geheimer API-Schlüssel für Finanzdaten"
+```
+
+- `name`: Paketname in Kleinbuchstaben mit Ziffern, `_` und `-`.
+- `version`: Exakte SemVer-Version (z. B. `0.1.0`).
+- `entry`: Einstiegsdatei, standardmäßig `src/lib.zyl` für Bibliotheken oder `main.zyl` für eigenständige Anwendungen.
+- `zelyra`: SemVer-Vorgabe für die Zelyra-CLI. Liegt die laufende Compiler-Version außerhalb dieses Bereichs, verweigert Zelyra die Übersetzung.
+- `effects`: Optionale Liste erlaubter Capability-Namen. `[]` erzwingt seiteneffektfreie reine Funktionen. Fehlt der Eintrag, gilt keine zusätzliche Paketobergrenze.
+
+### Modulcode schreiben und exportieren
+
+Funktionen, Records und Enums, die von außen erreichbar sein sollen, müssen mit dem Schlüsselwort `pub` exportiert werden:
+
+```zelyra
+pub record TaxResult {
+    net: Decimal,
+    tax: Decimal,
+    gross: Decimal,
+}
+
+pub fn calculate_tax(net: Decimal, rate: Decimal) -> TaxResult
+    requires { net >= 0 && rate >= 0 }
+    ensures { result.gross >= result.net }
+{
+    let tax = (net * rate) / 100
+    return TaxResult {
+        net: net,
+        tax: tax,
+        gross: net + tax,
+    }
+}
+```
+
+Nicht als `pub` deklarierte Deklarationen bleiben paketintern geschützt. Verträge (`requires`, `ensures`) werden beim Import vollständig vom Compiler geprüft.
+
+### Typisierte Moduleinstellungen (Settings)
+
+Zelyra trennt Paket-Konfigurationsschemata strikt von Anwendungsdaten und Geheimnissen:
+
+1. **Schemadeklaration:** Das Schema wird im Paketmanifest unter `[settings.<feld>]` beschrieben. Unterstützt werden `String` (bis 4 KiB), `Bool`, `Int` und `Float`. Geheimnisse deklarieren `secret = true` und dürfen keinen Standardwert besitzen.
+2. **Anwendungs-Konfiguration in `zelyra.settings.toml`:** Werte liegen im Workspace der Hauptanwendung, getrennt von `zelyra.toml`, damit sich Paketprüfsummen nicht verändern:
+   ```toml
+   [package_settings."packages/finanz_tools"]
+   api_timeout = 30
+   api_token = { env = "FINANZ_API_TOKEN" }
+   ```
+   Geheimnisse werden ausschließlich über `{ env = "ENV_VAR" }` referenziert. Die Zelyra-Laufzeit liest den Wert aus der Prozessumgebung und verhindert die Protokollierung in Fehlermeldungen oder Logs.
+3. **Abruf im Zelyra-Code:** Paketfunktionen lesen konfigurierte Werte typisiert über die interne generische Funktion `module_setting<T>`:
+   ```zelyra
+   fn get_timeout_seconds() -> Int {
+       let timeout = module_setting<Int>("api_timeout")
+       return timeout
+   }
+   ```
+4. **Verwaltung über Web und Studio:**
+   - **CLI-Prüfung:** `zelyra module settings check main.zyl` prüft Typen, Pflichtfelder und die Verfügbarkeit von Umgebungsvariablen.
+   - **Zelyra Studio:** Unter *Moduleinstellungen* bietet Studio einen revisionsgesicherten Einstellungseditor mit `.zelyra.settings.lock`.
+   - **Laufzeit-Webseite:** Ist in einer Anwendung Authentifizierung aktiv und `admin_permission` definiert, steht unter `/__zelyra/module-settings` eine CSRF-geschützte Webverwaltung für Administratoren bereit.
+
+### Einbinden in eine Zelyra-Anwendung
+
+Um ein Modul in einer Hauptanwendung zu verwenden, wird es im Anwendungsmanifest `zelyra.toml` unter `[dependencies.<alias>]` eingetragen:
+
+```toml
+[package]
+name = "meine_anwendung"
+version = "1.0.0"
+entry = "main.zyl"
+zelyra = ">=1.2.0"
+
+[dependencies.finanz]
+path = "packages/finanz_tools"
+version = "^0.1"
+```
+
+Im Quellcode erfolgt der Import über den Namensraum-Präfix `pkg:<alias>`:
+
+```zelyra
+import "pkg:finanz" as finanz
+
+fn main() {
+    let result = finanz::calculate_tax(200.0, 19.0)
+    print(result.gross)
+}
+```
+
+Nach dem Hinzufügen der Abhängigkeit wird das Lockfile synchronisiert und geprüft:
+
+```sh
+zelyra package lock .
+zelyra check main.zyl
+```
+
+### Modul-Inspektion, Planung und Bundling
+
+Zelyra stellt spezialisierte Befehle zur Analyse und Distribution von Modulen bereit:
+
+1. **Modul-Katalog anzeigen (`module list`):**
+   ```sh
+   zelyra module list main.zyl
+   zelyra module list main.zyl --format json
+   ```
+   Listet alle Quellmodule, Importaliase, öffentlichen Exporte, Prüfsummen, Effektobergrenzen und Einstellungs-Schemas deterministisch auf.
+2. **Abhängigkeitsgraph analysieren (`module plan`):**
+   ```sh
+   zelyra module plan main.zyl pkg:finanz
+   ```
+   Berechnet den statischen Quellabschluss für das angegebene Modul und meldet fehlende oder zirkuläre Referenzen vor dem Bauen.
+3. **Modul bündeln (`module bundle`):**
+   ```sh
+   zelyra module bundle main.zyl pkg:finanz --output ./dist/finanz-bundle
+   ```
+   Erstellt ein eigenständiges Quellbundle mit isolierten Paketabhängigkeiten und neu berechnetem Lockfile, das offline und portabel deployt werden kann.
+
+### Signierte Pakete, Registry und Transaktionale Wiederherstellung
+
+Für teams- und organisationsübergreifende Verteilungen stellt Zelyra kryptografische Paketwerkzeuge bereit:
+
+- **Schlüsselpaar und Signatur:**
+  ```sh
+  zelyra package keygen --publisher finanzteam --output finanzteam.key
+  zelyra package sign packages/finanz_tools --publisher finanzteam --key finanzteam.key --output finanz_tools-0.1.0.zpkg
+  ```
+- **Herausgebervertrauen einrichten:**
+  ```sh
+  zelyra package trust add finanzteam <oeffentlicher-schluessel-hex>
+  zelyra package verify finanz_tools-0.1.0.zpkg
+  ```
+- **Statische Registry aufbauen und durchsuchen:**
+  ```sh
+  zelyra package registry build ./veroeffentlichte-pakete
+  zelyra package search https://pakete.example.test/index.json finanz
+  ```
+- **Verifizierte Installation:**
+  ```sh
+  zelyra package add https://pakete.example.test/index.json finanz_tools 0.1.0 --as finanz
+  zelyra package update https://pakete.example.test/index.json finanz_tools 0.2.0 --as finanz
+  zelyra package remove finanz
+  ```
+- **Transaktionale Wiederherstellung (`package recover`):**
+  Alle mutierenden Paketbefehle schreiben ein geschütztes Transaktionsjournal. Bricht ein Installations- oder Update-Vorgang (z. B. durch Stromausfall oder Verbindungsabbruch) ab, blockieren Folgeoperationen, bis der Zustand geprüft ist:
+  ```sh
+  zelyra package recover
+  zelyra package recover --apply
+  ```
+  `zelyra package recover --apply` stellt Manifest und `zelyra.lock` atomar auf den letzten fehlerfreien Stand zurück und bereinigt unvollständige Cache-Pfade.
+
+## 36. CSS-Designsystem und Oberflächengestaltung für CRUD und TableViews
+
+Zelyra verfolgt beim Frontend denselben Grundsatz wie bei Sprache und Datenbank: **Konstruierte Sicherheit ohne Ballast**. Statt schwergewichtige JavaScript-Build-Pipelines, Node.js-Abhängigkeiten oder npm-Pakete vorauszusetzen, liefert Zelyra ein integriertes, performantes CSS-Designsystem (`zelyra-ui.v1.css`), das direkt vom integrierten Webserver ausgeliefert wird.
+
+Dieses Kapitel beschreibt die Architektur des Zelyra-UI-Systems, alle verfügbaren Design-Tokens und Klassen sowie konkrete, produktionsreife CSS-Rezepte zur individuellen Gestaltung von CRUD-Seiten, TableViews, Master-Detail-Formularen und Filtern.
+
+---
+
+### 1. Architektur des Zelyra-UI-Designsystems
+
+Das Zelyra-Designsystem basiert auf modernen Webstandards und modernen CSS-Kaskadierungs-Ebenen (CSS Cascade Layers `@layer`).
+
+```
+┌────────────────────────────────────────────────────────────────────────┐
+│                        CSS Cascade Layers                              │
+│                                                                        │
+│  @layer reset         Browser-Normalisierung & Box-Sizing              │
+│       ↓                                                                │
+│  @layer base          Root-Variablen, Typografie, Standardelemente     │
+│       ↓                                                                │
+│  @layer theme         Farbschemata (Light, Dark, System), Dichte       │
+│       ↓                                                                │
+│  @layer layout        App-Shell, Grids, Container, Scrollbereiche      │
+│       ↓                                                                │
+│  @layer components    Karten, Buttons, Badges, Tabellen, Formulare     │
+│       ↓                                                                │
+│  @layer utilities     Hilfsklassen (Abstände, Textausrichtung)         │
+│       ↓                                                                │
+│  @layer overrides     Zelyra-Standardseiten (CRUD, TableViews)         │
+│       ↓                                                                │
+│  [Projekt-CSS]        Eigene zelyra.theme.css (höchste Priorität)      │
+└────────────────────────────────────────────────────────────────────────┘
+```
+
+#### Der Root-Selektor und Spezifität
+
+Alle Standardstile von Zelyra UI sind mit dem CSS-Pseudoselektor `:where(html[data-z-ui])` gekapselt:
+
+```css
+:where(html[data-z-ui]) .z-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+```
+
+Die `:where()`-Pseudoklasse verleiht dem Selektor eine Spezifität von **0**. Dadurch können Entwickler beliebige Zelyra-Stile in ihrer eigenen `zelyra.theme.css` mit gewöhnlichen Klassenselektoren (z. B. `.z-table`) überschreiben, ohne zu `!important` oder unleserlichen Selektorketten greifen zu müssen.
+
+#### Einbindung von Projekt-Stylesheets
+
+Ein Zelyra-Projekt kann projektspezifisches CSS auf zwei Wegen einbinden:
+
+1. **Automatische Erkennung:** Liegt im Wurzelverzeichnis des Projekts eine Datei namens `zelyra.theme.css` oder `assets/css/theme.css`, wird diese vom integrierten Server automatisch nach dem Zelyra-Basissystem in den `<head>` aller generierten Seiten injiziert.
+2. **Umgebungsvariable / Konfiguration:** Über die Umgebungsvariable `ZELYRA_UI_STYLESHEET=/pfad/zu/style.css` oder den CLI-Parameter `--stylesheet` kann ein beliebiger alternativer Pfad deklariert werden.
+
+Da ungelayertes CSS laut CSS-Spezifikation Vorrang vor allen `@layer`-Regeln hat, überschreiben Regeln in `zelyra.theme.css` automatisch die Framework-Vorgaben:
+
+```css
+/* In zelyra.theme.css: Überschreibt Standardstile sauber und konfliktfrei */
+.z-table th {
+  background: #1a2234;
+  color: #ffffff;
+}
+```
+
+Alternativ können eigene Regeln explizit im `@layer overrides` platziert werden:
+
+```css
+@layer overrides {
+  .z-table th {
+    background: #1a2234;
+    color: #ffffff;
+  }
+}
+```
+
+---
+
+### 2. Design-Tokens und CSS Custom Properties
+
+Zelyra UI definiert ein durchgängiges System typisierter CSS-Variablen auf dem `:root`- bzw. `html[data-z-ui]`-Element.
+
+#### Farbtokens (Color Tokens)
+
+| Token | Standardwert (Light) | Zweck / Verwendung |
+| :--- | :--- | :--- |
+| `--z-color-canvas` | `#f4f6fa` | Hintergrundfarbe des gesamten Dokuments |
+| `--z-color-surface` | `#ffffff` | Hintergrund von Karten, Formularen und Tabellen |
+| `--z-color-surface-raised` | `#ffffff` | Leicht erhabene Bereiche (z. B. Tabellenköpfe, Dropdowns) |
+| `--z-color-text` | `#182230` | Primäre Schriftfarbe für Fließtext und Titel |
+| `--z-color-text-muted` | `#526174` | Abgeschwächte Schrift für Hinweise, Labels, Metadaten |
+| `--z-color-border` | `#d8e0e9` | Standard-Rahmenfarbe für Tabellen, Inputs und Karten |
+| `--z-color-primary` | `#3157a4` | Primärfarbe für Buttons, aktive Tabs, Fokusrahmen |
+| `--z-color-on-primary` | `#ffffff` | Kontrast-Textfarbe auf Primärflächen |
+| `--z-color-primary-hover`| `#274889` | Hover-Zustand für Primärschaltflächen |
+| `--z-color-primary-soft` | `#eaf0fb` | Zarter Hintergrund für Zeilen-Hover und aktive Elemente |
+| `--z-color-success` | `#16734c` | Erfolgsmeldungen, Freigabestatus, bezahlte Rechnungen |
+| `--z-color-success-soft`| `#e9f6ef` | Weicher Hintergrund für Erfolgs-Badges und Notizen |
+| `--z-color-warning` | `#795000` | Warnungen, Entwürfe, Mahnungen |
+| `--z-color-warning-soft`| `#fff4d8` | Weicher Hintergrund für Warn-Badges |
+| `--z-color-danger` | `#a12e39` | Fehler, Stornos, Löschaktionen, Invarianten-Fehler |
+| `--z-color-danger-soft` | `#fff0f0` | Weicher Hintergrund für Fehlermeldungen |
+| `--z-color-focus` | `#275fc5` | Farbe des barrierefreien Fokus-Rings (`:focus-visible`) |
+| `--z-color-link` | `#244f9a` | Textlinks und Zeilenverweise |
+
+#### Maße, Abstände und Radien
+
+```css
+:where(html[data-z-ui]) {
+  /* Typografie */
+  --z-font-sans: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --z-font-mono: ui-monospace, "Cascadia Code", "Segoe UI Mono", monospace;
+  --z-font-size: 1rem;
+  --z-line-height: 1.5;
+
+  /* Höhen und Inhaltsbreite */
+  --z-control-height: 2.75rem; /* Standard-Eingabehöhe */
+  --z-content-width: 76rem;    /* Maximale Inhaltsbreite */
+
+  /* Abstände */
+  --z-space-1: 0.25rem;  /* 4px */
+  --z-space-2: 0.5rem;   /* 8px */
+  --z-space-3: 0.75rem;  /* 12px */
+  --z-space-4: 1rem;     /* 16px */
+  --z-space-5: 1.25rem;  /* 20px */
+  --z-space-6: 1.5rem;   /* 24px */
+  --z-space-8: 2rem;     /* 32px */
+
+  /* Radien */
+  --z-radius-sm: 0.35rem;  /* Inputs, Buttons */
+  --z-radius-md: 0.65rem;  /* Karten, Dialoge, Badges */
+  --z-radius-lg: 1rem;     /* AppShell-Hauptcontainer */
+  --z-radius-pill: 999px;  /* Runde Pill-Badges, Schalter */
+
+  /* Z-Index Ebenen */
+  --z-layer-sticky: 10;
+  --z-layer-dropdown: 20;
+  --z-layer-dialog: 100;
+  --z-layer-toast: 120;
+}
+```
+
+#### Kompakte Datendichte (`compact`)
+
+In administrativen Dashboards, Buchhaltungsprogrammen oder ERP-Modulen wird häufig eine hohe Informationsdichte gewünscht. Zelyra UI unterstützt dies nativ über das HTML-Attribut `data-z-density="compact"`:
+
+```html
+<html data-z-ui data-z-density="compact">
+```
+
+Im Compact-Modus reduziert Zelyra UI die Eingabehöhe automatisch von `2.75rem` auf `2.25rem` und strafft die Innenabstände aller Tabellenzeilen und Formularfelder. Entwickler können die Dichte auch gezielt für einzelne Sektionen (z. B. nur für eine bestimmte Datentabelle) aktivieren:
+
+```html
+<div class="z-table-scroll" data-z-density="compact">
+  <table class="z-table">...</table>
+</div>
+```
+
+---
+
+### 3. TableViews formatieren und optimieren
+
+Tabellenansichten (`tableview`) gehören zu den zentralen Oberflächenelementen von Zelyra. Sie stellen relationale Daten dar, bieten Such-, Filter- und Sortierfunktionen und enthalten Zeilenaktionen.
+
+#### Die Standard-HTML-Struktur
+
+Ein Zelyra-TableView erzeugt typischerweise folgende HTML-Hierarchie:
+
+```html
+<div class="z-generated-page">
+  <header class="z-page-header">
+    <div class="z-page-header__copy">
+      <h1 class="z-page-header__title">Rechnungen</h1>
+      <p class="z-page-header__description">Alle erfassten Rechnungen des aktuellen Mandanten.</p>
+    </div>
+    <div class="z-page-header__actions">
+      <a class="z-button z-button--primary" href="/invoices/new">+ Neue Rechnung</a>
+    </div>
+  </header>
+
+  <form class="zelyra-query-controls" method="get">
+    <fieldset>
+      <legend>Filter & Suche</legend>
+      <div class="z-query-controls__fields">
+        <!-- Filterfelder -->
+      </div>
+    </fieldset>
+  </form>
+
+  <div class="z-table-scroll">
+    <table class="z-table">
+      <thead>
+        <tr>
+          <th>Nummer</th>
+          <th>Kunde</th>
+          <th>Datum</th>
+          <th>Status</th>
+          <th style="text-align: right;">Bruttobetrag</th>
+          <th class="z-table__actions-head">Aktionen</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>RE-2026-0042</strong></td>
+          <td>Musterfirma GmbH</td>
+          <td>19.10.2026</td>
+          <td><span class="z-badge z-badge--success">Bezahlt</span></td>
+          <td style="text-align: right;">1.428,00 €</td>
+          <td class="z-table__actions">
+            <a class="z-button z-button--sm" href="/invoices/42">Anzeigen</a>
+            <a class="z-button z-button--sm" href="/invoices/42/edit">Bearbeiten</a>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <nav class="z-pagination" aria-label="Seitennavigation">
+    <div class="z-pagination__summary">Zeige 1 bis 25 von 148 Einträgen</div>
+    <div class="z-pagination__controls">...</div>
+  </nav>
+</div>
+```
+
+#### Sticky Header (Fixierter Tabellenkopf)
+
+Wenn Tabellen hunderte Einträge umfassen, scrollt der Tabellenkopf oft aus dem sichtbaren Bereich. Mit Sticky Headers bleibt die Kopfzeile dauerhaft sichtbar:
+
+```css
+/* In zelyra.theme.css: Fixierter Tabellenkopf */
+.z-table-scroll {
+  max-height: 70vh; /* Scrollbarer Bereich mit fester Maximalhöhe */
+  overflow-y: auto;
+  position: relative;
+}
+
+.z-table thead th {
+  position: sticky;
+  top: 0;
+  z-index: var(--z-layer-sticky);
+  background: var(--z-color-surface-raised);
+  border-bottom: 2px solid var(--z-color-border);
+  box-shadow: 0 2px 4px rgb(0 0 0 / 6%);
+}
+```
+
+#### Zebra-Streifen und interaktive Zeilenhervorhebung
+
+Zebra-Streifen verbessern das zeilenweise Erfassen komplexer Zahlenkolonnen dramatisch:
+
+```css
+/* Zebra-Streifen für gerade Zeilen */
+.z-table tbody tr:nth-child(even) {
+  background-color: rgb(0 0 0 / 2%);
+}
+
+[data-z-theme="dark"] .z-table tbody tr:nth-child(even) {
+  background-color: rgb(255 255 255 / 2.5%);
+}
+
+/* Intensiverer Zeilen-Hover */
+.z-table tbody tr:hover {
+  background-color: var(--z-color-primary-soft);
+  transition: background-color var(--z-motion-fast) ease-in-out;
+}
+```
+
+#### Rechtsbündige Zahlen und Währungen (Tabular Nums)
+
+In Tabellen dürfen Zahlen und Beträge niemals linksbündig oder zentriert gesetzt werden, da das menschliche Auge Dezimalstellen untereinander vergleichen muss. Zudem verhindert die Schriftart-Eigenschaft `tabular-nums`, dass Ziffern wie die schmale `1` das Schriftbild verschieben:
+
+```css
+/* Exakte numerische Ausrichtung für Betrags- und Mengenspalten */
+.z-table td.col-number,
+.z-table td.col-currency,
+.z-table th.col-number,
+.z-table th.col-currency {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum" 1;
+}
+
+/* Währungsbeträge dezent hervorheben */
+.z-table td.col-currency {
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+```
+
+#### Formatierung der Aktionsspalte (`.z-table__actions`)
+
+Die Zeilenaktionsleiste bündelt Bearbeiten-, Anzeigen- und Löschschaltflächen:
+
+```css
+/* Kompakte, sauber angeordnete Zeilenaktionsknöpfe */
+.z-table td.z-table__actions {
+  white-space: nowrap;
+  text-align: right;
+  vertical-align: middle;
+}
+
+.z-table td.z-table__actions .z-button,
+.z-table td.z-table__actions a.z-button {
+  min-height: 1.85rem;
+  padding: 0.2rem 0.6rem;
+  font-size: 0.82rem;
+  font-weight: 500;
+  border-radius: var(--z-radius-sm);
+}
+
+.z-table td.z-table__actions .z-button:hover {
+  transform: translateY(-1px);
+}
+```
+
+---
+
+### 4. Such-, Filter- und Abfragewerkzeuge
+
+Die Filterleiste über einer TableView wird in Zelyra über `.zelyra-query-controls` und `.z-query-controls__fields` gerendert.
+
+```css
+/* Modernes, aufgeräumtes Suchleisten-Design */
+.zelyra-query-controls {
+  border: 1px solid var(--z-color-border);
+  border-radius: var(--z-radius-md);
+  background: var(--z-color-surface-raised);
+  padding: 1rem 1.25rem;
+  margin-bottom: 1.5rem;
+}
+
+.zelyra-query-controls legend {
+  font-size: 0.88rem;
+  font-weight: 700;
+  color: var(--z-color-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: 0 0.4rem;
+}
+
+.z-query-controls__fields {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 14rem), 1fr)) auto;
+  align-items: end;
+  gap: 1rem;
+}
+
+/* Eingabefelder in der Filterleiste */
+.zelyra-query-controls .z-input,
+.zelyra-query-controls .z-select {
+  background: var(--z-color-surface);
+  border-color: var(--z-color-border);
+  box-shadow: inset 0 1px 2px rgb(0 0 0 / 4%);
+}
+
+.zelyra-query-controls .z-input:focus,
+.zelyra-query-controls .z-select:focus {
+  border-color: var(--z-color-primary);
+  outline: 3px solid var(--z-color-primary-soft);
+}
+```
+
+---
+
+### 5. Paginierung und leere Tabellenzustände
+
+#### Paginierung (`.z-pagination`)
+
+```css
+.z-pagination {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding-top: 1.25rem;
+  border-top: 1px solid var(--z-color-border);
+}
+
+.z-pagination__summary {
+  font-size: 0.88rem;
+  color: var(--z-color-text-muted);
+}
+
+.z-pagination__controls {
+  display: inline-flex;
+  gap: 0.35rem;
+}
+
+.z-pagination__controls a,
+.z-pagination__controls span {
+  display: inline-flex;
+  min-width: 2.25rem;
+  height: 2.25rem;
+  align-items: center;
+  justify-content: center;
+  padding: 0 0.5rem;
+  border: 1px solid var(--z-color-border);
+  border-radius: var(--z-radius-sm);
+  background: var(--z-color-surface);
+  color: var(--z-color-text);
+  font-size: 0.88rem;
+  text-decoration: none;
+}
+
+.z-pagination__controls a:hover {
+  background: var(--z-color-primary-soft);
+  border-color: var(--z-color-primary);
+}
+
+.z-pagination__controls [aria-current="page"] {
+  background: var(--z-color-primary);
+  color: var(--z-color-on-primary);
+  border-color: var(--z-color-primary);
+  font-weight: 700;
+}
+```
+
+#### Leere Zustände (`.z-empty-state`)
+
+Liefert eine Abfrage keine Ergebnisse, zeigt Zelyra den Zustand `.z-empty-state`:
+
+```css
+.z-empty-state {
+  text-align: center;
+  padding: 3.5rem 1.5rem;
+  background: var(--z-color-surface);
+  border: 1px dashed var(--z-color-border);
+  border-radius: var(--z-radius-md);
+  margin-block: 1rem;
+}
+
+.z-empty-state h3 {
+  margin: 0 0 0.5rem;
+  font-size: 1.2rem;
+  color: var(--z-color-text);
+}
+
+.z-empty-state p {
+  max-width: 30rem;
+  margin: 0 auto 1.5rem;
+  color: var(--z-color-text-muted);
+  font-size: 0.95rem;
+  line-height: 1.5;
+}
+
+.z-empty-state__actions {
+  display: flex;
+  justify-content: center;
+  gap: 0.75rem;
+}
+```
+
+---
+
+### 6. CRUD- und Master-Detail-Formulare gestalten
+
+Automatisch generierte Formulare (`crud.view.create`, `crud.view.edit`) werden im Container `.zelyra-crud-form-card` eingebettet.
+
+#### Zwei-Spalten-Formularlayout mit responsivem Umbruch
+
+```css
+/* Card-Hülle des Formulars */
+.zelyra-crud-form-card {
+  max-width: 68rem;
+  margin: 1.5rem auto 3rem;
+  padding: 2rem;
+  background: var(--z-color-surface);
+  border: 1px solid var(--z-color-border);
+  border-radius: var(--z-radius-lg);
+  box-shadow: var(--z-shadow-sm);
+}
+
+/* Zweispaltiges Formular-Grid */
+.zelyra-crud-form-card form {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1.25rem 1.5rem;
+}
+
+/* Vollbreite Felder (z. B. Bemerkungen, Textareas) */
+.zelyra-crud-form-card .z-field--full,
+.zelyra-crud-form-card .z-fieldset,
+.zelyra-crud-form-card .z-form-actions {
+  grid-column: 1 / -1;
+}
+
+/* Auf mobilen Displays einspaltig umbrechen */
+@media (max-width: 768px) {
+  .zelyra-crud-form-card form {
+    grid-template-columns: 1fr;
+  }
+}
+```
+
+#### Formularfelder, Labels und Hilfetexte
+
+```css
+.z-field {
+  display: grid;
+  gap: 0.4rem;
+  min-width: 0;
+}
+
+.z-field__label {
+  font-size: 0.92rem;
+  font-weight: 650;
+  color: var(--z-color-text);
+}
+
+/* Pflichtfeld-Sternchen hervorheben */
+.z-field__label[data-required="true"]::after {
+  content: " *";
+  color: var(--z-color-danger);
+}
+
+.z-field__hint {
+  font-size: 0.82rem;
+  color: var(--z-color-text-muted);
+}
+
+.z-input,
+.z-select,
+.z-textarea {
+  min-height: var(--z-control-height);
+  padding: 0.55rem 0.8rem;
+  border: 1px solid var(--z-color-border);
+  border-radius: var(--z-radius-sm);
+  background: var(--z-color-surface);
+  color: var(--z-color-text);
+  transition: border-color var(--z-motion-fast), box-shadow var(--z-motion-fast);
+}
+
+.z-input:focus,
+.z-select:focus,
+.z-textarea:focus {
+  border-color: var(--z-color-focus);
+  box-shadow: 0 0 0 3px var(--z-color-primary-soft);
+  outline: none;
+}
+```
+
+#### Validierungsfehler und Invarianten-Feedback (`[aria-invalid="true"]`)
+
+Meldet die Zelyra-Validierung einen Fehler (z. B. eine verletzte Tabelleninvariante wie `total_gross >= total_net`), setzt Zelyra das Attribut `aria-invalid="true"`:
+
+```css
+/* Roter Signalfokus für fehlerhafte Felder */
+.z-input[aria-invalid="true"],
+.z-select[aria-invalid="true"],
+.z-textarea[aria-invalid="true"] {
+  border: 2px solid var(--z-color-danger);
+  background-color: var(--z-color-danger-soft);
+}
+
+.z-field__error {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--z-color-danger);
+}
+
+/* Gesamtübersicht der Validierungsfehler oben am Formular */
+.z-error-summary {
+  margin-bottom: 1.5rem;
+  padding: 1.25rem;
+  border: 1px solid var(--z-color-danger);
+  border-left-width: 6px;
+  border-radius: var(--z-radius-md);
+  background: var(--z-color-danger-soft);
+  color: var(--z-color-danger);
+}
+```
+
+#### Master-Detail-Kindtabellen (`has_many`) und Summenboxen
+
+In Transaktionsformularen mit `has_many`-Relationen (wie Rechnungspositionen) wird die Kindtabelle nahtlos in das Formular integriert:
+
+```css
+/* Kinddatensatz-Tabelle im Formular */
+.z-fieldset.z-master-detail-items {
+  border: 1px solid var(--z-color-border);
+  border-radius: var(--z-radius-md);
+  padding: 1.25rem;
+  background: var(--z-color-surface-raised);
+}
+
+.z-master-detail-items table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.z-master-detail-items th,
+.z-master-detail-items td {
+  padding: 0.6rem 0.5rem;
+  border-bottom: 1px solid var(--z-color-border);
+}
+
+/* Kompakte Inputs in der Positionstabelle */
+.z-master-detail-items input.z-input {
+  min-height: 2.15rem;
+  padding: 0.25rem 0.5rem;
+  font-size: 0.9rem;
+}
+
+/* Summenbox für automatische Aggregat-Werte (Netto, MwSt, Brutto) */
+.z-form-summary-card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  max-width: 22rem;
+  margin-left: auto;
+  margin-top: 1rem;
+  padding: 1.25rem;
+  border: 1px solid var(--z-color-border);
+  border-radius: var(--z-radius-md);
+  background: var(--z-color-surface);
+}
+
+.z-form-summary-card__row {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.95rem;
+}
+
+.z-form-summary-card__row--total {
+  border-top: 2px solid var(--z-color-border);
+  padding-top: 0.65rem;
+  margin-top: 0.25rem;
+  font-size: 1.15rem;
+  font-weight: 750;
+  color: var(--z-color-primary);
+}
+```
+
+---
+
+### 7. Modaldialoge und Status-Badges
+
+#### Modaldialoge (`.z-dialog`)
+
+Zelyra verwendet standardkonforme HTML5-`<dialog>`-Elemente mit nativem Backdrop:
+
+```css
+.z-dialog {
+  width: min(38rem, calc(100vw - 2rem));
+  max-height: min(90vh, 48rem);
+  padding: 0;
+  border: 1px solid var(--z-color-border);
+  border-radius: var(--z-radius-lg);
+  background: var(--z-color-surface);
+  color: var(--z-color-text);
+  box-shadow: var(--z-shadow-md);
+  overflow: hidden;
+}
+
+/* Dunkel abgedunkelter Hintergrund mit Unschärfe */
+.z-dialog::backdrop {
+  background: rgb(10 20 35 / 65%);
+  backdrop-filter: blur(3px);
+}
+
+.z-dialog__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 1.1rem 1.5rem;
+  border-bottom: 1px solid var(--z-color-border);
+  background: var(--z-color-surface-raised);
+}
+
+.z-dialog__body {
+  padding: 1.5rem;
+  overflow-y: auto;
+}
+
+.z-dialog__footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.75rem;
+  padding: 1rem 1.5rem;
+  border-top: 1px solid var(--z-color-border);
+  background: var(--z-color-surface-raised);
+}
+```
+
+#### Status-Badges (`.z-badge`)
+
+```css
+.z-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.25rem 0.65rem;
+  font-size: 0.8rem;
+  font-weight: 650;
+  line-height: 1;
+  border-radius: var(--z-radius-pill);
+  border: 1px solid transparent;
+  white-space: nowrap;
+}
+
+/* Farbvarianten für Beleg- und Buchungszustände */
+.z-badge--success {
+  background: var(--z-color-success-soft);
+  color: var(--z-color-success);
+  border-color: rgb(22 115 76 / 20%);
+}
+
+.z-badge--warning {
+  background: var(--z-color-warning-soft);
+  color: var(--z-color-warning);
+  border-color: rgb(121 80 0 / 20%);
+}
+
+.z-badge--danger {
+  background: var(--z-color-danger-soft);
+  color: var(--z-color-danger);
+  border-color: rgb(161 46 57 / 20%);
+}
+
+.z-badge--neutral {
+  background: var(--z-color-canvas);
+  color: var(--z-color-text-muted);
+  border-color: var(--z-color-border);
+}
+```
+
+---
+
+### 8. Vollständige Praxisrezepte für zelyra.theme.css
+
+Die folgenden Rezepte können direkt in die Datei `zelyra.theme.css` im Projektverzeichnis übernommen werden.
+
+#### Rezept 1: Modernes Dark Mode & Accent Theme
+
+Ein sattes, augenschonendes dunkles Theme mit Indigo- und Cyan-Akzenten für Entwicklungs- und Leitstandanwendungen:
+
+```css
+/* ==========================================================================
+   Rezept 1: Modern Dark Theme für zelyra.theme.css
+   ========================================================================== */
+:where(html[data-z-ui][data-z-theme="dark"]),
+:where(html[data-z-ui]:not([data-z-theme])) {
+  /* Tiefes Schieferblau als Basisfarben */
+  --z-color-canvas: #0b0f17;
+  --z-color-surface: #121824;
+  --z-color-surface-raised: #1a2233;
+  --z-color-border: #28354b;
+
+  /* Typografie */
+  --z-color-text: #f1f5f9;
+  --z-color-text-muted: #94a3b8;
+
+  /* Strahlendes Cyan/Indigo als Primärakzent */
+  --z-color-primary: #38bdf8;
+  --z-color-on-primary: #082f49;
+  --z-color-primary-hover: #7dd3fc;
+  --z-color-primary-soft: #0c2b45;
+
+  /* Statusfarben */
+  --z-color-success: #4ade80;
+  --z-color-success-soft: #0e3720;
+  --z-color-warning: #facc15;
+  --z-color-warning-soft: #3d330c;
+  --z-color-danger: #f87171;
+  --z-color-danger-soft: #3d1417;
+
+  /* Schatten mit sanftem Schein */
+  --z-shadow-sm: 0 1px 3px rgb(0 0 0 / 50%);
+  --z-shadow-md: 0 12px 32px rgb(0 0 0 / 70%);
+}
+
+/* Akzentuierter Tabellenkopf im Dark Mode */
+.z-table thead th {
+  background: #172030;
+  color: #38bdf8;
+  border-bottom: 2px solid #28354b;
+}
+
+/* Sanfter Zeilen-Hover */
+.z-table tbody tr:hover {
+  background-color: #17243b;
+}
+```
+
+#### Rezept 2: Kompakte Finanz- und Buchhaltungstabelle
+
+Optimiert für Buchhaltungslisten, Kassenbücher und Belegübersichten mit fixiertem Tabellenkopf, Währungsausrichtung und schnellem visuellen Scannen:
+
+```css
+/* ==========================================================================
+   Rezept 2: Finanz- und Buchhaltungstabelle mit Sticky Header
+   ========================================================================== */
+.z-table-scroll {
+  max-height: 72vh;
+  overflow: auto;
+  border: 1px solid var(--z-color-border);
+  border-radius: var(--z-radius-md);
+  box-shadow: 0 4px 12px rgb(0 0 0 / 4%);
+}
+
+.z-table {
+  font-size: 0.9rem;
+  border-collapse: separate;
+  border-spacing: 0;
+}
+
+/* Fixierter Tabellenkopf */
+.z-table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  background: var(--z-color-surface-raised);
+  border-bottom: 2px solid var(--z-color-primary);
+  padding: 0.65rem 0.75rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  font-size: 0.78rem;
+  letter-spacing: 0.04em;
+  color: var(--z-color-text);
+}
+
+/* Schmale, platzsparende Zeilen */
+.z-table td {
+  padding: 0.5rem 0.75rem;
+  border-bottom: 1px solid var(--z-color-border);
+  vertical-align: middle;
+}
+
+/* Subtile Streifung */
+.z-table tbody tr:nth-child(even) td {
+  background-color: rgb(0 0 0 / 1.5%);
+}
+
+/* Numerische Spalten rechtsbündig mit fester Ziffernbreite */
+.z-table th:nth-child(5),
+.z-table td:nth-child(5),
+.z-table th:nth-child(6),
+.z-table td:nth-child(6) {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.z-table td:nth-child(5) {
+  font-weight: 700;
+  color: var(--z-color-text);
+}
+
+/* Zeilenaktionen rechtsbündig und kompakt */
+.z-table td:last-child {
+  text-align: right;
+  white-space: nowrap;
+}
+
+.z-table td:last-child .z-button {
+  min-height: 1.85rem;
+  padding: 0.15rem 0.55rem;
+  font-size: 0.8rem;
+}
+```
+
+#### Rezept 3: Master-Detail-Rechnungsformular mit Card-Stil
+
+Dieses Rezept gestaltet Belegformulare mit geteilten Kopfdaten, strukturierter Positionstabelle und hervorgehobener Rechnungssummenkarte:
+
+```css
+/* ==========================================================================
+   Rezept 3: Master-Detail Rechnungsformular mit Card-Design
+   ========================================================================== */
+.zelyra-crud-form-card {
+  max-width: 72rem;
+  border: 1px solid var(--z-color-border);
+  border-radius: var(--z-radius-lg);
+  padding: 2.25rem;
+  background: var(--z-color-surface);
+  box-shadow: 0 10px 30px rgb(0 0 0 / 5%);
+}
+
+/* Headerbereich des Formulars */
+.zelyra-crud-form-card > header {
+  margin-bottom: 2rem;
+  padding-bottom: 1.25rem;
+  border-bottom: 1px solid var(--z-color-border);
+}
+
+.zelyra-crud-form-card > header h1 {
+  font-size: 1.6rem;
+  margin: 0 0 0.4rem;
+  color: var(--z-color-text);
+}
+
+/* Gruppierung der Stammdaten in einer erhabenen Karte */
+.z-form-master-section {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 1.25rem;
+  padding: 1.5rem;
+  background: var(--z-color-surface-raised);
+  border: 1px solid var(--z-color-border);
+  border-radius: var(--z-radius-md);
+  margin-bottom: 2rem;
+}
+
+@media (max-width: 900px) {
+  .z-form-master-section {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Positionstabelle (Kind-Sammlung) */
+.z-form-items-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-block: 1rem 1.5rem;
+}
+
+.z-form-items-table th {
+  padding: 0.65rem;
+  border-bottom: 2px solid var(--z-color-border);
+  font-weight: 700;
+  font-size: 0.85rem;
+  color: var(--z-color-text-muted);
+}
+
+.z-form-items-table td {
+  padding: 0.5rem;
+  border-bottom: 1px solid var(--z-color-border);
+}
+
+/* Hervorgehobene Summen-Box rechts unten */
+.z-invoice-totals-box {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 0.6rem 2rem;
+  width: min(100%, 24rem);
+  margin-left: auto;
+  padding: 1.25rem 1.5rem;
+  background: var(--z-color-surface-raised);
+  border: 1px solid var(--z-color-border);
+  border-radius: var(--z-radius-md);
+}
+
+.z-invoice-totals-box dt {
+  color: var(--z-color-text-muted);
+  font-size: 0.95rem;
+}
+
+.z-invoice-totals-box dd {
+  margin: 0;
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.z-invoice-totals-box dt.total-gross,
+.z-invoice-totals-box dd.total-gross {
+  border-top: 2px solid var(--z-color-border);
+  padding-top: 0.75rem;
+  margin-top: 0.25rem;
+  font-size: 1.25rem;
+  font-weight: 800;
+  color: var(--z-color-primary);
+}
+
+/* Formular-Aktionsleiste */
+.z-form-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 1rem;
+  margin-top: 2.5rem;
+  padding-top: 1.5rem;
+  border-top: 1px solid var(--z-color-border);
+}
+
+.z-form-actions .z-button--primary {
+  min-width: 11rem;
+  font-size: 1rem;
+}
+```
