@@ -1862,10 +1862,28 @@ fn module_bundle_command(mut arguments: impl Iterator<Item = String>) -> ExitCod
         }
 
         let database = plan.get("database").cloned().unwrap_or(Value::Null);
+        let database_is_required = database["required"].as_bool().unwrap_or(false);
         let configured_backends = database["configurations"]
             .as_array()
             .cloned()
             .unwrap_or_default();
+        let needs_mariadb_client = database_is_required
+            && (configured_backends.is_empty()
+                || configured_backends.iter().any(|configuration| {
+                    configuration["engine"]
+                        .as_str()
+                        .is_some_and(|engine| engine.eq_ignore_ascii_case("mariadb"))
+                }));
+        let runtime_packages = if needs_mariadb_client {
+            "ca-certificates mariadb-client"
+        } else {
+            "ca-certificates"
+        };
+        let runtime_package_manifest = if needs_mariadb_client {
+            vec!["ca-certificates", "mariadb-client"]
+        } else {
+            vec!["ca-certificates"]
+        };
         let connection_environment = configured_backends
             .first()
             .and_then(|configuration| configuration["connection_environment"].as_str())
@@ -1888,6 +1906,9 @@ fn module_bundle_command(mut arguments: impl Iterator<Item = String>) -> ExitCod
             let dockerfile = format!(
                 r#"FROM rust:1-bookworm AS build
 ARG ZELYRA_REF={compiler_ref}
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends ca-certificates git \
+    && rm -rf /var/lib/apt/lists/*
 RUN git init /zelyra \
     && git -C /zelyra remote add origin https://github.com/sf1976/zelyra.git \
     && git -C /zelyra fetch --depth=1 origin "$ZELYRA_REF" \
@@ -1898,7 +1919,9 @@ COPY . ./
 RUN /out/bin/zelyra check main.zyl
 
 FROM debian:bookworm-slim
-COPY --from=build /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/ca-certificates.crt
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends {runtime_packages} \
+    && rm -rf /var/lib/apt/lists/*
 COPY --from=build /out/bin/zelyra /usr/local/bin/zelyra
 WORKDIR /app
 COPY . ./
@@ -1980,8 +2003,7 @@ ZELYRA_DB_TLS_MODE=auto
                     "compiler_repository": "https://github.com/sf1976/zelyra",
                     "compiler_commit": compiler_ref,
                     "files": docker_files,
-                    "runtime_packages": [],
-                    "trust_store": "copied from the pinned Rust build image",
+                    "runtime_packages": runtime_package_manifest,
                     "database_connection": format!("external, configured per exported Compose project via {}", database["connection_environment"].as_str().unwrap_or("DATABASE_URL")),
                     "database_connection_scope": "per_exported_compose_project",
                     "supports_multiple_connections_per_process": false
@@ -2004,7 +2026,7 @@ ZELYRA_DB_TLS_MODE=auto
         )
         .map_err(|error| format!("cannot write bundle manifest: {error}"))?;
         let readme = if docker {
-            format!("# Experimental Zelyra Docker package\n\nThe generated source dependency closure has no unresolved references and must pass `zelyra check` before publication. This is not a verified complete deployment; inspect `zelyra.bundle.json` (`complete_deployment: false`) for runtime effects and deployment requirements. The Dockerfile builds Zelyra from the exact compiler commit recorded in that manifest and runs that compiler's `zelyra check main.zyl` against this bundle during image construction. Choose a compiler commit that supports every syntax and package feature used by the bundle; incompatible pins fail the image build.\n\nThe runtime image contains the Zelyra executable, application files, and the CA trust bundle copied from the build stage. Database access uses Zelyra's embedded connector; no database command-line client or package-manager step is needed.\n\nCopy `.env.example` to `.env`, set a private `{connection_environment}` if needed, then run `docker compose up --build`. The MariaDB service is external and is not created by this package. The default `host.docker.internal` address is for a database on the Docker host; adjust it for your network. Remote database connections use verified TLS by default. For a private CA, mount its file into the app container and set `ZELYRA_DB_TLS_CA_CERT_FILE` to that in-container path. Disable TLS only for an isolated local network. Never commit `.env`.\n")
+            format!("# Experimental Zelyra Docker package\n\nThe generated source dependency closure has no unresolved references and must pass `zelyra check` before publication. This is not a verified complete deployment; inspect `zelyra.bundle.json` (`complete_deployment: false`) for runtime effects and deployment requirements. The Dockerfile builds Zelyra from the exact compiler commit recorded in that manifest and runs that compiler's `zelyra check main.zyl` against this bundle during image construction. Choose a compiler commit that supports every syntax and package feature used by the bundle; incompatible pins fail the image build.\n\nCopy `.env.example` to `.env`, set a private `{connection_environment}` if needed, then run `docker compose up --build`. The MariaDB service is external and is not created by this package. The default `host.docker.internal` address is for a database on the Docker host; adjust it for your network. Remote database connections use verified TLS by default. For a private CA, mount its file into the app container and set `ZELYRA_DB_TLS_CA_CERT_FILE` to that in-container path. Disable TLS only for an isolated local network. Never commit `.env`.\n")
         } else {
             "# Experimental Zelyra source bundle\n\nThe generated source dependency closure has no unresolved references and must pass `zelyra check` before publication. It is not a Docker export or a complete deployment. Review `zelyra.bundle.json`; its `complete_deployment` value is `false` because runtime effects and deployment requirements may need configuration.\n\nConfigure any required external database and runtime settings separately. No `.env` file or credentials were copied.\n".to_owned()
         };

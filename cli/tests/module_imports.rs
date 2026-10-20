@@ -1702,11 +1702,7 @@ fn independent_database_using_bundles_get_separate_connection_configuration() {
             .lines()
             .any(|line| line == "ZELYRA_DATABASE_MAIN_URL="));
         let dockerfile = fs::read_to_string(bundle.join("Dockerfile")).unwrap();
-        assert!(!dockerfile.contains("apt-get"));
-        assert!(!dockerfile.contains("mariadb-client"));
-        assert!(dockerfile.contains(
-            "COPY --from=build /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/ca-certificates.crt"
-        ));
+        assert!(dockerfile.contains("ca-certificates mariadb-client"));
         let manifest: Value =
             serde_json::from_slice(&fs::read(bundle.join("zelyra.bundle.json")).unwrap()).unwrap();
         assert_eq!(manifest["database"]["required"], true);
@@ -1726,14 +1722,7 @@ fn independent_database_using_bundles_get_separate_connection_configuration() {
             manifest["docker"]["supports_multiple_connections_per_process"],
             false
         );
-        assert_eq!(
-            manifest["docker"]["runtime_packages"],
-            serde_json::json!([])
-        );
-        assert_eq!(
-            manifest["docker"]["trust_store"],
-            "copied from the pinned Rust build image"
-        );
+        assert_eq!(manifest["docker"]["runtime_packages"][1], "mariadb-client");
         assert_eq!(manifest["source_closure_complete"], true);
         assert_eq!(
             manifest["source_closure_evidence"]["unresolved_references"],
