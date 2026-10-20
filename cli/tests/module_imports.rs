@@ -1702,6 +1702,11 @@ fn independent_database_using_bundles_get_separate_connection_configuration() {
             .lines()
             .any(|line| line == "ZELYRA_DATABASE_MAIN_URL="));
         let dockerfile = fs::read_to_string(bundle.join("Dockerfile")).unwrap();
+        let build_stage = dockerfile
+            .split("FROM debian:bookworm-slim")
+            .next()
+            .expect("Dockerfile has a build stage");
+        assert!(!build_stage.contains("apt-get"));
         assert!(dockerfile.contains("ca-certificates mariadb-client"));
         let manifest: Value =
             serde_json::from_slice(&fs::read(bundle.join("zelyra.bundle.json")).unwrap()).unwrap();
