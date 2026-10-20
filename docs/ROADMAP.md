@@ -552,6 +552,7 @@ semantic parity.
 - [~] Opt-in CLI execution is available for AST, MIR, and the supported bytecode subset. MIR/bytecode inspection, safe versioned caching, stable machine-readable diagnostics, and Studio integration remain open without breaking existing CLI behavior.
 - [~] A reproducible CPU benchmark compares mutable array updates across AST, MIR, and Bytecode; its method and three release runs are recorded in the [benchmark report](benchmarks/mutable-array-backends.en.md). I/O workloads, startup, memory, throughput, and compilation cost remain open.
 - [~] A deterministic, bounded scalar differential corpus now generates 96 integer expressions and checks each result against an independent host-language oracle, AST, MIR, encoded/decoded Bytecode, and VM execution. This increases arithmetic regression coverage only; it does not establish full operator, error, resource, or language parity.
+- [~] Integer `/` and `%` error paths are also compared across AST, MIR, and decoded Bytecode: division/remainder by zero and signed `Int` minimum divided/remaindered by `-1` must preserve both the diagnostic message and exact source span. This covers these four failures only; backend-specific step accounting and broader diagnostics remain open.
 - [ ] Release gate: no default-VM switch or production-readiness claim before feature parity, safety checks, differential tests, documented limitations, and reproducible builds.
 
 ### Cross-cutting business-platform extensions added to the 1.2.0–1.3.0 goal

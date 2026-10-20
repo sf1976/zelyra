@@ -928,6 +928,38 @@ fn generated_bounded_integer_expressions_match_independent_oracle_and_backends()
 }
 
 #[test]
+fn integer_division_and_remainder_failures_match_ast_mir_and_bytecode_spans() {
+    let source = r#"
+fn divide(left: Int, right: Int) -> Int { return left / right }
+fn remainder(left: Int, right: Int) -> Int { return left % right }
+fn main() {}
+"#;
+    let ast = parse(&lex(source).expect("source lexes")).expect("source parses");
+    let mir = crate::lower(&ast).expect("source type-checks and lowers");
+    for (name, arguments) in [
+        ("divide", vec![Value::Int(1), Value::Int(0)]),
+        ("remainder", vec![Value::Int(1), Value::Int(0)]),
+        ("divide", vec![Value::Int(i64::MIN), Value::Int(-1)]),
+        ("remainder", vec![Value::Int(i64::MIN), Value::Int(-1)]),
+    ] {
+        let expected = zelyra_runtime::execute_function(&ast, name, arguments.clone(), None)
+            .expect_err("AST must reject zero division and signed overflow");
+        let mir_error =
+            execution::execute_function(&mir, name, arguments.clone(), ExecutionLimits::default())
+                .expect_err("MIR must reject zero division and signed overflow");
+        let bytecode = compile(&mir, name).expect("error-path function compiles");
+        let decoded = decode(&encode(&bytecode).expect("error-path bytecode encodes"))
+            .expect("error-path bytecode verifies after decoding");
+        let actual = execute(&decoded, arguments, ExecutionLimits::default())
+            .expect_err("bytecode must reject zero division and signed overflow");
+        assert_eq!(mir_error.message, expected.message, "MIR {name}");
+        assert_eq!(mir_error.span, expected.span, "MIR source span {name}");
+        assert_eq!(actual.message, expected.message, "bytecode {name}");
+        assert_eq!(actual.span, expected.span, "bytecode source span {name}");
+    }
+}
+
+#[test]
 fn bytecode_to_float_conversion_matches_ast_for_the_laravel_projection_shape() {
     let source = r#"
 fn useful_life(months: UInt) -> Float {
