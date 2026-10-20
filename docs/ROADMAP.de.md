@@ -470,8 +470,10 @@ abgeschlossen.
   nicht kopiert.
   Der jüngste ausdrückliche Live-Schemacheck vergleicht zusätzlich bekannte
   MariaDB-Speichertypen einschließlich Decimal-Präzision und -Skalierung sowie
-  Fremdschlüssel-Zielspalten. Unbekannte Abbildungen werden getrennt
-  ausgewiesen; Standardwerte, Engine, Charset, Collation und Trigger bleiben
+  Fremdschlüssel-Zielspalten. Statische Integer-, Bool-, Text- und `now`-
+  Defaults werden verglichen, sofern Zelyra sie sicher interpretieren kann;
+  die Berichte geben Default-Inhalte nicht aus und listen nicht unterstützte
+  Ausdrücke als ungeprüft. Engine, Charset, Collation und Trigger bleiben
   ungeprüft. Die echte Datenbank wurde schreibgeschützt verbunden, ohne
   Anwendungszeilen zu lesen: 80 Tabellen und 1.215 Spalten wurden untersucht,
   alle 78 generierten Migrationskandidaten verglichen und 293 konkrete
