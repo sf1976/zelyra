@@ -325,8 +325,15 @@ abgeschlossen.
   `tenants.user_id` zugeordneter Eigentümer konnte ohne Pivot-Zeile eine
   mandantengebundene Rechnung anlegen; ein Konto ohne Mitgliedschaft und ohne
   Eigentümerschaft blieb abgewiesen. Schreibtransaktionen prüfen dieselben
-  Mitgliedschafts- und Eigentümerregeln vor der Mutation erneut. Ungelöste
-  Abläufe und genaue Quellpositionen
+  Mitgliedschafts- und Eigentümerregeln vor der Mutation erneut.
+  Paketintegration wurde zusätzlich praktisch geprüft: `module plan` löst
+  das erzeugte Paket auf, der Quellabschluss lässt sich bündeln und in einem
+  getrennten Konsumentenprojekt über einen relativen `pkg:`-Pfad verwenden.
+  Paket-Lock und Compilerprüfung bestanden; die fünf nativen Auth- und
+  Sitzungsrouten wurden angezeigt. Das Bundle meldet weiterhin unvollständiges
+  Deployment, da Laufzeiteffekte, Projektkonfiguration und Deployment-Artefakte
+  noch nicht vollständig modelliert sind. Ungelöste Abläufe und genaue
+  Quellpositionen
   in einem versionierten Bericht erhalten. Abnahmeprojekt ist
   `/opt/siedelmann-laravel/app`; weitere Abdeckung folgt in 1.2.30. Siehe den
   [Arbeitsplan 1.2.27](release-plans/1.2.27-laravel-website-importer.de.md).

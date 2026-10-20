@@ -297,6 +297,13 @@ security and compatibility gates stated for that milestone.
   could create a tenant-scoped invoice without a pivot row, while an account
   with neither membership nor ownership remained denied. Write transactions
   revalidate the same membership/ownership rules before mutation.
+  Module interoperability was exercised end to end: the generated package
+  resolved through `module plan`, passed source-closure bundling, and was
+  copied into a separate consumer project using a relative `pkg:` dependency.
+  The consumer lock and compiler check passed and it exposed the five native
+  auth/session routes. The bundle still reports incomplete deployment because
+  runtime effects, project configuration, and deployment artifacts are not
+  fully modeled.
   Keep unresolved behavior and exact source locations visible in a versioned
   report. The `/opt/siedelmann-laravel/app` project is the acceptance fixture;
   broader route/workflow coverage continues in 1.2.30. See the
