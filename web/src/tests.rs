@@ -433,6 +433,50 @@ fn renders_accessible_child_rows_and_escapes_submitted_values() {
 }
 
 #[test]
+fn child_collection_legends_localize_after_html_escaping() {
+    let route = child_collection_form_route();
+    let rendered = render_form(&route, &HashMap::new(), &[], None);
+    let localized = localize_html(&rendered, UiLanguage::English);
+    assert!(localized.contains("<legend>Items</legend>"));
+    assert!(!localized.contains("&#xe000;zelyra-locale:"));
+    assert!(!localized.contains("zelyra-locale:identifier.items"));
+}
+
+#[test]
+fn automatic_invoice_number_queries_are_tenant_scoped() {
+    let mut route = form_route();
+    route.form.table = Some("invoices".into());
+    route.tenant_column = Some("tenant_id".into());
+    let tenant = TenantContext {
+        user_id: 7,
+        tenant_id: 23,
+        membership_table: None,
+        membership_has_active: false,
+        tenant_owner_table: None,
+        tenant_owner_column: None,
+    };
+
+    let lookup =
+        automatic_invoice_number_lookup_query(&route, false, "RE-000042", 42, Some(&tenant));
+    assert!(lookup
+        .sql
+        .contains("AND `tenant_id` = :zelyra_invoice_tenant_id"));
+    assert!(lookup.sql.ends_with("FOR UPDATE"));
+    assert!(lookup.params.iter().any(|(name, value)| {
+        name == "zelyra_invoice_tenant_id" && matches!(value, QueryValue::Int(23))
+    }));
+
+    let update =
+        automatic_invoice_number_update_query(&route, false, "RE-000042".into(), 42, Some(&tenant));
+    assert!(update
+        .sql
+        .contains("AND `tenant_id` = :zelyra_invoice_tenant_id"));
+    assert!(update.params.iter().any(|(name, value)| {
+        name == "zelyra_invoice_tenant_id" && matches!(value, QueryValue::Int(23))
+    }));
+}
+
+#[test]
 fn renders_relation_options_from_the_matching_child_collection() {
     let mut route = child_collection_form_route();
     let child = route.child_collections.first_mut().unwrap();

@@ -7820,6 +7820,72 @@ fn is_automatic_invoice_number_form(form: &FormRoute) -> bool {
             .any(|field| field.name == "invoice_number")
 }
 
+fn automatic_invoice_number_lookup_query(
+    form: &FormRoute,
+    is_postgres: bool,
+    candidate: &str,
+    id: i64,
+    tenant_context: Option<&TenantContext>,
+) -> zelyra_database::Query {
+    let table = form.form.table.as_deref().unwrap_or("invoices");
+    let mut sql = format!(
+        "SELECT id FROM {} WHERE {} = :invoice_number AND {} <> :id",
+        quote_ident(table, is_postgres),
+        quote_ident("invoice_number", is_postgres),
+        quote_ident("id", is_postgres),
+    );
+    let mut params = vec![
+        (
+            "invoice_number".into(),
+            QueryValue::String(candidate.into()),
+        ),
+        ("id".into(), QueryValue::Int(id)),
+    ];
+    if let (Some(column), Some(context)) = (form.tenant_column.as_deref(), tenant_context) {
+        sql.push_str(&format!(
+            " AND {} = :zelyra_invoice_tenant_id",
+            quote_ident(column, is_postgres)
+        ));
+        params.push((
+            "zelyra_invoice_tenant_id".into(),
+            QueryValue::Int(context.tenant_id),
+        ));
+    }
+    sql.push_str(" FOR UPDATE");
+    zelyra_database::Query { sql, params }
+}
+
+fn automatic_invoice_number_update_query(
+    form: &FormRoute,
+    is_postgres: bool,
+    invoice_number: String,
+    id: i64,
+    tenant_context: Option<&TenantContext>,
+) -> zelyra_database::Query {
+    let table = form.form.table.as_deref().unwrap_or("invoices");
+    let mut sql = format!(
+        "UPDATE {} SET {} = :invoice_number WHERE {} = :id",
+        quote_ident(table, is_postgres),
+        quote_ident("invoice_number", is_postgres),
+        quote_ident("id", is_postgres),
+    );
+    let mut params = vec![
+        ("invoice_number".into(), QueryValue::String(invoice_number)),
+        ("id".into(), QueryValue::Int(id)),
+    ];
+    if let (Some(column), Some(context)) = (form.tenant_column.as_deref(), tenant_context) {
+        sql.push_str(&format!(
+            " AND {} = :zelyra_invoice_tenant_id",
+            quote_ident(column, is_postgres)
+        ));
+        params.push((
+            "zelyra_invoice_tenant_id".into(),
+            QueryValue::Int(context.tenant_id),
+        ));
+    }
+    zelyra_database::Query { sql, params }
+}
+
 fn random_invoice_nonce() -> Result<String, (u16, String)> {
     let mut bytes = [0_u8; 12];
     OsRng
@@ -12875,23 +12941,23 @@ fn execute_form_action_with_children(
             let mut sequence = 0_u32;
             let invoice_number = loop {
                 let candidate = if sequence == 0 { base.clone() } else { format!("{base}-{sequence}") };
-                let existing = transaction.execute(&zelyra_database::Query {
-                    sql: format!("SELECT id FROM {} WHERE {} = :invoice_number AND {} <> :id FOR UPDATE", quote_ident("invoices", is_postgres), quote_ident("invoice_number", is_postgres), quote_ident("id", is_postgres)),
-                    params: vec![
-                        ("invoice_number".into(), zelyra_database::QueryValue::String(candidate.clone())),
-                        ("id".into(), zelyra_database::QueryValue::Int(id)),
-                    ],
-                })?;
+                let existing = transaction.execute(&automatic_invoice_number_lookup_query(
+                    form,
+                    is_postgres,
+                    &candidate,
+                    id,
+                    tenant_context,
+                ))?;
                 if existing.rows.is_empty() { break candidate; }
                 sequence = sequence.checked_add(1).ok_or_else(|| zelyra_database::DatabaseError { message: "could not allocate a unique invoice number".into() })?;
             };
-            transaction.execute(&zelyra_database::Query {
-                sql: format!("UPDATE {} SET {} = :invoice_number WHERE {} = :id", quote_ident("invoices", is_postgres), quote_ident("invoice_number", is_postgres), quote_ident("id", is_postgres)),
-                params: vec![
-                    ("invoice_number".into(), zelyra_database::QueryValue::String(invoice_number)),
-                    ("id".into(), zelyra_database::QueryValue::Int(id)),
-                ],
-            })?;
+            transaction.execute(&automatic_invoice_number_update_query(
+                form,
+                is_postgres,
+                invoice_number,
+                id,
+                tenant_context,
+            ))?;
         }
         if let (Some(audit_table), Some(audit_event)) =
             (form.audit_table.as_deref(), form.audit_event.as_deref())

@@ -466,6 +466,12 @@ security and compatibility gates stated for that milestone.
   verifies that the table remains tenant-scoped, the unsafe route is omitted,
   and the scaffold documents this limitation. It does not connect to a
   database; the actual project workflow remains an open migration item.
+  Tenant-scoped invoice-number collision checks and updates now include the
+  authenticated tenant key, and generated master-detail legend locale markers
+  survive HTML escaping. Generic number-series definitions, per-tenant
+  counters, computed table fields, and FileRef-aware CRUD controls remain
+  unsupported; standalone checked file forms and private FileRef storage do
+  exist.
   Scalar nominal ID columns may now add `references <table>` while preserving
   their Zelyra type and emitting a real SQL FK. The project linker now rewrites
   module-local tenant aliases on both columns and scope declarations. Based on

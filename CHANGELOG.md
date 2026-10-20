@@ -17,6 +17,12 @@
   Schema-Referenzen, Quellcodedatei-Abdeckungsberichte und compilergeprüfte
   wiederverwendbare Paketausgabe erweitern. Die Migration bleibt unvollständig;
   nicht unterstütztes Quellverhalten wird zur Prüfung ausgewiesen.
+- Scope generated invoice-number collision checks and updates to the active
+  tenant, and preserve locale markers while escaping generated master-detail
+  legends so they translate correctly. / Kollisionstests und Aktualisierung
+  automatisch vergebener Rechnungsnummern auf den aktiven Mandanten
+  beschränken und Locale-Marker beim Escaping generierter Master-Detail-
+  Legenden erhalten, damit sie korrekt übersetzt werden.
 
 
 ## 1.2.29 — 2026-10-20

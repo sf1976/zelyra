@@ -515,6 +515,12 @@ abgeschlossen.
   die Einschränkung im Scaffold genannt wird. Es findet dabei kein
   Datenbankzugriff statt; das bleibt ein offener Importablauf und ist kein
   Laufzeittest der Abmeldung.
+  Mandantengebundene Kollisionsprüfungen und Updates automatisch vergebener
+  Rechnungsnummern enthalten nun den authentifizierten Mandantenschlüssel;
+  Locale-Marker generierter Master-Detail-Legenden überstehen das HTML-Escaping.
+  Generische Nummernkreise, mandantenbezogene Zähler, berechnete Tabellenfelder
+  und CRUD-Steuerelemente für FileRef bleiben nicht unterstützt. Geprüfte
+  Datei-Forms und privater FileRef-Speicher sind bereits vorhanden.
   `table ... scoped by`-Spalten können nun zusätzlich ein skalares nominales
   ID-Feld mit `references <table>` als SQL-Fremdschlüssel deklarieren. Der
   Projektlinker erhält dabei den modul-lokalen Tenant-ID-Alias. Der Importer
