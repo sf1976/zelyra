@@ -589,6 +589,7 @@ Diese Meilensteine sind in Arbeit und noch nicht veröffentlicht. Bereits teilwe
 - [ ] AST-Interpreter als auswählbare Referenz behalten, bis die VM den gesamten unterstützten Sprachumfang korrekt abdeckt. Differential-, Property-, Fuzz-, Sicherheits- und Regressionstests ergänzen.
 - [~] Opt-in-CLI-Ausführung ist für AST, MIR und die unterstützte Bytecode-Teilmenge vorhanden. MIR-/Bytecode-Inspektion, sicheres versioniertes Caching, stabile maschinenlesbare Diagnosen und Studio-Integration bleiben offen, ohne bestehendes CLI-Verhalten zu brechen.
 - [~] Ein reproduzierbarer CPU-Benchmark vergleicht mutable Arrayupdates über AST, MIR und Bytecode; Messaufbau und drei Release-Läufe sind im [Benchmarkbericht](benchmarks/mutable-array-backends.de.md) dokumentiert. I/O-Last, Startzeit, Speicherverbrauch, Durchsatz und Kompilieraufwand bleiben offen.
+- [~] Ein deterministischer, begrenzter skalarer Differentialkorpus erzeugt 96 Ganzzahlausdrücke und prüft jedes Ergebnis gegen ein unabhängiges Host-Sprachorakel, AST, MIR, kodierten/dekodierten Bytecode und VM-Ausführung. Das erweitert nur die Arithmetik-Regressionstests und belegt keine vollständige Operator-, Fehler-, Ressourcen- oder Sprachparität.
 - [ ] Freigabekriterium: VM erst nach vollständiger Feature-Parität, Sicherheitsnachweisen, Differentialtests, dokumentierten Grenzen und reproduzierbaren Builds zum Standard machen.
 
 ### Querschnittliche Geschäftsplattform-Erweiterungen im Ziel 1.2.0–1.3.0

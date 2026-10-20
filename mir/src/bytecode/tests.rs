@@ -860,6 +860,74 @@ fn main() { print(compute(3)) }
 }
 
 #[test]
+fn generated_bounded_integer_expressions_match_independent_oracle_and_backends() {
+    let mut state = 0x5eed_cafe_u64;
+    let mut source = String::from("fn main() {}\n");
+    let mut cases = Vec::new();
+    for index in 0..96 {
+        let mut next_operand = || {
+            state = state.wrapping_mul(6364136223846793005).wrapping_add(1);
+            ((state >> 32) % 41) as i64 - 20
+        };
+        let left = next_operand();
+        let middle = next_operand();
+        let right = next_operand();
+        let first_operator = match state.rotate_left(7) % 3 {
+            0 => '+',
+            1 => '-',
+            _ => '*',
+        };
+        state = state.wrapping_mul(6364136223846793005).wrapping_add(1);
+        let second_operator = match state.rotate_left(13) % 3 {
+            0 => '+',
+            1 => '-',
+            _ => '*',
+        };
+        let first = match first_operator {
+            '+' => left + middle,
+            '-' => left - middle,
+            '*' => left * middle,
+            _ => unreachable!(),
+        };
+        let expected = match second_operator {
+            '+' => first + right,
+            '-' => first - right,
+            '*' => first * right,
+            _ => unreachable!(),
+        };
+        let name = format!("generated_{index}");
+        source.push_str(&format!(
+            "fn {name}() -> Int {{ return (({left} {first_operator} {middle}) {second_operator} {right}) }}\n"
+        ));
+        cases.push((name, expected));
+    }
+
+    let ast =
+        parse(&lex(&source).expect("generated source lexes")).expect("generated source parses");
+    let mir = crate::lower(&ast).expect("generated source type-checks and lowers");
+    for (name, expected) in cases {
+        let ast_value = zelyra_runtime::execute_function(&ast, &name, Vec::new(), None)
+            .unwrap_or_else(|error| panic!("AST {name}: {}", error.message));
+        let mir_value =
+            execution::execute_function(&mir, &name, Vec::new(), ExecutionLimits::default())
+                .unwrap_or_else(|error| panic!("MIR {name}: {}", error.message));
+        let bytecode =
+            compile(&mir, &name).unwrap_or_else(|error| panic!("compile {name}: {error:?}"));
+        let decoded = decode(&encode(&bytecode).expect("bytecode encodes"))
+            .expect("encoded bytecode verifies on load");
+        let bytecode_value = execute(&bytecode, Vec::new(), ExecutionLimits::default())
+            .unwrap_or_else(|error| panic!("bytecode {name}: {}", error.message));
+        let decoded_value = execute(&decoded, Vec::new(), ExecutionLimits::default())
+            .unwrap_or_else(|error| panic!("decoded bytecode {name}: {}", error.message));
+        let oracle = Value::Int(expected);
+        assert_eq!(ast_value, oracle, "independent integer oracle for {name}");
+        assert_eq!(mir_value.value, oracle, "MIR for {name}");
+        assert_eq!(bytecode_value.value, oracle, "bytecode for {name}");
+        assert_eq!(decoded_value.value, oracle, "decoded bytecode for {name}");
+    }
+}
+
+#[test]
 fn bytecode_to_float_conversion_matches_ast_for_the_laravel_projection_shape() {
     let source = r#"
 fn useful_life(months: UInt) -> Float {
