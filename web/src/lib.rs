@@ -676,6 +676,7 @@ pub struct TableViewFilter {
 #[derive(Clone, Debug)]
 pub struct AuthRoute {
     pub table: String,
+    pub login_enabled_column: Option<String>,
     pub membership_table: Option<String>,
     pub tenant_owner_table: Option<String>,
     pub tenant_owner_column: Option<String>,
@@ -3126,11 +3127,16 @@ fn dispatch_login(
             else {
                 return Response::html(500, "<h1>500 Internal Server Error</h1>");
             };
-            let active_clause = if table.columns.iter().any(|column| column.name == "active") {
-                " AND active = true"
-            } else {
-                ""
-            };
+            let enabled_column = auth.login_enabled_column.as_deref().or_else(|| {
+                table
+                    .columns
+                    .iter()
+                    .any(|column| column.name == "active")
+                    .then_some("active")
+            });
+            let active_clause = enabled_column.map_or_else(String::new, |column| {
+                format!(" AND {} = true", quote_identifier(column))
+            });
             let query = format!(
                 "SELECT id, email, password_hash FROM {} WHERE email = :email{} LIMIT 1",
                 quote_identifier(&auth.table),
@@ -6001,6 +6007,7 @@ fn render_auth_sessions(
 fn account_sessions_test_auth() -> AuthRoute {
     AuthRoute {
         table: "users".into(),
+        login_enabled_column: None,
         membership_table: None,
         tenant_owner_table: None,
         tenant_owner_column: None,

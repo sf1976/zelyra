@@ -508,9 +508,14 @@ security and compatibility gates stated for that milestone.
   new destination-only test account and verifies invalid login, successful
   login, persisted session creation, logout, and session revocation through
   local HTTP and disposable MariaDB. It copies no Laravel credentials or user
-  rows and does not migrate custom registration, tenant-selection, or 2FA
-  flows. The local MariaDB client reports that TLS certificate verification
-  is disabled for this password-authenticated disposable test connection.
+  rows. The importer now recognizes the project's simple required-Boolean
+  `is_approved` guard and emits `auth users { login_enabled: is_approved }`;
+  the E2E proves an unapproved test account is rejected and the same account
+  can sign in after an explicit approval update. The special administrator
+  exception, custom messages, registration, tenant-selection, and 2FA flows
+  are still not transferred. The local MariaDB client reports that TLS
+  certificate verification is disabled for this password-authenticated
+  disposable test connection.
   PHP method recognizer uses the existing lexical source map and balanced code
   braces; regression tests reject method-shaped comments and cover nested
   blocks, typed return declarations, and lookup/update/view patterns that occur

@@ -1201,6 +1201,7 @@ auth users {
     permissions: user_permissions
     roles: user_roles
     role_permissions: role_permissions
+    login_enabled: is_approved
 }
 
 page "/admin" {
@@ -1212,6 +1213,14 @@ page "/admin" {
     }
 }
 ~~~
+
+`login_enabled` is optional. When set, it must name a required Boolean column
+in the user table; only rows whose value is `true` can sign in. Without it,
+the existing `active: Bool` convention remains in effect. The Laravel importer
+emits `login_enabled` only when it finds a matching approval check in the
+statically linked login controller. Project-specific administrator
+exceptions, registration workflows, and two-factor behavior still need
+separate review and, where required, native Zelyra implementation.
 
 The optional `permissions` table contains `user_id` and `permission` for
 direct grants. Role groups are enabled with `roles` and `role_permissions`:

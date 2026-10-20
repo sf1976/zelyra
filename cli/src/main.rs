@@ -7935,6 +7935,30 @@ fn validate_auth(path: &str, program: &zelyra_ast::Program, schema: &Schema) -> 
                 valid = false;
             }
         }
+        if let Some(enabled_column) = auth.login_enabled_column.as_deref() {
+            match table
+                .columns
+                .iter()
+                .find(|column| column.name == enabled_column)
+            {
+                Some(column)
+                    if !column.nullable
+                        && (column.sql_type.to_ascii_uppercase().contains("BOOL")
+                            || column.sql_type.to_ascii_uppercase().contains("TINYINT")) => {}
+                _ => {
+                    diagnostic_with_span(
+                        path,
+                        "E-AUTH-004",
+                        &format!(
+                            "authentication login_enabled column `{}.{enabled_column}` must be a required boolean",
+                            auth.table
+                        ),
+                        auth.span,
+                    );
+                    valid = false;
+                }
+            }
+        }
         if let Some(membership_table_name) = &auth.membership_table {
             if membership_table_name == &auth.table
                 || auth.session_table.as_ref() == Some(membership_table_name)
@@ -10570,6 +10594,7 @@ fn serve_command(mut args: impl Iterator<Item = String>) -> ExitCode {
         };
         Some(AuthRoute {
             table: auth.table.clone(),
+            login_enabled_column: auth.login_enabled_column.clone(),
             membership_table: auth.membership_table.clone(),
             tenant_owner_table: auth.tenant_owner_table.clone(),
             tenant_owner_column: auth.tenant_owner_column.clone(),

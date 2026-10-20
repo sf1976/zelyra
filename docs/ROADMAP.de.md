@@ -559,11 +559,16 @@ abgeschlossen.
   kleinen CI-Fixture und `/opt/siedelmann-laravel/app` werden ausschließlich
   neue Testbenutzer in einer Wegwerf-Zieldatenbank angelegt und ungültiger
   Login, erfolgreicher Login, persistente Sitzung, Logout und Sitzungswiderruf
-  über lokales HTTP und MariaDB geprüft. Laravel-Zugangsdaten oder
-  Benutzerzeilen werden nicht kopiert; eigene Registrierungs-,
-  Mandantenauswahl- oder 2FA-Abläufe werden nicht migriert. Der lokale
-  MariaDB-Client weist darauf hin, dass bei dieser passwortgeschützten
-  Wegwerfverbindung die TLS-Zertifikatsprüfung deaktiviert ist.
+  über lokales HTTP und MariaDB geprüft. Der Importer erkennt jetzt außerdem
+  die einfache erforderliche Bool-Freigabe `is_approved` und erzeugt
+  `auth users { login_enabled: is_approved }`; das E2E weist ein nicht
+  freigegebenes Testkonto ab und lässt dasselbe Konto nach einer expliziten
+  Freigabe anmelden. Laravels Sonderausnahme für den Hauptadministrator,
+  individuelle Meldungen, Registrierung, Mandantenauswahl und 2FA werden
+  weiterhin nicht übernommen. Laravel-Zugangsdaten oder Benutzerzeilen werden
+  nicht kopiert. Der lokale MariaDB-Client weist darauf hin, dass bei dieser
+  passwortgeschützten Wegwerfverbindung die TLS-Zertifikatsprüfung deaktiviert
+  ist.
   PHP-Methodenerkennung nutzt jetzt die vorhandene lexikalische Quellpositionskarte
   und ausbalancierte Codeklammern; Regressionstests weisen
   methodenähnliche Kommentare zurück und decken verschachtelte Blöcke sowie

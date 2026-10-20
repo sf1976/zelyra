@@ -1307,6 +1307,7 @@ auth users {
     permissions: user_permissions
     roles: user_roles
     role_permissions: role_permissions
+    login_enabled: is_approved
 }
 
 page "/admin" {
@@ -1318,6 +1319,15 @@ page "/admin" {
     }
 }
 ~~~
+
+`login_enabled` ist optional. Wenn es angegeben ist, muss es auf eine
+erforderliche Bool-Spalte der Benutzertabelle zeigen; nur Datensätze mit dem
+Wert `true` können sich anmelden. Ohne diese Angabe bleibt die bestehende
+Konvention `active: Bool` erhalten. Der Laravel-Importer setzt
+`login_enabled` nur, wenn er eine passende Freigabeprüfung statisch im
+verknüpften Login-Controller erkennt. Projektspezifische Admin-Ausnahmen,
+Registrierungsabläufe und Zwei-Faktor-Logik müssen weiterhin separat geprüft
+und gegebenenfalls als Zelyra-Funktion umgesetzt werden.
 
 Die optionale Tabelle `permissions` enthält `user_id` und `permission` für
 direkte Vergaben. Rollengruppen werden mit `roles` und `role_permissions`

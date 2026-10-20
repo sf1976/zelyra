@@ -1869,6 +1869,7 @@ fn default_shell_covers_standalone_forms_and_tableviews_but_not_custom_pages() {
 fn generated_login_page_uses_the_localized_default_shell() {
     let auth = AuthRoute {
         table: "users".into(),
+        login_enabled_column: None,
         membership_table: None,
         tenant_owner_table: None,
         tenant_owner_column: None,
@@ -2382,6 +2383,7 @@ fn project_catalog_references_localize_component_properties_in_both_languages() 
 fn project_catalogs_override_generated_ui_and_parameterized_labels() {
     let auth = AuthRoute {
         table: "users".into(),
+        login_enabled_column: None,
         membership_table: None,
         tenant_owner_table: None,
         tenant_owner_column: None,
@@ -2471,6 +2473,7 @@ fn framework_errors_auth_labels_and_validation_use_the_locale_catalog() {
 
     let auth = AuthRoute {
         table: "users".into(),
+        login_enabled_column: None,
         membership_table: None,
         tenant_owner_table: None,
         tenant_owner_column: None,
@@ -3087,6 +3090,7 @@ fn secure_session_cookie_is_set_when_tls_terminates_at_a_proxy() {
 fn logout_clears_session_cookie_with_the_matching_secure_attribute() {
     let auth = AuthRoute {
         table: "users".into(),
+        login_enabled_column: None,
         membership_table: None,
         tenant_owner_table: None,
         tenant_owner_column: None,
@@ -4747,6 +4751,7 @@ fn password_hash_rejects_empty_password() {
 fn logout_requires_csrf() {
     let auth = AuthRoute {
         table: "users".into(),
+        login_enabled_column: None,
         membership_table: None,
         tenant_owner_table: None,
         tenant_owner_column: None,
@@ -4886,6 +4891,7 @@ fn rotating_memory_session_invalidates_previous_token() {
     );
     let auth = AuthRoute {
         table: "users".into(),
+        login_enabled_column: None,
         membership_table: None,
         tenant_owner_table: None,
         tenant_owner_column: None,
@@ -4981,6 +4987,7 @@ fn session_device_metadata_is_bounded_and_escaped_in_self_service_view() {
 fn session_administration_preserves_legacy_tables_and_escapes_rows() {
     let mut auth = AuthRoute {
         table: "users".into(),
+        login_enabled_column: None,
         membership_table: None,
         tenant_owner_table: None,
         tenant_owner_column: None,
@@ -6297,6 +6304,7 @@ fn database_capability_denies_page_data_before_database_access() {
 fn database_capability_denies_persistent_login() {
     let auth = AuthRoute {
         table: "users".into(),
+        login_enabled_column: None,
         membership_table: None,
         tenant_owner_table: None,
         tenant_owner_column: None,

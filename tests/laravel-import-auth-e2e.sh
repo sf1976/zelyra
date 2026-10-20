@@ -72,6 +72,8 @@ if [[ -e "${project}/.env" || -e "${project}/storage" ]]; then
     echo "error: generated scaffold unexpectedly contains Laravel environment or runtime data" >&2
     exit 1
 fi
+grep -F 'login_enabled: is_approved' "${project}/packages/imported_identity/src/lib.zyl" >/dev/null
+grep -F '"approval_guard_transferred": true' "${project}/GENERATION_SELECTION.json" >/dev/null
 
 echo "[2/6] creating a separate empty destination database"
 client --batch --skip-column-names \
@@ -85,7 +87,7 @@ password_hash="$(printf '%s\n' "${test_password}" | "${zelyra_bin}" auth hash-pa
 MYSQL_PWD="${database_password}" mariadb \
     --protocol=tcp --host="${database_host}" --port="${database_port}" \
     --user="${database_user}" "${database_name}" \
-    --execute="INSERT INTO users (name, email, password_hash) VALUES ('Importer E2E', '${test_email}', '${password_hash}');"
+    --execute="INSERT INTO users (name, email, password_hash, is_approved) VALUES ('Importer E2E', '${test_email}', '${password_hash}', false);"
 
 echo "[4/6] starting the generated authentication routes"
 "${zelyra_bin}" serve "${project}/main.zyl" "${address}" \
@@ -121,6 +123,17 @@ PY
 )"
 
 echo "[5/6] authenticating and verifying a persisted native session"
+unapproved_status="$(curl --silent --output "${temporary}/unapproved.html" --write-out '%{http_code}' \
+    --header "Origin: ${base_url}" \
+    --data-urlencode "_zelyra_csrf=${csrf}" \
+    --data-urlencode "email=${test_email}" \
+    --data-urlencode "password=${test_password}" \
+    "${base_url}/login")"
+[[ "${unapproved_status}" == "401" ]]
+MYSQL_PWD="${database_password}" mariadb \
+    --protocol=tcp --host="${database_host}" --port="${database_port}" \
+    --user="${database_user}" "${database_name}" \
+    --execute="UPDATE users SET is_approved = true WHERE email = '${test_email}';"
 invalid_status="$(curl --silent --output "${temporary}/invalid.html" --write-out '%{http_code}' \
     --header "Origin: ${base_url}" \
     --data-urlencode "_zelyra_csrf=${csrf}" \

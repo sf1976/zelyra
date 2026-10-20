@@ -4212,6 +4212,32 @@ fn rejects_protected_routes_without_auth_definition() {
 }
 
 #[test]
+fn auth_login_enabled_requires_a_required_boolean_user_column() {
+    let valid = r#"
+        table users {
+            id: Id primary auto
+            email: String(255) required unique
+            password_hash: String(255) required
+            is_approved: Bool required default true
+        }
+        auth users { table: users login_enabled: is_approved }
+        fn main() {}
+    "#;
+    let program = parse(&lex(valid).unwrap()).unwrap();
+    let schema = build_schema(&program).unwrap();
+    assert!(validate_auth("auth.zyl", &program, &schema));
+
+    for field in ["is_approved: Bool?", "is_approved: String(10) required"] {
+        let source = format!(
+            "table users {{ id: Id primary auto email: String(255) required unique password_hash: String(255) required {field} }} auth users {{ table: users login_enabled: is_approved }} fn main() {{}}"
+        );
+        let program = parse(&lex(&source).unwrap()).unwrap();
+        let schema = build_schema(&program).unwrap();
+        assert!(!validate_auth("auth.zyl", &program, &schema));
+    }
+}
+
+#[test]
 fn rejects_scoped_crud_permissions_without_auth_definition() {
     let source = r#"
         table customers {

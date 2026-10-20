@@ -623,6 +623,7 @@ impl<'a> Parser<'a> {
         self.expect(TokenKind::LBrace, "opening brace after authentication name")?;
         self.skip_newlines();
         let mut table = None;
+        let mut login_enabled_column = None;
         let mut membership_table = None;
         let mut tenant_owner = None;
         let mut session_table = None;
@@ -660,6 +661,7 @@ impl<'a> Parser<'a> {
                 TokenKind::Ident(name) if name == "reset_rate_limits" => "reset_rate_limits",
                 TokenKind::Ident(name) if name == "memberships" => "memberships",
                 TokenKind::Ident(name) if name == "tenant_owner" => "tenant_owner",
+                TokenKind::Ident(name) if name == "login_enabled" => "login_enabled",
                 TokenKind::ResetRateLimit => "reset_rate_limit",
                 TokenKind::ResetBlockSeconds => "reset_block_seconds",
                 TokenKind::Ident(name) if name == "mfa" => "mfa",
@@ -676,6 +678,14 @@ impl<'a> Parser<'a> {
                 self.expect(TokenKind::Dot, "`.` before tenant owner column")?;
                 let (owner_column, _) = self.ident("tenant owner column")?;
                 tenant_owner = Some((owner_table, owner_column));
+                self.skip_newlines();
+                continue;
+            }
+            if field == "login_enabled" {
+                if login_enabled_column.is_some() {
+                    return self.error("login_enabled may only be declared once");
+                }
+                login_enabled_column = Some(self.ident("login-enabled user column")?.0);
                 self.skip_newlines();
                 continue;
             }
@@ -790,6 +800,7 @@ impl<'a> Parser<'a> {
         Ok(AuthDef {
             name,
             table,
+            login_enabled_column,
             membership_table,
             tenant_owner_table: tenant_owner.as_ref().map(|(table, _)| table.clone()),
             tenant_owner_column: tenant_owner.map(|(_, column)| column),
@@ -6185,6 +6196,7 @@ mod tests {
             &lex(r#"auth users {
                     table: users
                     sessions: auth_sessions
+                    login_enabled: is_approved
                     memberships: tenant_memberships
                     tenant_owner: tenants.user_id
                 }
@@ -6198,6 +6210,10 @@ mod tests {
         assert_eq!(
             program.auth[0].membership_table.as_deref(),
             Some("tenant_memberships")
+        );
+        assert_eq!(
+            program.auth[0].login_enabled_column.as_deref(),
+            Some("is_approved")
         );
         assert_eq!(
             program.auth[0].tenant_owner_table.as_deref(),
@@ -6859,6 +6875,7 @@ mod tests {
             r#"auth users { table: users login_rate_limit: 0 per 60 } fn main() { }"#,
             r#"auth users { table: users login_rate_limit: 5 per 0 } fn main() { }"#,
             r#"auth users { table: users login_block_seconds: 86401 } fn main() { }"#,
+            r#"auth users { table: users login_enabled: active login_enabled: approved } fn main() { }"#,
             r#"auth users { table: users login_rate_limit: 5 per 60 login_rate_limit: 3 per 30 } fn main() { }"#,
         ] {
             assert!(parse(&lex(source).unwrap()).is_err(), "accepted {source}");

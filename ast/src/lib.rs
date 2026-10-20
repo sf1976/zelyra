@@ -1212,6 +1212,9 @@ pub struct CrudErrorViewDef {
 pub struct AuthDef {
     pub name: String,
     pub table: String,
+    /// Optional required boolean user column. When configured, only users
+    /// whose value is true may complete password authentication.
+    pub login_enabled_column: Option<String>,
     /// Optional table with `(user_id, tenant_id)` membership rows and an
     /// optional `active` Boolean column (when present, only active rows count).
     pub membership_table: Option<String>,
