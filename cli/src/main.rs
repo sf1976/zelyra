@@ -11829,6 +11829,62 @@ fn dispatch_api_with_capabilities(
     for (name, value) in path_params {
         values.insert(name.clone(), serde_json::Value::String(value.clone()));
     }
+    if api.method == "PATCH" {
+        if let Some(table_name) = &api.validates_table {
+            let Some(table) = program
+                .tables
+                .iter()
+                .find(|table| table.name == *table_name)
+            else {
+                return api_error_response(
+                    500,
+                    "InternalServerError",
+                    "validated API table is missing",
+                );
+            };
+            let missing_validated_input = api.input.iter().any(|field| {
+                table
+                    .columns
+                    .iter()
+                    .any(|column| column.name == field.name && column.computed.is_none())
+                    && !values.contains_key(&field.name)
+            });
+            if missing_validated_input {
+                let Some(database_url) = context.database_url else {
+                    return api_error_response(
+                        503,
+                        "ServiceUnavailable",
+                        "PATCH validation needs the existing database row when fields are omitted",
+                    );
+                };
+                match merge_api_patch_row_values(
+                    program,
+                    table,
+                    database_url,
+                    context.verified_tenant_id,
+                    &mut values,
+                ) {
+                    Ok(()) => {}
+                    Err(ApiPatchMergeError::BadRequest(message)) => {
+                        return api_error_response(400, "BadRequest", &message);
+                    }
+                    Err(ApiPatchMergeError::NotFound) => {
+                        return api_error_response(404, "NotFound", "record not found");
+                    }
+                    Err(ApiPatchMergeError::Database(error)) => {
+                        eprintln!(
+                            "zelyra: could not load a row for partial API validation: {error}"
+                        );
+                        return api_error_response(
+                            500,
+                            "InternalServerError",
+                            "could not load the existing record for PATCH validation",
+                        );
+                    }
+                }
+            }
+        }
+    }
     let mut arguments = Vec::new();
     for field in &api.input {
         let Some(value) = values.get(&field.name) else {
@@ -11989,6 +12045,158 @@ fn dispatch_api_with_capabilities(
     ) {
         Ok(value) => api_result_response(api, &value),
         Err(error) => api_error_response(500, "InternalServerError", &error.message),
+    }
+}
+
+enum ApiPatchMergeError {
+    BadRequest(String),
+    NotFound,
+    Database(String),
+}
+
+fn merge_api_patch_row_values(
+    program: &zelyra_ast::Program,
+    table: &zelyra_ast::TableDef,
+    database_url: &str,
+    verified_tenant_id: Option<i64>,
+    values: &mut HashMap<String, serde_json::Value>,
+) -> Result<(), ApiPatchMergeError> {
+    let Some(primary_key) = table.columns.iter().find(|column| column.primary_key) else {
+        return Err(ApiPatchMergeError::BadRequest(
+            "validated PATCH table has no declared primary key".into(),
+        ));
+    };
+    let Some(id) = values.get(&primary_key.name) else {
+        return Err(ApiPatchMergeError::BadRequest(format!(
+            "PATCH path must provide primary key `{}`",
+            primary_key.name
+        )));
+    };
+    let id_value = if let Some(id) = id.as_i64() {
+        QueryValue::Int(id)
+    } else if let Some(id) = id.as_str() {
+        if let Ok(id) = id.parse::<i64>() {
+            QueryValue::Int(id)
+        } else {
+            QueryValue::String(id.to_owned())
+        }
+    } else {
+        return Err(ApiPatchMergeError::BadRequest(format!(
+            "PATCH primary key `{}` must be a scalar",
+            primary_key.name
+        )));
+    };
+
+    let is_postgres = zelyra_database::is_postgres_url(database_url);
+    let selected_columns = table
+        .columns
+        .iter()
+        .filter(|column| column.computed.is_none())
+        .collect::<Vec<_>>();
+    let select_list = selected_columns
+        .iter()
+        .map(|column| {
+            let storage_name = column.storage_name.as_deref().unwrap_or(&column.name);
+            quote_ident(storage_name, is_postgres)
+        })
+        .collect::<Vec<_>>()
+        .join(", ");
+    let table_name = quote_ident(&table.name, is_postgres);
+    let primary_key_name = primary_key
+        .storage_name
+        .as_deref()
+        .unwrap_or(&primary_key.name);
+    let mut predicates = vec![format!(
+        "{} = :zelyra_patch_id",
+        quote_ident(primary_key_name, is_postgres)
+    )];
+    let mut parameters = vec![("zelyra_patch_id".into(), id_value)];
+    if let Some(scope) = &table.tenant_scope {
+        let Some(tenant_id) = verified_tenant_id else {
+            return Err(ApiPatchMergeError::BadRequest(
+                "verified tenant context is required for scoped PATCH validation".into(),
+            ));
+        };
+        let Some(tenant_column) = table
+            .columns
+            .iter()
+            .find(|column| column.name == scope.column)
+        else {
+            return Err(ApiPatchMergeError::BadRequest(
+                "validated PATCH table has no tenant scope column".into(),
+            ));
+        };
+        let tenant_storage = tenant_column
+            .storage_name
+            .as_deref()
+            .unwrap_or(&tenant_column.name);
+        predicates.push(format!(
+            "{} = :zelyra_patch_tenant",
+            quote_ident(tenant_storage, is_postgres)
+        ));
+        parameters.push(("zelyra_patch_tenant".into(), QueryValue::Int(tenant_id)));
+    }
+    let sql = format!(
+        "SELECT {select_list} FROM {table_name} WHERE {} LIMIT 1",
+        predicates.join(" AND ")
+    );
+    let result = zelyra_database::execute_query(database_url, &sql, parameters)
+        .map_err(|error| ApiPatchMergeError::Database(error.message))?;
+    let Some(row) = result.rows.first() else {
+        return Err(ApiPatchMergeError::NotFound);
+    };
+    for (index, column) in selected_columns.iter().enumerate() {
+        if values.contains_key(&column.name) {
+            continue;
+        }
+        let Some(raw) = row.get(index) else {
+            return Err(ApiPatchMergeError::Database(
+                "database returned an incomplete row for PATCH validation".into(),
+            ));
+        };
+        let is_null = result
+            .nulls
+            .first()
+            .and_then(|nulls| nulls.get(index))
+            .copied()
+            .unwrap_or(false);
+        let value = if is_null {
+            serde_json::Value::Null
+        } else if api_type_uses_json_storage(&column.ty, program, &mut HashSet::new()) {
+            serde_json::from_str(raw).unwrap_or_else(|_| serde_json::Value::String(raw.clone()))
+        } else {
+            serde_json::Value::String(raw.clone())
+        };
+        values.insert(column.name.clone(), value);
+    }
+    Ok(())
+}
+
+fn api_type_uses_json_storage(
+    ty: &Type,
+    program: &zelyra_ast::Program,
+    seen: &mut HashSet<String>,
+) -> bool {
+    match ty {
+        Type::Option(inner) => api_type_uses_json_storage(inner, program, seen),
+        Type::Array(_) => true,
+        Type::Map(_, _) | Type::Applied { .. } => true,
+        Type::Named(name) => {
+            if program.records.iter().any(|record| record.name == *name)
+                || program
+                    .enums
+                    .iter()
+                    .any(|definition| definition.name == *name)
+            {
+                true
+            } else if let Some(definition) = program.types.iter().find(|item| item.name == *name) {
+                seen.insert(name.clone())
+                    && api_type_uses_json_storage(&definition.target, program, seen)
+            } else {
+                false
+            }
+        }
+        _ => false,
     }
 }
 

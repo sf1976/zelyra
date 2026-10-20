@@ -3265,14 +3265,17 @@ fn computed_api_fields_are_recomputed_before_validation_and_database_write() {
         fn main() { }
     "#;
     let table_name = format!("zelyra_computed_api_{}", std::process::id());
+    let database_url = env::var("ZELYRA_TEST_DATABASE_URL")
+        .expect("ignored integration test needs a disposable database URL");
     let source = source.replace("__TABLE__", &table_name);
     let program = parse(&lex(&source).unwrap()).unwrap();
     check_apis(&program).expect("computed API contract should type-check");
     zelyra_runtime::check(&program).expect("computed API handler should type-check");
     let schema = zelyra_database::build_schema(&program).unwrap();
-    let database_url = env::var("ZELYRA_TEST_DATABASE_URL")
-        .expect("ignored integration test needs a disposable database URL");
-    zelyra_database::execute_query(&database_url, &schema.create_sql(), Vec::new()).unwrap();
+    let create_sql = schema.create_sql();
+    zelyra_database::execute_query(&database_url, &create_sql, Vec::new()).unwrap_or_else(
+        |error| panic!("could not create computed API test schema: {error}; SQL: {create_sql}"),
+    );
 
     let request = zelyra_web::parse_request(
         "POST /items HTTP/1.1\r\nContent-Type: application/json\r\n\r\n{\"quantity\":3,\"unit_price\":0.385,\"total\":999}",
@@ -3320,8 +3323,40 @@ fn computed_api_fields_are_recomputed_before_validation_and_database_write() {
     )
     .unwrap();
     assert_eq!(rows.rows, vec![vec!["1.54".to_owned()]]);
+    let invalid_patch_request = zelyra_web::parse_request(
+        "PATCH /items/1 HTTP/1.1\r\nContent-Type: application/json\r\n\r\n{\"quantity\":-5}",
+    )
+    .unwrap();
+    let invalid_patch_response = dispatch_api(
+        &program,
+        &program.apis[2],
+        "update_item",
+        &invalid_patch_request,
+        &HashMap::from([("id".to_owned(), id.clone())]),
+        Some(&database_url),
+    );
+    assert_eq!(
+        invalid_patch_response.status, 422,
+        "{}",
+        invalid_patch_response.body
+    );
+    let rows = zelyra_database::execute_query(
+        &database_url,
+        &format!("SELECT quantity, unit_price, total FROM {table_name}"),
+        Vec::new(),
+    )
+    .unwrap();
+    assert_eq!(
+        rows.rows,
+        vec![vec![
+            String::from("4.000"),
+            String::from("0.385"),
+            String::from("1.54"),
+        ]]
+    );
+
     let patch_request = zelyra_web::parse_request(
-        "PATCH /items/1 HTTP/1.1\r\nContent-Type: application/json\r\n\r\n{\"quantity\":5,\"unit_price\":0.385,\"total\":999}",
+        "PATCH /items/1 HTTP/1.1\r\nContent-Type: application/json\r\n\r\n{\"quantity\":5,\"total\":999}",
     )
     .unwrap();
     let response = dispatch_api(
@@ -3329,7 +3364,7 @@ fn computed_api_fields_are_recomputed_before_validation_and_database_write() {
         &program.apis[2],
         "update_item",
         &patch_request,
-        &HashMap::from([("id".to_owned(), id)]),
+        &HashMap::from([("id".to_owned(), id.clone())]),
         Some(&database_url),
     );
     assert_eq!(response.status, 200, "{}", response.body);
@@ -3342,6 +3377,20 @@ fn computed_api_fields_are_recomputed_before_validation_and_database_write() {
     )
     .unwrap();
     assert_eq!(rows.rows, vec![vec!["1.93".to_owned()]]);
+    let rows = zelyra_database::execute_query(
+        &database_url,
+        &format!("SELECT quantity, unit_price, total FROM {table_name}"),
+        Vec::new(),
+    )
+    .unwrap();
+    assert_eq!(
+        rows.rows,
+        vec![vec![
+            String::from("5.000"),
+            String::from("0.385"),
+            String::from("1.93"),
+        ]]
+    );
     zelyra_database::execute_query(
         &database_url,
         &format!("DROP TABLE {table_name}"),
