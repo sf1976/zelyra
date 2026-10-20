@@ -566,18 +566,22 @@ abgeschlossen.
   Vollständigkeit des Verhaltensgraphen oder eine erfolgte Übersetzung.
   Der jüngste ausdrückliche Live-Schemacheck vergleicht zusätzlich bekannte
   MariaDB-Speichertypen einschließlich Decimal-Präzision und -Skalierung sowie
-  Fremdschlüssel-Zielspalten. Statische Integer-, Bool-, Text-, Decimal-,
+  vollständige Fremdschlüssel-Quell-/Zielspaltentupel einschließlich
+  zusammengesetzter Mandantenschlüssel. Statische Integer-, Bool-, Text-, Decimal-,
   Time- und `now`-Defaults werden verglichen, sofern Zelyra sie sicher
   interpretieren kann; Berichte geben Default-Inhalte nicht aus und listen
   nicht unterstützte Ausdrücke als ungeprüft. Der jüngste Lauf untersuchte
   89 Tabellen mit 1.293 Spalten und verglich alle 80 generierten Kandidaten.
-  Er fand 297 SQL-Typ-, 117 statische Default- und 34 Fremdschlüsselabweichungen
-  (insgesamt 448). Die 34 Fremdschlüsselabweichungen sind ausdrücklich
-  dokumentierte Sicherheitsänderungen von `SET NULL` zu `RESTRICT` bei
-  mandantengebundenen zusammengesetzten Referenzen: MariaDB kann unter einem
+  Er fand 297 SQL-Typ-, 117 statische Default- und 59 Fremdschlüsselabweichungen
+  (insgesamt 473). Alle 59 betreffen einfache Fremdschlüssel in der Live-DB,
+  während die generierten mandantengebundenen Relationen zusammengesetzte
+  Schlüssel `(tenant_id, relation_id) -> (tenant_id, id)` verlangen; bei 29
+  unterscheidet sich zusätzlich die Löschaktion, weil der sichere Kandidat
+  `RESTRICT` statt Laravels `SET NULL` verwendet. MariaDB kann unter einem
   zusammengesetzten `ON DELETE SET NULL` den Beziehungsschlüssel nicht nullen,
   ohne zugleich den erforderlichen Mandantenschlüssel zu nullen. Der Importer
-  markiert diese Fälle zur Prüfung und behauptet keine Verhaltensgleichheit.
+  markiert die Abweichungen zur Prüfung und behauptet keine
+  Verhaltensgleichheit.
   Engine, Charset, Collation und Trigger bleiben ungeprüft. Dieser
   schreibgeschützte Befund gilt für das untersuchte Quelldatenbankschema und
   kann sich mit dessen Änderungen ändern. Die frühere Aussage „keine

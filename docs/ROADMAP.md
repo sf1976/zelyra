@@ -514,22 +514,26 @@ security and compatibility gates stated for that milestone.
   coverage of the detected PHP file set, not completeness of the behavior
   graph or that source behavior has been translated.
   The latest explicit live-schema run now compares known MariaDB storage types
-  (including Decimal precision/scale) and foreign-key target columns as well as
+  (including Decimal precision/scale) and full foreign-key source/target
+  column tuples, including composite tenant keys, as well as
   presence, nullability, and indexes. Unknown mappings remain listed
   separately; default values, engine, charset, collation, and triggers are not
   compared. Against the real database it connected read-only, read no
   application rows, inspected 89 tables/1,293 columns, and compared all 80
   generated migration candidates. It reported 297 SQL-type differences, 117
-  static-default differences, and 34 foreign-key differences (448 total).
+  static-default differences, and 59 foreign-key differences (473 total).
   This supersedes the earlier “zero schema differences” result, which covered
   only the previously documented metadata subset. Static integer, boolean,
   text, Decimal, Time, and `now` defaults are now compared where Zelyra can
   interpret them safely; reports omit the actual default text, and unsupported
-  expressions are listed as unclassified. The 34 foreign-key differences are
-  the explicit `SET NULL` to `RESTRICT` safety changes for tenant-scoped
-  composite references; MariaDB cannot null the relation key while preserving
-  the required tenant key under a composite `ON DELETE SET NULL`. The importer
-  records these differences for review rather than claiming behavioral parity.
+  expressions are listed as unclassified. All 59 foreign-key differences are
+  live single-column references where generated tenant-scoped relations
+  require the composite `(tenant_id, relation_id) -> (tenant_id, id)` key; 29
+  also differ in delete action because the safe candidate uses `RESTRICT` where
+  Laravel declares `SET NULL`. MariaDB cannot null the relation key while
+  preserving the required tenant key under a composite `ON DELETE SET NULL`.
+  The importer records these differences for review rather than claiming
+  behavioral parity.
   Engine, charset, collation, and triggers remain unchecked. This read-only
   snapshot is specific to the inspected source database and can change as its
   schema changes.
