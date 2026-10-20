@@ -755,9 +755,13 @@ keine Produktionsreife.
   `.env`-Datenbankauflösung, `/new`, Multipart-Speicherung, Listenlink ohne
   rohe Referenz und authentifizierter Download. Ein vorhandener Upload-
   Integrationstest deckt Edit-Erhalt/Ersetzung, Rollback-Bereinigung sowie
-  direkte Dispatcher-Prüfungen ab: Ein Mandantenmitglied darf laden, ein
-  anderer Mandant erhält 404. Ein vollständiger authentifizierter
-  Cross-Tenant-HTTP-Ablauf und Browserprüfungen bleiben Release-Gates.
+  direkte Dispatcher-Prüfungen ab. Der Mandanten-CRUD-E2E lädt nun zusätzlich
+  ein Dokument über das authentifizierte generierte Formular hoch, prüft den
+  gespeicherten Mandanten, lädt die Datei im selben Mandanten herunter und
+  bestätigt 404 bei Auswahl eines anderen Mandanten. Der Test prüft außerdem
+  den PDF-Content-Type und dass die opake FileRef nicht im Detail-HTML erscheint.
+  Browserprüfungen und ein koordiniertes Datenbank-/Datei-Backup mit
+  Wiederherstellung bleiben Release-Gates.
 
 Siehe den [Plan zum Abschluss des Geschäfts-CRUD](release-plans/1.2.31-1.2.33-business-crud.de.md).
 

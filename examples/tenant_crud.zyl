@@ -57,6 +57,16 @@ table invoices {
     deleted_at: Timestamp?
 }
 
+table tenant_documents {
+    id: Id primary auto
+    tenant_id: Int required
+    title: String(100) required
+    attachment: FileRef? attachment {
+        max_size: "1MB"
+        allowed_types: ["application/pdf"]
+    }
+}
+
 table tenant_invoice_action_log {
     id: Id primary auto
     invoice_id: Int required
@@ -92,6 +102,18 @@ crud Invoice -> invoices {
     list {
         id
         title
+    }
+}
+
+crud TenantDocument -> tenant_documents {
+    requires auth
+    permits "documents.view"
+    tenant: tenant_id
+
+    list {
+        id
+        title
+        attachment
     }
 }
 
