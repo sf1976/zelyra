@@ -336,8 +336,10 @@ security and compatibility gates stated for that milestone.
   `session.user_id` come from the authenticated selected tenant, a wrong-tenant
   target fails with 404, and direct POST without the action permission returns
   403. A separate-database PostgreSQL HTTP E2E now proves successful row/hash/
-  time and audit updates plus rollback after a runtime error. The broader
-  security/permission matrix remains open. See the
+  time and audit updates plus rollback after a runtime error. Both database
+  E2Es also send two simultaneous lock requests and verify exactly one success,
+  one guarded conflict, and one audit row. The broader security/permission
+  matrix remains open. See the
   [1.2.28 work plan](release-plans/1.2.28-typed-crud-actions.en.md).
 - [ ] **1.2.29 — bounded secure file upload foundation (subject to design
   gate):** Specify and test multipart size limits, file metadata types,

@@ -59,9 +59,10 @@ PY
 "${zelyra_bin}" check "${project_file}"
 DATABASE_URL="${database_url}" "${zelyra_bin}" db setup "${project_file}"
 DATABASE_URL="${database_url}" "${zelyra_bin}" outbox setup "${project_file}"
-client --batch -e "INSERT INTO invoices (invoice_number, is_locked) VALUES ('${invoice}', false), ('${invoice}-rollback', false)"
+client --batch -e "INSERT INTO invoices (invoice_number, is_locked) VALUES ('${invoice}', false), ('${invoice}-rollback', false), ('${invoice}-concurrent', false)"
 id="$(client --batch --skip-column-names -e "SELECT id FROM invoices WHERE invoice_number='${invoice}'")"
 rollback_id="$(client --batch --skip-column-names -e "SELECT id FROM invoices WHERE invoice_number='${invoice}-rollback'")"
+concurrent_id="$(client --batch --skip-column-names -e "SELECT id FROM invoices WHERE invoice_number='${invoice}-concurrent'")"
 port="$(python3 -c 'import socket; s=socket.socket(); s.bind(("127.0.0.1", 0)); print(s.getsockname()[1]); s.close()')"
 base="http://127.0.0.1:${port}"
 DATABASE_URL="${database_url}" "${zelyra_bin}" serve "${project_file}" "127.0.0.1:${port}" >"${temp_dir}/server.log" 2>&1 & server_pid=$!
@@ -74,6 +75,15 @@ status="$(post_action "${id}" lock "${token}" "${temp_dir}/lock-result.html")"; 
 hash="$(printf '%s' "${invoice}" | sha256sum | cut -d' ' -f1)"
 [[ "$(client --batch --skip-column-names -e "SELECT CONCAT(is_locked, '|', integrity_hash='${hash}', '|', locked_at IS NOT NULL) FROM invoices WHERE id=${id}")" == "1|1|1" ]]
 [[ "$(client --batch --skip-column-names -e "SELECT COUNT(*) FROM invoice_audit_logs WHERE invoice_id=${id} AND action='locked'")" == 1 ]]
+
+load_form "${concurrent_id}" lock "${temp_dir}/concurrent.html"
+concurrent_token="$(csrf_from "${temp_dir}/concurrent.html")"; [[ -n "${concurrent_token}" ]]
+post_action "${concurrent_id}" lock "${concurrent_token}" "${temp_dir}/concurrent-1.html" >"${temp_dir}/concurrent-1.status" & first_post=$!
+post_action "${concurrent_id}" lock "${concurrent_token}" "${temp_dir}/concurrent-2.html" >"${temp_dir}/concurrent-2.status" & second_post=$!
+wait "${first_post}"; wait "${second_post}"
+concurrent_statuses="$(printf '%s\n' "$(cat "${temp_dir}/concurrent-1.status")" "$(cat "${temp_dir}/concurrent-2.status")" | sort | paste -sd, -)"
+[[ "${concurrent_statuses}" == "303,409" ]]
+[[ "$(client --batch --skip-column-names -e "SELECT CONCAT(is_locked, '|', (SELECT COUNT(*) FROM invoice_audit_logs WHERE invoice_id=${concurrent_id} AND action='locked')) FROM invoices WHERE id=${concurrent_id}")" == "1|1" ]]
 
 load_form "${id}" lock "${temp_dir}/guard.html"; token="$(csrf_from "${temp_dir}/guard.html")"
 status="$(post_action "${id}" lock "${token}" "${temp_dir}/guard-result.html")"; [[ "${status}" == 409 ]]

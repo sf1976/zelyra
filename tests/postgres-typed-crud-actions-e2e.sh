@@ -54,9 +54,10 @@ db_created=true
 sed 's/engine: mariadb/engine: postgres/' "${repo_dir}/examples/typed_crud_actions/main.zyl" >"${temp_dir}/main.zyl"
 DATABASE_URL="${database_url}" "${zelyra_bin}" check "${temp_dir}/main.zyl"
 DATABASE_URL="${database_url}" "${zelyra_bin}" db apply "${temp_dir}/main.zyl" >/dev/null
-psql -X -v ON_ERROR_STOP=1 --dbname="${database_url}" --command="INSERT INTO invoices (invoice_number, is_locked) VALUES ('pg-${suffix}', false), ('pg-${suffix}-rollback', false);" >/dev/null
+psql -X -v ON_ERROR_STOP=1 --dbname="${database_url}" --command="INSERT INTO invoices (invoice_number, is_locked) VALUES ('pg-${suffix}', false), ('pg-${suffix}-rollback', false), ('pg-${suffix}-concurrent', false);" >/dev/null
 id="$(psql -X -At --dbname="${database_url}" --command="SELECT id FROM invoices WHERE invoice_number='pg-${suffix}';")"
 rollback_id="$(psql -X -At --dbname="${database_url}" --command="SELECT id FROM invoices WHERE invoice_number='pg-${suffix}-rollback';")"
+concurrent_id="$(psql -X -At --dbname="${database_url}" --command="SELECT id FROM invoices WHERE invoice_number='pg-${suffix}-concurrent';")"
 app_port="$(python3 -c 'import socket; s=socket.socket(); s.bind(("127.0.0.1", 0)); print(s.getsockname()[1]); s.close()')"
 base="http://127.0.0.1:${app_port}"
 DATABASE_URL="${database_url}" "${zelyra_bin}" serve "${temp_dir}/main.zyl" "127.0.0.1:${app_port}" >"${temp_dir}/server.log" 2>&1 & server_pid=$!
@@ -85,6 +86,15 @@ status="$(post_action "${id}" lock "${token}" "${temp_dir}/lock-result.html")"; 
 hash="$(printf '%s' "pg-${suffix}" | sha256sum | cut -d' ' -f1)"
 [[ "$(psql -X -At --dbname="${database_url}" --command="SELECT is_locked::int || '|' || (integrity_hash='${hash}')::int || '|' || (locked_at IS NOT NULL)::int FROM invoices WHERE id=${id};")" == "1|1|1" ]]
 [[ "$(psql -X -At --dbname="${database_url}" --command="SELECT COUNT(*) FROM invoice_audit_logs WHERE invoice_id=${id} AND action='locked';")" == 1 ]]
+
+load_detail "${concurrent_id}" "${temp_dir}/concurrent.html"
+concurrent_token="$(csrf_from "${temp_dir}/concurrent.html")"; [[ -n "${concurrent_token}" ]]
+post_action "${concurrent_id}" lock "${concurrent_token}" "${temp_dir}/concurrent-1.html" >"${temp_dir}/concurrent-1.status" & first_post=$!
+post_action "${concurrent_id}" lock "${concurrent_token}" "${temp_dir}/concurrent-2.html" >"${temp_dir}/concurrent-2.status" & second_post=$!
+wait "${first_post}"; wait "${second_post}"
+concurrent_statuses="$(printf '%s\n' "$(cat "${temp_dir}/concurrent-1.status")" "$(cat "${temp_dir}/concurrent-2.status")" | sort | paste -sd, -)"
+[[ "${concurrent_statuses}" == "303,409" ]]
+[[ "$(psql -X -At --dbname="${database_url}" --command="SELECT is_locked::int || '|' || (SELECT COUNT(*) FROM invoice_audit_logs WHERE invoice_id=${concurrent_id} AND action='locked') FROM invoices WHERE id=${concurrent_id};")" == "1|1" ]]
 
 load_detail "${rollback_id}" "${temp_dir}/fail.html"
 token="$(csrf_from "${temp_dir}/fail.html")"; [[ -n "${token}" ]]
