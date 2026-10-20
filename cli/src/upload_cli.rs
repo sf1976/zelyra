@@ -2,11 +2,18 @@ use super::*;
 use std::time::{Duration, SystemTime};
 
 pub(super) fn files_command(mut arguments: impl Iterator<Item = String>) -> ExitCode {
-    if arguments.next().as_deref() != Some("cleanup") {
-        usage();
-        return ExitCode::from(2);
+    match arguments.next().as_deref() {
+        Some("cleanup") => files_cleanup_command(arguments),
+        Some("backup") => files_backup_command(arguments),
+        Some("restore") => files_restore_command(arguments),
+        _ => {
+            usage();
+            ExitCode::from(2)
+        }
     }
+}
 
+fn files_cleanup_command(mut arguments: impl Iterator<Item = String>) -> ExitCode {
     let mut entry = "main.zyl".to_owned();
     let mut entry_set = false;
     let mut min_age_days = 30_u64;
@@ -183,6 +190,175 @@ pub(super) fn files_command(mut arguments: impl Iterator<Item = String>) -> Exit
     }
 }
 
+fn files_backup_command(mut arguments: impl Iterator<Item = String>) -> ExitCode {
+    let mut entry = "main.zyl".to_owned();
+    let mut entry_set = false;
+    let mut output = None;
+    while let Some(argument) = arguments.next() {
+        match argument.as_str() {
+            "--output" => {
+                let Some(value) = arguments.next() else {
+                    eprintln!("error[E-CLI-001]: --output requires a new backup directory path");
+                    return ExitCode::from(2);
+                };
+                output = Some(PathBuf::from(value));
+            }
+            value if value.starts_with('-') => {
+                eprintln!("error[E-CLI-001]: unknown files backup option `{value}`");
+                return ExitCode::from(2);
+            }
+            value if !entry_set => {
+                entry = value.to_owned();
+                entry_set = true;
+            }
+            value => {
+                eprintln!("error[E-CLI-001]: unexpected files backup argument `{value}`");
+                return ExitCode::from(2);
+            }
+        }
+    }
+    let Some(output) = output else {
+        eprintln!("error[E-CLI-001]: files backup requires --output <new-directory>");
+        return ExitCode::from(2);
+    };
+    let (program, database_url, project_directory) = match file_storage_context(&entry) {
+        Ok(context) => context,
+        Err(code) => return code,
+    };
+    let references = match load_file_references(&program, &database_url) {
+        Ok(references) => references,
+        Err(error) => {
+            eprintln!("error[E-FILE-002]: could not verify upload references: {error}");
+            return ExitCode::from(1);
+        }
+    };
+    let storage = match zelyra_web::file_storage::FileStorage::new(
+        project_directory.join("storage/zelyra"),
+    ) {
+        Ok(storage) => storage,
+        Err(error) => {
+            eprintln!("error[E-FILE-001]: private upload storage is unavailable: {error}");
+            return ExitCode::from(1);
+        }
+    };
+    match storage.backup_to_directory(&output, &references) {
+        Ok(summary) => {
+            println!(
+                "Backed up {} managed upload(s) ({} bytes) to {}.",
+                summary.files,
+                summary.total_bytes,
+                output.display()
+            );
+            println!("Database contents are not included; back up the database separately while the application is quiescent.");
+            ExitCode::SUCCESS
+        }
+        Err(error) => {
+            eprintln!("error[E-FILE-006]: upload backup failed: {error}");
+            ExitCode::from(1)
+        }
+    }
+}
+
+fn files_restore_command(mut arguments: impl Iterator<Item = String>) -> ExitCode {
+    let mut entry = "main.zyl".to_owned();
+    let mut entry_set = false;
+    let mut input = None;
+    let mut apply = false;
+    while let Some(argument) = arguments.next() {
+        match argument.as_str() {
+            "--from" => {
+                let Some(value) = arguments.next() else {
+                    eprintln!("error[E-CLI-001]: --from requires a backup directory path");
+                    return ExitCode::from(2);
+                };
+                input = Some(PathBuf::from(value));
+            }
+            "--apply" => apply = true,
+            value if value.starts_with('-') => {
+                eprintln!("error[E-CLI-001]: unknown files restore option `{value}`");
+                return ExitCode::from(2);
+            }
+            value if !entry_set => {
+                entry = value.to_owned();
+                entry_set = true;
+            }
+            value => {
+                eprintln!("error[E-CLI-001]: unexpected files restore argument `{value}`");
+                return ExitCode::from(2);
+            }
+        }
+    }
+    if !apply {
+        eprintln!("error[E-CLI-001]: files restore changes private storage and requires --apply");
+        return ExitCode::from(2);
+    }
+    let Some(input) = input else {
+        eprintln!("error[E-CLI-001]: files restore requires --from <backup-directory>");
+        return ExitCode::from(2);
+    };
+    let (program, database_url, project_directory) = match file_storage_context(&entry) {
+        Ok(context) => context,
+        Err(code) => return code,
+    };
+    let references = match load_file_references(&program, &database_url) {
+        Ok(references) => references,
+        Err(error) => {
+            eprintln!("error[E-FILE-002]: could not verify upload references: {error}");
+            return ExitCode::from(1);
+        }
+    };
+    let storage = match zelyra_web::file_storage::FileStorage::new(
+        project_directory.join("storage/zelyra"),
+    ) {
+        Ok(storage) => storage,
+        Err(error) => {
+            eprintln!("error[E-FILE-001]: private upload storage is unavailable: {error}");
+            return ExitCode::from(1);
+        }
+    };
+    match storage.restore_from_directory(&input, &references) {
+        Ok(summary) => {
+            println!(
+                "Restored {} managed upload(s) ({} bytes) from {}.",
+                summary.files,
+                summary.total_bytes,
+                input.display()
+            );
+            println!("The database is not part of this file-storage restore and must already be restored.");
+            ExitCode::SUCCESS
+        }
+        Err(error) => {
+            eprintln!("error[E-FILE-006]: upload restore failed: {error}");
+            ExitCode::from(1)
+        }
+    }
+}
+
+fn file_storage_context(entry: &str) -> Result<(Program, String, PathBuf), ExitCode> {
+    let program = validate(entry).map_err(|()| ExitCode::from(1))?;
+    let project_directory = Path::new(entry)
+        .parent()
+        .filter(|directory| !directory.as_os_str().is_empty())
+        .unwrap_or(Path::new("."))
+        .to_path_buf();
+    let database_name = program
+        .databases
+        .first()
+        .map(|database| database.name.as_str());
+    let database_url = match database_url_for_project(&project_directory, database_name) {
+        Ok(Some(url)) => url,
+        Ok(None) => {
+            eprintln!("error[E-ENV-001]: DATABASE_URL is required to verify upload references");
+            return Err(ExitCode::from(1));
+        }
+        Err(error) => {
+            eprintln!("error[E-ENV-001]: {error}");
+            return Err(ExitCode::from(1));
+        }
+    };
+    Ok((program, database_url, project_directory))
+}
+
 fn load_file_references(
     program: &Program,
     database_url: &str,
@@ -281,6 +457,6 @@ fn is_file_ref_type(
 
 fn usage() {
     eprintln!(
-        "Usage: zelyra files cleanup [entry.zyl] [--min-age-days <1..3650>] [--apply --maintenance-window]"
+        "Usage:\n  zelyra files cleanup [entry.zyl] [--min-age-days <1..3650>] [--apply --maintenance-window]\n  zelyra files backup [entry.zyl] --output <new-directory>\n  zelyra files restore [entry.zyl] --from <backup-directory> --apply"
     );
 }

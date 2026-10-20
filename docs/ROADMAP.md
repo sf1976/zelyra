@@ -399,12 +399,22 @@ security and compatibility gates stated for that milestone.
   E2E proves preview, referenced-file preservation, and explicit orphan removal;
   it also starts a real upload-enabled `zelyra serve`, verifies cleanup is
   refused while that process holds the lock, then verifies cleanup succeeds
-  after the server exits.
+  after the server exits. `zelyra files backup --output <new-directory>` now
+  creates a versioned, private directory snapshot of verified blobs and
+  manifests under the exclusive lock; it refuses missing database references
+  and never overwrites an existing destination. `zelyra files restore --from
+  <directory> --apply` stages and checks every size, media type, manifest and
+  SHA-256 before atomically publishing the tenant tree, and refuses missing
+  database references or existing uploads. A disposable MariaDB E2E verifies
+  byte/manifest restoration and that corrupted input publishes nothing. These
+  commands cover only the private file-storage component: database contents,
+  app configuration and secrets are excluded and must be backed up separately.
   Replacing a file on an authorized edit now removes the previous blob only
   after the database action commits; cleanup failure leaves a managed orphan
   for the explicit reference-aware cleanup command. Permanent CRUD deletion removes an upload after commit only when no declared
-  FileRef still uses it; soft-delete retains the recoverable file. Backup/restore
-  remain open. Non-Unix
+  FileRef still uses it; soft-delete retains the recoverable file. Coordinated
+  whole-application database-plus-file backup and crash/failure recovery remain
+  open. Non-Unix
   creation fails closed pending ACL support.
   `FileRef` maps to `CHAR(36)`/`UUID`/`TEXT` by backend, checked file forms must
   match a same-named reference column, automatic CRUD cannot render it as text,
@@ -427,8 +437,8 @@ security and compatibility gates stated for that milestone.
   `/opt/siedelmann-laravel/app` identified upload
   flows in invoices,
   contracts, settings, postal letters, and inbound mail; the importer does not
-  generate them. Remaining release gates include backup/restore and additional cleanup E2E
-  coverage for crash remnants and failure recovery. See the
+  generate them. Remaining release gates include whole-application backup and
+  additional cleanup E2E coverage for crash remnants and failure recovery. See the
   [1.2.29 secure upload plan](release-plans/1.2.29-secure-uploads.en.md).
 - [~] **1.2.30 — Laravel import workflow coverage:** Standalone forms now
   support checked local routes with captured path parameters, a compiler-checked

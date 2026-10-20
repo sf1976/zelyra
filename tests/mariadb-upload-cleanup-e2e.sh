@@ -75,8 +75,10 @@ mkdir -p "${tenant_dir}"
 chmod 700 "${project_dir}/storage" "${project_dir}/storage/zelyra" \
     "${project_dir}/storage/zelyra/tenants" "${tenant_dir}"
 for ref in "${referenced_ref}" "${orphan_ref}"; do
-    printf 'test bytes\n' >"${tenant_dir}/${ref}"
-    printf 'test manifest\n' >"${tenant_dir}/${ref}.meta"
+    printf '%%PDF-1.7\ncleanup test document\n' >"${tenant_dir}/${ref}"
+    digest="$(sha256sum "${tenant_dir}/${ref}" | cut -d ' ' -f 1)"
+    size="$(stat -c '%s' "${tenant_dir}/${ref}")"
+    printf 'application/pdf\n%s\n%s\n' "${size}" "${digest}" >"${tenant_dir}/${ref}.meta"
     chmod 600 "${tenant_dir}/${ref}" "${tenant_dir}/${ref}.meta"
     touch -d '2 days ago' "${tenant_dir}/${ref}" "${tenant_dir}/${ref}.meta"
 done
@@ -142,4 +144,29 @@ server_pid=""
     --min-age-days 1 --apply --maintenance-window >/dev/null
 [[ ! -e "${tenant_dir}/${locked_ref}" ]]
 [[ ! -e "${tenant_dir}/${locked_ref}.meta" ]]
-echo "upload cleanup MariaDB E2E passed (preview, reference preservation, explicit apply, live-server lock)"
+
+# The file-storage backup is separate from a database dump. Verify it includes
+# the referenced bytes, rejects corruption before publishing any file, and
+# restores the opaque reference without overwriting live storage.
+backup_directory="${project_dir}/upload-backup"
+"${zelyra_bin}" files backup "${project_dir}/main.zyl" --output "${backup_directory}" >"${project_dir}/backup.log"
+grep -F 'Backed up 1 managed upload' "${project_dir}/backup.log" >/dev/null
+grep -F 'Database contents are not included' "${project_dir}/backup.log" >/dev/null
+cp "${tenant_dir}/${referenced_ref}" "${project_dir}/expected-upload.pdf"
+rm -rf -- "${project_dir}/storage/zelyra/tenants"
+"${zelyra_bin}" files restore "${project_dir}/main.zyl" --from "${backup_directory}" --apply >/dev/null
+cmp "${project_dir}/expected-upload.pdf" "${tenant_dir}/${referenced_ref}"
+
+corrupt_backup="${project_dir}/corrupt-upload-backup"
+cp -a "${backup_directory}" "${corrupt_backup}"
+printf '%%PDF-1.7\ntampered\n' >"${corrupt_backup}/tenants/0/${referenced_ref}"
+rm -rf -- "${project_dir}/storage/zelyra/tenants"
+if "${zelyra_bin}" files restore "${project_dir}/main.zyl" --from "${corrupt_backup}" --apply >"${project_dir}/corrupt-restore.log" 2>&1; then
+    echo "error: upload restore unexpectedly accepted a checksum-corrupted backup" >&2
+    exit 1
+fi
+grep -F 'checksum or metadata verification failed' "${project_dir}/corrupt-restore.log" >/dev/null
+[[ ! -e "${project_dir}/storage/zelyra/tenants" ]]
+"${zelyra_bin}" files restore "${project_dir}/main.zyl" --from "${backup_directory}" --apply >/dev/null
+cmp "${project_dir}/expected-upload.pdf" "${tenant_dir}/${referenced_ref}"
+echo "upload cleanup and backup MariaDB E2E passed (preview, live-server lock, checksum-verified backup and restore)"

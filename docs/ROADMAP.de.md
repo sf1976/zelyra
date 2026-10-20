@@ -445,8 +445,20 @@ abgeschlossen.
   Waisenobjekt für den ausdrücklichen referenzgeprüften Cleanup-Befehl zurück.
   Beim endgültigen CRUD-Löschen wird eine Datei nach dem Commit nur entfernt,
   wenn keine deklarierte FileRef-Spalte mehr auf sie verweist; Soft-Delete
-  behält die Datei für eine mögliche Wiederherstellung. Backup/Restore bleiben
-  offen. Nicht-Unix-Anlegen schlägt bis zur
+  behält die Datei für eine mögliche Wiederherstellung. `zelyra files backup
+  --output <neues-verzeichnis>` erzeugt unter exklusiver Sperre ein
+  versioniertes privates Verzeichnis mit geprüften Blobs und Manifesten. Es
+  bricht bei fehlenden Datenbankreferenzen ab und überschreibt kein Ziel.
+  `zelyra files restore --from <verzeichnis> --apply` stellt zuerst alle
+  Dateien in einen Stagingbaum, prüft Größe, Medientyp, Manifest und SHA-256
+  und veröffentlicht den Mandantenbaum erst danach. Fehlende Datenbankreferenzen
+  sowie vorhandene Uploads werden abgewiesen. Ein Wegwerf-MariaDB-E2E prüft
+  Wiederherstellung von Bytes/Manifesten und dass korrupte Eingaben nichts
+  veröffentlichen. Diese Befehle sichern nur die private Dateikomponente;
+  Datenbank, Projektkonfiguration und Geheimnisse sind ausgeschlossen und
+  müssen separat gesichert werden. Ein koordiniertes vollständiges
+  Anwendungsbackup aus Datenbank und Dateien sowie Absturz-/Fehlerwiederherstellung
+  bleiben offen. Nicht-Unix-Anlegen schlägt bis zur
   ACL-Unterstützung geschlossen fehl. `FileRef` wird je
   Backend als `CHAR(36)`/`UUID`/`TEXT` abgebildet. Geprüfte
   Datei-Formulare müssen auf eine gleichnamige Referenzspalte zeigen;
@@ -469,8 +481,8 @@ abgeschlossen.
   konnte. Der Code wird zusätzlich mit lokalem Rust 1.98 geprüft. Eine statische Analyse von
   `/opt/siedelmann-laravel/app` fand Uploadabläufe bei Rechnungen, Verträgen,
   Einstellungen, Postbriefen und eingehender Mail; der Importer erzeugt sie
-  nicht. Offen sind Backup/Restore und zusätzliche Cleanup-E2E-Prüfungen für
-  Absturzreste und Fehlerwiederherstellung.
+  nicht. Offen sind ein vollständiges Anwendungsbackup und zusätzliche
+  Cleanup-E2E-Prüfungen für Absturzreste und Fehlerwiederherstellung.
   Siehe den [Plan für sichere Uploads 1.2.29](release-plans/1.2.29-secure-uploads.de.md).
 - [~] **1.2.30 — Abdeckung echter Laravel-Migrationsabläufe:** Standalone-Forms
   unterstützen geprüfte lokale Routen mit erfassten Pfadparametern, ein

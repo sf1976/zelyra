@@ -15,6 +15,9 @@ use std::{
     time::SystemTime,
 };
 
+mod backup;
+pub use backup::BackupSummary;
+
 const MAX_UPLOAD_BYTES: u64 = 100 * 1024 * 1024;
 
 #[derive(Clone, Debug, PartialEq, Eq)]

@@ -2571,6 +2571,7 @@ dependencies = [
  "libc",
  "rand_core 0.6.4",
  "ring",
+ "serde",
  "serde_json",
  "sha2 0.10.9",
  "subtle",

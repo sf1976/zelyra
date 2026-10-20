@@ -194,7 +194,7 @@ jobs:
           ZELYRA_BIN: target/debug/zelyra
           ZELYRA_REPL_MARIADB_IMAGE: mariadb:11.8
         run: ./tests/language-console-mariadb-e2e.sh
-      - name: Verify upload cleanup coordinates with a live server
+      - name: Verify upload cleanup and storage backup/restore
         env:
           ZELYRA_BIN: target/debug/zelyra
           ZELYRA_UPLOAD_MARIADB_IMAGE: mariadb:11.8
