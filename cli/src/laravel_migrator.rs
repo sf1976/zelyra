@@ -305,7 +305,7 @@ struct CommandOutput {
 
 pub(super) fn command(mut arguments: impl Iterator<Item = String>) -> ExitCode {
     if arguments.next().as_deref() != Some("laravel") {
-        eprintln!("Usage: zelyra import laravel <analyze|generate> <project> [--report <path>] [--output <target>] [--table <name>]... [--format markdown|json] [--inspect-database]");
+        eprintln!("Usage: zelyra import laravel analyze <project> --report <path> [--format markdown|json] [--inspect-database] | generate <project> --output <target> (--table <name>... | --all-supported)");
         return ExitCode::from(2);
     }
     let Some(operation) = arguments.next() else {
@@ -324,6 +324,7 @@ pub(super) fn command(mut arguments: impl Iterator<Item = String>) -> ExitCode {
     let mut output = None;
     let mut format = None;
     let mut inspect_database = false;
+    let mut all_supported = false;
     let mut requested_tables = Vec::new();
     while let Some(argument) = arguments.next() {
         match argument.as_str() {
@@ -338,6 +339,7 @@ pub(super) fn command(mut arguments: impl Iterator<Item = String>) -> ExitCode {
             },
             "--format" => format = arguments.next(),
             "--inspect-database" => inspect_database = true,
+            "--all-supported" => all_supported = true,
             _ => {
                 eprintln!("error[E-IMPORT-001]: unknown import option `{argument}`");
                 return ExitCode::from(2);
@@ -358,6 +360,18 @@ pub(super) fn command(mut arguments: impl Iterator<Item = String>) -> ExitCode {
     }
     if operation == "analyze" && !requested_tables.is_empty() {
         eprintln!("error[E-IMPORT-001]: `--table` can only be used with `generate` and `--output`");
+        return ExitCode::from(2);
+    }
+    if operation == "analyze" && all_supported {
+        eprintln!("error[E-IMPORT-001]: `--all-supported` can only be used with `generate`");
+        return ExitCode::from(2);
+    }
+    if operation == "generate" && requested_tables.is_empty() && !all_supported {
+        eprintln!("error[E-IMPORT-001]: `generate` requires an explicit selection: use `--table <name>` or `--all-supported`");
+        return ExitCode::from(2);
+    }
+    if all_supported && !requested_tables.is_empty() {
+        eprintln!("error[E-IMPORT-001]: `--all-supported` cannot be combined with `--table`");
         return ExitCode::from(2);
     }
     let project = PathBuf::from(project);

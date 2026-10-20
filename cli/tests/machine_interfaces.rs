@@ -1412,6 +1412,33 @@ fn run_reads_console_input_and_handles_eof_and_capability_denial() {
 }
 
 #[test]
+fn laravel_generation_requires_an_explicit_supported_selection() {
+    let directory = temporary_directory("laravel-selection-required");
+    fs::create_dir_all(&directory).unwrap();
+    let source = directory.join("source-is-not-read-before-selection");
+    let output_directory = directory.join("generated");
+    let output = Command::new(binary())
+        .args([
+            "import",
+            "laravel",
+            "generate",
+            source.to_str().unwrap(),
+            "--output",
+            output_directory.to_str().unwrap(),
+        ])
+        .output()
+        .expect("Laravel importer should report the missing selection");
+    assert_eq!(output.status.code(), Some(2));
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("requires an explicit selection") && stderr.contains("--all-supported"),
+        "unexpected stderr: {stderr}"
+    );
+    assert!(!output_directory.exists());
+    fs::remove_dir_all(directory).unwrap();
+}
+
+#[test]
 fn language_console_keeps_bindings_and_recovers_after_runtime_errors_in_piped_input() {
     let (directory, source) = temporary_project_source("language-console-repl", "fn main() {}\n");
     let mut child = Command::new(binary())

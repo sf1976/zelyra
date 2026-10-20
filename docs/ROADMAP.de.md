@@ -290,7 +290,9 @@ abgeschlossen.
   Frameworkkompatibilität und keine PHP-Laufzeitunterstützung. Routen,
   Controlleraktionen, Services, Models, Migrationen, Blade-Layouts/-Views,
   Assets und auf Wunsch das Live-Datenbankschema als quellbelegten Graphen
-  analysieren. `.env` nur für ausdrücklich angeforderte Schema-Lesezugriffe
+  analysieren. Die Generierung verlangt ausdrücklich `--table <name>` oder
+  `--all-supported`; ohne Auswahl werden nicht stillschweigend alle erkannten
+  Teilmengen erzeugt. `.env` nur für ausdrücklich angeforderte Schema-Lesezugriffe
   verwenden; Zugangsdaten nie ausgeben, keine Anwendungszeilen lesen, keine
   PHP-Dateien ausführen und die Quelle nicht verändern. Nur ausdrücklich
   ausgewählte, unterstützte Module in ein neues Ziel generieren und den

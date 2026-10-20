@@ -262,7 +262,9 @@ security and compatibility gates stated for that milestone.
 - [~] **1.2.27 — Laravel website import foundation:** Reintroduce a new,
   read-only-first importer for migrating selected website behavior into native
   Zelyra modules; this is not Laravel framework compatibility or PHP runtime
-  support. Analyze routes, controller actions, services, models, migrations,
+  support. Generation requires `--table <name>` or an explicit
+  `--all-supported`; it no longer silently selects every recognized subset.
+  Analyze routes, controller actions, services, models, migrations,
   Blade layouts/views/assets, and optional live database schema metadata as a
   source-evidenced graph. Read `.env` only for an explicitly requested
   read-only schema connection; never print credentials, read application rows,
