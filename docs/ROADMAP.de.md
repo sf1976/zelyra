@@ -569,13 +569,20 @@ abgeschlossen.
   Fremdschlüssel-Zielspalten. Statische Integer-, Bool-, Text-, Decimal-,
   Time- und `now`-Defaults werden verglichen, sofern Zelyra sie sicher
   interpretieren kann; Berichte geben Default-Inhalte nicht aus und listen
-  nicht unterstützte Ausdrücke als ungeprüft. Der erneute Vergleich fand
-  117 Default- und 297 SQL-Typabweichungen (414 insgesamt). Er verglich 80
-  Kandidaten und untersuchte 1.250 Spalten. Engine, Charset, Collation und
-  Trigger bleiben ungeprüft. Die echte Datenbank wurde schreibgeschützt
-  verbunden, ohne Anwendungszeilen zu lesen. Das ersetzt den früheren Befund „keine
-  Schemadifferenzen“, der nur den damals dokumentierten Metadatenausschnitt
-  verglich.
+  nicht unterstützte Ausdrücke als ungeprüft. Der jüngste Lauf untersuchte
+  89 Tabellen mit 1.293 Spalten und verglich alle 80 generierten Kandidaten.
+  Er fand 297 SQL-Typ-, 117 statische Default- und 34 Fremdschlüsselabweichungen
+  (insgesamt 448). Die 34 Fremdschlüsselabweichungen sind ausdrücklich
+  dokumentierte Sicherheitsänderungen von `SET NULL` zu `RESTRICT` bei
+  mandantengebundenen zusammengesetzten Referenzen: MariaDB kann unter einem
+  zusammengesetzten `ON DELETE SET NULL` den Beziehungsschlüssel nicht nullen,
+  ohne zugleich den erforderlichen Mandantenschlüssel zu nullen. Der Importer
+  markiert diese Fälle zur Prüfung und behauptet keine Verhaltensgleichheit.
+  Engine, Charset, Collation und Trigger bleiben ungeprüft. Dieser
+  schreibgeschützte Befund gilt für das untersuchte Quelldatenbankschema und
+  kann sich mit dessen Änderungen ändern. Die frühere Aussage „keine
+  Schemadifferenzen“ bezog sich nur auf den damals verglichenen
+  Metadatenausschnitt.
 - [ ] **1.3.0 — kanonische Struktur und Bytecode-Standard:** Das optionale,
   versionierte Projektlayout (`routes/`, `domain/`, `schema/`, `public/`,
   `assets/`, `plugins/`), Architekturprüfungen und eine sichere

@@ -518,16 +518,21 @@ security and compatibility gates stated for that milestone.
   presence, nullability, and indexes. Unknown mappings remain listed
   separately; default values, engine, charset, collation, and triggers are not
   compared. Against the real database it connected read-only, read no
-  application rows, inspected 80 tables/1,215 columns, compared all 78
-  generated migration candidates, and reported 293 concrete type differences.
+  application rows, inspected 89 tables/1,293 columns, and compared all 80
+  generated migration candidates. It reported 297 SQL-type differences, 117
+  static-default differences, and 34 foreign-key differences (448 total).
   This supersedes the earlier “zero schema differences” result, which covered
   only the previously documented metadata subset. Static integer, boolean,
   text, Decimal, Time, and `now` defaults are now compared where Zelyra can
   interpret them safely; reports omit the actual default text, and unsupported
-  expressions are listed as unclassified. The latest live comparison found
-  117 default and 297 SQL type differences across 80 candidates (414 total).
-  This rerun inspected 1,250 columns; engine, charset, collation, and triggers
-  remain unchecked.
+  expressions are listed as unclassified. The 34 foreign-key differences are
+  the explicit `SET NULL` to `RESTRICT` safety changes for tenant-scoped
+  composite references; MariaDB cannot null the relation key while preserving
+  the required tenant key under a composite `ON DELETE SET NULL`. The importer
+  records these differences for review rather than claiming behavioral parity.
+  Engine, charset, collation, and triggers remain unchecked. This read-only
+  snapshot is specific to the inspected source database and can change as its
+  schema changes.
 - [ ] **1.3.0 — canonical structure and Bytecode default:** Complete the
   opt-in versioned project layout (`routes/`, `domain/`, `schema/`, `public/`,
   `assets/`, and `plugins/`), architecture checks, and safe layout migration
