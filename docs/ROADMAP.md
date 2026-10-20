@@ -251,7 +251,8 @@ security and compatibility gates stated for that milestone.
   [1.2.25 work plan](release-plans/1.2.25-db-cli-console-query.en.md).
   Released as [`v1.2.25`](https://github.com/sf1976/zelyra/releases/tag/v1.2.25).
 - [~] **1.2.26 — interactive language console:** Add an incremental AST
-  interpreter session with persistent typed bindings, line continuation,
+  interpreter session with persistent typed bindings, table and field-name
+  tab completion, line continuation,
   recoverable two-line source-located diagnostics, safe project context, and explicit backend selection
   only where equivalent semantics are implemented. Sandbox writes inside a
   pinned MariaDB/MySQL transaction and roll them back on exit unless `--persist`

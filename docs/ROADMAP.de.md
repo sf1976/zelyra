@@ -272,7 +272,8 @@ abgeschlossen.
   Veröffentlicht als [`v1.2.25`](https://github.com/sf1976/zelyra/releases/tag/v1.2.25).
 - [~] **1.2.26 — interaktive Zelyra-Sprachkonsole:** Eine inkrementelle
   AST-Interpreter-Sitzung mit persistenten typisierten Bindungen,
-  mehrzeiliger Eingabe, fortsetzbaren zweizeiligen Diagnosen mit Quellposition
+  mehrzeiliger Eingabe, Tabellen- und Feldnamen in der Tab-Vervollständigung,
+  fortsetzbaren zweizeiligen Diagnosen mit Quellposition
   und sicherem Projektkontext
   ergänzen. AST-/Bytecode-Auswahl nur dort anbieten, wo das gewählte Backend
   gleichwertige Semantik unterstützt. Schreibzugriffe müssen in einer echten

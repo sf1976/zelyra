@@ -400,6 +400,12 @@ impl ReplSession {
                 .map(|function| function.name.clone()),
         );
         names.extend(self.program.tables.iter().map(|table| table.name.clone()));
+        names.extend(
+            self.program
+                .tables
+                .iter()
+                .flat_map(|table| table.columns.iter().map(|column| column.name.clone())),
+        );
         names.extend(self.program.records.iter().flat_map(|structure| {
             std::iter::once(structure.name.clone())
                 .chain(structure.fields.iter().map(|field| field.name.clone()))
@@ -696,6 +702,24 @@ mod tests {
             unique_session_type_name(&program),
             format!("{REPL_SESSION_TYPE}_1")
         );
+    }
+
+    #[test]
+    fn completion_includes_declared_table_columns_and_library_functions() {
+        let program = parse(
+            &lex(
+                "table Customer { id: Id primary auto name: String(80) required }\nfn main() {}\n",
+            )
+            .expect("lex project"),
+        )
+        .expect("parse project");
+        let session = ReplSession::new(program, None, None, None, true).expect("start REPL");
+        let candidates = session.completion_candidates();
+        assert!(candidates.contains(&"Customer".to_owned()));
+        assert!(candidates.contains(&"id".to_owned()));
+        assert!(candidates.contains(&"name".to_owned()));
+        assert!(candidates.contains(&"hash_sha256".to_owned()));
+        assert!(candidates.contains(&"now".to_owned()));
     }
 
     #[test]
