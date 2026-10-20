@@ -405,8 +405,12 @@ abgeschlossen.
   Größenlimits und die PDF-/PNG-/JPEG-Allowlist, weisen tabellengebundene
   Formulare sowie Speicher- und Action-Kontexte ab und rendern ein
   Multipart-Dateifeld ohne Dateinamen-Ausgabe.
-  Übermittlungen erhalten weiterhin HTTP 415; Inhaltserkennung, autorisierte
-  Uploadverarbeitung und Speicherung fehlen. Eine statische Analyse von
+  Übermittlungen erhalten weiterhin HTTP 415. Ein Unix-Speicherprimitiv
+  unterstützt Staging, atomare Veröffentlichung, opake mandantengebundene
+  Referenzen, private Dateirechte, No-Follow-Öffnen, Signaturauswahl für
+  PDF/PNG/JPEG sowie Größen-/SHA-256-Prüfung. Es ist noch nicht mit HTTP, Forms,
+  Datenbanktransaktionen oder Download-Berechtigungen verbunden; Nicht-Unix-
+  Anlegen schlägt bis zur ACL-Unterstützung geschlossen fehl. Eine statische Analyse von
   `/opt/siedelmann-laravel/app` fand Uploadabläufe bei Rechnungen, Verträgen,
   Einstellungen, Postbriefen und eingehender Mail; der Importer erzeugt sie
   nicht. Offen sind Inhaltsprüfung, private mandantengebundene Speicherung,

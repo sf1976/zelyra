@@ -20,6 +20,7 @@ use zelyra_database::{QueryValue, Schema};
 use zelyra_forms::{validate, FieldError};
 use zelyra_runtime::Value as RuntimeValue;
 mod edit_snapshot;
+pub mod file_storage;
 mod forms;
 mod http;
 mod i18n;

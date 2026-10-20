@@ -364,8 +364,12 @@ security and compatibility gates stated for that milestone.
   sizes and the PDF/PNG/JPEG allowlist, rejects table-backed forms and
   storage/action contexts, and renders a multipart file input without echoing
   client filenames. Submissions
-  are still rejected with 415; detected-content validation, authorized upload
-  processing, and storage are not implemented. A static analysis of
+  are still rejected with 415. A Unix-only private storage primitive now
+  provides staged publication, opaque tenant-scoped references, file modes,
+  no-follow opens, signature-based PDF/PNG/JPEG selection, and size/SHA-256
+  checks, but it is not connected to HTTP, Forms, database transactions, or
+  download authorization. Non-Unix creation fails closed pending ACL support.
+  A static analysis of
   `/opt/siedelmann-laravel/app` identified upload
   flows in invoices,
   contracts, settings, postal letters, and inbound mail; the importer does not

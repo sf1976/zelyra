@@ -8,6 +8,7 @@ edition = "2021"
 license = "MIT OR Apache-2.0"
 
 [workspace.dependencies]
+libc = "0.2"
 fs2 = "0.4.3"
 num-bigint = "=0.4.8"
 bytes = "1"
