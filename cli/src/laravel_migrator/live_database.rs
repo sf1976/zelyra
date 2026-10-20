@@ -252,6 +252,7 @@ pub(super) fn compare_candidates(live: &Value, generation: &Value) -> Value {
     let mut compared_tables = Vec::new();
     let mut differences = Vec::new();
     let mut unclassified_types = Vec::new();
+    let maria_db_type_comparison = matches!(live["driver"].as_str(), Some("mysql" | "mariadb"));
     let mut candidate_names = BTreeSet::new();
 
     for candidate in &candidates {
@@ -310,6 +311,15 @@ pub(super) fn compare_candidates(live: &Value, generation: &Value) -> Value {
                 Some(!expected["default"].is_null()),
                 actual["default_present"].as_bool(),
             );
+            if !maria_db_type_comparison {
+                unclassified_types.push(json!({
+                    "table": table_name,
+                    "column": physical_name,
+                    "zelyra_type": expected["zelyra_type"],
+                    "reason": "live driver has no matching type-equivalence rules"
+                }));
+                continue;
+            }
             match expected_mariadb_type(expected) {
                 Some(expected_type) => {
                     if let Some(actual_type) = actual["sql_type"].as_str() {
@@ -992,7 +1002,7 @@ mod tests {
             ],
             "indexes":[],"uniques":[]
         }]});
-        let live = json!({"tables":[{
+        let live = json!({"driver":"mariadb","tables":[{
             "name":"orders",
             "columns":[
                 {"name":"id","sql_type":"BIGINT","nullable":false,"primary_key":true,"default_present":false},
@@ -1028,7 +1038,7 @@ mod tests {
             "decimal_precision":{"precision":12,"scale":2},"nullable":false,
             "primary_key":false,"default":null,"relation_status":"not_a_foreign_key"
         }],"indexes":[],"uniques":[]}]});
-        let live = json!({"tables":[{"name":"orders","columns":[{
+        let live = json!({"driver":"mysql","tables":[{"name":"orders","columns":[{
             "name":"amount","sql_type":"DECIMAL(12,4)","nullable":false,
             "primary_key":false,"default_present":false
         }],"indexes":[],"uniques":[],"foreign_keys":[]}]});
@@ -1043,6 +1053,27 @@ mod tests {
                     && difference["expected_type"] == "DECIMAL(12,2)"
                     && difference["actual_type"] == "DECIMAL(12,4)"
             }));
+    }
+
+    #[test]
+    fn does_not_apply_mariadb_type_rules_to_sqlite_schema_metadata() {
+        let generation = json!({"candidates":[{"table":"orders","columns":[{
+            "name":"id","source_column_name":"id","zelyra_type":"Id",
+            "nullable":false,"primary_key":true,"default":null,
+            "relation_status":"not_a_foreign_key"
+        }],"indexes":[],"uniques":[]}]});
+        let live = json!({"driver":"sqlite","tables":[{"name":"orders","columns":[{
+            "name":"id","sql_type":"INTEGER","nullable":false,
+            "primary_key":true,"default_present":false
+        }],"indexes":[],"uniques":[],"foreign_keys":[]}]});
+
+        let comparison = compare_candidates(&live, &generation);
+        assert_eq!(comparison["difference_count"], 0);
+        assert_eq!(comparison["unclassified_types"][0]["column"], "id");
+        assert_eq!(
+            comparison["unclassified_types"][0]["reason"],
+            "live driver has no matching type-equivalence rules"
+        );
     }
 
     #[test]
