@@ -369,7 +369,9 @@ security and compatibility gates stated for that milestone.
   provides staged publication, opaque tenant-scoped references, private
   sidecar manifests, verified reads, file modes, no-follow opens,
   signature-based PDF/PNG/JPEG selection, and size/SHA-256 checks. Partial
-  publication failures remove both final entries. The generated
+  publication failures remove both final entries. Removal checks both entry
+  types before mutation and removes the manifest first, preventing an invalid
+  manifest from causing partial deletion. The generated
   `/crud/{id}/files/{field}` download route requires authentication, uses the
   CRUD read permission, verifies the owning row and tenant/recipient scope, and
   returns only checksum-verified bytes with private attachment headers. CRUD

@@ -412,10 +412,13 @@ abgeschlossen.
   unterstützt Staging, opake mandantengebundene Referenzen, private
   Sidecar-Manifeste, verifizierte Lesezugriffe, private Dateirechte,
   No-Follow-Öffnen, Signaturauswahl für PDF/PNG/JPEG sowie Größen-/SHA-256-
-  Prüfung. Bei Teilfehlern werden beide endgültigen Einträge entfernt. Der
+  Prüfung. Bei Teilfehlern werden beide endgültigen Einträge entfernt. Das
+  Entfernen prüft Blob und Manifest vor jeder Änderung und entfernt zuerst das
+  Manifest; ein ungültiges Manifest löst daher keine Teillöschung aus. Der
   HTTP-/Speicherpfad ist über Datei- und Datenbankcommit nicht crash-atomar;
-  ein Absturz kann ein verwaistes Objekt hinterlassen. Geschützte Downloads,
-  Ersetzen/Löschen, Bereinigung und Backup/Restore sind offen. Nicht-Unix-
+  ein Absturz kann ein verwaistes Objekt hinterlassen. Geschützte Downloads
+  sind bereits enthalten; Ersetzen/Löschen, Bereinigung und Backup/Restore sind
+  offen. Nicht-Unix-
   Anlegen schlägt bis zur ACL-Unterstützung geschlossen fehl. `FileRef` wird je
   Backend als `CHAR(36)`/`UUID`/`TEXT` abgebildet. Geprüfte
   Datei-Formulare müssen auf eine gleichnamige Referenzspalte zeigen;

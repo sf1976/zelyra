@@ -258,24 +258,38 @@ impl FileStorage {
     pub fn remove(&self, tenant_id: i64, file_ref: &str) -> Result<(), FileStorageError> {
         let path = self.file_path(tenant_id, file_ref)?;
         let metadata_path = self.metadata_path(tenant_id, file_ref)?;
-        match fs::symlink_metadata(&path) {
+        let blob_exists = match fs::symlink_metadata(&path) {
             Ok(metadata) if metadata.file_type().is_symlink() || !metadata.is_file() => {
                 return Err(FileStorageError(
                     "stored file reference does not identify a regular file".into(),
                 ));
             }
-            Ok(_) => fs::remove_file(path).map_err(storage_error)?,
-            Err(error) if error.kind() == io::ErrorKind::NotFound => {}
+            Ok(_) => true,
+            Err(error) if error.kind() == io::ErrorKind::NotFound => false,
             Err(error) => return Err(storage_error(error)),
+        };
+        let manifest_exists = match fs::symlink_metadata(&metadata_path) {
+            Ok(metadata) if metadata.file_type().is_symlink() || !metadata.is_file() => {
+                return Err(FileStorageError(
+                    "stored file manifest is not a regular file".into(),
+                ));
+            }
+            Ok(_) => true,
+            Err(error) if error.kind() == io::ErrorKind::NotFound => false,
+            Err(error) => return Err(storage_error(error)),
+        };
+
+        // Remove metadata first. If unlinking the blob then fails, the
+        // remaining bytes have no valid manifest and cannot be served by the
+        // verified read path. Most importantly, an invalid manifest is found
+        // before either entry is changed.
+        if manifest_exists {
+            fs::remove_file(metadata_path).map_err(storage_error)?;
         }
-        match fs::symlink_metadata(&metadata_path) {
-            Ok(metadata) if metadata.file_type().is_symlink() || !metadata.is_file() => Err(
-                FileStorageError("stored file manifest is not a regular file".into()),
-            ),
-            Ok(_) => fs::remove_file(metadata_path).map_err(storage_error),
-            Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(()),
-            Err(error) => Err(storage_error(error)),
+        if blob_exists {
+            fs::remove_file(path).map_err(storage_error)?;
         }
+        Ok(())
     }
 
     fn tenant_directory(&self, tenant_id: i64) -> Result<PathBuf, FileStorageError> {
@@ -626,6 +640,38 @@ mod tests {
         assert!(staged.publish().is_err());
         assert!(!directory.join(&file_ref).exists());
         assert_eq!(fs::read_dir(&directory).unwrap().count(), 1);
+        fs::remove_file(manifest).unwrap();
+        let _ = fs::remove_dir_all(root);
+        let _ = fs::remove_dir_all(outside);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn refuses_to_partially_remove_blob_when_manifest_is_a_symlink() {
+        use std::os::unix::fs::symlink;
+
+        let root = temporary_root();
+        let outside = temporary_root().with_extension("outside-manifest");
+        fs::create_dir_all(&outside).unwrap();
+        let store = FileStorage::new(&root).unwrap();
+        let metadata = store
+            .stage(8, b"%PDF-1.7\nprotected bytes", 1024, &pdf_allowed())
+            .unwrap()
+            .publish()
+            .unwrap();
+        let directory = root.join("tenants/8");
+        let blob = directory.join(&metadata.file_ref);
+        let manifest = directory.join(format!("{}.meta", metadata.file_ref));
+        fs::remove_file(&manifest).unwrap();
+        symlink(outside.join("target"), &manifest).unwrap();
+
+        assert!(store.remove(8, &metadata.file_ref).is_err());
+        assert!(blob.is_file(), "invalid manifest must not remove the blob");
+        assert!(fs::symlink_metadata(&manifest)
+            .unwrap()
+            .file_type()
+            .is_symlink());
+
         fs::remove_file(manifest).unwrap();
         let _ = fs::remove_dir_all(root);
         let _ = fs::remove_dir_all(outside);
