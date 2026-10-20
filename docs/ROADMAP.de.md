@@ -444,8 +444,9 @@ abgeschlossen.
   PHP-Methodenerkennung nutzt jetzt die vorhandene lexikalische Quellpositionskarte
   und ausbalancierte Codeklammern; Regressionstests weisen
   methodenähnliche Kommentare zurück und decken verschachtelte Blöcke sowie
-  Rückgabetypen ab. Der reale Laravel-Import wurde danach erneut erzeugt und
-  `zelyra check` bestand. Diese Quellgenerierung lässt sich mit
+  Rückgabetypen sowie Lookup-/Update-/View-Muster ausschließlich in Kommentaren
+  oder Stringliteralen ab. Der reale Laravel-Import wurde danach erneut
+  erzeugt und `zelyra check` bestand. Diese Quellgenerierung lässt sich mit
   `python3 tests/laravel_import_project_check.py /opt/siedelmann-laravel/app`
   wiederholen; das Skript entfernt geerbte Datenbank-URLs aus der Umgebung und
   löscht das temporäre Gerüst. Es startet weder den HTTP-Ablauf noch eine

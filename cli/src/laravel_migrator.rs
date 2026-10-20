@@ -85,6 +85,7 @@ impl SourceSpan {
 
 struct PhpSourceMap {
     code: Vec<bool>,
+    comments: Vec<bool>,
     line_starts: Vec<usize>,
 }
 
@@ -96,6 +97,7 @@ impl PhpSourceMap {
                 .windows(5)
                 .any(|window| window.eq_ignore_ascii_case(b"<?php"));
         let mut code = vec![false; bytes.len()];
+        let mut comments = vec![false; bytes.len()];
         let mut index = 0;
         let mut in_php = !has_open_tag;
         while index < bytes.len() {
@@ -121,11 +123,15 @@ impl PhpSourceMap {
             if bytes[index..].starts_with(b"//")
                 || (bytes[index] == b'#' && bytes.get(index + 1) != Some(&b'['))
             {
-                index = skip_line(bytes, index);
+                let end = skip_line(bytes, index);
+                comments[index..end].fill(true);
+                index = end;
                 continue;
             }
             if bytes[index..].starts_with(b"/*") {
-                index = skip_block_comment(bytes, index);
+                let end = skip_block_comment(bytes, index);
+                comments[index..end].fill(true);
+                index = end;
                 continue;
             }
             if matches!(bytes[index], b'\'' | b'"' | b'`') {
@@ -147,11 +153,25 @@ impl PhpSourceMap {
                 line_starts.push(index + 1);
             }
         }
-        Self { code, line_starts }
+        Self {
+            code,
+            comments,
+            line_starts,
+        }
     }
 
     fn is_code(&self, byte_offset: usize) -> bool {
         self.code.get(byte_offset).copied().unwrap_or(false)
+    }
+
+    fn without_comments(&self, source: &str) -> String {
+        let mut bytes = source.as_bytes().to_vec();
+        for (offset, byte) in bytes.iter_mut().enumerate() {
+            if self.comments.get(offset).copied().unwrap_or(false) && *byte != b'\n' {
+                *byte = b' ';
+            }
+        }
+        String::from_utf8(bytes).expect("masking PHP comments preserves valid UTF-8")
     }
 
     fn position(&self, source: &str, byte_offset: usize) -> (usize, usize) {

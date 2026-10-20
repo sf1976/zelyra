@@ -400,7 +400,8 @@ security and compatibility gates stated for that milestone.
   token 404, CSRF-protected POST redirect, and the persisted timestamp. The
   PHP method recognizer uses the existing lexical source map and balanced code
   braces; regression tests reject method-shaped comments and cover nested
-  blocks and typed return declarations. The real Laravel source was regenerated
+  blocks, typed return declarations, and lookup/update/view patterns that occur
+  only in comments or string literals. The real Laravel source was regenerated
   after this change and its main scaffold passed `zelyra check`. Repeat the
   source-only generation and check with
   `python3 tests/laravel_import_project_check.py /opt/siedelmann-laravel/app`;

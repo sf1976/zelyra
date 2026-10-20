@@ -253,30 +253,48 @@ fn recognized_controller(source: &str, token: &str) -> bool {
     };
     let token = regex::escape(token);
     let token_parameter = |declaration: &str| {
-        regex::Regex::new(&format!(r"(?is)\([^)]*\${token}\b"))
-            .is_ok_and(|regex| regex.is_match(declaration))
+        let Ok(regex) = regex::Regex::new(&format!(r"(?is)\([^)]*\${token}\b")) else {
+            return false;
+        };
+        let map = PhpSourceMap::new(declaration);
+        let found = regex
+            .find_iter(declaration)
+            .any(|matched| map.is_code(matched.start()));
+        found
     };
-    let hash_matches = |body: &str| {
-        regex::Regex::new(&format!(
-            r#"(?is)hash\s*\(\s*['"]sha256['"]\s*,\s*\${token}\s*\)"#
-        ))
-        .is_ok_and(|regex| regex.is_match(body))
+    let contains_code_match = |body: &str, pattern: &'static str, description: &'static str| {
+        let map = PhpSourceMap::new(body);
+        let comment_free = map.without_comments(body);
+        let regex = compiled_regex(pattern, description);
+        let found = regex
+            .find_iter(&comment_free)
+            .any(|matched| map.is_code(matched.start()));
+        found
     };
     let lookup = |body: &str| {
-        body.contains("token_hash")
-            && body.contains("first()")
-            && body.contains("abort_unless")
-            && hash_matches(body)
+        contains_code_match(
+            body,
+            r#"(?is)\bwhere\s*\(\s*['"]token_hash['"]\s*,\s*hash\s*\(\s*['"]sha256['"]\s*,\s*\$token\s*\)\s*\)\s*->\s*first\s*\(\s*\)"#,
+            "verified unsubscribe token lookup pattern",
+        ) && contains_code_match(
+            body,
+            r"(?is)\babort_unless\s*\(\s*\$[a-z_][a-z0-9_]*\s*,\s*404\s*\)",
+            "verified unsubscribe 404 guard pattern",
+        )
     };
     let idempotent = compiled_regex(
-        r#"(?is)['\"]?unsubscribed_at['\"]?\s*=>\s*\$[a-z_][a-z0-9_]*->unsubscribed_at\s*\?:\s*now\s*\(\s*\).*?->save\s*\(\s*\)"#,
+        r#"(?is)\bforceFill\s*\(\s*\[.*?['\"]unsubscribed_at['\"]\s*=>\s*\$[a-z_][a-z0-9_]*->unsubscribed_at\s*\?:\s*now\s*\(\s*\).*?\]\s*\)\s*->\s*save\s*\(\s*\)"#,
         "idempotent unsubscribe update pattern",
     );
+    let unsubscribe_map = PhpSourceMap::new(unsubscribe);
+    let unsubscribe_code = unsubscribe_map.without_comments(unsubscribe);
     token_parameter(show_declaration)
         && token_parameter(unsubscribe_declaration)
         && lookup(show)
         && lookup(unsubscribe)
-        && idempotent.is_match(unsubscribe)
+        && idempotent
+            .find_iter(&unsubscribe_code)
+            .any(|matched| unsubscribe_map.is_code(matched.start()))
 }
 
 fn controller_views(source: &str) -> Option<(String, String)> {
@@ -284,9 +302,17 @@ fn controller_views(source: &str) -> Option<(String, String)> {
         r#"(?s)view\s*\(\s*['\"]([^'\"]+)['\"]"#,
         "unsubscribe confirmation view pattern",
     );
+    let source_map = PhpSourceMap::new(source);
+    let comment_free = source_map.without_comments(source);
     let matches = confirm
-        .captures_iter(source)
-        .filter_map(|capture| capture.get(1).map(|value| value.as_str().to_owned()))
+        .captures_iter(&comment_free)
+        .filter_map(|capture| {
+            let start = capture.get(0)?.start();
+            source_map
+                .is_code(start)
+                .then(|| capture.get(1).map(|value| value.as_str().to_owned()))
+                .flatten()
+        })
         .collect::<Vec<_>>();
     (matches.len() == 2).then(|| (matches[0].clone(), matches[1].clone()))
 }
@@ -398,6 +424,33 @@ class PublicUnsubscribeController {
                 "function unsubscribe(string $token): View {",
             );
         assert!(recognized_controller(&typed, "token"));
+    }
+
+    #[test]
+    fn rejects_lookup_guards_and_idempotent_updates_that_exist_only_in_comments() {
+        let commented_lookup = CONTROLLER.replace(
+            "$record = Model::where('token_hash', hash('sha256', $token))->first();\n        abort_unless($record, 404);",
+            "/* Model::where('token_hash', hash('sha256', $token))->first();\n        abort_unless($record, 404); */",
+        );
+        assert!(!recognized_controller(&commented_lookup, "token"));
+
+        let commented_update = CONTROLLER.replace(
+            "$record->forceFill(['unsubscribed_at' => $record->unsubscribed_at ?: now()])->save();",
+            "$record->forceFill([]); /* $record->forceFill(['unsubscribed_at' => $record->unsubscribed_at ?: now()])->save(); */",
+        );
+        assert!(!recognized_controller(&commented_update, "token"));
+    }
+
+    #[test]
+    fn ignores_view_calls_inside_comments_and_string_literals() {
+        let source = format!(
+            "<?php\n$example = \"view('fake.one')\";\n// view('fake.two')\n{}",
+            CONTROLLER.replace("<?php", "")
+        );
+        assert_eq!(
+            controller_views(&source),
+            Some(("public.confirm".into(), "public.done".into()))
+        );
     }
 
     #[test]
