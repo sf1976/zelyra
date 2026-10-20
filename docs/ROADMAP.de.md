@@ -284,7 +284,10 @@ abgeschlossen.
   `--tenant` und `:tenant` stellen `tenant_id` sowie das typisierte
   `session.tenant_id: Option<Int>` bereit, aktivieren aber keine automatische
   Zeilenfilterung. Compiler-, Capability-, Contract-, Schrittbudget- und
-  Stacktiefenprüfungen bleiben aktiv. Siehe [Sprachkonsolen-Anleitung](language-console.de.md) und den
+  Stacktiefenprüfungen bleiben aktiv. Kann ein Eingabe-Savepoint nicht sicher
+  angelegt, freigegeben oder zurückgerollt werden, sperrt die Sitzung weitere
+  Ausdrücke bis zum Beenden mit Rollback der äußeren Transaktion. Siehe
+  [Sprachkonsolen-Anleitung](language-console.de.md) und den
   [Arbeitsplan 1.2.26](release-plans/1.2.26-interactive-language-console.en.md).
   `tests/language-console-mariadb-e2e.sh` prüft Rollback beim Beenden,
   explizites `:rollback`, Batch-Commit und `--persist` gegen eine isolierte

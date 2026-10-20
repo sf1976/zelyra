@@ -261,7 +261,9 @@ security and compatibility gates stated for that milestone.
   `tenant_id` binding and typed `session.tenant_id: Option<Int>` context,
   without adding authorization or row filtering. PostgreSQL sandbox and bytecode REPL remain
   unsupported. Preserve compiler, capability, contract, step-budget, and stack
-  depth checks.
+  depth checks. If an input savepoint cannot be safely created, released, or
+  rolled back, the session fails closed and refuses later expressions until
+  exit triggers the outer rollback.
   `tests/language-console-mariadb-e2e.sh` verifies exit rollback, explicit
   `:rollback`, batch commit, and `--persist` against an isolated disposable
   MariaDB. PostgreSQL sandbox transactions and a bytecode REPL remain open.

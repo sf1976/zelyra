@@ -65,6 +65,7 @@ pub struct ReplSession {
     grants: Option<HashSet<String>>,
     policy: Option<RuntimePolicy>,
     transaction: Option<Arc<Mutex<zelyra_database::MariaDbInteractiveTransaction>>>,
+    transaction_poisoned: bool,
     sandbox: bool,
     session_type_name: String,
     function_sequence: u64,
@@ -133,6 +134,7 @@ impl ReplSession {
             grants,
             policy,
             transaction,
+            transaction_poisoned: false,
             sandbox,
             session_type_name,
             function_sequence: 0,
@@ -140,6 +142,11 @@ impl ReplSession {
     }
 
     pub fn eval_line(&mut self, input: &str) -> Result<ReplEvaluation, ReplError> {
+        if self.transaction_poisoned {
+            return Err(ReplError::Session(
+                "sandbox transaction state is uncertain after a savepoint failure; close the console so the transaction can be rolled back".into(),
+            ));
+        }
         let parsed = parse_input(input)?;
         let parsed_function = parsed.functions.first().ok_or_else(|| {
             ReplError::Session("the REPL input did not produce a function body".into())
@@ -269,13 +276,16 @@ impl ReplSession {
         }
 
         if let Some(transaction) = &self.transaction {
-            transaction
+            if let Err(error) = transaction
                 .lock()
                 .map_err(|_| ReplError::Session("sandbox transaction is unavailable".into()))?
                 .begin_input()
-                .map_err(|error| {
-                    ReplError::Session(format!("cannot begin input transaction: {error}"))
-                })?;
+            {
+                self.transaction_poisoned = true;
+                return Err(ReplError::Session(format!(
+                    "cannot begin input transaction; close the console to roll back the sandbox: {error}"
+                )));
+            }
         }
 
         let outcome = if let (Some(url), Some(transaction)) =
@@ -303,21 +313,31 @@ impl ReplSession {
 
         if let Some(error) = outcome.error {
             if let Some(transaction) = &self.transaction {
-                let _ = transaction
+                let rollback = transaction
                     .lock()
                     .map_err(|_| ReplError::Session("sandbox transaction is unavailable".into()))?
                     .rollback_input();
+                if let Err(rollback_error) = rollback {
+                    self.transaction_poisoned = true;
+                    return Err(ReplError::Session(format!(
+                        "evaluation failed: {}; input rollback also failed: {}; close the console so the outer transaction can be rolled back",
+                        remap_input_runtime_error(error), rollback_error
+                    )));
+                }
             }
             return Err(ReplError::Runtime(remap_input_runtime_error(error)));
         }
         if let Some(transaction) = &self.transaction {
-            transaction
+            if let Err(error) = transaction
                 .lock()
                 .map_err(|_| ReplError::Session("sandbox transaction is unavailable".into()))?
                 .finish_input()
-                .map_err(|error| {
-                    ReplError::Session(format!("cannot finish input transaction: {error}"))
-                })?;
+            {
+                self.transaction_poisoned = true;
+                return Err(ReplError::Session(format!(
+                    "cannot finish input savepoint; close the console to roll back the sandbox: {error}"
+                )));
+            }
         }
 
         let tuple = match outcome.value.unwrap_or(Value::Unit) {
@@ -458,31 +478,49 @@ impl ReplSession {
     }
 
     pub fn commit(&mut self) -> Result<(), ReplError> {
+        if self.transaction_poisoned {
+            return Err(ReplError::Session(
+                "sandbox transaction state is uncertain; close the console to roll it back".into(),
+            ));
+        }
         let Some(transaction) = &self.transaction else {
             return Err(ReplError::Session(
                 ":commit is available only in sandbox mode with a configured MariaDB database"
                     .into(),
             ));
         };
-        transaction
+        let result = transaction
             .lock()
             .map_err(|_| ReplError::Session("sandbox transaction is unavailable".into()))?
             .commit()
-            .map_err(|error| ReplError::Session(format!("commit failed: {error}")))
+            .map_err(|error| ReplError::Session(format!("commit failed: {error}")));
+        if result.is_err() {
+            self.transaction_poisoned = true;
+        }
+        result
     }
 
     pub fn rollback(&mut self) -> Result<(), ReplError> {
+        if self.transaction_poisoned {
+            return Err(ReplError::Session(
+                "sandbox transaction state is uncertain; close the console so the connection is discarded".into(),
+            ));
+        }
         let Some(transaction) = &self.transaction else {
             return Err(ReplError::Session(
                 ":rollback is available only in sandbox mode with a configured MariaDB database"
                     .into(),
             ));
         };
-        transaction
+        let result = transaction
             .lock()
             .map_err(|_| ReplError::Session("sandbox transaction is unavailable".into()))?
             .rollback()
-            .map_err(|error| ReplError::Session(format!("rollback failed: {error}")))
+            .map_err(|error| ReplError::Session(format!("rollback failed: {error}")));
+        if result.is_err() {
+            self.transaction_poisoned = true;
+        }
+        result
     }
 
     pub fn is_sandbox(&self) -> bool {
@@ -776,6 +814,17 @@ mod tests {
         assert!(session.eval_line("1 / 0").is_err());
         let result = session.eval_line("\"weiter\"").expect("evaluate next line");
         assert_eq!(result.value, Some(Value::String("weiter".into())));
+    }
+
+    #[test]
+    fn uncertain_sandbox_transaction_fails_closed_for_later_inputs() {
+        let mut session = session();
+        session.transaction_poisoned = true;
+
+        let error = session
+            .eval_line("1 + 1")
+            .expect_err("an uncertain transaction must not execute more input");
+        assert!(error.to_string().contains("transaction state is uncertain"));
     }
 
     #[test]
