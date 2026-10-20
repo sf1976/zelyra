@@ -1,5 +1,23 @@
 ## Unreleased
 
+## 1.2.30 — 2026-10-20
+
+- Add typed scalar ID references with `references <table>`, preserving nominal
+  tenant IDs while generating database-enforced foreign keys. Tenant-scoped
+  references use composite tenant keys and reject cross-tenant links. / Typisierte
+  skalare ID-Referenzen mit `references <table>` ergänzen; nominale
+  Mandanten-IDs bleiben erhalten und Fremdschlüssel werden in der Datenbank
+  erzwungen. Mandantenbezogene Referenzen nutzen zusammengesetzte Schlüssel
+  und weisen mandantenübergreifende Verknüpfungen zurück.
+- Extend the Laravel website importer with checked token routes, explicit
+  tenant-aware schema references, source-file coverage reporting, and
+  compiler-checked reusable package output. This remains a partial migration;
+  unsupported source behavior is reported for review. / Den Laravel-Webseiten-
+  Importer um geprüfte Token-Routen, ausdrückliche mandantenbewusste
+  Schema-Referenzen, Quellcodedatei-Abdeckungsberichte und compilergeprüfte
+  wiederverwendbare Paketausgabe erweitern. Die Migration bleibt unvollständig;
+  nicht unterstütztes Quellverhalten wird zur Prüfung ausgewiesen.
+
 
 ## 1.2.29 — 2026-10-20
 

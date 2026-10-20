@@ -495,7 +495,10 @@ abgeschlossen.
   Veröffentlicht als [`v1.2.29`](https://github.com/sf1976/zelyra/releases/tag/v1.2.29);
   alle Release-Gates bestanden, Linux-/Windows-Artefakte und Prüfsummen
   veröffentlicht.
-- [~] **1.2.30 — Abdeckung echter Laravel-Migrationsabläufe:** Standalone-Forms
+- [~] **1.2.30 — Abdeckung echter Laravel-Migrationsabläufe:** Der
+  Releasekandidat ergänzt mandantensichere skalare Referenzen und die unten
+  beschriebene Grundlage für geprüfte Token-Forms. Das verbessert den Import
+  der Akzeptanzwebseite, schließt ihn aber nicht ab. Standalone-Forms
   unterstützen geprüfte lokale Routen mit erfassten Pfadparametern, ein
   compilergeprüftes schreibgeschütztes `verify sql<T>` vor dem GET-Rendern und
   `require_match` für direkte SQL-Aktionen. Das erforderliche erste `SELECT`

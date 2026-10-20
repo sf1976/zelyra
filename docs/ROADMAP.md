@@ -449,7 +449,10 @@ security and compatibility gates stated for that milestone.
   [`v1.2.29`](https://github.com/sf1976/zelyra/releases/tag/v1.2.29); all
   release gates passed, and Linux/Windows artifacts and checksums were
   published.
-- [~] **1.2.30 — Laravel import workflow coverage:** Standalone forms now
+- [~] **1.2.30 — Laravel import workflow coverage:** The release candidate adds
+  tenant-safe scalar references and the checked token-form foundation below.
+  This advances, but does not complete, import of the acceptance website.
+  Standalone forms now
   support checked local routes with captured path parameters, a compiler-checked
   read-only `verify sql<T>` gate before GET rendering, and `require_match` for
   direct SQL actions. The required first `SELECT` and all later SQL run on the
