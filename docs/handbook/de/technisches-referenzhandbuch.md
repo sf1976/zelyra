@@ -3288,6 +3288,16 @@ table invoices scoped by tenant_id: TenantId {
 - **Deklaratives CRUD und Formulare:** Vor jedem Schreibvorgang (Create/Edit) evaluiert Zelyra die Invarianten atomar. Werden Invarianten verletzt, wird der Schreibvorgang verhindert und das Formular liefert die deklarierte Fehlermeldung mit HTTP-Status 422.
 - **Typisierte API-Eingabeprüfung:** APIs können Request-Bodies an Tabellen binden (`validates`). Die Validierung liefert standardisierte HTTP-422-Fehlerverträge, bevor der Handler ausgeführt wird.
 
+Tabellen mit berechneten Spalten dürfen diese Spalten nicht als API-Eingaben
+deklarieren. Zelyra berechnet sie serverseitig aus den typisierten Eingaben neu,
+prüft danach die Tabelleninvarianten und übergibt die Ergebnisse als zusätzliche
+Handlerparameter in Tabellenspaltenreihenfolge. Das gilt für geprüfte API-POST-
+und -PUT-Routen. Ein Update muss alle Berechnungsabhängigkeiten und Ergebnisse
+an die gleichnamigen typisierten Parameter binden. Manipulierte Werte aus dem
+Request werden nicht verwendet. `examples/computed_api.zyl` enthält ein
+compilergeprüftes Create-/Update-Beispiel. Für diesen Berechnungspfad ist API-
+PATCH noch nicht unterstützt.
+
 ## 34. Lifecycle-Guards, Policies und Master-Detail-CRUD
 
 Revisionssicherheit (z. B. nach GoBD) verlangt, dass festgeschriebene Belege nicht mehr nachträglich verändert oder gelöscht werden dürfen. Gleichzeitig müssen komplexe Belege wie Rechnungen oder Aufträge Kopf- und Positionsdaten atomar erfassen.

@@ -74,6 +74,7 @@ fn number_series_allocator_is_atomic_and_scoped_per_tenant() {
             storage_name: None,
             decimal_precision: None,
             auto_sequence: Some("KD-{0001}".into()),
+            computed: None,
             required: true,
             primary_key: false,
             auto: false,
@@ -374,6 +375,403 @@ fn table_validation_predicate_runs_before_form_writes_and_returns_declared_messa
             .unwrap()
             .is_empty()
     );
+}
+
+#[test]
+fn computed_table_columns_are_recalculated_and_replace_submitted_values() {
+    let source = r#"
+        table invoice_items {
+            quantity: Int required
+            unit_price: Int required
+            total_net: Int required compute(quantity * unit_price)
+            total_gross: Int required compute(total_net + 2)
+        }
+        fn main() {}
+    "#;
+    let program = zelyra_parser::parse(&zelyra_lexer::lex(source).unwrap()).unwrap();
+    zelyra_runtime::check(&program).expect("computed expressions are type checked");
+    let mut lowered = program.clone();
+    let (functions, mappings) = zelyra_ast::build_computed_column_functions(&program);
+    lowered.functions.extend(functions);
+    let mut values = HashMap::from([
+        ("quantity".to_owned(), "3".to_owned()),
+        ("unit_price".to_owned(), "125".to_owned()),
+        ("total_net".to_owned(), "999999".to_owned()),
+        ("total_gross".to_owned(), "999999".to_owned()),
+    ]);
+
+    evaluate_computed_columns(&lowered, &mappings, "invoice_items", &mut values)
+        .expect("server-side computed fields should evaluate in dependency order");
+
+    assert_eq!(values.get("total_net").map(String::as_str), Some("375"));
+    assert_eq!(values.get("total_gross").map(String::as_str), Some("377"));
+
+    let mut invalid = HashMap::from([
+        ("quantity".to_owned(), "not-a-number".to_owned()),
+        ("unit_price".to_owned(), "125".to_owned()),
+    ]);
+    let error = evaluate_computed_columns(&lowered, &mappings, "invoice_items", &mut invalid)
+        .expect_err("invalid user input must be returned as a field error");
+    assert!(error.is_user_input);
+    assert_eq!(error.field, "quantity");
+}
+
+#[test]
+fn computed_field_invalid_input_returns_form_error_before_database_access() {
+    let source = r#"
+        table invoice_items {
+            quantity: Int required
+            unit_price: Int required
+            total: Int required compute(quantity * unit_price)
+        }
+        fn main() {}
+    "#;
+    let program = zelyra_parser::parse(&zelyra_lexer::lex(source).unwrap()).unwrap();
+    zelyra_runtime::check(&program).expect("computed expressions should type check");
+    let (functions, mappings) = zelyra_ast::build_computed_column_functions(&program);
+    let mut lowered = program.clone();
+    lowered.functions.extend(functions);
+
+    let mut route = form_route();
+    route.form.table = Some("invoice_items".into());
+    let field = |name: &str, ty: Type, required: bool| zelyra_ast::FormField {
+        name: name.into(),
+        ty: Some(ty),
+        label: None,
+        placeholder: None,
+        required,
+        min_length: None,
+        max: None,
+        min_value: None,
+        max_value: None,
+        choices: Vec::new(),
+        widget: None,
+        appearance: None,
+        file_upload: None,
+        readonly: false,
+        span: zelyra_ast::Span::default(),
+    };
+    route.form.fields = vec![
+        field("quantity", Type::Int, true),
+        field("unit_price", Type::Int, true),
+        field("total", Type::Int, false),
+    ];
+    route.form.fields[2].readonly = true;
+    route.table = Some(program.tables[0].clone());
+
+    let request = parse_request(
+        "POST /forms/CustomerCreate HTTP/1.1\r\nHost: localhost\r\nOrigin: http://localhost\r\nContent-Type: application/x-www-form-urlencoded\r\n\r\n_zelyra_csrf=csrf-token&quantity=not-an-integer&unit_price=4&total=999",
+    )
+    .unwrap();
+    let response = dispatch_form_with_language(
+        &route,
+        &request,
+        &HashMap::new(),
+        None,
+        FormDispatchContext {
+            actor_user_id: None,
+            tenant_context: None,
+            language: UiLanguage::English,
+            validation_program: Some(&lowered),
+            table_validation_functions: &[],
+            computed_column_functions: &mappings,
+            crud_policy_functions: &[],
+            crud_action_functions: &[],
+            capability_grants: None,
+            runtime_policy: None,
+            granted_permissions: Vec::new(),
+            multipart_parts: &[],
+            upload_storage_root: None,
+        },
+    );
+
+    assert_eq!(response.status, 422);
+    assert!(response.body.contains("quantity"));
+    assert!(response.body.contains("not-an-integer"));
+}
+
+#[test]
+fn computed_decimal_fields_round_half_away_from_zero_and_reject_precision_overflow() {
+    let source = r#"
+        table invoice_items {
+            quantity: Decimal(10, 3) required
+            unit_price: Decimal(10, 3) required
+            total: Decimal(5, 2) required compute(quantity * unit_price)
+        }
+        fn main() {}
+    "#;
+    let program = zelyra_parser::parse(&zelyra_lexer::lex(source).unwrap()).unwrap();
+    zelyra_runtime::check(&program).expect("decimal computed expression should type check");
+    let (functions, mappings) = zelyra_ast::build_computed_column_functions(&program);
+    let mut lowered = program.clone();
+    lowered.functions.extend(functions);
+    let mut values = HashMap::from([
+        ("quantity".to_owned(), "3".to_owned()),
+        ("unit_price".to_owned(), "0.385".to_owned()),
+    ]);
+    evaluate_computed_columns(&lowered, &mappings, "invoice_items", &mut values).unwrap();
+    assert_eq!(values.get("total").map(String::as_str), Some("1.16"));
+
+    let mut overflow = HashMap::from([
+        ("quantity".to_owned(), "999".to_owned()),
+        ("unit_price".to_owned(), "999".to_owned()),
+    ]);
+    assert!(
+        evaluate_computed_columns(&lowered, &mappings, "invoice_items", &mut overflow)
+            .unwrap_err()
+            .message
+            .contains("overflows Decimal(5, 2)")
+    );
+}
+
+#[test]
+fn computed_optional_fields_use_typed_option_matching_for_null_values() {
+    let source = r#"
+        table invoice_items {
+            net_amount: Decimal?
+            gross_amount: Decimal? compute(match net_amount {
+                Some(net) => Some(net * decimal("2"))
+                None => None
+            })
+        }
+        fn main() {}
+    "#;
+    let program = zelyra_parser::parse(&zelyra_lexer::lex(source).unwrap()).unwrap();
+    zelyra_runtime::check(&program).expect("optional computed fields are type checked");
+    let (functions, mappings) = zelyra_ast::build_computed_column_functions(&program);
+    let mut lowered = program.clone();
+    lowered.functions.extend(functions);
+
+    let mut values = HashMap::from([("net_amount".to_owned(), String::new())]);
+    evaluate_computed_columns(&lowered, &mappings, "invoice_items", &mut values).unwrap();
+    assert_eq!(values.get("net_amount").map(String::as_str), Some(""));
+    assert_eq!(values.get("gross_amount").map(String::as_str), Some(""));
+
+    let mut present = HashMap::from([("net_amount".to_owned(), "10.00".to_owned())]);
+    evaluate_computed_columns(&lowered, &mappings, "invoice_items", &mut present).unwrap();
+    assert_eq!(present.get("gross_amount").map(String::as_str), Some("20"));
+}
+
+#[test]
+#[ignore = "requires ZELYRA_TEST_DATABASE_URL pointing to a disposable MariaDB or PostgreSQL database"]
+fn computed_decimal_crud_post_persists_the_server_recalculated_value() {
+    let source = r#"
+        database main { engine: mariadb }
+        table __TABLE__ {
+            id: Id primary auto
+            quantity: Decimal(10, 3) required
+            unit_price: Decimal(10, 3) required
+            total: Decimal(12, 2) required compute(quantity * unit_price)
+            validate { total > decimal("0"): "Total must be positive" }
+        }
+        form InvoiceCreate -> __TABLE__ {
+            fields { quantity unit_price total }
+            action save {
+                sql { INSERT INTO __TABLE__ (quantity, unit_price, total) VALUES (:quantity, :unit_price, :total) }
+            }
+        }
+        form InvoiceEdit -> __TABLE__ {
+            fields { quantity unit_price total }
+            action save {
+                sql { UPDATE __TABLE__ SET quantity = :quantity, unit_price = :unit_price, total = :total WHERE id = :id }
+            }
+        }
+        fn main() {}
+    "#;
+    let table_name = format!("zelyra_computed_test_{}", std::process::id());
+    let source = source.replace("__TABLE__", &table_name);
+    let program = zelyra_parser::parse(&zelyra_lexer::lex(&source).unwrap()).unwrap();
+    zelyra_runtime::check(&program).expect("CRUD form fields should type check");
+    let schema = zelyra_database::build_schema(&program).unwrap();
+    let database_url = std::env::var("ZELYRA_TEST_DATABASE_URL")
+        .expect("ignored integration test requires a disposable database URL");
+    zelyra_database::execute_query(&database_url, &schema.create_sql(), Vec::new()).unwrap();
+
+    let mut form = form_route();
+    form.path = format!("/{table_name}/new");
+    form.action = form.path.clone();
+    form.form = program.forms[0].clone();
+    form.form.fields = vec![
+        field("quantity", Type::Decimal, true),
+        field("unit_price", Type::Decimal, true),
+        field("total", Type::Decimal, false),
+    ];
+    form.form.fields[2].readonly = true;
+    form.form.table = Some(table_name.clone());
+    form.table = Some(program.tables[0].clone());
+    form.schema = Some(schema);
+    let mut lowered = program.clone();
+    let (functions, computed_column_functions) =
+        zelyra_ast::build_computed_column_functions(&program);
+    lowered.functions.extend(functions);
+    let (functions, table_validation_functions) =
+        zelyra_ast::build_table_validation_functions(&program);
+    lowered.functions.extend(functions);
+    let request = parse_request(
+        &format!("POST /{table_name}/new HTTP/1.1\r\nHost: localhost\r\nOrigin: http://localhost\r\nContent-Type: application/x-www-form-urlencoded\r\n\r\n_zelyra_csrf=csrf-token&quantity=3&unit_price=0.385&total=999999"),
+    )
+    .unwrap();
+    let response = dispatch_form_with_language(
+        &form,
+        &request,
+        &HashMap::new(),
+        Some(&database_url),
+        FormDispatchContext {
+            actor_user_id: None,
+            tenant_context: None,
+            language: UiLanguage::English,
+            validation_program: Some(&lowered),
+            table_validation_functions: &table_validation_functions,
+            computed_column_functions: &computed_column_functions,
+            crud_policy_functions: &[],
+            crud_action_functions: &[],
+            capability_grants: None,
+            runtime_policy: None,
+            granted_permissions: Vec::new(),
+            multipart_parts: &[],
+            upload_storage_root: None,
+        },
+    );
+    assert_eq!(response.status, 303, "{}", response.body);
+    let stored = zelyra_database::execute_query(
+        &database_url,
+        &format!("SELECT total FROM {table_name}"),
+        Vec::new(),
+    )
+    .unwrap();
+    assert_eq!(stored.rows, vec![vec!["1.16".to_owned()]]);
+
+    let id = zelyra_database::execute_query(
+        &database_url,
+        &format!("SELECT id FROM {table_name}"),
+        Vec::new(),
+    )
+    .unwrap()
+    .rows[0][0]
+        .clone();
+    let mut edit_route = form_route();
+    edit_route.path = format!("/{table_name}/{{id}}/edit");
+    edit_route.action = edit_route.path.clone();
+    edit_route.form = program.forms[1].clone();
+    edit_route.form.fields = vec![
+        field("quantity", Type::Decimal, true),
+        field("unit_price", Type::Decimal, true),
+        field("total", Type::Decimal, false),
+    ];
+    edit_route.form.fields[2].readonly = true;
+    edit_route.form.table = Some(table_name.clone());
+    edit_route.table = Some(program.tables[0].clone());
+    edit_route.schema = Some(zelyra_database::build_schema(&program).unwrap());
+    let path_params = HashMap::from([("id".to_owned(), id)]);
+    let edit_get = parse_request(&format!(
+        "GET /{table_name}/{}/edit HTTP/1.1\r\nHost: localhost\r\n\r\n",
+        path_params["id"]
+    ))
+    .unwrap();
+    let edit_context = || FormDispatchContext {
+        actor_user_id: None,
+        tenant_context: None,
+        language: UiLanguage::English,
+        validation_program: Some(&lowered),
+        table_validation_functions: &table_validation_functions,
+        computed_column_functions: &computed_column_functions,
+        crud_policy_functions: &[],
+        crud_action_functions: &[],
+        capability_grants: None,
+        runtime_policy: None,
+        granted_permissions: Vec::new(),
+        multipart_parts: &[],
+        upload_storage_root: None,
+    };
+    let edit_page = dispatch_form_with_language(
+        &edit_route,
+        &edit_get,
+        &path_params,
+        Some(&database_url),
+        edit_context(),
+    );
+    assert_eq!(edit_page.status, 200, "{}", edit_page.body);
+    let snapshot = edit_page
+        .body
+        .split("name=\"_zelyra_snapshot\" value=\"")
+        .nth(1)
+        .and_then(|value| value.split('"').next())
+        .expect("edit form should include its signed record snapshot");
+    let invalid_edit_post = parse_request(&format!(
+        "POST /{table_name}/{}/edit HTTP/1.1\r\nHost: localhost\r\nOrigin: http://localhost\r\nContent-Type: application/x-www-form-urlencoded\r\n\r\n_zelyra_csrf=csrf-token&_zelyra_snapshot={snapshot}&quantity=-4&unit_price=0.385&total=999999",
+        path_params["id"]
+    ))
+    .unwrap();
+    let invalid_edit_response = dispatch_form_with_language(
+        &edit_route,
+        &invalid_edit_post,
+        &path_params,
+        Some(&database_url),
+        edit_context(),
+    );
+    assert_eq!(
+        invalid_edit_response.status, 422,
+        "{}",
+        invalid_edit_response.body
+    );
+    assert!(invalid_edit_response
+        .body
+        .contains("Total must be positive"));
+    assert!(invalid_edit_response.body.contains("-1.54"));
+    let unchanged = zelyra_database::execute_query(
+        &database_url,
+        &format!("SELECT total FROM {table_name}"),
+        Vec::new(),
+    )
+    .unwrap();
+    assert_eq!(unchanged.rows, vec![vec!["1.16".to_owned()]]);
+
+    let edit_post = parse_request(&format!(
+        "POST /{table_name}/{}/edit HTTP/1.1\r\nHost: localhost\r\nOrigin: http://localhost\r\nContent-Type: application/x-www-form-urlencoded\r\n\r\n_zelyra_csrf=csrf-token&_zelyra_snapshot={snapshot}&quantity=4&unit_price=0.385&total=999999",
+        path_params["id"]
+    ))
+    .unwrap();
+    let edit_response = dispatch_form_with_language(
+        &edit_route,
+        &edit_post,
+        &path_params,
+        Some(&database_url),
+        edit_context(),
+    );
+    assert_eq!(edit_response.status, 303, "{}", edit_response.body);
+    let stored = zelyra_database::execute_query(
+        &database_url,
+        &format!("SELECT total FROM {table_name}"),
+        Vec::new(),
+    )
+    .unwrap();
+    assert_eq!(stored.rows, vec![vec!["1.54".to_owned()]]);
+    zelyra_database::execute_query(
+        &database_url,
+        &format!("DROP TABLE {table_name}"),
+        Vec::new(),
+    )
+    .unwrap();
+
+    fn field(name: &str, ty: Type, required: bool) -> zelyra_ast::FormField {
+        zelyra_ast::FormField {
+            name: name.into(),
+            ty: Some(ty),
+            label: None,
+            placeholder: None,
+            required,
+            min_length: None,
+            max: None,
+            min_value: None,
+            max_value: None,
+            choices: Vec::new(),
+            widget: None,
+            appearance: None,
+            file_upload: None,
+            readonly: false,
+            span: zelyra_ast::Span::default(),
+        }
+    }
 }
 
 #[test]
@@ -804,6 +1202,7 @@ fn legacy_invoice_number_generation_remains_for_fields_without_a_sequence() {
             storage_name: None,
             decimal_precision: None,
             auto_sequence: Some("RE-{0001}".into()),
+            computed: None,
             required: true,
             primary_key: false,
             auto: false,
@@ -1070,6 +1469,7 @@ fn table_validation_rejects_invalid_form_before_action_execution() {
             language: UiLanguage::English,
             validation_program: Some(&lowered),
             table_validation_functions: &mappings,
+            computed_column_functions: &[],
             crud_policy_functions: &[],
             crud_action_functions: &[],
             capability_grants: None,
@@ -1080,9 +1480,13 @@ fn table_validation_rejects_invalid_form_before_action_execution() {
         },
     );
     assert_eq!(response.status, 422);
-    assert!(response
-        .body
-        .contains("Due date must not precede invoice date."));
+    assert!(
+        response
+            .body
+            .contains("Due date must not precede invoice date."),
+        "unexpected invalid-form response: {}",
+        response.body
+    );
 
     let valid_request = parse_request("POST /forms/CustomerCreate HTTP/1.1\r\nHost: localhost\r\nOrigin: http://localhost\r\n\r\n_zelyra_csrf=csrf-token&invoice_date=2026-10-20&due_date=2026-10-21").unwrap();
     let valid_response = dispatch_form_with_language(
@@ -1096,6 +1500,7 @@ fn table_validation_rejects_invalid_form_before_action_execution() {
             language: UiLanguage::English,
             validation_program: Some(&lowered),
             table_validation_functions: &mappings,
+            computed_column_functions: &[],
             crud_policy_functions: &[],
             crud_action_functions: &[],
             capability_grants: None,
@@ -1718,6 +2123,7 @@ fn relation_form_route() -> FormRoute {
             storage_name: None,
             decimal_precision: None,
             auto_sequence: None,
+            computed: None,
             required: true,
             primary_key: false,
             auto: false,

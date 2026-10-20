@@ -11228,7 +11228,7 @@ fn generated_crud_form(
                     ty: Some(column.ty.clone()),
                     label: None,
                     placeholder: None,
-                    required: column.required,
+                    required: column.required && column.computed.is_none(),
                     min_length: None,
                     max: None,
                     min_value: None,
@@ -11237,7 +11237,7 @@ fn generated_crud_form(
                     widget: None,
                     appearance: None,
                     file_upload: None,
-                    readonly: false,
+                    readonly: column.computed.is_some(),
                     span: column.span,
                 })
                 .collect();
@@ -11274,6 +11274,7 @@ fn generated_crud_form(
         })
         .filter(|column| {
             column.auto_sequence.is_some()
+                || column.computed.is_some()
                 || configured_fields
                     .is_none_or(|fields| fields.iter().any(|name| name == &column.name))
         })
@@ -11304,7 +11305,9 @@ fn generated_crud_form(
                 widget: None,
                 appearance: None,
                 file_upload: None,
-                readonly: generated_invoice_number || generated_number_series,
+                readonly: generated_invoice_number
+                    || generated_number_series
+                    || column.computed.is_some(),
                 span: column.span,
             }
         })
@@ -11590,8 +11593,11 @@ fn generated_api_routes(
     runtime_policy: Option<&RuntimePolicy>,
 ) -> Vec<ApiRoute> {
     let database_url = database_url_from_program(program);
-    let (lowered_program, table_validation_functions) =
+    let (mut lowered_program, table_validation_functions) =
         zelyra_ast::lower_table_validation_functions(program);
+    let (computed_functions, computed_column_functions) =
+        zelyra_ast::build_computed_column_functions(&lowered_program);
+    lowered_program.functions.extend(computed_functions);
     program
         .apis
         .iter()
@@ -11600,6 +11606,7 @@ fn generated_api_routes(
             let api = api.clone();
             let program = lowered_program.clone();
             let table_validation_functions = table_validation_functions.clone();
+            let computed_column_functions = computed_column_functions.clone();
             let database_url = database_url.clone();
             let capability_grants = capability_grants.cloned();
             let runtime_policy = runtime_policy.cloned();
@@ -11633,6 +11640,7 @@ fn generated_api_routes(
                             capability_grants: capability_grants.as_ref(),
                             runtime_policy: runtime_policy.as_ref(),
                             table_validation_functions: &table_validation_functions,
+                            computed_column_functions: &computed_column_functions,
                             verified_tenant_id,
                         },
                     )
@@ -11667,8 +11675,11 @@ fn dispatch_api(
     path_params: &HashMap<String, String>,
     database_url: Option<&str>,
 ) -> Response {
-    let (lowered_program, table_validation_functions) =
+    let (mut lowered_program, table_validation_functions) =
         zelyra_ast::lower_table_validation_functions(program);
+    let (computed_functions, computed_column_functions) =
+        zelyra_ast::build_computed_column_functions(&lowered_program);
+    lowered_program.functions.extend(computed_functions);
     dispatch_api_with_capabilities(
         &lowered_program,
         api,
@@ -11680,6 +11691,7 @@ fn dispatch_api(
             capability_grants: None,
             runtime_policy: None,
             table_validation_functions: &table_validation_functions,
+            computed_column_functions: &computed_column_functions,
             verified_tenant_id: None,
         },
     )
@@ -11691,6 +11703,7 @@ struct ApiRuntimeContext<'a> {
     capability_grants: Option<&'a HashSet<String>>,
     runtime_policy: Option<&'a RuntimePolicy>,
     table_validation_functions: &'a [zelyra_ast::TableValidationFunction],
+    computed_column_functions: &'a [zelyra_ast::ComputedColumnFunction],
     verified_tenant_id: Option<i64>,
 }
 
@@ -11787,6 +11800,84 @@ fn dispatch_api_with_capabilities(
             Err(error) => return api_error_response(400, "BadRequest", &error),
         }
     }
+    let mut computed_api_values = HashMap::new();
+    if let Some(table_name) = &api.validates_table {
+        let Some(table) = program
+            .tables
+            .iter()
+            .find(|table| table.name == *table_name)
+        else {
+            return api_error_response(
+                500,
+                "InternalServerError",
+                "validated API table is missing",
+            );
+        };
+        let mut table_values = HashMap::new();
+        for column in table
+            .columns
+            .iter()
+            .filter(|column| column.computed.is_none())
+        {
+            if let Some(value) = values.get(&column.name) {
+                let scalar = match value {
+                    serde_json::Value::Null => Some(String::new()),
+                    serde_json::Value::String(value) => Some(value.clone()),
+                    serde_json::Value::Number(value) => Some(value.to_string()),
+                    serde_json::Value::Bool(value) => Some(value.to_string()),
+                    _ => None,
+                };
+                if let Some(value) = scalar {
+                    table_values.insert(column.name.clone(), value);
+                }
+            }
+        }
+        if let Some(column) = trusted_tenant_column {
+            table_values.insert(
+                column.name.clone(),
+                context
+                    .verified_tenant_id
+                    .expect("checked above")
+                    .to_string(),
+            );
+        }
+        if table.columns.iter().any(|column| column.computed.is_some()) {
+            if let Err(error) = zelyra_web::evaluate_computed_columns_for_api(
+                program,
+                context.computed_column_functions,
+                table_name,
+                &mut table_values,
+            ) {
+                return api_error_response(400, "BadRequest", &error);
+            }
+            for column in table
+                .columns
+                .iter()
+                .filter(|column| column.computed.is_some())
+            {
+                let Some(value) = table_values.get(&column.name) else {
+                    return api_error_response(
+                        500,
+                        "InternalServerError",
+                        "computed API field was not produced",
+                    );
+                };
+                let json = if matches!(column.ty, Type::Option(_)) && value.is_empty() {
+                    serde_json::Value::Null
+                } else {
+                    serde_json::Value::String(value.clone())
+                };
+                let runtime_value = match api_value_json(&json, &column.ty, program) {
+                    Ok(value) => value,
+                    Err(error) => {
+                        return api_error_response(500, "InternalServerError", &error);
+                    }
+                };
+                computed_api_values.insert(column.name.clone(), runtime_value.clone());
+                arguments.push(runtime_value);
+            }
+        }
+    }
     if trusted_tenant_column.is_some() {
         arguments.push(RuntimeValue::Int(
             context.verified_tenant_id.expect("checked above"),
@@ -11799,6 +11890,11 @@ fn dispatch_api_with_capabilities(
             .zip(&arguments)
             .map(|(field, value)| (field.name.clone(), value.clone()))
             .collect::<HashMap<_, _>>();
+        submitted.extend(
+            computed_api_values
+                .iter()
+                .map(|(name, value)| (name.clone(), value.clone())),
+        );
         if let (Some(column), Some(tenant_id)) = (trusted_tenant_column, context.verified_tenant_id)
         {
             submitted.insert(column.name.clone(), RuntimeValue::Int(tenant_id));

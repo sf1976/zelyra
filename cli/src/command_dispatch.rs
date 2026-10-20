@@ -718,6 +718,26 @@ pub(super) fn run() -> ExitCode {
         }
         "run" => match validate(&path).and_then(|program| {
             validate_execution_settings(&path)?;
+            let selected_entry = entry_function.as_deref().unwrap_or("main");
+            let computed_api_entry = program.apis.iter().any(|api| {
+                api.handler.as_deref() == Some(selected_entry)
+                    && api.validates_table.as_ref().is_some_and(|table_name| {
+                        program.tables.iter().any(|table| {
+                            &table.name == table_name
+                                && table.columns.iter().any(|column| column.computed.is_some())
+                        })
+                    })
+            });
+            if computed_api_entry {
+                diagnostic(
+                    &path,
+                    "E-CLI-001",
+                    "a computed-field API handler can only run through its validated API route",
+                    1,
+                    1,
+                );
+                return Err(());
+            }
             let entry_arguments = if let Some(entry) = entry_function.as_deref() {
                 match program.functions.iter().find(|function| function.name == entry) {
                     Some(function) if !function.type_params.is_empty() => {

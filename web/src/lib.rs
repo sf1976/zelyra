@@ -771,6 +771,7 @@ struct FormDispatchContext<'a> {
     language: UiLanguage,
     validation_program: Option<&'a Program>,
     table_validation_functions: &'a [zelyra_ast::TableValidationFunction],
+    computed_column_functions: &'a [zelyra_ast::ComputedColumnFunction],
     crud_policy_functions: &'a [zelyra_ast::CrudPolicyFunction],
     crud_action_functions: &'a [zelyra_ast::CrudActionFunction],
     capability_grants: Option<&'a HashSet<String>>,
@@ -1209,6 +1210,7 @@ pub struct WebApp {
     pub forms: Vec<FormRoute>,
     validation_program: Option<Arc<Program>>,
     table_validation_functions: Vec<zelyra_ast::TableValidationFunction>,
+    computed_column_functions: Vec<zelyra_ast::ComputedColumnFunction>,
     crud_policy_functions: Vec<zelyra_ast::CrudPolicyFunction>,
     crud_action_functions: Vec<zelyra_ast::CrudActionFunction>,
     capability_grants: Option<HashSet<String>>,
@@ -1246,6 +1248,7 @@ impl WebApp {
             forms,
             validation_program: None,
             table_validation_functions: Vec::new(),
+            computed_column_functions: Vec::new(),
             crud_policy_functions: Vec::new(),
             crud_action_functions: Vec::new(),
             capability_grants: None,
@@ -1349,6 +1352,7 @@ impl WebApp {
             forms,
             validation_program: None,
             table_validation_functions: Vec::new(),
+            computed_column_functions: Vec::new(),
             crud_policy_functions: Vec::new(),
             crud_action_functions: Vec::new(),
             capability_grants: None,
@@ -1387,13 +1391,17 @@ impl WebApp {
     /// Installs the compiler-lowered, statically checked table invariants used
     /// by generated and declarative form submissions.
     pub fn with_validation_program(mut self, program: Program) -> Self {
-        let (lowered, mappings) = zelyra_ast::lower_table_validation_functions_owned(program);
+        let (mut lowered, mappings) = zelyra_ast::lower_table_validation_functions_owned(program);
+        let (computed_functions, computed_mappings) =
+            zelyra_ast::build_computed_column_functions(&lowered);
+        lowered.functions.extend(computed_functions);
         let (lowered, crud_policy_functions) =
             zelyra_ast::lower_crud_policy_functions_owned(lowered);
         let (lowered, crud_action_functions) =
             zelyra_ast::lower_crud_action_functions_owned(lowered);
         self.validation_program = Some(Arc::new(lowered));
         self.table_validation_functions = mappings;
+        self.computed_column_functions = computed_mappings;
         self.crud_policy_functions = crud_policy_functions;
         self.crud_action_functions = crud_action_functions;
         self
@@ -2003,6 +2011,7 @@ impl WebApp {
                                 language: self.ui_language,
                                 validation_program: self.validation_program.as_deref(),
                                 table_validation_functions: &self.table_validation_functions,
+                                computed_column_functions: &self.computed_column_functions,
                                 crud_policy_functions: &self.crud_policy_functions,
                                 crud_action_functions: &self.crud_action_functions,
                                 capability_grants: self.capability_grants.as_ref(),
@@ -2126,6 +2135,7 @@ impl WebApp {
                                     language: self.ui_language,
                                     validation_program: self.validation_program.as_deref(),
                                     table_validation_functions: &self.table_validation_functions,
+                                    computed_column_functions: &self.computed_column_functions,
                                     crud_policy_functions: &self.crud_policy_functions,
                                     crud_action_functions: &self.crud_action_functions,
                                     capability_grants: self.capability_grants.as_ref(),
@@ -6428,6 +6438,7 @@ fn dispatch_form(
             language: UiLanguage::English,
             validation_program: None,
             table_validation_functions: &[],
+            computed_column_functions: &[],
             crud_policy_functions: &[],
             crud_action_functions: &[],
             capability_grants: None,
@@ -6452,6 +6463,7 @@ fn dispatch_form_with_language(
         language,
         validation_program,
         table_validation_functions,
+        computed_column_functions,
         crud_policy_functions,
         crud_action_functions,
         capability_grants,
@@ -6967,8 +6979,47 @@ fn dispatch_form_with_language(
             Ok(options) => options,
             Err(error) => return relation_options_error(database_url, error),
         };
+    if let (Some(program), Some(table_name)) = (validation_program, form.form.table.as_deref()) {
+        if let Err(error) =
+            evaluate_computed_columns(program, computed_column_functions, table_name, &mut values)
+        {
+            if error.is_user_input {
+                return Response::html(
+                    422,
+                    render_form_with_language(
+                        &rendered_form,
+                        &values,
+                        &[FieldError {
+                            field: error.field,
+                            message: error.message,
+                        }],
+                        Some("@i18n:form.correct_errors"),
+                        &relation_options,
+                        language,
+                    ),
+                );
+            }
+            eprintln!(
+                "zelyra web: computed fields could not be evaluated: {}",
+                error.message
+            );
+            return Response::html(500, "<h1>500 Internal Server Error</h1>");
+        }
+    }
     let mut validation_form = form.form.clone();
     let mut validation_table = form.table.clone();
+    for field in &mut validation_form.fields {
+        if form.table.as_ref().is_some_and(|table| {
+            table
+                .columns
+                .iter()
+                .any(|column| column.name == field.name && column.computed.is_some())
+        }) {
+            // The browser control is readonly, but the server has already
+            // replaced its submitted content with a checked computed result.
+            field.readonly = false;
+        }
+    }
     if let Some(table) = &mut validation_table {
         for column in &mut table.columns {
             if column.auto_sequence.is_some() {
@@ -7019,8 +7070,44 @@ fn dispatch_form_with_language(
             Err(error) => return relation_options_error(database_url, error),
         };
         match validate_crud_child_rows(&child_route, child, &values, &options) {
-            Ok((rows, child_errors)) => {
+            Ok((mut rows, child_errors)) => {
                 errors.extend(child_errors);
+                if let Some(program) = validation_program {
+                    for (row_index, row) in rows.iter_mut().enumerate() {
+                        if let Err(error) = evaluate_computed_columns(
+                            program,
+                            computed_column_functions,
+                            &child.table.name,
+                            row,
+                        ) {
+                            if error.is_user_input {
+                                return Response::html(
+                                    422,
+                                    render_form_with_language(
+                                        &rendered_form,
+                                        &values,
+                                        &[FieldError {
+                                            field: forms::crud_child_value_key(
+                                                &child.definition.name,
+                                                row_index,
+                                                &error.field,
+                                            ),
+                                            message: error.message,
+                                        }],
+                                        Some("@i18n:form.correct_errors"),
+                                        &relation_options,
+                                        language,
+                                    ),
+                                );
+                            }
+                            eprintln!(
+                                "zelyra web: computed child fields could not be evaluated: {}",
+                                error.message
+                            );
+                            return Response::html(500, "<h1>500 Internal Server Error</h1>");
+                        }
+                    }
+                }
                 child_rows.insert(child.definition.name.clone(), rows);
             }
             Err(error) => {
@@ -7373,6 +7460,17 @@ fn validate_crud_child_rows(
     }
     let mut rows = Vec::new();
     let mut errors = Vec::new();
+    let mut validation_form = child_route.form.clone();
+    for field in &mut validation_form.fields {
+        if child
+            .table
+            .columns
+            .iter()
+            .any(|column| column.name == field.name && column.computed.is_some())
+        {
+            field.readonly = false;
+        }
+    }
     for row_index in 0..count {
         let mut row = HashMap::new();
         let supplied_any_value = child.fields.iter().any(|field| {
@@ -7396,7 +7494,7 @@ fn validate_crud_child_rows(
             }
         }
         let validation = zelyra_forms::validate(
-            &child_route.form,
+            &validation_form,
             child_route.table.as_ref(),
             child_route.schema.as_ref(),
             &row,
@@ -11941,6 +12039,300 @@ fn evaluate_table_validations(
         }
     }
     Ok(errors)
+}
+
+#[derive(Debug)]
+struct ComputedFieldError {
+    field: String,
+    message: String,
+    is_user_input: bool,
+}
+
+fn evaluate_computed_columns(
+    program: &Program,
+    mappings: &[zelyra_ast::ComputedColumnFunction],
+    table_name: &str,
+    values: &mut HashMap<String, String>,
+) -> Result<(), ComputedFieldError> {
+    let Some((table_index, table)) = program
+        .tables
+        .iter()
+        .enumerate()
+        .find(|(_, table)| table.name == table_name)
+    else {
+        return Err(ComputedFieldError {
+            field: String::new(),
+            message: format!("computed-field table `{table_name}` is missing"),
+            is_user_input: false,
+        });
+    };
+    for column in table
+        .columns
+        .iter()
+        .filter(|column| column.computed.is_none())
+    {
+        let Some(input) = values.get(&column.name).cloned() else {
+            continue;
+        };
+        if input.is_empty() {
+            continue;
+        }
+        let input_value =
+            runtime_value_for_column(program, column, Some(&input)).map_err(|message| {
+                ComputedFieldError {
+                    field: column.name.clone(),
+                    message,
+                    is_user_input: true,
+                }
+            })?;
+        if computed_decimal_kind(&column.ty, &program.types, &mut HashSet::new()).is_some() {
+            let normalized = match input_value {
+                RuntimeValue::Option(None) => None,
+                RuntimeValue::Option(Some(value)) => Some(
+                    normalize_computed_decimal(program, column, *value)
+                        .map_err(|message| ComputedFieldError {
+                            field: column.name.clone(),
+                            message,
+                            is_user_input: true,
+                        })?
+                        .output(),
+                ),
+                value => Some(
+                    normalize_computed_decimal(program, column, value)
+                        .map_err(|message| ComputedFieldError {
+                            field: column.name.clone(),
+                            message,
+                            is_user_input: true,
+                        })?
+                        .output(),
+                ),
+            };
+            if let Some(normalized) = normalized {
+                values.insert(column.name.clone(), normalized);
+            }
+        }
+    }
+    let mut pending = mappings
+        .iter()
+        .filter(|mapping| mapping.table_index == table_index)
+        .collect::<Vec<_>>();
+    let policy = zelyra_runtime::RuntimePolicy {
+        step_budget: Some(10_000),
+        ..zelyra_runtime::RuntimePolicy::default()
+    };
+    while !pending.is_empty() {
+        let ready_index = pending.iter().position(|mapping| {
+            mapping.input_columns.iter().all(|name| {
+                values.contains_key(name)
+                    || table
+                        .columns
+                        .iter()
+                        .find(|column| column.name == *name)
+                        .is_some_and(|column| matches!(column.ty, Type::Option(_)))
+            })
+        });
+        let Some(ready_index) = ready_index else {
+            let names = pending
+                .iter()
+                .filter_map(|mapping| table.columns.get(mapping.column_index))
+                .map(|column| column.name.as_str())
+                .collect::<Vec<_>>()
+                .join(", ");
+            return Err(ComputedFieldError {
+                field: String::new(),
+                message: format!(
+                    "computed fields have a dependency cycle or missing input: {names}"
+                ),
+                is_user_input: false,
+            });
+        };
+        let mapping = pending.remove(ready_index);
+        let column = table
+            .columns
+            .get(mapping.column_index)
+            .ok_or_else(|| ComputedFieldError {
+                field: String::new(),
+                message: "computed-field mapping references an unknown column".into(),
+                is_user_input: false,
+            })?;
+        let mut arguments = Vec::with_capacity(mapping.input_columns.len());
+        for name in &mapping.input_columns {
+            let input = table
+                .columns
+                .iter()
+                .find(|candidate| candidate.name == *name)
+                .ok_or_else(|| ComputedFieldError {
+                    field: column.name.clone(),
+                    message: format!("computed field references unknown input `{name}`"),
+                    is_user_input: false,
+                })?;
+            arguments.push(
+                runtime_value_for_column(program, input, values.get(name).map(String::as_str))
+                    .map_err(|message| ComputedFieldError {
+                        field: name.clone(),
+                        message,
+                        is_user_input: true,
+                    })?,
+            );
+        }
+        let computed = zelyra_runtime::execute_function_with_capabilities_and_policies(
+            program,
+            &mapping.function_name,
+            arguments,
+            None,
+            None,
+            Some(&policy),
+        )
+        .map_err(|error| ComputedFieldError {
+            field: column.name.clone(),
+            message: error.message,
+            is_user_input: true,
+        })?;
+        let value = match computed {
+            RuntimeValue::Option(None) => String::new(),
+            RuntimeValue::Option(Some(value)) => {
+                normalize_computed_decimal(program, column, *value)
+                    .map_err(|message| ComputedFieldError {
+                        field: column.name.clone(),
+                        message,
+                        is_user_input: true,
+                    })?
+                    .output()
+            }
+            other => normalize_computed_decimal(program, column, other)
+                .map_err(|message| ComputedFieldError {
+                    field: column.name.clone(),
+                    message,
+                    is_user_input: true,
+                })?
+                .output(),
+        };
+        values.insert(column.name.clone(), value);
+    }
+    Ok(())
+}
+
+/// Recomputes a table's declared derived columns for a validated API payload.
+/// Missing optional/defaulted values are materialized using the same rules as
+/// generated forms before the shared computed-field evaluator runs.
+pub fn evaluate_computed_columns_for_api(
+    program: &Program,
+    mappings: &[zelyra_ast::ComputedColumnFunction],
+    table_name: &str,
+    values: &mut HashMap<String, String>,
+) -> Result<(), String> {
+    let table = program
+        .tables
+        .iter()
+        .find(|table| table.name == table_name)
+        .ok_or_else(|| format!("computed-field table `{table_name}` is missing"))?;
+    for column in table
+        .columns
+        .iter()
+        .filter(|column| column.computed.is_none())
+    {
+        if values.contains_key(&column.name) {
+            continue;
+        }
+        match &column.default {
+            Some(zelyra_ast::DefaultValue::Int(value)) => {
+                values.insert(column.name.clone(), value.to_string());
+            }
+            Some(zelyra_ast::DefaultValue::Bool(value)) => {
+                values.insert(column.name.clone(), value.to_string());
+            }
+            Some(
+                zelyra_ast::DefaultValue::String(value) | zelyra_ast::DefaultValue::Ident(value),
+            ) => {
+                values.insert(column.name.clone(), value.clone());
+            }
+            None if matches!(column.ty, Type::Option(_)) => {
+                values.insert(column.name.clone(), String::new());
+            }
+            None => {}
+        }
+    }
+    evaluate_computed_columns(program, mappings, table_name, values).map_err(|error| error.message)
+}
+
+fn normalize_computed_decimal(
+    program: &Program,
+    column: &zelyra_ast::ColumnDef,
+    value: RuntimeValue,
+) -> Result<RuntimeValue, String> {
+    let Some(is_money) = computed_decimal_kind(&column.ty, &program.types, &mut HashSet::new())
+    else {
+        return Ok(value);
+    };
+    let default_scale = if is_money { 4 } else { 9 };
+    let (precision, scale) = column.decimal_precision.unwrap_or((39, default_scale));
+    if scale > zelyra_ast::decimal::SCALE_DIGITS {
+        return Err(format!(
+            "decimal column `{}` requests unsupported scale {scale}",
+            column.name
+        ));
+    }
+    let RuntimeValue::Decimal(value) = value else {
+        return Err(format!(
+            "decimal column `{}` produced a non-Decimal value for a Decimal field",
+            column.name
+        ));
+    };
+    let divisor = 10_i128
+        .checked_pow(zelyra_ast::decimal::SCALE_DIGITS - scale)
+        .ok_or_else(|| "computed decimal scale overflow".to_owned())?;
+    let magnitude = value.unsigned_abs();
+    let divisor_u = divisor as u128;
+    let mut rounded = magnitude / divisor_u;
+    let remainder = magnitude % divisor_u;
+    if remainder.saturating_mul(2) >= divisor_u {
+        rounded = rounded
+            .checked_add(1)
+            .ok_or_else(|| "computed decimal rounding overflow".to_owned())?;
+    }
+    let rounded = rounded
+        .checked_mul(divisor_u)
+        .ok_or_else(|| "computed decimal rounding overflow".to_owned())?;
+    let signed = if value < 0 {
+        if rounded == (i128::MAX as u128) + 1 {
+            i128::MIN
+        } else {
+            -i128::try_from(rounded).map_err(|_| "computed decimal overflow".to_owned())?
+        }
+    } else {
+        i128::try_from(rounded).map_err(|_| "computed decimal overflow".to_owned())?
+    };
+    if precision > 0 && precision < 39 {
+        let decimal_limit = 10_u128
+            .checked_pow(precision)
+            .and_then(|limit| limit.checked_sub(1))
+            .and_then(|limit| limit.checked_mul(divisor_u))
+            .ok_or_else(|| "computed decimal precision overflow".to_owned())?;
+        if signed.unsigned_abs() > decimal_limit {
+            return Err(format!(
+                "value overflows Decimal({precision}, {scale}) for `{}`",
+                column.name
+            ));
+        }
+    }
+    Ok(RuntimeValue::Decimal(signed))
+}
+
+fn computed_decimal_kind(
+    ty: &Type,
+    aliases: &[zelyra_ast::TypeDef],
+    seen: &mut HashSet<String>,
+) -> Option<bool> {
+    match ty {
+        Type::Option(inner) => computed_decimal_kind(inner, aliases, seen),
+        Type::Decimal => Some(false),
+        Type::Named(name) if name == "Money" => Some(true),
+        Type::Named(name) if seen.insert(name.clone()) => aliases
+            .iter()
+            .find(|alias| alias.name == *name)
+            .and_then(|alias| computed_decimal_kind(&alias.target, aliases, seen)),
+        _ => None,
+    }
 }
 
 #[derive(Default)]

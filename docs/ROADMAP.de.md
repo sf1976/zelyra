@@ -688,16 +688,27 @@ geprüft; berechnete Felder und generierte Uploads sind weiterhin offen:
   `invoice_number`-Vergabe prüfen. Konkurrenz, Rollback, Mandantentrennung,
   Eindeutigkeit und Formatprüfung bleiben erforderlich; nicht unterstützte
   Backends müssen ausdrücklich abgewiesen werden.
-- [ ] **1.2.32 — typisierte berechnete Geschäftsfelder:** Reine, typisierte
+- [~] **1.2.32 — typisierte berechnete Geschäftsfelder:** Reine, typisierte
   und deterministische Ausdrücke für abgeleitete Felder ergänzen, einschließlich
   unterstützter skalarer und Decimal-Operationen. Abhängigkeitsgraphen prüfen;
   Zyklen, unbekannte Felder, Effects und Schreibversuche auf berechnete Werte
-  abweisen. CRUD und unterstützte API-Schreibvorgänge berechnen Werte
-  serverseitig vor dem Speichern neu. Eine Live-Formularvorschau ist nur
-  unverbindlich und muss dieselbe geprüfte Ausdruckssemantik verwenden.
-  Decimal-Skala/Rundung, Nullfortpflanzung, Edit-Verhalten und Backendumfang
-  festlegen. Tests prüfen manipulierte Eingaben, Reihenfolge, Fehler, exakte
-  Geldrechnung sowie Create/Edit/API-Parität.
+  abweisen. Die Implementierung berechnet Werte in generierten CRUD-Formularen
+  serverseitig neu, normalisiert Decimal-Skalen und weist rohe SQL-Schreibpfade
+  zurück, die die Berechnung umgehen würden. API-POST- und -PUT-Validierung
+  unterstützt berechnete Felder als zusätzliche typisierte Handlerparameter;
+  Clientfelder werden nicht als API-Eingabe zugelassen. SQL-Updates sind nur
+  zulässig, wenn alle berechneten Abhängigkeiten und Ergebnisse an passende
+  typisierte Parameter gebunden sind. Ein isolierter MariaDB-11.8-Test deckt
+  Create und Update ab und bestätigt, dass gefälschte Clientwerte ignoriert
+  werden. Solche Handler sind aus normalem Zelyra-Code nicht aufrufbar und
+  lassen sich nicht als CLI-Einstieg ausführen. Ein MariaDB-CRUD-HTTP-Test
+  deckt Anlegen, Bearbeiten, abgewiesene Validierung, unveränderte Speicherung
+  nach dem Fehler und den neu berechneten Wert in der Fehlerantwort ab. Optionale
+  Eingaben bleiben typisierte `Option<T>` und müssen mit `match` behandelt
+  werden; `None` wird bei optionalen Zielfeldern als fehlender Wert gespeichert.
+  API-`PATCH`, weitere Datenbankläufe und
+  vollständige Release-Prüfungen sind noch offen. Beispiel:
+  `examples/computed_api.zyl`.
 - [ ] **1.2.33 — FileRef-Unterstützung im generierten CRUD:** Begrenzte,
   deklarative Anhangsregeln für Schema und CRUD ergänzen und sichere
   Uploadfelder auf Create/Edit sowie geschützte Download-Links auf Details

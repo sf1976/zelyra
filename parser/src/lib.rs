@@ -2797,6 +2797,7 @@ impl<'a> Parser<'a> {
         let (ty, length, decimal_precision) = self.column_type()?;
         let mut storage_name = None;
         let mut auto_sequence = None;
+        let mut computed = None;
         let mut required = false;
         let mut primary_key = false;
         let mut auto = false;
@@ -2883,6 +2884,15 @@ impl<'a> Parser<'a> {
                     auto_sequence = Some(self.string_value("quoted number-series format")?);
                     self.expect(TokenKind::RParen, "`)` after number-series format")?;
                 }
+                TokenKind::Ident(ref value) if value == "compute" => {
+                    self.advance();
+                    if computed.is_some() {
+                        return self.error("`compute` may be specified only once");
+                    }
+                    self.expect(TokenKind::LParen, "`(` after `compute`")?;
+                    computed = Some(self.expression()?);
+                    self.expect(TokenKind::RParen, "`)` after computed expression")?;
+                }
                 _ => break,
             }
         }
@@ -2893,6 +2903,7 @@ impl<'a> Parser<'a> {
             storage_name,
             decimal_precision,
             auto_sequence,
+            computed,
             required,
             primary_key,
             auto,
@@ -5798,6 +5809,19 @@ mod tests {
         assert_eq!(
             program.tables[0].columns[0].auto_sequence.as_deref(),
             Some("AG-{year}-{0001}")
+        );
+    }
+
+    #[test]
+    fn parses_computed_column_expressions() {
+        let program = parse(
+            &lex("table invoice_items { quantity: Decimal(10, 2) required unit_price: Decimal(12, 2) required total_net: Decimal(12, 2) required compute(quantity * unit_price) }\n").unwrap(),
+        )
+        .expect("computed column expression should parse");
+        let total = &program.tables[0].columns[2];
+        assert!(total.computed.is_some());
+        assert!(
+            total.computed.as_ref().unwrap().span.end > total.computed.as_ref().unwrap().span.start
         );
     }
 

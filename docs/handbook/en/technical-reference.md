@@ -3108,6 +3108,37 @@ table invoices scoped by tenant_id: TenantId {
 - **Declarative CRUD & Forms:** Prior to committing create or edit writes, Zelyra evaluates all declared invariants atomically. If any condition fails, the write is aborted, and the form renders the message with HTTP status 422.
 - **Typed API Input Validation:** APIs can bind request payloads to tables (`validates`). Validation evaluates table invariants and returns standardized HTTP 422 error contracts before executing the handler.
 
+If a validated table has computed columns, do not declare them as API request
+inputs. Declare only the source fields. Zelyra recalculates computed values
+before table invariants and passes them to the handler as additional typed
+parameters after the declared request inputs, in table-column order. Clients
+cannot select the computed value. For example, a table with `quantity`,
+`unit_price`, and `total: Decimal compute(quantity * unit_price)` can use:
+
+```zelyra
+api POST "/invoice-items" {
+    handler create_item
+    input { quantity: Decimal unit_price: Decimal }
+    validates invoice_items
+    output Result<Decimal, String>
+    errors { 422 ValidationError: String }
+}
+
+fn create_item(quantity: Decimal, unit_price: Decimal, total: Decimal) -> Result<Decimal, String> {
+    // Persist :total through a parameter-bound SQL statement here.
+    return Ok(total)
+}
+```
+
+Handlers that persist the row must use the injected computed parameter, never
+a client-provided value. Missing required source fields remain compile-time
+errors; optional and defaulted source fields follow their table declarations.
+The same checked input and recomputation path is available to validated API
+`PUT` handlers. Their SQL update must bind every computed dependency and output
+to the corresponding typed handler parameter. `examples/computed_api.zyl`
+contains runnable create and update handlers; `PATCH` is not supported by this
+computed-field path yet.
+
 ## 34. Lifecycle Guards, Policies, and Master-Detail CRUD
 
 Compliance regulations (e.g., GoBD) require that posted and locked business documents cannot be modified or deleted. Additionally, business documents like invoices and sales orders require parent records and line items to be saved in an atomic transaction.

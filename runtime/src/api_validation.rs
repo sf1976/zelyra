@@ -75,6 +75,23 @@ pub fn check_apis(program: &Program) -> Result<(), Vec<ApiDiagnostic>> {
         .iter()
         .map(|function| (function.name.as_str(), function))
         .collect::<HashMap<_, _>>();
+    let computed_api_handlers = program
+        .apis
+        .iter()
+        .filter_map(|api| {
+            let handler = api.handler.as_ref()?;
+            let table_name = api.validates_table.as_ref()?;
+            let table = program
+                .tables
+                .iter()
+                .find(|table| &table.name == table_name)?;
+            table
+                .columns
+                .iter()
+                .any(|column| column.computed.is_some())
+                .then(|| handler.clone())
+        })
+        .collect::<HashSet<_>>();
     for api in &program.apis {
         if !routes.insert((api.method.clone(), api.path.clone())) {
             errors.push(ApiDiagnostic {
@@ -191,6 +208,22 @@ pub fn check_apis(program: &Program) -> Result<(), Vec<ApiDiagnostic>> {
                     span: api.span,
                 });
             }
+            let computed_columns = table
+                .columns
+                .iter()
+                .filter(|column| column.computed.is_some())
+                .collect::<Vec<_>>();
+            for column in &computed_columns {
+                if api.input.iter().any(|field| field.name == column.name) {
+                    errors.push(ApiDiagnostic {
+                        message: format!(
+                            "API must not accept computed field `{}` from request input; computed fields are passed to the handler by Zelyra",
+                            column.name
+                        ),
+                        span: api.span,
+                    });
+                }
+            }
             for column in table.columns.iter().filter(|column| {
                 !column.auto
                     && Some(column.name.as_str())
@@ -198,6 +231,7 @@ pub fn check_apis(program: &Program) -> Result<(), Vec<ApiDiagnostic>> {
                             .tenant_scope
                             .as_ref()
                             .map(|scope| scope.column.as_str())
+                    && column.computed.is_none()
             }) {
                 let Some(input) = api.input.iter().find(|field| field.name == column.name) else {
                     if !matches!(column.ty, Type::Option(_)) && column.default.is_none() {
@@ -219,6 +253,44 @@ pub fn check_apis(program: &Program) -> Result<(), Vec<ApiDiagnostic>> {
                         ),
                         span: input.span,
                     });
+                }
+            }
+            let table_index = program
+                .tables
+                .iter()
+                .position(|candidate| candidate.name == *table_name)
+                .expect("table was resolved above");
+            let (_, computed_mappings) = zelyra_ast::build_computed_column_functions(program);
+            for mapping in computed_mappings
+                .iter()
+                .filter(|mapping| mapping.table_index == table_index)
+            {
+                for dependency in &mapping.input_columns {
+                    let Some(column) = table
+                        .columns
+                        .iter()
+                        .find(|column| column.name == *dependency)
+                    else {
+                        continue;
+                    };
+                    if column.computed.is_some() {
+                        continue;
+                    }
+                    let supplied_by_tenant = table
+                        .tenant_scope
+                        .as_ref()
+                        .is_some_and(|scope| scope.column == column.name);
+                    if !supplied_by_tenant
+                        && !api.input.iter().any(|field| field.name == column.name)
+                    {
+                        errors.push(ApiDiagnostic {
+                            message: format!(
+                                "API validating `{table_name}` must declare computed input dependency `{}`",
+                                column.name
+                            ),
+                            span: api.span,
+                        });
+                    }
                 }
             }
             if !api.errors.iter().any(|error| {
@@ -266,13 +338,33 @@ pub fn check_apis(program: &Program) -> Result<(), Vec<ApiDiagnostic>> {
                 });
                 continue;
             }
-            let expected_count = api.input.len() + usize::from(trusted_tenant_column.is_some());
+            let computed_columns = api
+                .validates_table
+                .as_ref()
+                .and_then(|table_name| {
+                    program
+                        .tables
+                        .iter()
+                        .find(|table| table.name == *table_name)
+                })
+                .map(|table| {
+                    table
+                        .columns
+                        .iter()
+                        .filter(|column| column.computed.is_some())
+                        .collect::<Vec<_>>()
+                })
+                .unwrap_or_default();
+            let expected_count = api.input.len()
+                + computed_columns.len()
+                + usize::from(trusted_tenant_column.is_some());
             if function.params.len() != expected_count {
                 errors.push(ApiDiagnostic {
                     message: format!(
-                        "API handler `{handler}` expects {} parameter(s), but the API declares {} request input field(s){}",
+                        "API handler `{handler}` expects {} parameter(s), but the API declares {} request input field(s), {} server-computed field(s){}",
                         function.params.len(),
                         api.input.len(),
+                        computed_columns.len(),
                         if trusted_tenant_column.is_some() { " plus one verified tenant parameter" } else { "" }
                     ),
                     span: api.span,
@@ -289,8 +381,28 @@ pub fn check_apis(program: &Program) -> Result<(), Vec<ApiDiagnostic>> {
                     });
                 }
             }
+            for (parameter, column) in function
+                .params
+                .iter()
+                .skip(api.input.len())
+                .take(computed_columns.len())
+                .zip(&computed_columns)
+            {
+                if parameter.name != column.name || parameter.ty != column.ty {
+                    errors.push(ApiDiagnostic {
+                        message: format!(
+                            "API handler parameter `{}` must match server-computed field `{}` with type `{}`",
+                            parameter.name, column.name, column.ty
+                        ),
+                        span: parameter.span,
+                    });
+                }
+            }
             if let Some(column) = trusted_tenant_column {
-                if let Some(parameter) = function.params.get(api.input.len()) {
+                if let Some(parameter) = function
+                    .params
+                    .get(api.input.len() + computed_columns.len())
+                {
                     if parameter.name != column.name || parameter.ty != column.ty {
                         errors.push(ApiDiagnostic {
                             message: format!(
@@ -361,11 +473,137 @@ pub fn check_apis(program: &Program) -> Result<(), Vec<ApiDiagnostic>> {
             }
         }
     }
+    for function in &program.functions {
+        if let Some((handler, span)) =
+            find_computed_api_handler_reference(&function.body, &computed_api_handlers)
+        {
+            errors.push(ApiDiagnostic {
+                message: format!(
+                    "computed API handler `{handler}` cannot be called from Zelyra functions; its computed parameters are injected only at the validated API boundary"
+                ),
+                span,
+            });
+        }
+    }
     if errors.is_empty() {
         Ok(())
     } else {
         Err(errors)
     }
+}
+
+fn find_computed_api_handler_reference(
+    block: &Block,
+    handlers: &HashSet<String>,
+) -> Option<(String, Span)> {
+    fn expression(expr: &Expr, handlers: &HashSet<String>) -> Option<(String, Span)> {
+        match &expr.kind {
+            ExprKind::FunctionValue(name) if handlers.contains(name) => {
+                Some((name.clone(), expr.span))
+            }
+            ExprKind::Call { name, args, .. } => {
+                if handlers.contains(name) {
+                    return Some((name.clone(), expr.span));
+                }
+                args.iter().find_map(|arg| expression(arg, handlers))
+            }
+            ExprKind::Array(items) => items.iter().find_map(|item| expression(item, handlers)),
+            ExprKind::Map(entries) => entries.iter().find_map(|(key, value)| {
+                expression(key, handlers).or_else(|| expression(value, handlers))
+            }),
+            ExprKind::Record { fields, .. } => fields
+                .iter()
+                .find_map(|(_, value)| expression(value, handlers)),
+            ExprKind::Lambda { body, .. }
+            | ExprKind::Field { target: body, .. }
+            | ExprKind::Unary { expr: body, .. }
+            | ExprKind::Await(body) => expression(body, handlers),
+            ExprKind::Index { target, index } => {
+                expression(target, handlers).or_else(|| expression(index, handlers))
+            }
+            ExprKind::Binary { left, right, .. } => {
+                expression(left, handlers).or_else(|| expression(right, handlers))
+            }
+            ExprKind::Match { value, arms } => expression(value, handlers).or_else(|| {
+                arms.iter().find_map(|arm| {
+                    arm.guard
+                        .as_ref()
+                        .and_then(|guard| expression(guard, handlers))
+                        .or_else(|| expression(&arm.value, handlers))
+                })
+            }),
+            ExprKind::Int(_)
+            | ExprKind::UInt(_)
+            | ExprKind::Float(_)
+            | ExprKind::Bool(_)
+            | ExprKind::String(_)
+            | ExprKind::Char(_)
+            | ExprKind::FunctionValue(_)
+            | ExprKind::Variable(_)
+            | ExprKind::Sql { .. } => None,
+        }
+    }
+
+    fn nested_block(block: &Block, handlers: &HashSet<String>) -> Option<(String, Span)> {
+        block
+            .statements
+            .iter()
+            .find_map(|statement| match statement {
+                Stmt::Let { value, .. }
+                | Stmt::BindOrAssign { value, .. }
+                | Stmt::TupleBindOrAssign { value, .. }
+                | Stmt::Expr(value) => expression(value, handlers),
+                Stmt::ArrayIndexAssign { index, value, .. } => {
+                    expression(index, handlers).or_else(|| expression(value, handlers))
+                }
+                Stmt::Return { value, .. } => {
+                    value.as_ref().and_then(|value| expression(value, handlers))
+                }
+                Stmt::If {
+                    condition,
+                    then_block,
+                    else_block,
+                    ..
+                } => expression(condition, handlers)
+                    .or_else(|| nested_block(then_block, handlers))
+                    .or_else(|| {
+                        else_block
+                            .as_ref()
+                            .and_then(|block| nested_block(block, handlers))
+                    }),
+                Stmt::While {
+                    condition,
+                    invariants,
+                    body,
+                    ..
+                } => expression(condition, handlers)
+                    .or_else(|| {
+                        invariants
+                            .iter()
+                            .find_map(|item| expression(item, handlers))
+                    })
+                    .or_else(|| nested_block(body, handlers)),
+                Stmt::For { iterable, body, .. } => {
+                    expression(iterable, handlers).or_else(|| nested_block(body, handlers))
+                }
+                Stmt::Loop {
+                    invariants, body, ..
+                } => invariants
+                    .iter()
+                    .find_map(|item| expression(item, handlers))
+                    .or_else(|| nested_block(body, handlers)),
+                Stmt::Match { value, arms, .. } => expression(value, handlers).or_else(|| {
+                    arms.iter()
+                        .find_map(|arm| nested_block(&arm.body, handlers))
+                }),
+                Stmt::Transaction { body, .. } | Stmt::Parallel { body, .. } => {
+                    nested_block(body, handlers)
+                }
+                Stmt::Break { .. } | Stmt::Continue { .. } => None,
+            })
+    }
+
+    nested_block(block, handlers)
 }
 
 fn api_type_known(

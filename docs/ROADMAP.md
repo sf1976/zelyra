@@ -632,15 +632,30 @@ computed fields and generated uploads remain open:
   legacy `invoice_number` generation. Retain concurrency, rollback, tenant
   isolation, uniqueness and format checks; reject unsupported backends
   explicitly.
-- [ ] **1.2.32 — typed computed business fields:** Add pure, typed,
+- [~] **1.2.32 — typed computed business fields:** Add pure, typed,
   deterministic derived-field expressions for supported scalar/Decimal
   operations. Check dependency graphs and reject cycles, unknown fields,
   effects, and client-supplied writes to derived values. Recompute on the
-  server before persistence for CRUD and supported API writes; any live form
+  server before persistence for generated CRUD writes; any live form
   preview is advisory and must use the same checked expression semantics.
-  Define Decimal scale/rounding, null propagation, edit behavior, and backend
-  support. Test forged values, dependency ordering, errors, exact monetary
-  arithmetic, and create/edit/API parity.
+  Decimal scale and rounding are defined; optional inputs remain typed
+  `Option<T>` and require explicit `match` handling, with `None` persisted as a
+  missing value for optional targets. The current implementation checks
+  expression types and dependency
+  cycles, replaces submitted derived values in generated parent/child CRUD,
+  and supports API `POST` validation handlers: computed values are injected as
+  typed handler parameters, client fields are rejected, SQL may bind only the
+  matching server-computed output parameter, and the handler cannot be called
+  from ordinary Zelyra code or selected as a CLI entry point. The persisted API
+  path and CRUD create path both passed isolated MariaDB 11.8 tests. API `PUT`
+  validation handlers also receive recomputed values; SQL updates are accepted
+  only when all computed dependencies and outputs bind matching typed
+  parameters. An isolated MariaDB 11.8 test covers create and update and ignores
+  forged client values. A MariaDB CRUD HTTP integration test covers create,
+  edit, rejected validation, unchanged persistence after rejection, and the
+  recalculated value shown on the error response. Decimal scale and rounding
+  are implemented. API `PATCH`, broader backend tests, and complete release
+  gates remain open. See `examples/computed_api.zyl`.
 - [ ] **1.2.33 — FileRef-aware generated CRUD:** Add bounded declarative
   attachment constraints to schema/CRUD metadata and render safe upload fields
   on create/edit plus authorized download links on details. Reuse existing
