@@ -42,10 +42,13 @@ exporter.
 The separate pure `csv_import` package decodes a bounded delimited document,
 requires a header row with non-empty column names, and rejects data rows with a
 different number of fields.
-It returns the parsed rows without writing to the database. The
-`csv_import_demo` entry exercises a valid file, a malformed-width row, and an
-empty header column on AST, MIR, and Bytecode. It is a parsing/shape-validation module, not a column
-mapping UI or transactional database importer.
+`preview_table(rows, max_rows)` returns at most 100 data rows plus the header.
+`map_columns(rows, source_columns, target_columns)` reorders and renames
+explicitly selected columns, rejecting missing or ambiguous headers and
+duplicate target names. Both return parsed values without writing to the
+database or converting field types. The `csv_import_demo` entry exercises
+valid and invalid inputs on AST, MIR, and Bytecode. It is not a preview UI or a
+transactional database importer.
 
 To run the CSV demonstration without connecting to MariaDB:
 
