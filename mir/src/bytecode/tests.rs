@@ -1255,7 +1255,7 @@ fn zero_step_budget_failure_keeps_source_location_across_backends() {
     assert!(mir_error.message.contains("step budget exceeded"));
     assert!(bytecode_error.message.contains("step budget exceeded"));
     assert_eq!(mir_error.span, ast_error.span);
-    assert_eq!(bytecode_error.span.line, ast_error.span.line);
+    assert_eq!(bytecode_error.span, ast_error.span);
 }
 
 #[test]
