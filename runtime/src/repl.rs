@@ -66,6 +66,7 @@ pub struct ReplSession {
     policy: Option<RuntimePolicy>,
     transaction: Option<Arc<Mutex<zelyra_database::MariaDbInteractiveTransaction>>>,
     sandbox: bool,
+    session_type_name: String,
     function_sequence: u64,
 }
 
@@ -77,18 +78,10 @@ impl ReplSession {
         policy: Option<RuntimePolicy>,
         sandbox: bool,
     ) -> Result<Self, ReplError> {
-        if program
-            .records
-            .iter()
-            .any(|record| record.name == REPL_SESSION_TYPE)
-        {
-            return Err(ReplError::Session(format!(
-                "project record name `{REPL_SESSION_TYPE}` is reserved by the language console"
-            )));
-        }
+        let session_type_name = unique_session_type_name(&program);
         let mut program = program;
         program.records.push(RecordDef {
-            name: REPL_SESSION_TYPE.into(),
+            name: session_type_name.clone(),
             is_public: false,
             is_class: false,
             type_params: Vec::new(),
@@ -124,13 +117,13 @@ impl ReplSession {
                 "session".into(),
                 Binding {
                     value: Value::Object {
-                        type_name: REPL_SESSION_TYPE.into(),
+                        type_name: session_type_name.clone(),
                         type_args: Vec::new(),
                         fields: [("tenant_id".into(), Value::Option(None))]
                             .into_iter()
                             .collect(),
                     },
-                    ty: Type::Named(REPL_SESSION_TYPE.into()),
+                    ty: Type::Named(session_type_name.clone()),
                     mutable: false,
                 },
             )]
@@ -141,6 +134,7 @@ impl ReplSession {
             policy,
             transaction,
             sandbox,
+            session_type_name,
             function_sequence: 0,
         })
     }
@@ -499,7 +493,7 @@ impl ReplSession {
             "session".into(),
             Binding {
                 value: Value::Object {
-                    type_name: REPL_SESSION_TYPE.into(),
+                    type_name: self.session_type_name.clone(),
                     type_args: Vec::new(),
                     fields: [(
                         "tenant_id".into(),
@@ -508,7 +502,7 @@ impl ReplSession {
                     .into_iter()
                     .collect(),
                 },
-                ty: Type::Named(REPL_SESSION_TYPE.into()),
+                ty: Type::Named(self.session_type_name.clone()),
                 mutable: false,
             },
         );
@@ -521,6 +515,21 @@ impl ReplSession {
             },
         );
     }
+}
+
+fn unique_session_type_name(program: &Program) -> String {
+    let existing = program
+        .records
+        .iter()
+        .map(|record| record.name.as_str())
+        .collect::<HashSet<_>>();
+    let mut candidate = REPL_SESSION_TYPE.to_owned();
+    let mut suffix = 0_u64;
+    while existing.contains(candidate.as_str()) {
+        suffix = suffix.saturating_add(1);
+        candidate = format!("{REPL_SESSION_TYPE}_{suffix}");
+    }
+    candidate
 }
 
 fn parse_input(input: &str) -> Result<Program, ReplError> {
@@ -669,6 +678,23 @@ mod tests {
         assert_eq!(
             session.eval_line("tenant_id").unwrap().value,
             Some(Value::Int(42))
+        );
+    }
+
+    #[test]
+    fn session_context_type_avoids_project_record_name_collisions() {
+        let mut program = parse(&lex("fn main() {}\n").unwrap()).unwrap();
+        program.records.push(RecordDef {
+            name: REPL_SESSION_TYPE.into(),
+            is_public: false,
+            is_class: false,
+            type_params: Vec::new(),
+            fields: Vec::new(),
+            span: Span::default(),
+        });
+        assert_eq!(
+            unique_session_type_name(&program),
+            format!("{REPL_SESSION_TYPE}_1")
         );
     }
 
