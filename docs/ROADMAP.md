@@ -401,7 +401,12 @@ security and compatibility gates stated for that milestone.
   PHP method recognizer uses the existing lexical source map and balanced code
   braces; regression tests reject method-shaped comments and cover nested
   blocks and typed return declarations. The real Laravel source was regenerated
-  after this change and its main scaffold passed `zelyra check`. The scaffold
+  after this change and its main scaffold passed `zelyra check`. Repeat the
+  source-only generation and check with
+  `python3 tests/laravel_import_project_check.py /opt/siedelmann-laravel/app`;
+  the script strips ambient database URLs and removes its temporary scaffold.
+  This check does not run the generated HTTP workflow or connect to a database.
+  The scaffold
   remains an incomplete migration: the latest full-project inventory reports
   2,186 findings, including 1,343 manual/unresolved and 843 partial.
   Laravel, Composer packages, PHP controllers, Blade runtime files, and source

@@ -445,7 +445,11 @@ abgeschlossen.
   und ausbalancierte Codeklammern; Regressionstests weisen
   methodenähnliche Kommentare zurück und decken verschachtelte Blöcke sowie
   Rückgabetypen ab. Der reale Laravel-Import wurde danach erneut erzeugt und
-  `zelyra check` bestand. Das Gerüst ist weiterhin keine vollständige Migration:
+  `zelyra check` bestand. Diese Quellgenerierung lässt sich mit
+  `python3 tests/laravel_import_project_check.py /opt/siedelmann-laravel/app`
+  wiederholen; das Skript entfernt geerbte Datenbank-URLs aus der Umgebung und
+  löscht das temporäre Gerüst. Es startet weder den HTTP-Ablauf noch eine
+  Datenbankverbindung. Das Gerüst ist weiterhin keine vollständige Migration:
   die Gesamtanalyse meldet 2.186 Befunde, davon 1.343 manuell/offen und 843
   teilweise. Laravel,
   Composer-Pakete, PHP-Controller, Blade-Laufzeitdateien und Zugangsdaten werden
