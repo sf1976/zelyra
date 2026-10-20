@@ -864,6 +864,9 @@ fn generate_scaffold(
             .filter_map(|candidate| candidate["candidate_source"].as_str())
             .collect::<Vec<_>>()
             .join("\n\n");
+        if generated_schema_source.contains("scoped by tenant_id: TenantId") {
+            generated_schema_source = format!("type TenantId = Id\n\n{generated_schema_source}");
+        }
         if let Some(workflow) = &generated_route_workflow {
             let table = workflow.report["source_table"].as_str().unwrap_or_default();
             if let Some(source) = route_workflows::grant_schema_access(
@@ -1277,6 +1280,18 @@ fn generate_scaffold(
             &staging.join("README.md"),
             "\n`IMPORT_COVERAGE.json` separates statically inventoried source files, findings, generated artifacts, compiler-check status, and runtime behavior tests. A passed compiler check is not evidence that an imported workflow behaves like Laravel; the report deliberately records workflow behavior as unverified by scaffold generation.\n",
         )?;
+        if generated_route_workflow.is_none()
+            && included_tables.iter().any(|candidate| {
+                candidate["candidate_source"]
+                    .as_str()
+                    .is_some_and(|source| source.contains("scoped by tenant_id:"))
+            })
+        {
+            append_generated_text(
+                &staging.join("README.md"),
+                "\n## Tenant-scoped public workflows require manual implementation\n\nThe scaffold does not emit public token workflows that would query or update tenant-scoped records without an authenticated tenant context. The source route remains a migration finding; implement and review it using a narrowly scoped Zelyra server operation that preserves both token validation and tenant isolation. The importer does not bypass Zelyra's tenant SQL checks.\n",
+            )?;
+        }
         if let Some((session_table, _)) = &native_auth {
             append_generated_text(
                 &staging.join("README.md"),

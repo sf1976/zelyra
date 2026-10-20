@@ -27,7 +27,7 @@ Ressourcendisziplin und ehrliche Beweisaussagen leiten jede Phase. Das
 [Manifest](MANIFESTO.de.md) beschreibt die Prinzipien; die Roadmap kennzeichnet
 den tatsächlich implementierten Stand.
 
-Das aktuelle stabile Release ist 1.2.28 und wurde unter https://github.com/sf1976/zelyra/releases/tag/v1.2.28 veröffentlicht. **Aktuelle Meilensteine** ist die
+Das aktuelle stabile Release ist 1.2.29 und wurde unter https://github.com/sf1976/zelyra/releases/tag/v1.2.29 veröffentlicht. **Aktuelle Meilensteine** ist die
 verbindliche Übersicht der nächsten Vorhaben. Ältere, nummerierte Release-
 Abschnitte bleiben als historische Planung und Nachweise erhalten; sie legen
 für sich keine aktuellen Releaseziele fest. Langfristige Ideen stehen im
@@ -399,7 +399,7 @@ abgeschlossen.
   Release-Gates bestanden. Die umfassendere Berechtigungs-/Sicherheitsmatrix
   bleibt ein offener Folgepunkt. Siehe den
   [Arbeitsplan 1.2.28](release-plans/1.2.28-typed-crud-actions.de.md).
-- [~] **1.2.29 — begrenzte sichere Datei-Uploads:** Die Architekturaufnahme ist
+- [x] **1.2.29 — begrenzte sichere Datei-Uploads (veröffentlicht):** Die Architekturaufnahme ist
   abgeschlossen. Der HTTP-Server liest Requests jetzt begrenzt als Bytes und
   leitet gültige Multipart-Bodies durch den Decoder; die öffentliche Text-
   `Request`-API und das globale Limit von 1 MiB bleiben unverändert. Routen
@@ -492,6 +492,9 @@ abgeschlossen.
   Datenbank muss separat und bei gestopptem Zelyra gesichert/wiederhergestellt
   werden.
   Siehe den [Plan für sichere Uploads 1.2.29](release-plans/1.2.29-secure-uploads.de.md).
+  Veröffentlicht als [`v1.2.29`](https://github.com/sf1976/zelyra/releases/tag/v1.2.29);
+  alle Release-Gates bestanden, Linux-/Windows-Artefakte und Prüfsummen
+  veröffentlicht.
 - [~] **1.2.30 — Abdeckung echter Laravel-Migrationsabläufe:** Standalone-Forms
   unterstützen geprüfte lokale Routen mit erfassten Pfadparametern, ein
   compilergeprüftes schreibgeschütztes `verify sql<T>` vor dem GET-Rendern und
@@ -499,36 +502,43 @@ abgeschlossen.
   und alle folgenden SQL-Anweisungen laufen in derselben Transaktion; ohne
   Treffer folgt 404 vor jedem Schreibzugriff, CSRF bleibt Pflicht und
   verifizierte Token-Seiten erhalten `Cache-Control: no-store`. Ein
-  wiederholbarer MariaDB-/Browser-E2E prüft Tokenvalidierung, ungültige GET-
-  und POST-Tokens, erfolgreiche Abmeldung, idempotente Wiederholung und den
-  Erhalt des ersten Abmeldezeitpunkts. Das ausführbare native Beispiel ist
-  `examples/csv_mailer_unsubscribe.zyl`. Der Importer erkennt jetzt das
-  quellbelegte Muster `PublicCsvMailerUnsubscribeController` und erzeugt das
-  wiederverwendbare Modul `src/imported_public_unsubscribe.zyl`, ein gemeinsames
-  Schemapaket und einen auf dieses Modul begrenzten Tabellenzugriff. Übersetzt
-  werden nur der literale SHA-256-Tokenvergleich, die Prüfung vor dem Schreiben,
-  die idempotente Abmeldung und statische Hinweistexte; abweichende Varianten
-  bleiben unübersetzt. Die Ausgabe bestand `zelyra check`; ein Lauf mit
-  Wegwerf-MariaDB und HTTP-Server bestätigte GET 200, 404 für ungültige Tokens,
-  CSRF-geschützten POST-Redirect und den gespeicherten Zeitpunkt. Die
-  wiederholbare Prüfung `python3 tests/laravel_import_unsubscribe_e2e.py
-  /opt/siedelmann-laravel/app` erzeugt das Scaffold erneut, richtet dessen
-  Schema in einem frischen Wegwerf-MariaDB-Container ein und prüft gültige und
-  ungültige GET-/POST-Tokens, CSRF, den stabilen Zeitstempel nach Wiederholung
-  sowie die Erfolgsseite über HTTP. Erkennt der Importer ein gemeinsames
-  Anwendungslayout, bindet die generierte Erfolgsseite diese Shell; andernfalls
-  erzeugt er keinen ungelösten Layoutverweis. Der Generierungsbericht hält die
-  Entscheidung fest. Der Test prüft außerdem, dass die gerenderte Erfolgsseite
-  innerhalb der erzeugten Shell liegt. Es wird keine E-Mail versendet und weder
-  Datenbank noch Scaffold bleiben zurück. Das ist ein HTTP-Integrationstest,
-  kein Browser-Automationstest.
+  wiederholbarer MariaDB-/HTTP-E2E prüft den Ablauf am ausdrücklich
+  unmandantenfähigen Beispiel `examples/csv_mailer_unsubscribe.zyl`. Für das
+  echte Laravel-Projekt `/opt/siedelmann-laravel/app` wird dieser Ablauf
+  derzeit nicht generiert: `csv_mailer_suppressions` ist mandantengebunden, die
+  öffentliche Tokenroute besitzt aber keinen authentifizierten
+  Mandantenkontext. `tests/laravel_import_unsubscribe_e2e.py` prüft hier nun,
+  dass die Tabelle als `scoped by` erzeugt, die unsichere Route ausgelassen und
+  die Einschränkung im Scaffold genannt wird. Es findet dabei kein
+  Datenbankzugriff statt; das bleibt ein offener Importablauf und ist kein
+  Laufzeittest der Abmeldung.
+  `table ... scoped by`-Spalten können nun zusätzlich ein skalares nominales
+  ID-Feld mit `references <table>` als SQL-Fremdschlüssel deklarieren. Der
+  Projektlinker erhält dabei den modul-lokalen Tenant-ID-Alias. Der Importer
+  erkennt `foreignId('tenant_id')->constrained('tenants')` nur anhand des
+  statischen Migrationsbelegs, erzeugt `TenantId`, die Tabellenscopes und den
+  realen FK. Für zwei mandantengebundene Tabellen werden die vorhandenen
+  zusammengesetzten FK-Ziele samt `UNIQUE (tenant_id, id)` genutzt. Ein
+  tatsächlicher MariaDB-11.8-Lauf bestätigte, dass eine eigene Referenz gelingt
+  und eine mandantenfremde Referenz mit FK-Fehler abgewiesen wird; der
+  wiederholbare Test `tests/mariadb-tenant-relations-e2e.sh` prüft nun sowohl
+  Record-Relationen als auch skalare nominale Referenzen. Generierte Namen
+  zusammengesetzter Schlüssel kollidieren nun nicht mehr mit bereits
+  vorhandenen eindeutigen Tenant-Einzelspalten. Das Laravel-Importer-Auth-E2E
+  richtet das generierte Identitätspaket in einer separaten, kurzlebigen
+  MariaDB ein und prüft native Anmeldung, gespeicherte Session und Abmeldung;
+  Laravel-Zugangsdaten und Anwendungszeilen werden nicht importiert. Laravels
+  `SET NULL` auf einer solchen zusammengesetzten Relation kann Zelyra nicht
+  sicher abbilden; der prüfpflichtige Scaffold ersetzt dies sichtbar durch
+  `RESTRICT` und schreibt den Unterschied als Reviewhinweis aus. Kein
+  Datenbank- oder Quelldateiinhalt des Laravel-Projekts wurde verändert.
   Jedes generierte Gerüst enthält jetzt `IMPORT_COVERAGE.json`, das
   Quellinventar, Befundklassifizierungen, erzeugte Artefakte, Compilerstatus
   und Laufzeitteststatus trennt. Der Source-Only-Integrationstest gleicht den
   Bericht mit Dateiplan und Generierungsmanifest ab und bestätigt, dass aus
   der Generierung keine Laufzeitabdeckung abgeleitet wird. Der letzte Lauf
-  gegen `/opt/siedelmann-laravel/app` erfasste 565 PHP-Dateien und 2.229
-  Befunde (1.367 manuell/ungelöst und 862 teilweise unterstützt).
+  gegen `/opt/siedelmann-laravel/app` erfasste 572 PHP-Dateien und 2.263
+  Befunde (1.387 manuell/ungelöst und 876 teilweise unterstützt).
   Die Quellprüfung des Gesamtprojekts bestätigt zudem die generierten
   Login-/Logout- und Abmelderouten, validiert den Paket-Lock offline und
   führt module plan für pkg:imported_identity aus, einschließlich
@@ -567,16 +577,27 @@ abgeschlossen.
   Vollständigkeit des Verhaltensgraphen oder eine erfolgte Übersetzung.
   Der jüngste ausdrückliche Live-Schemacheck vergleicht zusätzlich bekannte
   MariaDB-Speichertypen einschließlich Decimal-Präzision und -Skalierung sowie
-  Fremdschlüssel-Zielspalten. Statische Integer-, Bool-, Text-, Decimal-,
+  vollständige Fremdschlüssel-Quell-/Zielspaltentupel einschließlich
+  zusammengesetzter Mandantenschlüssel. Statische Integer-, Bool-, Text-, Decimal-,
   Time- und `now`-Defaults werden verglichen, sofern Zelyra sie sicher
   interpretieren kann; Berichte geben Default-Inhalte nicht aus und listen
-  nicht unterstützte Ausdrücke als ungeprüft. Der erneute Vergleich fand
-  117 Default- und 297 SQL-Typabweichungen (414 insgesamt). Er verglich 80
-  Kandidaten und untersuchte 1.250 Spalten. Engine, Charset, Collation und
-  Trigger bleiben ungeprüft. Die echte Datenbank wurde schreibgeschützt
-  verbunden, ohne Anwendungszeilen zu lesen. Das ersetzt den früheren Befund „keine
-  Schemadifferenzen“, der nur den damals dokumentierten Metadatenausschnitt
-  verglich.
+  nicht unterstützte Ausdrücke als ungeprüft. Der jüngste Lauf untersuchte
+  89 Tabellen mit 1.293 Spalten und verglich alle 80 generierten Kandidaten.
+  Er fand 297 SQL-Typ-, 117 statische Default- und 59 Fremdschlüsselabweichungen
+  (insgesamt 473). Alle 59 betreffen einfache Fremdschlüssel in der Live-DB,
+  während die generierten mandantengebundenen Relationen zusammengesetzte
+  Schlüssel `(tenant_id, relation_id) -> (tenant_id, id)` verlangen; bei 29
+  unterscheidet sich zusätzlich die Löschaktion, weil der sichere Kandidat
+  `RESTRICT` statt Laravels `SET NULL` verwendet. MariaDB kann unter einem
+  zusammengesetzten `ON DELETE SET NULL` den Beziehungsschlüssel nicht nullen,
+  ohne zugleich den erforderlichen Mandantenschlüssel zu nullen. Der Importer
+  markiert die Abweichungen zur Prüfung und behauptet keine
+  Verhaltensgleichheit.
+  Engine, Charset, Collation und Trigger bleiben ungeprüft. Dieser
+  schreibgeschützte Befund gilt für das untersuchte Quelldatenbankschema und
+  kann sich mit dessen Änderungen ändern. Die frühere Aussage „keine
+  Schemadifferenzen“ bezog sich nur auf den damals verglichenen
+  Metadatenausschnitt.
 - [ ] **1.3.0 — kanonische Struktur und Bytecode-Standard:** Das optionale,
   versionierte Projektlayout (`routes/`, `domain/`, `schema/`, `public/`,
   `assets/`, `plugins/`), Architekturprüfungen und eine sichere

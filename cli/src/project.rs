@@ -950,6 +950,9 @@ fn link_modules(
             for column in &mut table.columns {
                 linker.rewrite_type(&mut column.ty, column.span)?;
             }
+            if let Some(scope) = &mut table.tenant_scope {
+                linker.rewrite_type(&mut scope.tenant_type, scope.span)?;
+            }
             linked.tables.push(table);
         }
         for mut definition in module.program.types.clone() {
@@ -1524,6 +1527,9 @@ impl TypeLinker<'_> {
             if table.span.source_id == source_id {
                 for column in &mut table.columns {
                     self.rewrite_type(&mut column.ty, column.span)?;
+                }
+                if let Some(scope) = &mut table.tenant_scope {
+                    self.rewrite_type(&mut scope.tenant_type, scope.span)?;
                 }
             }
         }
@@ -2818,6 +2824,28 @@ mod tests {
 
     fn cleanup(directory: &Path) {
         fs::remove_dir_all(directory).unwrap();
+    }
+
+    #[test]
+    fn linked_tenant_scope_rewrites_module_local_aliases_and_retains_database_references() {
+        let directory = project(&[
+            ("main.zyl", "import \"src/schema.zyl\" as schema\nfn main() {}\n"),
+            (
+                "src/schema.zyl",
+                "type TenantId = Id\ntable tenants { id: Id primary auto }\ntable customers scoped by tenant_id: TenantId { id: Id primary auto tenant_id: TenantId required references tenants }\n",
+            ),
+        ]);
+        let loaded = load(directory.join("main.zyl").to_str().unwrap()).unwrap();
+        check(&loaded.program).expect("module-local tenant aliases remain valid after linking");
+        let schema = build_schema(&loaded.program).expect("referenced schema remains valid");
+        let customers = schema
+            .tables
+            .iter()
+            .find(|table| table.name == "customers")
+            .unwrap();
+        assert_eq!(customers.tenant_scope_column.as_deref(), Some("tenant_id"));
+        assert_eq!(customers.foreign_keys[0].referenced_table, "tenants");
+        cleanup(&directory);
     }
 
     #[test]

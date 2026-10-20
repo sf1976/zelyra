@@ -63,12 +63,24 @@ client "${base_db}" --batch --skip-column-names \
     -e "CREATE DATABASE \`${database}\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;"
 cat >"${work}/main.zyl" <<'ZELYRA'
 type TenantId = Id
+type CustomerGroupId = Id
+
+table tenants {
+    id: TenantId primary
+}
+
+table customer_groups scoped by tenant_id: TenantId {
+    id: CustomerGroupId primary auto
+    tenant_id: TenantId required references tenants on_delete cascade
+    name: String(100) required
+}
 
 table customers scoped by tenant_id: TenantId {
     id: Id primary auto
     tenant_id: TenantId required
     customer_number: String(50) required unique within tenant
     name: String required
+    customer_group_id: CustomerGroupId? references customer_groups
 }
 
 table invoices scoped by tenant_id: TenantId {
@@ -80,19 +92,26 @@ table invoices scoped by tenant_id: TenantId {
 fn main() {}
 ZELYRA
 
-echo "[1/5] applying tenant relation and tenant-unique schema"
+echo "[1/6] applying tenant relation and tenant-unique schema"
 DATABASE_URL="${test_url}" "${zelyra_bin}" db setup "${work}/main.zyl"
 plan="$(DATABASE_URL="${test_url}" "${zelyra_bin}" db plan "${work}/main.zyl")"
 grep -Fq "No schema changes" <<<"${plan}"
 
-echo "[2/5] proving equal customer numbers are allowed across tenants"
+client "${database}" --batch --skip-column-names <<SQL
+INSERT INTO tenants (id) VALUES (101), (202);
+INSERT INTO customer_groups (tenant_id, name) VALUES
+    (101, 'tenant A group'),
+    (202, 'tenant B group');
+SQL
+
+echo "[2/6] proving equal customer numbers are allowed across tenants"
 client "${database}" --batch --skip-column-names <<SQL
 INSERT INTO customers (tenant_id, customer_number, name) VALUES
     (101, 'C-001', 'tenant A'),
     (202, 'C-001', 'tenant B');
 SQL
 
-echo "[3/5] proving duplicate customer numbers are rejected within a tenant"
+echo "[3/6] proving duplicate customer numbers are rejected within a tenant"
 if output="$(client "${database}" --batch --skip-column-names \
     -e "INSERT INTO customers (tenant_id, customer_number, name) VALUES (101, 'C-001', 'duplicate');" 2>&1)"; then
     echo "error: MariaDB accepted a duplicate customer number within one tenant" >&2
@@ -103,7 +122,7 @@ grep -Eiq 'duplicate|unique|1062' <<<"${output}" || {
     exit 1
 }
 
-echo "[4/5] proving same-tenant and optional relations work"
+echo "[4/6] proving same-tenant and optional relation-record FKs work"
 client "${database}" --batch --skip-column-names <<SQL
 INSERT INTO invoices (tenant_id, customer_id) VALUES
     (101, NULL),
@@ -111,7 +130,23 @@ INSERT INTO invoices (tenant_id, customer_id) VALUES
     (202, (SELECT id FROM customers WHERE tenant_id = 202));
 SQL
 
-echo "[5/5] proving MariaDB rejects a cross-tenant relation"
+echo "[5/6] proving scalar nominal references preserve tenant isolation"
+client "${database}" --batch --skip-column-names <<SQL
+INSERT INTO customers (tenant_id, customer_number, name, customer_group_id)
+VALUES (101, 'CG-OWN', 'own group reference',
+    (SELECT id FROM customer_groups WHERE tenant_id = 101));
+SQL
+if output="$(client "${database}" --batch --skip-column-names \
+    -e "INSERT INTO customers (tenant_id, customer_number, name, customer_group_id) VALUES (101, 'CG-FOREIGN', 'foreign group reference', (SELECT id FROM customer_groups WHERE tenant_id = 202));" 2>&1)"; then
+    echo "error: MariaDB accepted a scalar reference to another tenant" >&2
+    exit 1
+fi
+grep -Eiq 'foreign key|constraint|1452' <<<"${output}" || {
+    echo "error: scalar reference failure did not report a foreign-key violation" >&2
+    exit 1
+}
+
+echo "[6/6] proving MariaDB rejects cross-tenant relation-record FK"
 if output="$(client "${database}" --batch --skip-column-names \
     -e "INSERT INTO invoices (tenant_id, customer_id) VALUES (101, (SELECT id FROM customers WHERE tenant_id = 202));" 2>&1)"; then
     echo "error: MariaDB accepted a relation to a different tenant" >&2
@@ -121,4 +156,4 @@ grep -Eiq 'foreign key|constraint|1452' <<<"${output}" || {
     echo "error: failed insert did not report a foreign-key violation" >&2
     exit 1
 }
-echo "tenant unique constraint and relation checks passed"
+echo "tenant unique, relation-record FK, and scalar-reference checks passed"

@@ -71,3 +71,29 @@ CRUD-Kreislauf mit echten Fremdschlüssel-Constraints nachgewiesen:
 - Auf MySQL und MariaDB erzwingt `innodb_lock_wait_timeout` harte, konfigurierte
   Abbruchgrenzen für Zeilensperren (~1 s statt 50 s).
 Siehe [Nachweise](release-readiness/0.9.9-relational-crud-matrix.de.md).
+
+## Typisierte skalare Referenzen und Mandantenschlüssel (1.2.30-Entwicklung)
+
+Eine skalare nominale ID kann ihren Zelyra-Typ behalten und zugleich eine
+explizite Datenbankreferenz deklarieren, zum Beispiel
+`customer_group_id: CustomerGroupId? references customer_groups`. Die
+Zieltabelle muss einen Primärschlüssel `id` besitzen; Quell- und Ziel-ID
+müssen nach Aliasauflösung `Id` sein. Der Compiler prüft die Referenz und
+erzeugt daraus einen echten Fremdschlüssel. Eine optionale Quell-ID wird als
+nullable SQL-Spalte angelegt. Sind beide Tabellen mit demselben nominalen
+Mandantentyp gescoped, wird der zusammengesetzte FK
+`(tenant_id, relation_id) -> (tenant_id, id)` erzeugt und der Zieltabelle der
+benötigte eindeutige Schlüssel `(tenant_id, id)` hinzugefügt. So weist die
+Datenbank mandantenfremde Referenzen ab. Unterschiedliche nominale
+Mandantenidentitäten werden abgewiesen.
+
+DDL-Generierungstests decken MariaDB, PostgreSQL und SQLite ab. Ein echter
+MariaDB-11.8-Test akzeptierte eine mandanteneigene Referenz und wies eine
+mandantenfremde ab. Das ist ein begrenzter Nachweis für diese explizite
+skalare Referenzform und keine allgemeine Backend-Paritätsaussage. Der
+Laravel-Importer erzeugt die Syntax nur, wenn eine statische Migration den
+Fremdschlüssel belegt. Ein zusammengesetzter Tenant-FK kann
+`ON DELETE SET NULL` nicht erhalten, weil dadurch auch der erforderliche
+Mandantenschlüssel geleert würde. Der Importer kennzeichnet das erzeugte
+`RESTRICT` als prüfpflichtige Verhaltensabweichung. Siehe den
+[1.2.30-Arbeitsplan](release-plans/1.2.30-typed-schema-references.de.md).

@@ -1331,6 +1331,7 @@ fn relation_form_route() -> FormRoute {
             unique: false,
             unique_within_tenant: false,
             default: None,
+            references: None,
             on_delete: None,
             span: zelyra_ast::Span::default(),
         }],

@@ -25,7 +25,7 @@ telemetry, explicit effects, portable data, resource discipline, and honest
 proof claims guide every phase. The [manifesto](MANIFESTO.md) states the
 principles; the roadmap below tracks what is actually implemented.
 
-The current stable release is 1.2.28, published at https://github.com/sf1976/zelyra/releases/tag/v1.2.28. **Current milestones** is the source of
+The current stable release is 1.2.29, published at https://github.com/sf1976/zelyra/releases/tag/v1.2.29. **Current milestones** is the source of
 near-term commitments. Older numbered release sections below are retained as
 historical planning and evidence; they do not by themselves define current
 release targets. Longer-term ideas remain in the post-1.0 evolution section.
@@ -360,7 +360,7 @@ security and compatibility gates stated for that milestone.
   was added later as an experimental 1.2.26 follow-up and uses the same grant
   checks. Released as [`v1.2.28`](https://github.com/sf1976/zelyra/releases/tag/v1.2.28); release gates passed. The broader security/permission matrix remains an open follow-up. See the
   [1.2.28 work plan](release-plans/1.2.28-typed-crud-actions.en.md).
-- [~] **1.2.29 — bounded secure file upload foundation:** Architecture inventory
+- [x] **1.2.29 — bounded secure file upload foundation (released):** Architecture inventory
   is complete. The HTTP server now reads bounded byte requests and sends valid
   multipart bodies through the decoder; the existing public text `Request` API
   and 1 MiB global limit remain unchanged. Multipart receives HTTP 415 on
@@ -445,41 +445,49 @@ security and compatibility gates stated for that milestone.
   database, configuration, and secrets;
   coordinated whole-application backup remains a separate follow-up, with the
   database backed up/restored separately while Zelyra is stopped. See the
-  [1.2.29 secure upload plan](release-plans/1.2.29-secure-uploads.en.md).
+  [1.2.29 secure upload plan](release-plans/1.2.29-secure-uploads.en.md). Released as
+  [`v1.2.29`](https://github.com/sf1976/zelyra/releases/tag/v1.2.29); all
+  release gates passed, and Linux/Windows artifacts and checksums were
+  published.
 - [~] **1.2.30 — Laravel import workflow coverage:** Standalone forms now
   support checked local routes with captured path parameters, a compiler-checked
   read-only `verify sql<T>` gate before GET rendering, and `require_match` for
   direct SQL actions. The required first `SELECT` and all later SQL run on the
   same transaction; no match returns 404 before writes, CSRF remains required,
   and verified-token pages are marked `Cache-Control: no-store`. A repeatable
-  MariaDB/browser E2E verifies token validation, invalid-token GET and POST
-  behavior, successful unsubscribe, idempotent repeat submission, and stable
-  first-unsubscribe time. The executable native example is
-  `examples/csv_mailer_unsubscribe.zyl`. The importer now recognizes the
-  source-evidenced `PublicCsvMailerUnsubscribeController` pattern and emits a
-  reusable `src/imported_public_unsubscribe.zyl` module, a shared schema module,
-  and a scoped table access grant. It translates only a literal SHA-256 token
-  lookup, read-before-write, idempotent unsubscribe update, and static notice
-  text; unsupported variants remain ungenerated. Generated output passed
-  `zelyra check`, and a disposable MariaDB/HTTP run verified GET 200, invalid
-  token 404, CSRF-protected POST redirect, and the persisted timestamp. The
-  repeatable `python3 tests/laravel_import_unsubscribe_e2e.py
-  /opt/siedelmann-laravel/app` test now regenerates the source-derived scaffold,
-  applies its schema to a fresh disposable MariaDB container, and exercises
-  valid/invalid GET and POST, CSRF, repeated-submit timestamp stability, and
-  the success page over HTTP. When the importer discovers a shared app layout,
-  the generated success page now binds that shell; otherwise it emits no
-  unresolved layout reference. The source report records this decision. The
-  test also verifies the rendered success page is inside the generated shell.
-  It sends no mail and leaves no database or scaffold behind. This is an HTTP
-  integration test, not browser automation.
+  MariaDB/HTTP E2E exercises the flow against the explicitly unscoped example
+  `examples/csv_mailer_unsubscribe.zyl`. For the real Laravel project
+  `/opt/siedelmann-laravel/app`, this workflow is currently not generated:
+  `csv_mailer_suppressions` is tenant-owned, while its public token route has no
+  authenticated tenant context. `tests/laravel_import_unsubscribe_e2e.py` now
+  verifies that the table remains tenant-scoped, the unsafe route is omitted,
+  and the scaffold documents this limitation. It does not connect to a
+  database; the actual project workflow remains an open migration item.
+  Scalar nominal ID columns may now add `references <table>` while preserving
+  their Zelyra type and emitting a real SQL FK. The project linker now rewrites
+  module-local tenant aliases on both columns and scope declarations. Based on
+  static migration evidence, the importer maps
+  `foreignId('tenant_id')->constrained('tenants')` to `TenantId`, table scopes,
+  and the real reference. Scoped-to-scoped relations use composite foreign
+  keys and the required `UNIQUE (tenant_id, id)` target key. A live MariaDB 11.8
+  run confirmed same-tenant references succeed and cross-tenant references are
+  rejected by the FK; the repeatable
+  `tests/mariadb-tenant-relations-e2e.sh` checks both record-typed and scalar
+  nominal references. Generated composite-key names now avoid collisions with
+  existing single-column tenant unique constraints. The Laravel importer auth
+  E2E sets up the generated identity package in a separate disposable MariaDB
+  database and verifies native login, session persistence, and logout; it does
+  not import Laravel credentials or rows. Laravel `SET NULL` on such a composite key cannot be
+  preserved safely: the review candidate emits `RESTRICT` and records the
+  behavioral difference. No Laravel database contents or source files were
+  modified.
   Every generated scaffold now includes `IMPORT_COVERAGE.json`, which
   separates source inventory, finding classifications, generated artifacts,
   compiler status, and behavior-test status. The source-only integration test
   checks it against the source-file plan and generation manifest and confirms
   generation did not claim workflow runtime coverage. Its latest run against
-  `/opt/siedelmann-laravel/app` accounted for 565 PHP files and 2,229 findings
-  (1,367 manual/unresolved and 862 partial).
+  `/opt/siedelmann-laravel/app` accounted for 572 PHP files and 2,263 findings
+  (1,387 manual/unresolved and 876 partial).
   The source-only full-project check also asserts the generated native
   login/logout and unsubscribe routes, validates the package lock offline, and
   runs module plan for pkg:imported_identity to verify its package identity
@@ -504,8 +512,8 @@ security and compatibility gates stated for that milestone.
   the script strips ambient database URLs and removes its temporary scaffold.
   This check does not run the generated HTTP workflow or connect to a database.
   The scaffold
-  remains an incomplete migration: the latest source-only rerun reports 2,229
-  findings (1,367 manual/unresolved and 862 partial across 565 source files).
+  remains an incomplete migration: the latest source-only rerun reports 2,263
+  findings (1,387 manual/unresolved and 876 partial across 572 source files).
   These are analysis findings, not a migrated-feature count.
   Laravel, Composer packages, PHP controllers, Blade runtime files, and source
   credentials are not copied. The source-only integration check compares an
@@ -515,20 +523,29 @@ security and compatibility gates stated for that milestone.
   coverage of the detected PHP file set, not completeness of the behavior
   graph or that source behavior has been translated.
   The latest explicit live-schema run now compares known MariaDB storage types
-  (including Decimal precision/scale) and foreign-key target columns as well as
+  (including Decimal precision/scale) and full foreign-key source/target
+  column tuples, including composite tenant keys, as well as
   presence, nullability, and indexes. Unknown mappings remain listed
   separately; default values, engine, charset, collation, and triggers are not
   compared. Against the real database it connected read-only, read no
-  application rows, inspected 80 tables/1,215 columns, compared all 78
-  generated migration candidates, and reported 293 concrete type differences.
+  application rows, inspected 89 tables/1,293 columns, and compared all 80
+  generated migration candidates. It reported 297 SQL-type differences, 117
+  static-default differences, and 59 foreign-key differences (473 total).
   This supersedes the earlier “zero schema differences” result, which covered
   only the previously documented metadata subset. Static integer, boolean,
   text, Decimal, Time, and `now` defaults are now compared where Zelyra can
   interpret them safely; reports omit the actual default text, and unsupported
-  expressions are listed as unclassified. The latest live comparison found
-  117 default and 297 SQL type differences across 80 candidates (414 total).
-  This rerun inspected 1,250 columns; engine, charset, collation, and triggers
-  remain unchecked.
+  expressions are listed as unclassified. All 59 foreign-key differences are
+  live single-column references where generated tenant-scoped relations
+  require the composite `(tenant_id, relation_id) -> (tenant_id, id)` key; 29
+  also differ in delete action because the safe candidate uses `RESTRICT` where
+  Laravel declares `SET NULL`. MariaDB cannot null the relation key while
+  preserving the required tenant key under a composite `ON DELETE SET NULL`.
+  The importer records these differences for review rather than claiming
+  behavioral parity.
+  Engine, charset, collation, and triggers remain unchecked. This read-only
+  snapshot is specific to the inspected source database and can change as its
+  schema changes.
 - [ ] **1.3.0 — canonical structure and Bytecode default:** Complete the
   opt-in versioned project layout (`routes/`, `domain/`, `schema/`, `public/`,
   `assets/`, and `plugins/`), architecture checks, and safe layout migration

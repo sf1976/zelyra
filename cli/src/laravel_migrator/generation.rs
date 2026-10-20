@@ -390,6 +390,7 @@ fn parse_sql_column(source: &str) -> Result<Column, String> {
         decimal_precision,
         enum_values: None,
         relation_table: None,
+        references_table: None,
         unresolved_relation: None,
         nullable,
         primary_key,
@@ -667,9 +668,15 @@ fn apply_sql_foreign_constraint(
                 .into(),
         );
     }
-    column.name = source_field.to_owned();
-    column.ty = relation_type_for_table(&constraint.target_table)?;
-    column.relation_table = Some(constraint.target_table.clone());
+    if constraint.source_column == "tenant_id" && constraint.target_table == "tenants" {
+        column.name = constraint.source_column.clone();
+        column.ty = "TenantId".into();
+        column.references_table = Some(constraint.target_table.clone());
+    } else {
+        column.name = source_field.to_owned();
+        column.ty = relation_type_for_table(&constraint.target_table)?;
+        column.relation_table = Some(constraint.target_table.clone());
+    }
     column.on_delete = constraint.on_delete;
     Ok(())
 }
@@ -685,6 +692,7 @@ struct Column {
     decimal_precision: Option<(u32, u32)>,
     enum_values: Option<Vec<String>>,
     relation_table: Option<String>,
+    references_table: Option<String>,
     unresolved_relation: Option<String>,
     nullable: bool,
     primary_key: bool,
@@ -1580,9 +1588,33 @@ impl SchemaAnalyzer {
             .iter()
             .map(|candidate: &Candidate| candidate.table.clone())
             .collect::<BTreeSet<_>>();
+        let tenant_scoped_tables = unique
+            .iter()
+            .filter(|candidate| {
+                candidate.columns.iter().any(|column| {
+                    column.name == "tenant_id"
+                        && !column.nullable
+                        && column.references_table.as_deref() == Some("tenants")
+                })
+            })
+            .map(|candidate| candidate.table.clone())
+            .collect::<BTreeSet<_>>();
         for candidate in &mut unique {
             let mut changed_fields = BTreeMap::<String, String>::new();
+            let source_is_tenant_scoped = tenant_scoped_tables.contains(&candidate.table);
             for column in &mut candidate.columns {
+                if let Some(target) = column
+                    .references_table
+                    .as_ref()
+                    .filter(|target| !available.contains(*target))
+                    .cloned()
+                {
+                    column.unresolved_relation = Some(target);
+                    column.ty = "UInt".into();
+                    column.references_table = None;
+                    column.on_delete = None;
+                    continue;
+                }
                 if let Some(target) = column
                     .relation_table
                     .as_ref()
@@ -1595,6 +1627,19 @@ impl SchemaAnalyzer {
                     column.ty = "UInt".into();
                     column.relation_table = None;
                     changed_fields.insert(field_name, column.name.clone());
+                }
+                if column.on_delete == Some(ReferentialAction::SetNull)
+                    && source_is_tenant_scoped
+                    && column
+                        .relation_table
+                        .as_ref()
+                        .is_some_and(|target| tenant_scoped_tables.contains(target))
+                {
+                    candidate.backend_review_notes.push(format!(
+                        "Laravel relation `{}.{}` declares `ON DELETE SET NULL`, but a tenant-safe composite foreign key cannot null the required `tenant_id` column. The generated candidate uses `RESTRICT`; review and implement equivalent deletion behavior explicitly.",
+                        candidate.table, column.source_name
+                    ));
+                    column.on_delete = Some(ReferentialAction::Restrict);
                 }
             }
             for field in candidate
@@ -1646,6 +1691,15 @@ impl SchemaAnalyzer {
             .map(render_table)
             .collect::<Vec<_>>()
             .join("\n\n");
+        let source = if unique.iter().any(|candidate| {
+            candidate.columns.iter().any(|column| {
+                column.name == "tenant_id" && column.references_table.as_deref() == Some("tenants")
+            })
+        }) {
+            format!("type TenantId = Id\n\n{source}")
+        } else {
+            source
+        };
         json!({
             "schema_version": "7",
             "rollback_inventory": {
@@ -1715,8 +1769,9 @@ impl SchemaAnalyzer {
                         "source_declaration": column.laravel_method,
                         "zelyra_type": column.ty,
                         "relation_table": column.relation_table,
+                        "references_table": column.references_table,
                         "unresolved_relation_target": column.unresolved_relation,
-                        "relation_status": if column.unresolved_relation.is_some() { "target_unavailable_emitted_as_unsigned_id" } else if column.relation_table.is_some() { "resolved" } else { "not_a_foreign_key" },
+                        "relation_status": if column.unresolved_relation.is_some() { "target_unavailable_emitted_as_unsigned_id" } else if column.references_table.is_some() { "scalar_id_reference" } else if column.relation_table.is_some() { "resolved" } else { "not_a_foreign_key" },
                         "mapping_review": mapping_review_note(&column.laravel_method),
                         "length": column.length,
                         "allowed_values": column.enum_values,
@@ -2137,6 +2192,7 @@ fn parse_columns(
                         decimal_precision: None,
                         enum_values: None,
                         relation_table: None,
+                        references_table: None,
                         unresolved_relation: None,
                         nullable: true,
                         primary_key: false,
@@ -2205,7 +2261,9 @@ fn parse_columns(
             }
         }
         let nullable = explicit_nullable || method == "rememberToken";
-        let (name, ty, relation_table) = if method == "foreignId" && constrained_table.is_some() {
+        let (name, ty, relation_table, references_table) = if method == "foreignId"
+            && constrained_table.is_some()
+        {
             if let Some(source_field) = source_name.strip_suffix("_id") {
                 let table = match constrained_table {
                     Some(table) if !table.is_empty() => table,
@@ -2227,8 +2285,12 @@ fn parse_columns(
                             .into(),
                     );
                 }
-                let relation_type = relation_type_for_table(&table)?;
-                (source_field.to_owned(), relation_type, Some(table))
+                if source_name == "tenant_id" && table == "tenants" {
+                    (source_name.clone(), "TenantId".into(), None, Some(table))
+                } else {
+                    let relation_type = relation_type_for_table(&table)?;
+                    (source_field.to_owned(), relation_type, Some(table), None)
+                }
             } else {
                 let target = constrained_table
                     .as_deref()
@@ -2241,6 +2303,7 @@ fn parse_columns(
                     source_name.clone(),
                     relation_type,
                     constrained_table.clone(),
+                    None,
                 )
             }
         } else if method == "foreignId" {
@@ -2253,14 +2316,14 @@ fn parse_columns(
             backend_review_notes.push(format!(
                 "Laravel `foreignId` column `{table_name}.{source_name}` has no `constrained()` call; it is emitted as an unsigned `UInt` field without a foreign-key relation. Review backend width and signedness."
             ));
-            (source_name.clone(), "UInt".into(), None)
+            (source_name.clone(), "UInt".into(), None, None)
         } else {
             if constrained_table.is_some() || on_delete.is_some() {
                 return Err(
                     "foreign-key modifiers are only supported on `foreignId` columns".into(),
                 );
             }
-            (source_name.clone(), source_ty, None)
+            (source_name.clone(), source_ty, None, None)
         };
         if !is_identifier(&name) {
             return Err(format!(
@@ -2269,7 +2332,9 @@ fn parse_columns(
         }
         let primary_key = primary_key || primary_id;
         primary_key_count += usize::from(primary_key);
-        let imported_delete_action = relation_table.as_ref().and(on_delete);
+        let imported_delete_action = (relation_table.is_some() || references_table.is_some())
+            .then_some(on_delete)
+            .flatten();
         let storage_name = relation_table
             .as_ref()
             .filter(|_| !source_name.ends_with("_id"))
@@ -2284,6 +2349,7 @@ fn parse_columns(
             decimal_precision,
             enum_values,
             relation_table,
+            references_table,
             unresolved_relation: None,
             nullable,
             primary_key,
@@ -3259,7 +3325,17 @@ fn is_decimal_literal(value: &str) -> bool {
 }
 
 fn render_table(candidate: &Candidate) -> String {
-    let mut lines = vec![format!("table {} {{", candidate.table)];
+    let tenant_scope = candidate.columns.iter().find(|column| {
+        column.name == "tenant_id"
+            && !column.nullable
+            && column.references_table.as_deref() == Some("tenants")
+    });
+    let header = if tenant_scope.is_some() {
+        format!("table {} scoped by tenant_id: TenantId {{", candidate.table)
+    } else {
+        format!("table {} {{", candidate.table)
+    };
+    let mut lines = vec![header];
     for column in &candidate.columns {
         let mut ty = column.ty.clone();
         if column.length.is_some() {
@@ -3267,7 +3343,7 @@ fn render_table(candidate: &Candidate) -> String {
         } else if let Some((precision, scale)) = column.decimal_precision {
             ty.push_str(&format!("({precision}, {scale})"));
         }
-        if column.nullable && column.relation_table.is_none() {
+        if column.nullable {
             ty.push('?');
         }
         let mut attributes = Vec::new();
@@ -3288,10 +3364,16 @@ fn render_table(candidate: &Candidate) -> String {
         if let Some(default) = &column.default {
             attributes.push(default.clone());
         }
-        if let Some(action) = column.on_delete.filter(|_| column.relation_table.is_some()) {
+        if let Some(action) = column
+            .on_delete
+            .filter(|_| column.relation_table.is_some() || column.references_table.is_some())
+        {
             if action != ReferentialAction::NoAction {
                 attributes.push(format!("on_delete {action}"));
             }
+        }
+        if let Some(target) = &column.references_table {
+            attributes.push(format!("references {target}"));
         }
         let suffix = if attributes.is_empty() {
             String::new()
@@ -3341,6 +3423,120 @@ fn span_json(span: SourceSpan) -> Value {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn tenant_foreign_ids_generate_scoped_schema_with_scalar_references() {
+        let mut analyzer = SchemaAnalyzer::default();
+        analyzer.scan(
+            "database/migrations/create_tenants.php",
+            "<?php Schema::create('tenants', function ($table) { $table->id(); $table->string('name'); });",
+        );
+        analyzer.scan(
+            "database/migrations/create_customers.php",
+            "<?php Schema::create('customer_groups', function ($table) { $table->id(); $table->foreignId('tenant_id')->constrained('tenants')->cascadeOnDelete(); $table->string('name'); });",
+        );
+        analyzer.scan(
+            "database/migrations/create_customer_records.php",
+            "<?php Schema::create('customers', function ($table) { $table->id(); $table->foreignId('tenant_id')->constrained('tenants')->cascadeOnDelete(); $table->foreignId('customer_group_id')->nullable()->constrained('customer_groups')->nullOnDelete(); $table->string('name'); });",
+        );
+        let plan = analyzer.finish();
+        assert_eq!(plan["generated_table_count"], 3, "{plan}");
+        let source = plan["candidate_source"].as_str().unwrap();
+        assert!(source.contains("type TenantId = Id"), "{source}");
+        assert!(
+            source.contains("table customers scoped by tenant_id: TenantId {"),
+            "{source}"
+        );
+        assert!(
+            source.contains("tenant_id: TenantId required on_delete cascade references tenants"),
+            "{source}"
+        );
+        assert!(
+            source.contains("customer_group: Customer_Group? on_delete restrict"),
+            "{source}"
+        );
+        let column = plan["candidates"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|candidate| candidate["table"] == "customers")
+            .unwrap()["columns"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|column| column["source_column_name"] == "tenant_id")
+            .unwrap();
+        assert_eq!(column["zelyra_type"], "TenantId");
+        assert_eq!(column["references_table"], "tenants");
+        assert_eq!(column["relation_status"], "scalar_id_reference");
+        let customers = plan["candidates"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|candidate| candidate["table"] == "customers")
+            .unwrap();
+        assert!(customers["backend_review_notes"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|note| note.as_str().unwrap().contains("candidate uses `RESTRICT`")));
+    }
+
+    #[test]
+    fn only_proven_scoped_tables_restrict_tenant_composite_set_null_relations() {
+        let mut analyzer = SchemaAnalyzer::default();
+        analyzer.scan(
+            "database/migrations/create_tenants.php",
+            "<?php Schema::create('tenants', function ($table) { $table->id(); });",
+        );
+        analyzer.scan(
+            "database/migrations/create_customers.php",
+            "<?php Schema::create('customers', function ($table) { $table->id(); $table->foreignId('tenant_id')->constrained('tenants')->cascadeOnDelete(); $table->string('name'); });",
+        );
+        analyzer.scan(
+            "database/migrations/create_orders.php",
+            "<?php Schema::create('orders', function ($table) { $table->id(); $table->unsignedBigInteger('tenant_id'); $table->foreignId('customer_id')->nullable()->constrained('customers')->nullOnDelete(); });",
+        );
+        analyzer.scan(
+            "database/migrations/create_scoped_orders.php",
+            "<?php Schema::create('scoped_orders', function ($table) { $table->id(); $table->foreignId('tenant_id')->constrained('tenants')->cascadeOnDelete(); $table->foreignId('customer_id')->nullable()->constrained('customers')->nullOnDelete(); });",
+        );
+
+        let plan = analyzer.finish();
+        let candidate = |table: &str| {
+            plan["candidates"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .find(|candidate| candidate["table"] == table)
+                .unwrap()
+        };
+        let order_relation = candidate("orders")["columns"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|column| column["source_column_name"] == "customer_id")
+            .unwrap();
+        assert_eq!(order_relation["on_delete"], "set_null");
+        assert!(!candidate("orders")["backend_review_notes"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|note| note.as_str().unwrap().contains("tenant-safe composite")));
+
+        let scoped_order_relation = candidate("scoped_orders")["columns"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|column| column["source_column_name"] == "customer_id")
+            .unwrap();
+        assert_eq!(scoped_order_relation["on_delete"], "restrict");
+        assert!(candidate("scoped_orders")["backend_review_notes"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|note| note.as_str().unwrap().contains("tenant-safe composite")));
+    }
 
     #[test]
     fn generates_exact_string_integer_boolean_and_date_fields() {
@@ -4063,7 +4259,7 @@ return new class extends Migration {
         assert_eq!(plan["generated_table_count"], 3);
         let source = plan["candidate_source"].as_str().unwrap();
         assert!(source.contains("customer: Customer required on_delete cascade"));
-        assert!(source.contains("template: Template on_delete set_null"));
+        assert!(source.contains("template: Template? on_delete set_null"));
         let invoice = plan["candidates"]
             .as_array()
             .unwrap()
@@ -4352,7 +4548,7 @@ return new class extends Migration {
         assert_eq!(customer["on_delete"], "set_null");
         assert_eq!(customer["nullable"], true);
         let source = plan["candidate_source"].as_str().unwrap();
-        assert!(source.contains("customer: Customer on_delete set_null"));
+        assert!(source.contains("customer: Customer? on_delete set_null"));
         assert!(source.contains("index {\n        customer\n    }"));
     }
 
@@ -4673,7 +4869,7 @@ return new class extends Migration {
                 .contains("target type and delete action are imported")));
         let source = plan["candidate_source"].as_str().unwrap();
         assert!(
-            source.contains("approved_by: User storage_name \"approved_by\" on_delete set_null"),
+            source.contains("approved_by: User? storage_name \"approved_by\" on_delete set_null"),
             "{source}"
         );
         assert!(!source.contains("approved_by_id"), "{source}");
@@ -4760,7 +4956,7 @@ return new class extends Migration {
             .iter()
             .any(|column| column["source_column_name"] == "reference_date"));
         let generated = orders["candidate_source"].as_str().unwrap();
-        assert!(generated.contains("customer: Customer on_delete set_null"));
+        assert!(generated.contains("customer: Customer? on_delete set_null"));
         assert!(generated.contains("reference_date: Date?"));
         assert!(generated.contains("unique {\n        token\n    }"));
         assert!(generated.contains("index {\n        status\n    }"));

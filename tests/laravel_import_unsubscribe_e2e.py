@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import html
+import json
 import os
 import re
 import secrets
@@ -63,10 +64,6 @@ def main() -> int:
     if not binary.is_file():
         print(f"error: Zelyra binary not found: {binary}", file=sys.stderr)
         return 2
-    if shutil.which("docker") is None:
-        print("error: Docker is required for this disposable MariaDB E2E", file=sys.stderr)
-        return 2
-
     environment = {
         key: value
         for key, value in os.environ.items()
@@ -124,7 +121,45 @@ def main() -> int:
             )
             if generated.returncode:
                 return generated.returncode
-            workflow = (scaffold / "src/imported_public_unsubscribe.zyl").read_text(encoding="utf-8")
+            workflow_path = scaffold / "src/imported_public_unsubscribe.zyl"
+            if not workflow_path.is_file():
+                schema = (scaffold / "src/imported_schema.zyl").read_text(encoding="utf-8")
+                readme = (scaffold / "README.md").read_text(encoding="utf-8")
+                routes = subprocess.run(
+                    [str(binary), "routes", str(scaffold / "main.zyl"), "--format", "json"],
+                    env=environment,
+                    capture_output=True,
+                    text=True,
+                    check=False,
+                )
+                if routes.returncode:
+                    print(routes.stderr, file=sys.stderr, end="")
+                    return routes.returncode
+                if "table csv_mailer_suppressions scoped by tenant_id: TenantId" not in schema:
+                    raise RuntimeError("suppression schema lost its statically proven tenant scope")
+                if "Tenant-scoped public workflows require manual implementation" not in readme:
+                    raise RuntimeError("scaffold did not explain the blocked cross-tenant workflow")
+                route_entries = json.loads(routes.stdout).get("routes", [])
+                if any(
+                    isinstance(route, dict)
+                    and route.get("path") in (
+                        "/csv-mailer/abmelden/{token}",
+                        "/csv-mailer/abmelden",
+                    )
+                    for route in route_entries
+                ):
+                    raise RuntimeError("tenant-scoped public SQL workflow was unexpectedly exposed")
+                check = run([str(binary), "check", str(scaffold / "main.zyl")], env=environment)
+                if check.returncode:
+                    return check.returncode
+                print(
+                    "Laravel import tenant-boundary E2E passed: the public unsubscribe workflow remains manual because the source table is tenant-scoped and no authenticated tenant context exists. No database or mail transport was used."
+                )
+                return 0
+            if shutil.which("docker") is None:
+                print("error: Docker is required for this disposable MariaDB E2E", file=sys.stderr)
+                return 2
+            workflow = workflow_path.read_text(encoding="utf-8")
             if 'import "src/imported_layouts.zyl" as imported_layouts' not in workflow:
                 raise RuntimeError("generated unsubscribe module omitted its detected shared layout dependency")
             if "view: ImportedAppShell" not in workflow:

@@ -172,6 +172,71 @@ fn check_program(
         );
     }
     for table in &program.tables {
+        for column in &table.columns {
+            let Some(target_name) = column.references.as_deref() else {
+                continue;
+            };
+            let Some(target) = program
+                .tables
+                .iter()
+                .find(|candidate| candidate.name == target_name)
+            else {
+                errors.push(TypeError {
+                    code: "E-REF-001",
+                    message: format!(
+                        "column `{}.{}` references unknown table `{target_name}`",
+                        table.name, column.name
+                    ),
+                    span: column.span,
+                });
+                continue;
+            };
+            let Some(target_id) = target
+                .columns
+                .iter()
+                .find(|candidate| candidate.name == "id" && candidate.primary_key)
+            else {
+                errors.push(TypeError {
+                    code: "E-REF-001",
+                    message: format!(
+                        "referenced table `{target_name}` must declare `id` as its primary key"
+                    ),
+                    span: column.span,
+                });
+                continue;
+            };
+            let source_type = expand_type_aliases(&column.ty, &aliases).ok();
+            let source_type = match source_type {
+                Some(Type::Option(inner)) => Some(*inner),
+                other => other,
+            };
+            let target_type = expand_type_aliases(&target_id.ty, &aliases).ok();
+            if source_type != Some(Type::Named("Id".into()))
+                || target_type != Some(Type::Named("Id".into()))
+            {
+                errors.push(TypeError {
+                    code: "E-REF-001",
+                    message: format!(
+                        "column `{}.{}` and `{target_name}.id` must use ID-compatible types to declare a database reference",
+                        table.name, column.name
+                    ),
+                    span: column.span,
+                });
+            }
+            if matches!(column.ty, Type::Named(ref name) if program.tables.iter().any(|candidate| candidate.name == *name))
+            {
+                errors.push(TypeError {
+                    code: "E-REF-001",
+                    message: format!(
+                        "relation-typed column `{}.{}` cannot also declare `references`; use either a relation type or an ID-typed column with an explicit reference",
+                        table.name, column.name
+                    ),
+                    span: column.span,
+                });
+            }
+        }
+    }
+    for table in &program.tables {
         let Some(scope) = &table.tenant_scope else {
             continue;
         };
