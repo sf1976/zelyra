@@ -3506,7 +3506,7 @@ fn multipart_upload_commits_reference_and_removes_file_after_sql_rollback() {
         &render_crud_detail_with_actions(
             &crud,
             &["document"],
-            &[file_ref.clone()],
+            std::slice::from_ref(file_ref),
             &id,
             CrudUiActions {
                 create: false,
