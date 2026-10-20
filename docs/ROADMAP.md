@@ -25,7 +25,7 @@ telemetry, explicit effects, portable data, resource discipline, and honest
 proof claims guide every phase. The [manifesto](MANIFESTO.md) states the
 principles; the roadmap below tracks what is actually implemented.
 
-The current stable release is 1.2.28, published at https://github.com/sf1976/zelyra/releases/tag/v1.2.28. **Current milestones** is the source of
+The current stable release is 1.2.29, published at https://github.com/sf1976/zelyra/releases/tag/v1.2.29. **Current milestones** is the source of
 near-term commitments. Older numbered release sections below are retained as
 historical planning and evidence; they do not by themselves define current
 release targets. Longer-term ideas remain in the post-1.0 evolution section.
@@ -360,7 +360,7 @@ security and compatibility gates stated for that milestone.
   was added later as an experimental 1.2.26 follow-up and uses the same grant
   checks. Released as [`v1.2.28`](https://github.com/sf1976/zelyra/releases/tag/v1.2.28); release gates passed. The broader security/permission matrix remains an open follow-up. See the
   [1.2.28 work plan](release-plans/1.2.28-typed-crud-actions.en.md).
-- [~] **1.2.29 — bounded secure file upload foundation:** Architecture inventory
+- [x] **1.2.29 — bounded secure file upload foundation (released):** Architecture inventory
   is complete. The HTTP server now reads bounded byte requests and sends valid
   multipart bodies through the decoder; the existing public text `Request` API
   and 1 MiB global limit remain unchanged. Multipart receives HTTP 415 on
@@ -445,7 +445,10 @@ security and compatibility gates stated for that milestone.
   database, configuration, and secrets;
   coordinated whole-application backup remains a separate follow-up, with the
   database backed up/restored separately while Zelyra is stopped. See the
-  [1.2.29 secure upload plan](release-plans/1.2.29-secure-uploads.en.md).
+  [1.2.29 secure upload plan](release-plans/1.2.29-secure-uploads.en.md). Released as
+  [`v1.2.29`](https://github.com/sf1976/zelyra/releases/tag/v1.2.29); all
+  release gates passed, and Linux/Windows artifacts and checksums were
+  published.
 - [~] **1.2.30 — Laravel import workflow coverage:** Standalone forms now
   support checked local routes with captured path parameters, a compiler-checked
   read-only `verify sql<T>` gate before GET rendering, and `require_match` for
@@ -483,8 +486,8 @@ security and compatibility gates stated for that milestone.
   compiler status, and behavior-test status. The source-only integration test
   checks it against the source-file plan and generation manifest and confirms
   generation did not claim workflow runtime coverage. Its latest run against
-  `/opt/siedelmann-laravel/app` accounted for 565 PHP files and 2,229 findings
-  (1,367 manual/unresolved and 862 partial).
+  `/opt/siedelmann-laravel/app` accounted for 572 PHP files and 2,263 findings
+  (1,387 manual/unresolved and 876 partial).
   The source-only full-project check also asserts the generated native
   login/logout and unsubscribe routes, validates the package lock offline, and
   runs module plan for pkg:imported_identity to verify its package identity
@@ -509,8 +512,8 @@ security and compatibility gates stated for that milestone.
   the script strips ambient database URLs and removes its temporary scaffold.
   This check does not run the generated HTTP workflow or connect to a database.
   The scaffold
-  remains an incomplete migration: the latest source-only rerun reports 2,229
-  findings (1,367 manual/unresolved and 862 partial across 565 source files).
+  remains an incomplete migration: the latest source-only rerun reports 2,263
+  findings (1,387 manual/unresolved and 876 partial across 572 source files).
   These are analysis findings, not a migrated-feature count.
   Laravel, Composer packages, PHP controllers, Blade runtime files, and source
   credentials are not copied. The source-only integration check compares an

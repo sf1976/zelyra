@@ -27,7 +27,7 @@ Ressourcendisziplin und ehrliche Beweisaussagen leiten jede Phase. Das
 [Manifest](MANIFESTO.de.md) beschreibt die Prinzipien; die Roadmap kennzeichnet
 den tatsächlich implementierten Stand.
 
-Das aktuelle stabile Release ist 1.2.28 und wurde unter https://github.com/sf1976/zelyra/releases/tag/v1.2.28 veröffentlicht. **Aktuelle Meilensteine** ist die
+Das aktuelle stabile Release ist 1.2.29 und wurde unter https://github.com/sf1976/zelyra/releases/tag/v1.2.29 veröffentlicht. **Aktuelle Meilensteine** ist die
 verbindliche Übersicht der nächsten Vorhaben. Ältere, nummerierte Release-
 Abschnitte bleiben als historische Planung und Nachweise erhalten; sie legen
 für sich keine aktuellen Releaseziele fest. Langfristige Ideen stehen im
@@ -399,7 +399,7 @@ abgeschlossen.
   Release-Gates bestanden. Die umfassendere Berechtigungs-/Sicherheitsmatrix
   bleibt ein offener Folgepunkt. Siehe den
   [Arbeitsplan 1.2.28](release-plans/1.2.28-typed-crud-actions.de.md).
-- [~] **1.2.29 — begrenzte sichere Datei-Uploads:** Die Architekturaufnahme ist
+- [x] **1.2.29 — begrenzte sichere Datei-Uploads (veröffentlicht):** Die Architekturaufnahme ist
   abgeschlossen. Der HTTP-Server liest Requests jetzt begrenzt als Bytes und
   leitet gültige Multipart-Bodies durch den Decoder; die öffentliche Text-
   `Request`-API und das globale Limit von 1 MiB bleiben unverändert. Routen
@@ -492,6 +492,9 @@ abgeschlossen.
   Datenbank muss separat und bei gestopptem Zelyra gesichert/wiederhergestellt
   werden.
   Siehe den [Plan für sichere Uploads 1.2.29](release-plans/1.2.29-secure-uploads.de.md).
+  Veröffentlicht als [`v1.2.29`](https://github.com/sf1976/zelyra/releases/tag/v1.2.29);
+  alle Release-Gates bestanden, Linux-/Windows-Artefakte und Prüfsummen
+  veröffentlicht.
 - [~] **1.2.30 — Abdeckung echter Laravel-Migrationsabläufe:** Standalone-Forms
   unterstützen geprüfte lokale Routen mit erfassten Pfadparametern, ein
   compilergeprüftes schreibgeschütztes `verify sql<T>` vor dem GET-Rendern und
@@ -534,8 +537,8 @@ abgeschlossen.
   und Laufzeitteststatus trennt. Der Source-Only-Integrationstest gleicht den
   Bericht mit Dateiplan und Generierungsmanifest ab und bestätigt, dass aus
   der Generierung keine Laufzeitabdeckung abgeleitet wird. Der letzte Lauf
-  gegen `/opt/siedelmann-laravel/app` erfasste 565 PHP-Dateien und 2.229
-  Befunde (1.367 manuell/ungelöst und 862 teilweise unterstützt).
+  gegen `/opt/siedelmann-laravel/app` erfasste 572 PHP-Dateien und 2.263
+  Befunde (1.387 manuell/ungelöst und 876 teilweise unterstützt).
   Die Quellprüfung des Gesamtprojekts bestätigt zudem die generierten
   Login-/Logout- und Abmelderouten, validiert den Paket-Lock offline und
   führt module plan für pkg:imported_identity aus, einschließlich
