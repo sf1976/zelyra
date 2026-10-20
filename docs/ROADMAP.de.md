@@ -701,9 +701,9 @@ keine Produktionsreife.
   Versionsmatrix, Tutorial-Kompatibilität und Veröffentlichung sind noch
   offen. Eine lückenlose Vergabe wird nicht garantiert.
 - [ ] **1.2.31 Rest — mandantenbezogene Belegnummernkreise:** PostgreSQL
-  zusätzlich auf der unterstützten Versionsmatrix prüfen, Laufzeit- und
-  Migrationsverhalten für SQLite mit stabilem Diagnosecode prüfen, Release-
-  Gates abschließen und die Kompatibilität mit der bisherigen
+  zusätzlich auf der unterstützten Versionsmatrix prüfen, die stabile
+  Schema-Prüfung mit `E-DB-001` für SQLite-`auto_sequence` in der Release-Suite
+  abdecken, Release-Gates abschließen und die Kompatibilität mit der bisherigen
   `invoice_number`-Vergabe prüfen. Konkurrenz, Rollback, Mandantentrennung,
   Eindeutigkeit und Formatprüfung bleiben erforderlich; nicht unterstützte
   Backends müssen ausdrücklich abgewiesen werden.

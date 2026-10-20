@@ -646,8 +646,9 @@ syntax or a unit test alone does not establish production readiness.
   tutorial compatibility and publication remain open. No gapless numbering
   guarantee is made.
 - [ ] **1.2.31 remaining — tenant-aware document number series:** Verify the
-  supported version matrix, test SQLite runtime and migration behavior with a
-  stable diagnostic, complete release gates, and audit compatibility with
+  supported version matrix, keep the schema-time `E-DB-001` rejection for
+  SQLite `auto_sequence` covered in the release suite, complete release gates,
+  and audit compatibility with
   legacy `invoice_number` generation. Retain concurrency, rollback, tenant
   isolation, uniqueness and format checks; reject unsupported backends
   explicitly.
