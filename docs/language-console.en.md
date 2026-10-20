@@ -20,6 +20,8 @@ Each input is parsed, typechecked, and executed independently. Successful bindin
 => 30
 ```
 
+Records use a structured multiline display. Decimal values keep a visible type marker in the pretty-printer, for example `gross_amount: 119 [Decimal]`; the display does not invent a fractional scale that the runtime value does not retain.
+
 In a terminal, Reedline provides ANSI colors for keywords, strings, and numbers; history at `~/.zelyra_history`; tab completion for project functions, tables, records, fields, and common standard functions; and `>>`/`...` prompts. `NO_COLOR` and `ZELYRA_COLOR=never` disable color. Pipe input omits prompts. Inputs containing quotes, SQL, or recognizable secret keywords are excluded from saved history. Syntax, type, and runtime failures report a two-line diagnostic with a code, source location, and message, and leave the next input available.
 
 ## Commands

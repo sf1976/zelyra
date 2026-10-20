@@ -20,6 +20,8 @@ Eingaben werden einzeln geparst, typgeprüft und ausgeführt. Erfolgreiche Bindu
 => 30
 ```
 
+Datensätze werden strukturiert mehrzeilig dargestellt. Decimal-Werte behalten im Pretty-Printer eine sichtbare Typmarkierung, zum Beispiel `gross_amount: 119 [Decimal]`; die Anzeige ergänzt keine nicht gespeicherte Nachkommastellenskala.
+
 Im interaktiven Terminal bietet Reedline ANSI-Farben für Schlüsselwörter, Zeichenketten und Zahlen, Verlauf in `~/.zelyra_history`, Tab-Vervollständigung für Projektfunktionen, Tabellen, Records, Felder und häufige Standardfunktionen sowie `>>`/`...`-Prompts. `NO_COLOR` und `ZELYRA_COLOR=never` schalten Farben ab. Bei Pipe-Eingabe werden die Prompts ausgelassen. Eingaben mit Anführungszeichen, SQL oder erkennbaren Geheimnisbegriffen werden nicht in der Historie gespeichert. Syntax-, Typ- und Laufzeitfehler melden eine zweizeilige Diagnose mit Code sowie Quellposition und Meldung; die nächste Eingabe kann danach fortgesetzt werden.
 
 ## Befehle

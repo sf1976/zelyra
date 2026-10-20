@@ -678,6 +678,9 @@ fn pretty_value(value: &RuntimeValue, depth: usize) -> String {
     }
     match value {
         RuntimeValue::String(value) => format!("{:?}", value),
+        RuntimeValue::Decimal(value) => {
+            format!("{} [Decimal]", RuntimeValue::Decimal(*value).output())
+        }
         RuntimeValue::Object {
             type_name, fields, ..
         } => {
@@ -864,6 +867,25 @@ mod tests {
         assert_eq!(
             pretty_value(&value, 0),
             "Customer {\n  id: 7,\n  name: \"A\"\n}"
+        );
+    }
+
+    #[test]
+    fn decimal_values_keep_their_type_visible_in_repl_output() {
+        assert_eq!(
+            pretty_value(&Value::Decimal(1_190_000_000), 0),
+            "1.19 [Decimal]"
+        );
+        let value = Value::Object {
+            type_name: "Invoice".into(),
+            type_args: Vec::new(),
+            fields: [("gross_amount".into(), Value::Decimal(119_000_000_000))]
+                .into_iter()
+                .collect(),
+        };
+        assert_eq!(
+            pretty_value(&value, 0),
+            "Invoice {\n  gross_amount: 119 [Decimal]\n}"
         );
     }
 
