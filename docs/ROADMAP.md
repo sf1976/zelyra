@@ -605,12 +605,23 @@ These milestones are in progress and unreleased. Items with `[~]` are partially 
 
 ### 🧪 [~] Business CRUD completion before 1.3.0
 
-The five invoice/business hurdles reported during the 1.2.30 review are now
-tracked as release work. Tenant scoping for the existing invoice-number
-collision lookup and localization of generated master-detail legends are fixed
-in the 1.2.30 candidate. The first number-series implementation is present on
-the current unreleased branch and remains under release-level verification;
-computed fields and generated uploads remain open:
+The five invoice/business hurdles reported during the 1.2.30 review are all
+explicit release work before 1.3.0. Their implementation is split into small
+releases so each database, compiler, rendering, and security boundary can be
+verified independently. None of the current branch work is a published
+release. The current verified status is:
+
+| Reported hurdle | Current status | Remaining acceptance work |
+| --- | --- | --- |
+| Reusable sequential document numbers | Implemented in the 1.2.31 work: declarative `auto_sequence`, transactional counters, tenant/year scope, and generated CRUD protection from forged values. | Supported-backend/version matrix, SQLite diagnostic and migration behavior, legacy invoice compatibility, full release gates. No gapless-number guarantee. |
+| Tenant scope for invoice-number collision checks | The existing invoice-number path and the generic sequence allocator both bind the authenticated tenant. MariaDB integration verifies independent tenant counters and atomic allocation. | Keep the regression coverage in the release suite and verify all supported backends. |
+| Server-computed business fields | Implemented for generated CRUD and validated API POST/PUT/PATCH paths, with dependency/type checks and exact Decimal rounding. | Complete backend and AST/MIR/bytecode parity gates; PATCH does not merge omitted required fields from the stored row. |
+| Localized master-detail labels | The HTML-escaped locale markers are resolved for child-collection legends; a regression test covers the escaped rendering path. | Preserve the test in the release gates and verify locale fallback behavior in the tutorial. |
+| File attachments in generated CRUD | Implemented using checked `FileRef` metadata, existing private storage, generated upload fields, and authorized downloads. MariaDB tests cover persistence, rollback cleanup, and dispatcher-level tenant denial. | Full authenticated cross-tenant HTTP and browser checks, plus coordinated application backup/recovery; these are not claimed complete. |
+
+Do not mark this workstream complete until every remaining acceptance item in
+the table and the detailed release plans below passes. In particular, feature
+syntax or a unit test alone does not establish production readiness.
 
 - [~] **1.2.31 — tenant-aware document number series:** The branch now parses
   `auto_sequence("KD-{0001}")` and `auto_sequence("AG-{year}-{0001}")`, adds

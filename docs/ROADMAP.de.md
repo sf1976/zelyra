@@ -659,12 +659,24 @@ Diese Meilensteine sind in Arbeit und noch nicht veröffentlicht. Bereits teilwe
 
 ### 🧪 [~] Geschäfts-CRUD vor 1.3.0 abschließen
 
-Die fünf im 1.2.30-Review gemeldeten Hürden für Geschäftsbelege sind jetzt
-Release-Arbeit. Die Mandantenfilterung der bestehenden Rechnungsnummern-
-Kollisionssuche und die Lokalisierung generierter Master-Detail-Legenden sind
-im 1.2.30-Kandidaten korrigiert. Der erste Nummernkreis-Baustein ist im
-aktuellen unveröffentlichten Branch implementiert und wird noch releaseweit
-geprüft; berechnete Felder und generierte Uploads sind weiterhin offen:
+Alle fünf im 1.2.30-Review gemeldeten Hürden für Geschäftsbelege sind
+verbindliche Release-Arbeit vor 1.3.0. Die Implementierung ist auf kleine
+Releases verteilt, damit Datenbank-, Compiler-, Rendering- und Sicherheits-
+Grenzen unabhängig geprüft werden können. Nichts davon ist bereits als
+aktueller Branch-Stand veröffentlicht. Der derzeit verifizierte Stand:
+
+| Gemeldete Hürde | Aktueller Stand | Verbleibende Abnahme |
+| --- | --- | --- |
+| Wiederverwendbare fortlaufende Belegnummern | In der 1.2.31-Arbeit implementiert: deklaratives `auto_sequence`, transaktionale Zähler, Mandanten-/Jahresbereich und Schutz generierter CRUD-Routen vor gefälschten Eingaben. | Unterstützte Backend-/Versionsmatrix, SQLite-Diagnose und Migration, Kompatibilität mit alter Rechnungsnummernvergabe sowie vollständige Release-Gates. Lückenlosigkeit wird nicht garantiert. |
+| Mandantenfilter der Rechnungsnummern-Kollisionssuche | Der bisherige Rechnungsnummernpfad und der generische Zähler binden den authentifizierten Mandanten. MariaDB-Integration prüft getrennte Zähler und atomare Vergabe. | Regressionstests in Release-Gates erhalten und unterstützte Backends verifizieren. |
+| Serverseitig berechnete Geschäftsfelder | Für generiertes CRUD und geprüfte API-POST-/PUT-/PATCH-Pfade implementiert, einschließlich Abhängigkeits-/Typprüfung und exakter Decimal-Rundung. | Backend- sowie AST-/MIR-/Bytecode-Paritätsabnahme; PATCH übernimmt ausgelassene Pflichtfelder nicht aus dem bestehenden Datensatz. |
+| Lokalisierte Master-Detail-Beschriftungen | HTML-escaped Locale-Marker werden für Kindlisten-Legenden aufgelöst; ein Regressionstest deckt diesen Rendering-Pfad ab. | Test in Release-Gates behalten und Fallback-Verhalten im Tutorial prüfen. |
+| Datei-Anhänge im generierten CRUD | Mit geprüften `FileRef`-Metadaten, bestehendem privaten Speicher, generierten Uploadfeldern und autorisierten Downloads implementiert. MariaDB-Tests prüfen Persistenz, Rollback-Bereinigung und Mandantenverweigerung im Dispatcher. | Vollständiger authentifizierter Cross-Tenant-HTTP- und Browser-Test sowie koordinierte Anwendungssicherung/-wiederherstellung. Diese Punkte gelten nicht als abgeschlossen. |
+
+Dieser Arbeitsbereich ist erst abgeschlossen, wenn alle verbleibenden
+Abnahmen aus der Tabelle und den detaillierten Release-Plänen darunter
+bestanden sind. Sprachsyntax oder ein einzelner Unit-Test belegen für sich
+keine Produktionsreife.
 
 - [~] **1.2.31 — mandantenbezogene Belegnummernkreise:** Der Branch parst
   `auto_sequence("KD-{0001}")` und `auto_sequence("AG-{year}-{0001}")`, nimmt
