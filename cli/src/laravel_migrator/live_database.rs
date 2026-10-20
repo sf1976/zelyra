@@ -250,6 +250,10 @@ pub(super) fn compare_candidates(live: &Value, generation: &Value) -> Value {
         .as_array()
         .cloned()
         .unwrap_or_default();
+    let candidates_by_name = candidates
+        .iter()
+        .filter_map(|candidate| Some((candidate["table"].as_str()?, candidate)))
+        .collect::<BTreeMap<_, _>>();
     let mut compared_tables = Vec::new();
     let mut differences = Vec::new();
     let mut unclassified_types = Vec::new();
@@ -423,10 +427,17 @@ pub(super) fn compare_candidates(live: &Value, generation: &Value) -> Value {
             let relation_table = expected["relation_table"].as_str().unwrap_or_default();
             let relation_column = expected["relation_target_column"].as_str().unwrap_or("id");
             let delete_action = expected["on_delete"].as_str();
+            let (expected_source_columns, expected_target_columns) = expected_foreign_key_columns(
+                candidate,
+                candidates_by_name.get(relation_table).copied(),
+                expected,
+                relation_column,
+            );
             let found = actual_foreign_keys.iter().any(|actual| {
-                actual["column"].as_str() == Some(physical_name)
+                actual_foreign_key_columns(actual, "columns", "column") == expected_source_columns
                     && actual["referenced_table"].as_str() == Some(relation_table)
-                    && actual["referenced_column"].as_str() == Some(relation_column)
+                    && actual_foreign_key_columns(actual, "referenced_columns", "referenced_column")
+                        == expected_target_columns
                     && delete_action.is_none_or(|expected_action| {
                         delete_action_matches(
                             expected_action,
@@ -441,6 +452,8 @@ pub(super) fn compare_candidates(live: &Value, generation: &Value) -> Value {
                     "kind": "missing_or_different_live_foreign_key",
                     "expected_table": relation_table,
                     "expected_column": relation_column,
+                    "expected_columns": expected_source_columns.clone(),
+                    "expected_referenced_columns": expected_target_columns.clone(),
                     "expected_on_delete": delete_action
                 }));
             }
@@ -463,7 +476,7 @@ pub(super) fn compare_candidates(live: &Value, generation: &Value) -> Value {
             "table_presence", "column_presence", "nullability", "primary_key",
             "default_presence", "known_static_default_value_equivalence",
             "known_sql_type_equivalence", "indexes", "uniques",
-            "foreign_key_source_column_target_table_target_column_delete_action"
+            "foreign_key_source_columns_target_table_target_columns_delete_action"
         ],
         "not_compared": ["engine", "charset", "collation", "triggers"],
         "unclassified_defaults": unclassified_defaults,
@@ -476,6 +489,72 @@ pub(super) fn compare_candidates(live: &Value, generation: &Value) -> Value {
         "differences": differences,
         "unmodeled_live_tables": unmodeled_live_tables
     })
+}
+
+fn expected_foreign_key_columns(
+    source: &Value,
+    target: Option<&Value>,
+    relation: &Value,
+    target_column: &str,
+) -> (Vec<String>, Vec<String>) {
+    let relation_column = physical_column_name(relation)
+        .unwrap_or_else(|| relation["name"].as_str().unwrap_or_default());
+    let mut source_columns = Vec::new();
+    let mut target_columns = Vec::new();
+
+    if let (Some(source_scope), Some(target_scope)) = (
+        tenant_scope_column(source),
+        target.and_then(tenant_scope_column),
+    ) {
+        let matching_scope_types = source_scope["zelyra_type"]
+            .as_str()
+            .zip(target_scope["zelyra_type"].as_str())
+            .is_some_and(|(source, target)| source == target);
+        if matching_scope_types {
+            source_columns.push(
+                physical_column_name(source_scope)
+                    .unwrap_or_else(|| source_scope["name"].as_str().unwrap_or_default())
+                    .to_owned(),
+            );
+            target_columns.push(
+                physical_column_name(target_scope)
+                    .unwrap_or_else(|| target_scope["name"].as_str().unwrap_or_default())
+                    .to_owned(),
+            );
+        }
+    }
+
+    source_columns.push(relation_column.to_owned());
+    target_columns.push(target_column.to_owned());
+    (source_columns, target_columns)
+}
+
+fn tenant_scope_column(candidate: &Value) -> Option<&Value> {
+    candidate["columns"].as_array()?.iter().find(|column| {
+        column["name"] == "tenant_id"
+            && column["nullable"] == false
+            && column["references_table"] == "tenants"
+    })
+}
+
+fn actual_foreign_key_columns(key: &Value, list_key: &str, scalar_key: &str) -> Vec<String> {
+    key[list_key]
+        .as_array()
+        .filter(|columns| !columns.is_empty())
+        .map(|columns| {
+            columns
+                .iter()
+                .filter_map(Value::as_str)
+                .map(str::to_owned)
+                .collect()
+        })
+        .unwrap_or_else(|| {
+            key[scalar_key]
+                .as_str()
+                .map(str::to_owned)
+                .into_iter()
+                .collect()
+        })
 }
 
 /// Remove live default literals after comparison so a schema report never
@@ -1195,6 +1274,79 @@ mod tests {
             .unwrap()
             .iter()
             .any(|item| item == "known_sql_type_equivalence"));
+    }
+
+    #[test]
+    fn compares_complete_tenant_scoped_composite_foreign_keys() {
+        let generation = json!({"candidates":[
+            {
+                "table":"customers",
+                "columns":[
+                    {"name":"id","source_column_name":"id","nullable":false,"default":null,"relation_status":"not_a_foreign_key"},
+                    {"name":"tenant_id","source_column_name":"tenant_id","zelyra_type":"TenantId","nullable":false,"references_table":"tenants","relation_status":"scalar_id_reference"}
+                ],"indexes":[],"uniques":[]
+            },
+            {
+                "table":"orders",
+                "columns":[
+                    {"name":"id","source_column_name":"id","nullable":false,"default":null,"relation_status":"not_a_foreign_key"},
+                    {"name":"tenant_id","source_column_name":"tenant_id","zelyra_type":"TenantId","nullable":false,"references_table":"tenants","relation_status":"scalar_id_reference"},
+                    {"name":"customer","source_column_name":"customer_id","nullable":true,"default":null,"relation_status":"resolved","relation_table":"customers","relation_target_column":"id","on_delete":"Restrict"}
+                ],"indexes":[],"uniques":[]
+            }
+        ]});
+        let live = json!({"tables":[
+            {
+                "name":"customers",
+                "columns":[
+                    {"name":"id","nullable":false,"default_present":false},
+                    {"name":"tenant_id","nullable":false,"default_present":false}
+                ],"indexes":[],"uniques":[],"foreign_keys":[]
+            },
+            {
+                "name":"orders",
+                "columns":[
+                    {"name":"id","nullable":false,"default_present":false},
+                    {"name":"tenant_id","nullable":false,"default_present":false},
+                    {"name":"customer_id","nullable":true,"default_present":false}
+                ],"indexes":[],"uniques":[],"foreign_keys":[{
+                    "columns":["tenant_id","customer_id"],
+                    "referenced_table":"customers",
+                    "referenced_columns":["tenant_id","id"],
+                    "on_delete":"Restrict"
+                }]
+            }
+        ]});
+
+        let comparison = compare_candidates(&live, &generation);
+        assert!(!comparison["differences"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|difference| difference["kind"] == "missing_or_different_live_foreign_key"));
+
+        let mut simple_live_fk = live.clone();
+        simple_live_fk["tables"][1]["foreign_keys"] = json!([{
+            "column":"customer_id",
+            "referenced_table":"customers",
+            "referenced_column":"id",
+            "on_delete":"Restrict"
+        }]);
+        let comparison = compare_candidates(&simple_live_fk, &generation);
+        let difference = comparison["differences"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|difference| difference["kind"] == "missing_or_different_live_foreign_key")
+            .expect("a single-column relation must not satisfy the scoped composite constraint");
+        assert_eq!(
+            difference["expected_columns"],
+            json!(["tenant_id", "customer_id"])
+        );
+        assert_eq!(
+            difference["expected_referenced_columns"],
+            json!(["tenant_id", "id"])
+        );
     }
 
     #[test]

@@ -1,5 +1,69 @@
 ## Unreleased
 
+## 1.2.31 — 2026-10-20
+
+- Add declared, tenant-aware business number series for generated CRUD using
+  `auto_sequence("KD-{0001}")` and optional UTC-year scopes. Allocation is
+  transaction-protected, ignores submitted values, checks existing values,
+  and is explicitly not gapless. MariaDB and PostgreSQL are supported;
+  SQLite is rejected for runtime allocation. / Deklarierte,
+  mandantenbezogene Geschäftsnummernkreise für generiertes CRUD mit
+  `auto_sequence("KD-{0001}")` und optionalem UTC-Jahresscope ergänzen. Die
+  Vergabe ist transaktionsgeschützt, ignoriert übermittelte Werte, prüft
+  vorhandene Nummern und ist ausdrücklich nicht lückenlos. MariaDB und
+  PostgreSQL werden unterstützt; SQLite wird für die Laufzeitvergabe
+  abgewiesen.
+- Read MariaDB primary-key status from actual primary-key constraints instead
+  of the ambiguous `COLUMN_KEY` summary, preventing composite unique indexes
+  from producing false schema drift. / Primärschlüsselstatus in MariaDB aus
+  den tatsächlichen Primärschlüssel-Constraints statt der mehrdeutigen
+  `COLUMN_KEY`-Zusammenfassung lesen, damit zusammengesetzte Unique-Indizes
+  keinen falschen Schema-Drift erzeugen.
+
+## 1.2.30 — 2026-10-20
+
+- Add typed scalar ID references with `references <table>`, preserving nominal
+  tenant IDs while generating database-enforced foreign keys. Tenant-scoped
+  references use composite tenant keys and reject cross-tenant links. / Typisierte
+  skalare ID-Referenzen mit `references <table>` ergänzen; nominale
+  Mandanten-IDs bleiben erhalten und Fremdschlüssel werden in der Datenbank
+  erzwungen. Mandantenbezogene Referenzen nutzen zusammengesetzte Schlüssel
+  und weisen mandantenübergreifende Verknüpfungen zurück.
+- Extend the Laravel website importer with checked token routes, explicit
+  tenant-aware schema references, source-file coverage reporting, and
+  compiler-checked reusable package output. This remains a partial migration;
+  unsupported source behavior is reported for review. / Den Laravel-Webseiten-
+  Importer um geprüfte Token-Routen, ausdrückliche mandantenbewusste
+  Schema-Referenzen, Quellcodedatei-Abdeckungsberichte und compilergeprüfte
+  wiederverwendbare Paketausgabe erweitern. Die Migration bleibt unvollständig;
+  nicht unterstütztes Quellverhalten wird zur Prüfung ausgewiesen.
+- Scope generated invoice-number collision checks and updates to the active
+  tenant, and preserve locale markers while escaping generated master-detail
+  legends so they translate correctly. / Kollisionstests und Aktualisierung
+  automatisch vergebener Rechnungsnummern auf den aktiven Mandanten
+  beschränken und Locale-Marker beim Escaping generierter Master-Detail-
+  Legenden erhalten, damit sie korrekt übersetzt werden.
+- Update locked TLS certificate-validation and root-store dependencies to
+  patched RustSec-advisory versions. / Die gesperrten Abhängigkeiten zur
+  TLS-Zertifikatsprüfung und zum Zertifikatsspeicher auf gegen die
+  RustSec-Advisories behobene Versionen aktualisieren.
+
+
+## 1.2.29 — 2026-10-20
+
+- Add bounded multipart uploads for compiler-checked `File` form fields,
+  private tenant-scoped storage with opaque `FileRef` values, authorized
+  downloads, replacement/deletion cleanup, and preview-first orphan cleanup.
+  Add checksum-verified file-storage backup and restore. Storage creation is
+  currently supported on Unix only; the file backup excludes the database,
+  project configuration, and secrets. / Begrenzte Multipart-Uploads für
+  compilergeprüfte `File`-Formularfelder, privaten mandantengebundenen Speicher
+  mit opaken `FileRef`-Werten, geschützte Downloads, Bereinigung bei
+  Ersetzung/Löschung und vorschaugestützte Bereinigung verwaister Dateien
+  ergänzen. Prüfsummenvalidiertes Backup und Restore des Dateispeichers
+  ergänzen. Speicheranlage wird derzeit nur unter Unix unterstützt; das
+  Dateispeicher-Backup umfasst weder Datenbank noch Projektkonfiguration oder
+  Geheimnisse.
 
 ## 1.2.28 — 2026-10-20
 

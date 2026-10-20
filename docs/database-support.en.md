@@ -91,3 +91,19 @@ cannot preserve `ON DELETE SET NULL`, because that would also clear the
 required tenant key; the importer marks the generated `RESTRICT` behavior as a
 reviewed difference rather than claiming equivalence. See the
 [1.2.30 work plan](release-plans/1.2.30-typed-schema-references.en.md).
+
+## Number series in generated CRUD (1.2.31 development)
+
+The unreleased development branch lets a string column declare a number series,
+for example `customer_number: String(32) required
+auto_sequence("KD-{0001}")` or `quote_number: String(40) required
+auto_sequence("AG-{year}-{0001}")`. `{0001}` sets the zero-padded counter
+width; `{year}` uses the UTC calendar year and starts a separate counter each
+year. Schema planning includes the internally managed
+`_zelyra_number_sequences` table. Projects must review and deliberately apply
+that schema change before create requests use these fields. Generated create
+forms ignore forged client values; edit forms omit the number. MariaDB and
+PostgreSQL 16 have been tested for transactions, rollback, tenant separation,
+existing-value collisions, and concurrent allocation. SQLite is rejected for
+this runtime feature. Numbering is not guaranteed gapless: voided records must
+not silently reuse numbers. This syntax is not available in Zelyra 1.2.30.

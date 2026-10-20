@@ -3,6 +3,317 @@ use std::net::TcpListener;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
 #[test]
+fn number_series_formats_render_literal_year_and_padded_counter() {
+    assert_eq!(
+        render_number_series_value("KD-{0001}", 7, "2026").as_deref(),
+        Some("KD-0007")
+    );
+    assert_eq!(
+        render_number_series_value("AG-{year}-{0001}", 42, "2026").as_deref(),
+        Some("AG-2026-0042")
+    );
+    assert!(render_number_series_value("KD-{counter}", 1, "2026").is_none());
+    assert!(render_number_series_value("KD-}", 1, "2026").is_none());
+}
+
+#[test]
+#[ignore = "requires ZELYRA_TEST_DATABASE_URL pointing to a disposable MariaDB or PostgreSQL database"]
+fn number_series_allocator_is_atomic_and_scoped_per_tenant() {
+    let database_url = std::env::var("ZELYRA_TEST_DATABASE_URL")
+        .expect("the ignored integration test requires a disposable database URL");
+    let is_postgres = zelyra_database::is_postgres_url(&database_url);
+    let suffix = std::process::id();
+    let table = format!("zelyra_series_test_{suffix}");
+    let series = format!("{table}.number");
+    zelyra_database::execute_query(
+        &database_url,
+        if is_postgres {
+            "CREATE TABLE IF NOT EXISTS \"_zelyra_number_sequences\" (\"series_key\" VARCHAR(255) NOT NULL, \"scope_key\" VARCHAR(255) NOT NULL, \"next_value\" BIGINT NOT NULL, CONSTRAINT \"uq_zelyra_number_series_scope\" UNIQUE (\"series_key\", \"scope_key\"))"
+        } else {
+            "CREATE TABLE IF NOT EXISTS `_zelyra_number_sequences` (`series_key` VARCHAR(191) NOT NULL, `scope_key` VARCHAR(191) NOT NULL, `next_value` BIGINT NOT NULL, CONSTRAINT `uq_zelyra_number_series_scope` UNIQUE (`series_key`, `scope_key`)) ENGINE=InnoDB"
+        },
+        Vec::new(),
+    )
+    .unwrap();
+    zelyra_database::execute_query(
+        &database_url,
+        &if is_postgres {
+            format!("CREATE TABLE {} ({} BIGSERIAL PRIMARY KEY, {} BIGINT NOT NULL, {} VARCHAR(32) NOT NULL, CONSTRAINT {} UNIQUE ({}, {}))", quote_ident(&table, true), quote_ident("id", true), quote_ident("tenant_id", true), quote_ident("number", true), quote_ident("uq_test_tenant_number", true), quote_ident("tenant_id", true), quote_ident("number", true))
+        } else {
+            format!("CREATE TABLE {} ({} BIGINT PRIMARY KEY AUTO_INCREMENT, {} BIGINT NOT NULL, {} VARCHAR(32) NOT NULL, CONSTRAINT {} UNIQUE ({}, {})) ENGINE=InnoDB", quote_ident(&table, false), quote_ident("id", false), quote_ident("tenant_id", false), quote_ident("number", false), quote_ident("uq_test_tenant_number", false), quote_ident("tenant_id", false), quote_ident("number", false))
+        },
+        Vec::new(),
+    )
+    .unwrap();
+
+    let mut route = form_route();
+    route.form.table = Some(table.clone());
+    route.form.fields = vec![zelyra_ast::FormField {
+        name: "number".into(),
+        ty: Some(Type::String),
+        label: None,
+        placeholder: None,
+        required: false,
+        min_length: None,
+        max: None,
+        min_value: None,
+        max_value: None,
+        choices: Vec::new(),
+        widget: None,
+        appearance: None,
+        file_upload: None,
+        readonly: true,
+        span: zelyra_ast::Span::default(),
+    }];
+    route.table = Some(zelyra_ast::TableDef {
+        name: table.clone(),
+        columns: vec![zelyra_ast::ColumnDef {
+            name: "number".into(),
+            ty: Type::String,
+            length: Some(32),
+            storage_name: None,
+            decimal_precision: None,
+            auto_sequence: Some("KD-{0001}".into()),
+            required: true,
+            primary_key: false,
+            auto: false,
+            unique: false,
+            unique_within_tenant: false,
+            default: None,
+            references: None,
+            on_delete: None,
+            span: zelyra_ast::Span::default(),
+        }],
+        validations: Vec::new(),
+        indexes: Vec::new(),
+        uniques: Vec::new(),
+        access: zelyra_ast::TableAccessDef::default(),
+        tenant_scope: None,
+        span: zelyra_ast::Span::default(),
+    });
+    let action = zelyra_ast::FormAction {
+        name: "save".into(),
+        label: None,
+        icon: None,
+        confirm: None,
+        confirm_page: None,
+        success_page: None,
+        error_page: None,
+        fields: Vec::new(),
+        requires_auth: false,
+        permissions: Vec::new(),
+        capabilities: Vec::new(),
+        require_match: false,
+        statements: vec![zelyra_ast::Stmt::Expr(zelyra_ast::Expr {
+            kind: zelyra_ast::ExprKind::Sql {
+                result_type: Type::Unit,
+                query: format!(
+                    "INSERT INTO {} ({}, {}) VALUES (1, :number)",
+                    quote_ident(&table, is_postgres),
+                    quote_ident("tenant_id", is_postgres),
+                    quote_ident("number", is_postgres)
+                ),
+            },
+            span: zelyra_ast::Span::default(),
+        })],
+        execute_body: None,
+        guard: None,
+        success: None,
+        redirect: None,
+        span: zelyra_ast::Span::default(),
+    };
+    execute_form_action_with_children(
+        &route,
+        &action,
+        &HashMap::from([("number".into(), "FORGED".into())]),
+        &HashMap::new(),
+        &HashMap::new(),
+        &database_url,
+        FormExecutionContext {
+            actor_user_id: None,
+            expected_snapshot: None,
+            tenant_context: None,
+            validation_program: None,
+            table_validation_functions: &[],
+            crud_policy_functions: &[],
+            crud_action_functions: &[],
+            capability_grants: None,
+            runtime_policy: None,
+            granted_permissions: &[],
+        },
+    )
+    .unwrap();
+    let inserted = zelyra_database::execute_query(
+        &database_url,
+        &format!(
+            "SELECT {} FROM {} WHERE {} = 1",
+            quote_ident("number", is_postgres),
+            quote_ident(&table, is_postgres),
+            quote_ident("tenant_id", is_postgres)
+        ),
+        Vec::new(),
+    )
+    .unwrap();
+    assert_eq!(inserted.rows, [vec![String::from("KD-0001")]]);
+
+    let allocate = |tenant_id: i64| {
+        zelyra_database::with_decision_transaction(&database_url, |transaction| {
+            allocate_number_series(
+                transaction,
+                is_postgres,
+                &series,
+                &format!("tenant:{tenant_id}"),
+                "KD-{0001}",
+                &NumberSeriesTarget {
+                    table: &table,
+                    column: "number",
+                    tenant_column: Some("tenant_id"),
+                    tenant_id: Some(tenant_id),
+                },
+                0,
+            )
+        })
+        .unwrap()
+    };
+
+    assert_eq!(allocate(41), "KD-0001");
+    assert_eq!(allocate(41), "KD-0002");
+    assert_eq!(allocate(42), "KD-0001");
+    let allocate_year = |tenant_id: i64| {
+        zelyra_database::with_decision_transaction(&database_url, |transaction| {
+            allocate_number_series(
+                transaction,
+                is_postgres,
+                &format!("{series}.yearly"),
+                &format!("tenant:{tenant_id}"),
+                "AG-{year}-{0001}",
+                &NumberSeriesTarget {
+                    table: &table,
+                    column: "number",
+                    tenant_column: Some("tenant_id"),
+                    tenant_id: Some(tenant_id),
+                },
+                0,
+            )
+        })
+        .unwrap()
+    };
+    let yearly_first = allocate_year(41);
+    let yearly_second = allocate_year(41);
+    let yearly_prefix = yearly_first.rsplit_once('-').unwrap().0;
+    assert!(yearly_prefix.starts_with("AG-"));
+    assert_eq!(yearly_first, format!("{yearly_prefix}-0001"));
+    assert_eq!(yearly_second, format!("{yearly_prefix}-0002"));
+    let mut rolled_back_yearly_number = String::new();
+    let rollback_yearly: std::result::Result<(), zelyra_database::DatabaseError> =
+        zelyra_database::with_decision_transaction(&database_url, |transaction| {
+            rolled_back_yearly_number = allocate_number_series(
+                transaction,
+                is_postgres,
+                &format!("{series}.yearly"),
+                "tenant:46",
+                "AG-{year}-{0001}",
+                &NumberSeriesTarget {
+                    table: &table,
+                    column: "number",
+                    tenant_column: Some("tenant_id"),
+                    tenant_id: Some(46),
+                },
+                0,
+            )?;
+            Err(zelyra_database::DatabaseError {
+                message: "test rollback".into(),
+            })
+        });
+    assert!(rollback_yearly.is_err());
+    zelyra_database::execute_query(
+        &database_url,
+        &format!(
+            "INSERT INTO {} ({}, {}) VALUES (:tenant_id, :number)",
+            quote_ident(&table, is_postgres),
+            quote_ident("tenant_id", is_postgres),
+            quote_ident("number", is_postgres)
+        ),
+        vec![
+            ("tenant_id".into(), QueryValue::Int(46)),
+            (
+                "number".into(),
+                QueryValue::String(rolled_back_yearly_number.clone()),
+            ),
+        ],
+    )
+    .unwrap();
+    let yearly_collision = allocate_year(46);
+    assert_eq!(
+        yearly_collision,
+        format!(
+            "{}-0002",
+            rolled_back_yearly_number.rsplit_once('-').unwrap().0
+        )
+    );
+    zelyra_database::execute_query(
+        &database_url,
+        &format!(
+            "INSERT INTO {} ({}, {}) VALUES (45, 'KD-0001')",
+            quote_ident(&table, is_postgres),
+            quote_ident("tenant_id", is_postgres),
+            quote_ident("number", is_postgres)
+        ),
+        Vec::new(),
+    )
+    .unwrap();
+    assert_eq!(allocate(45), "KD-0002");
+
+    let rollback: std::result::Result<(), zelyra_database::DatabaseError> =
+        zelyra_database::with_decision_transaction(&database_url, |transaction| {
+            let value = allocate_number_series(
+                transaction,
+                is_postgres,
+                &series,
+                "tenant:43",
+                "KD-{0001}",
+                &NumberSeriesTarget {
+                    table: &table,
+                    column: "number",
+                    tenant_column: Some("tenant_id"),
+                    tenant_id: Some(43),
+                },
+                0,
+            )?;
+            assert_eq!(value, "KD-0001");
+            Err(zelyra_database::DatabaseError {
+                message: "test rollback".into(),
+            })
+        });
+    assert!(rollback.is_err());
+    assert_eq!(allocate(43), "KD-0001");
+
+    let values = std::thread::scope(|scope_thread| {
+        let handles = (0..8)
+            .map(|_| scope_thread.spawn(|| allocate(44)))
+            .collect::<Vec<_>>();
+        handles
+            .into_iter()
+            .map(|handle| handle.join().unwrap())
+            .collect::<Vec<_>>()
+    });
+    let unique = values.iter().collect::<std::collections::HashSet<_>>();
+    assert_eq!(unique.len(), 8);
+    zelyra_database::execute_query(
+        &database_url,
+        "DELETE FROM `_zelyra_number_sequences` WHERE `series_key` = :series",
+        vec![("series".into(), QueryValue::String(series))],
+    )
+    .unwrap();
+    zelyra_database::execute_query(
+        &database_url,
+        &format!("DROP TABLE {}", quote_ident(&table, is_postgres)),
+        Vec::new(),
+    )
+    .unwrap();
+}
+
+#[test]
 fn database_timestamps_convert_to_zelyra_utc_milliseconds() {
     assert_eq!(
         timestamp_value("2026-10-20 04:25:38.161000"),
@@ -430,6 +741,87 @@ fn renders_accessible_child_rows_and_escapes_submitted_values() {
     assert!(html.contains("value=\"add\""));
     assert!(html.contains("value=\"remove:1\""));
     assert_eq!(html.matches("<form ").count(), 1);
+}
+
+#[test]
+fn child_collection_legends_localize_after_html_escaping() {
+    let route = child_collection_form_route();
+    let rendered = render_form(&route, &HashMap::new(), &[], None);
+    let localized = localize_html(&rendered, UiLanguage::English);
+    assert!(localized.contains("<legend>Items</legend>"));
+    assert!(!localized.contains("&#xe000;zelyra-locale:"));
+    assert!(!localized.contains("zelyra-locale:identifier.items"));
+}
+
+#[test]
+fn automatic_invoice_number_queries_are_tenant_scoped() {
+    let mut route = form_route();
+    route.form.table = Some("invoices".into());
+    route.tenant_column = Some("tenant_id".into());
+    let tenant = TenantContext {
+        user_id: 7,
+        tenant_id: 23,
+        membership_table: None,
+        membership_has_active: false,
+        tenant_owner_table: None,
+        tenant_owner_column: None,
+    };
+
+    let lookup =
+        automatic_invoice_number_lookup_query(&route, false, "RE-000042", 42, Some(&tenant));
+    assert!(lookup
+        .sql
+        .contains("AND `tenant_id` = :zelyra_invoice_tenant_id"));
+    assert!(lookup.sql.ends_with("FOR UPDATE"));
+    assert!(lookup.params.iter().any(|(name, value)| {
+        name == "zelyra_invoice_tenant_id" && matches!(value, QueryValue::Int(23))
+    }));
+
+    let update =
+        automatic_invoice_number_update_query(&route, false, "RE-000042".into(), 42, Some(&tenant));
+    assert!(update
+        .sql
+        .contains("AND `tenant_id` = :zelyra_invoice_tenant_id"));
+    assert!(update.params.iter().any(|(name, value)| {
+        name == "zelyra_invoice_tenant_id" && matches!(value, QueryValue::Int(23))
+    }));
+}
+
+#[test]
+fn legacy_invoice_number_generation_remains_for_fields_without_a_sequence() {
+    let mut route = form_route();
+    route.form.name = "InvoiceCreate".into();
+    route.form.table = Some("invoices".into());
+    route.form.fields[0].name = "invoice_number".into();
+    assert!(is_automatic_invoice_number_form(&route));
+
+    route.table = Some(zelyra_ast::TableDef {
+        name: "invoices".into(),
+        columns: vec![zelyra_ast::ColumnDef {
+            name: "invoice_number".into(),
+            ty: Type::String,
+            length: Some(32),
+            storage_name: None,
+            decimal_precision: None,
+            auto_sequence: Some("RE-{0001}".into()),
+            required: true,
+            primary_key: false,
+            auto: false,
+            unique: false,
+            unique_within_tenant: false,
+            default: None,
+            references: None,
+            on_delete: None,
+            span: zelyra_ast::Span::default(),
+        }],
+        validations: Vec::new(),
+        indexes: Vec::new(),
+        uniques: Vec::new(),
+        access: zelyra_ast::TableAccessDef::default(),
+        tenant_scope: None,
+        span: zelyra_ast::Span::default(),
+    });
+    assert!(!is_automatic_invoice_number_form(&route));
 }
 
 #[test]
@@ -1325,6 +1717,7 @@ fn relation_form_route() -> FormRoute {
             length: None,
             storage_name: None,
             decimal_precision: None,
+            auto_sequence: None,
             required: true,
             primary_key: false,
             auto: false,
@@ -3250,25 +3643,44 @@ fn multipart_upload_commits_reference_and_removes_file_after_sql_rollback() {
         WebApp::with_database_url(Vec::new(), vec![route.clone()], Some(database_url.clone()))
             .with_upload_storage(&storage_root);
     let bytes = b"%PDF-1.7\ntransactional upload";
-    let parts = [multipart::MultipartPart {
-        name: "document".into(),
-        filename: Some("document.pdf".into()),
-        content_type: Some("application/pdf".into()),
-        data: bytes,
-    }];
-    let request = Request {
-        method: "POST".into(),
-        target: "/upload".into(),
-        path: "/upload".into(),
-        headers: HashMap::from([
-            ("host".into(), "localhost".into()),
-            ("origin".into(), "http://localhost".into()),
-        ]),
-        body: "_zelyra_csrf=csrf-token".into(),
-        remote_addr: None,
-    };
-    let committed = app.dispatch_with_multipart(&request, &parts);
-    assert_eq!(committed.status, 303, "{}", committed.body);
+    let boundary = "zelyra-upload-e2e-boundary";
+    let mut body = format!(
+        "--{boundary}\r\nContent-Disposition: form-data; name=\"_zelyra_csrf\"\r\n\r\ncsrf-token\r\n--{boundary}\r\nContent-Disposition: form-data; name=\"document\"; filename=\"document.pdf\"\r\nContent-Type: application/pdf\r\n\r\n"
+    )
+    .into_bytes();
+    body.extend_from_slice(bytes);
+    body.extend_from_slice(format!("\r\n--{boundary}--\r\n").as_bytes());
+    let listener = TcpListener::bind("127.0.0.1:0").expect("bind HTTP upload test listener");
+    let address = listener
+        .local_addr()
+        .expect("read HTTP upload test address");
+    let server = std::thread::spawn(move || {
+        let (mut stream, _) = listener.accept().expect("accept HTTP upload test request");
+        handle_connection(&mut stream, &app).expect("handle HTTP upload test request");
+    });
+    let mut client = TcpStream::connect(address).expect("connect to HTTP upload test server");
+    client
+        .set_read_timeout(Some(Duration::from_secs(5)))
+        .expect("set HTTP upload test timeout");
+    write!(
+        client,
+        "POST /upload HTTP/1.1\r\nHost: localhost\r\nOrigin: http://localhost\r\nContent-Type: multipart/form-data; boundary={boundary}\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+        body.len()
+    )
+    .expect("write HTTP upload test headers");
+    client
+        .write_all(&body)
+        .expect("write HTTP upload test body");
+    let mut response = Vec::new();
+    client
+        .read_to_end(&mut response)
+        .expect("read HTTP upload test response");
+    server.join().expect("join HTTP upload test server");
+    let response_head = String::from_utf8_lossy(&response);
+    assert!(
+        response_head.starts_with("HTTP/1.1 303 See Other\r\n"),
+        "{response_head}"
+    );
     let rows = zelyra_database::execute_read_only_query(
         &database_url,
         "SELECT id, document FROM zelyra_upload_e2e",
@@ -3609,6 +4021,23 @@ fn multipart_upload_commits_reference_and_removes_file_after_sql_rollback() {
         "opaque references are not shown"
     );
 
+    let parts = [multipart::MultipartPart {
+        name: "document".into(),
+        filename: Some("document.pdf".into()),
+        content_type: Some("application/pdf".into()),
+        data: bytes,
+    }];
+    let request = Request {
+        method: "POST".into(),
+        target: "/upload".into(),
+        path: "/upload".into(),
+        headers: HashMap::from([
+            ("host".into(), "localhost".into()),
+            ("origin".into(), "http://localhost".into()),
+        ]),
+        body: "_zelyra_csrf=csrf-token".into(),
+        remote_addr: None,
+    };
     let mut failing_route = route;
     failing_route.form.actions = vec![sql_action(vec![
         "INSERT INTO zelyra_upload_e2e (document, owner_id) VALUES (:document, 7)",

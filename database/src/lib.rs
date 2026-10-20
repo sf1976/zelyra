@@ -156,6 +156,37 @@ pub fn build_schema(program: &Program) -> Result<Schema, Vec<SchemaError>> {
                 });
                 continue;
             }
+            if let Some(format) = definition.auto_sequence.as_deref() {
+                if resolved_sequence_format(format).is_none() {
+                    errors.push(SchemaError {
+                        message: "auto_sequence format must contain exactly one `{0001}`-style counter token and may contain `{year}`".into(),
+                        span: definition.span,
+                    });
+                    continue;
+                }
+                if definition.length.is_some_and(|limit| {
+                    sequence_format_output_length(format)
+                        .is_none_or(|length| length > limit as usize)
+                }) {
+                    errors.push(SchemaError {
+                        message: "auto_sequence's maximum formatted value does not fit the String column length".into(),
+                        span: definition.span,
+                    });
+                    continue;
+                }
+                let sequence_type = resolve_type(&definition.ty, &program.types);
+                let sequence_type = match sequence_type {
+                    Type::Option(inner) => *inner,
+                    other => other,
+                };
+                if sequence_type != Type::String {
+                    errors.push(SchemaError {
+                        message: "auto_sequence is supported only on String columns".into(),
+                        span: definition.span,
+                    });
+                    continue;
+                }
+            }
             let resolved = resolve_type(&definition.ty, &program.types);
             let resolved_inner = match &resolved {
                 Type::Option(inner) => inner.as_ref(),
@@ -565,8 +596,83 @@ pub fn build_schema(program: &Program) -> Result<Schema, Vec<SchemaError>> {
             uniques,
         });
     }
+    let needs_number_sequences = program
+        .tables
+        .iter()
+        .flat_map(|table| &table.columns)
+        .any(|column| column.auto_sequence.is_some());
+    if needs_number_sequences && table_names.contains("_zelyra_number_sequences") {
+        errors.push(SchemaError {
+            message: "`_zelyra_number_sequences` is reserved for Zelyra's automatic number series"
+                .into(),
+            span: program
+                .tables
+                .iter()
+                .find(|table| table.name == "_zelyra_number_sequences")
+                .map_or(Span::default(), |table| table.span),
+        });
+    }
     if errors.is_empty() {
         ensure_tenant_reference_keys(&mut tables, backend);
+        if needs_number_sequences {
+            let series_table = "_zelyra_number_sequences";
+            tables.push(Table {
+                name: series_table.into(),
+                tenant_scope_column: None,
+                columns: vec![
+                    Column {
+                        name: "series_key".into(),
+                        sql_type: match backend {
+                            Backend::MariaDb => "VARCHAR(191)",
+                            Backend::Postgres => "VARCHAR(255)",
+                            Backend::Sqlite => "TEXT",
+                        }
+                        .into(),
+                        nullable: false,
+                        primary_key: false,
+                        auto: false,
+                        unique: false,
+                        default: None,
+                    },
+                    Column {
+                        name: "scope_key".into(),
+                        sql_type: match backend {
+                            Backend::MariaDb => "VARCHAR(191)",
+                            Backend::Postgres => "VARCHAR(255)",
+                            Backend::Sqlite => "TEXT",
+                        }
+                        .into(),
+                        nullable: false,
+                        primary_key: false,
+                        auto: false,
+                        unique: false,
+                        default: None,
+                    },
+                    Column {
+                        name: "next_value".into(),
+                        sql_type: match backend {
+                            Backend::MariaDb => "BIGINT",
+                            Backend::Postgres => "BIGINT",
+                            Backend::Sqlite => "INTEGER",
+                        }
+                        .into(),
+                        nullable: false,
+                        primary_key: false,
+                        auto: false,
+                        unique: false,
+                        default: None,
+                    },
+                ],
+                foreign_keys: Vec::new(),
+                indexes: Vec::new(),
+                uniques: vec![Index {
+                    name: "uq_zelyra_number_series_scope".into(),
+                    columns: vec!["series_key".into(), "scope_key".into()],
+                    unique: true,
+                    constraint_owned: true,
+                }],
+            });
+        }
         Ok(Schema {
             database: program.databases.first().map(|database| DatabaseConfig {
                 name: database.name.clone(),
@@ -578,6 +684,74 @@ pub fn build_schema(program: &Program) -> Result<Schema, Vec<SchemaError>> {
     } else {
         Err(errors)
     }
+}
+
+/// Accepts literal text plus `{year}` and exactly one zero-padded counter
+/// token such as `{0001}`. Keeping this grammar small makes allocation
+/// deterministic and avoids runtime formatting mini-languages.
+fn resolved_sequence_format(format: &str) -> Option<usize> {
+    let mut rest = format;
+    let mut counter_width = None;
+    while let Some(open) = rest.find('{') {
+        if rest[..open].contains('}') {
+            return None;
+        }
+        rest = &rest[open + 1..];
+        let close = rest.find('}')?;
+        let token = &rest[..close];
+        if token == "year" {
+            // Year can appear at most once to avoid surprising duplicate data.
+        } else if !token.is_empty()
+            && token.as_bytes().last() == Some(&b'1')
+            && token.as_bytes()[..token.len() - 1]
+                .iter()
+                .all(|byte| *byte == b'0')
+        {
+            if counter_width.replace(token.len()).is_some() {
+                return None;
+            }
+        } else {
+            return None;
+        }
+        rest = &rest[close + 1..];
+    }
+    if rest.contains('}') {
+        return None;
+    }
+    counter_width
+}
+
+fn sequence_format_output_length(format: &str) -> Option<usize> {
+    let mut length = 0;
+    let mut rest = format;
+    while let Some(open) = rest.find('{') {
+        let literal = &rest[..open];
+        if literal.contains('}') {
+            return None;
+        }
+        length += literal.chars().count();
+        rest = &rest[open + 1..];
+        let close = rest.find('}')?;
+        let token = &rest[..close];
+        length += if token == "year" {
+            4
+        } else {
+            if token.is_empty()
+                || token.as_bytes().last() != Some(&b'1')
+                || !token.as_bytes()[..token.len() - 1]
+                    .iter()
+                    .all(|byte| *byte == b'0')
+            {
+                return None;
+            }
+            token.len()
+        };
+        rest = &rest[close + 1..];
+    }
+    if rest.contains('}') {
+        return None;
+    }
+    Some(length + rest.chars().count())
 }
 
 fn ensure_tenant_reference_keys(tables: &mut [Table], backend: Backend) {
@@ -604,7 +778,11 @@ fn ensure_tenant_reference_keys(tables: &mut [Table], backend: Backend) {
             .chain(target.indexes.iter().filter(|index| index.unique))
             .any(|index| index.columns == columns);
         if !has_unique_key {
-            let name = generated_identifier(&format!("uq_{}_tenant_id", target.name), backend);
+            let name = available_generated_index_name(
+                target,
+                &format!("uq_{}_tenant_id", target.name),
+                backend,
+            );
             target.uniques.push(Index {
                 name,
                 columns,
@@ -613,6 +791,28 @@ fn ensure_tenant_reference_keys(tables: &mut [Table], backend: Backend) {
             });
         }
     }
+}
+
+fn available_generated_index_name(table: &Table, base: &str, backend: Backend) -> String {
+    let is_occupied = |candidate: &str| {
+        table
+            .indexes
+            .iter()
+            .chain(table.uniques.iter())
+            .any(|index| index.name == candidate)
+            || table
+                .foreign_keys
+                .iter()
+                .any(|foreign_key| foreign_key.name.as_deref() == Some(candidate))
+    };
+
+    let mut candidate = generated_identifier(base, backend);
+    let mut suffix = 2_u32;
+    while is_occupied(&candidate) {
+        candidate = generated_identifier(&format!("{base}_{suffix}"), backend);
+        suffix += 1;
+    }
+    candidate
 }
 
 fn identifier_limit(backend: Backend) -> Option<usize> {
@@ -2726,7 +2926,7 @@ pub fn inspect_mariadb(database_url: &str) -> Result<Schema, DatabaseError> {
     let mysql_server = mysql_server_from_version(&server_version);
     let output = run_mariadb_command(
         database_url,
-        "SELECT TABLE_NAME, COLUMN_NAME, DATA_TYPE, IS_NULLABLE, COLUMN_KEY, EXTRA, COALESCE(CHARACTER_MAXIMUM_LENGTH, DATETIME_PRECISION, ''), COALESCE(NUMERIC_PRECISION, ''), COALESCE(NUMERIC_SCALE, ''), CASE WHEN COLUMN_DEFAULT IS NULL THEN 'N' ELSE CONCAT('V', HEX(CAST(COLUMN_DEFAULT AS CHAR CHARACTER SET utf8mb4))) END FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME NOT IN ('_zelyra_schema_history', '_zelyra_outbox') ORDER BY TABLE_NAME, ORDINAL_POSITION",
+        "SELECT c.TABLE_NAME, c.COLUMN_NAME, c.DATA_TYPE, c.IS_NULLABLE, c.COLUMN_KEY, c.EXTRA, COALESCE(c.CHARACTER_MAXIMUM_LENGTH, c.DATETIME_PRECISION, ''), COALESCE(c.NUMERIC_PRECISION, ''), COALESCE(c.NUMERIC_SCALE, ''), CASE WHEN c.COLUMN_DEFAULT IS NULL THEN 'N' ELSE CONCAT('V', HEX(CAST(c.COLUMN_DEFAULT AS CHAR CHARACTER SET utf8mb4))) END, EXISTS (SELECT 1 FROM information_schema.KEY_COLUMN_USAGE pk WHERE pk.CONSTRAINT_SCHEMA = c.TABLE_SCHEMA AND pk.TABLE_NAME = c.TABLE_NAME AND pk.COLUMN_NAME = c.COLUMN_NAME AND pk.CONSTRAINT_NAME = 'PRIMARY') FROM information_schema.COLUMNS c WHERE c.TABLE_SCHEMA = DATABASE() AND c.TABLE_NAME NOT IN ('_zelyra_schema_history', '_zelyra_outbox') ORDER BY c.TABLE_NAME, c.ORDINAL_POSITION",
         None,
         Some(mysql_server),
     )?;
@@ -5220,7 +5420,7 @@ fn parse_mariadb_columns(output: &str) -> Result<Schema, DatabaseError> {
     };
     for line in output.lines().filter(|line| !line.trim().is_empty()) {
         let fields = line.split('\t').collect::<Vec<_>>();
-        if fields.len() != 10 {
+        if !matches!(fields.len(), 10 | 11) {
             return Err(DatabaseError {
                 message: format!(
                     "unexpected MariaDB column metadata with {} fields",
@@ -5234,7 +5434,14 @@ fn parse_mariadb_columns(output: &str) -> Result<Schema, DatabaseError> {
             name: fields[1].into(),
             sql_type,
             nullable: fields[3] == "YES",
-            primary_key: fields[4] == "PRI",
+            // COLUMN_KEY can report PRI for a non-null column that belongs to
+            // a composite UNIQUE key when the table has no explicit primary
+            // key. Prefer the constraint-level result when available.
+            primary_key: if fields.len() == 11 {
+                fields[10] == "1"
+            } else {
+                fields[4] == "PRI"
+            },
             auto: fields[5].contains("auto_increment"),
             unique: fields[4] == "UNI",
             default,
@@ -5980,6 +6187,57 @@ mod tests {
     }
 
     #[test]
+    fn scoped_reference_key_name_avoids_an_existing_tenant_unique_constraint() {
+        let source = r#"
+            type TenantId = Id
+            type DispatchResourceId = Id
+            table tenants {
+                id: TenantId primary auto
+            }
+            table dispatch_resources scoped by tenant_id: TenantId {
+                id: DispatchResourceId primary auto
+                tenant_id: TenantId required references tenants
+                unique { tenant_id }
+            }
+            table dispatch_orders scoped by tenant_id: TenantId {
+                id: Id primary auto
+                tenant_id: TenantId required references tenants
+                resource_id: DispatchResourceId? references dispatch_resources
+            }
+        "#;
+        let program = parse(&lex(source).unwrap()).unwrap();
+        let schema = build_schema(&program).unwrap();
+        let resource = schema
+            .tables
+            .iter()
+            .find(|table| table.name == "dispatch_resources")
+            .unwrap();
+        let generated_reference_key = resource
+            .uniques
+            .iter()
+            .find(|index| index.columns == ["tenant_id", "id"])
+            .unwrap();
+        assert_eq!(
+            generated_reference_key.name,
+            "uq_dispatch_resources_tenant_id_2"
+        );
+
+        let ddl = schema.create_sql();
+        assert!(ddl.contains("CONSTRAINT `uq_dispatch_resources_tenant_id` UNIQUE (`tenant_id`)"));
+        assert!(ddl
+            .contains("CONSTRAINT `uq_dispatch_resources_tenant_id_2` UNIQUE (`tenant_id`, `id`)"));
+
+        let mut constraint_names = Vec::new();
+        for part in ddl.split("CONSTRAINT `").skip(1) {
+            if let Some(name) = part.split('`').next() {
+                constraint_names.push(name);
+            }
+        }
+        let unique_names = constraint_names.iter().copied().collect::<HashSet<_>>();
+        assert_eq!(constraint_names.len(), unique_names.len());
+    }
+
+    #[test]
     fn explicit_scalar_references_keep_backend_ddl_and_composite_scope_keys() {
         for (engine, scalar_type, quote) in [
             ("mariadb", "BIGINT", '`'),
@@ -6618,6 +6876,47 @@ mod tests {
     fn schema(source: &str) -> Schema {
         let program = parse(&lex(source).unwrap()).unwrap();
         build_schema(&program).unwrap()
+    }
+
+    #[test]
+    fn number_series_formats_add_a_managed_system_table() {
+        let schema = schema("database main { engine: mariadb } table customers { id: Id primary auto customer_number: String(32) required auto_sequence(\"KD-{0001}\") } table quotes { id: Id primary auto quote_number: String(40) required auto_sequence(\"AG-{year}-{0001}\") }");
+        let system = schema
+            .tables
+            .iter()
+            .find(|table| table.name == "_zelyra_number_sequences")
+            .unwrap();
+        assert_eq!(system.uniques[0].columns, ["series_key", "scope_key"]);
+        let ddl = schema.create_sql();
+        assert!(ddl.contains("CREATE TABLE IF NOT EXISTS `_zelyra_number_sequences`"));
+        assert!(ddl.contains(
+            "CONSTRAINT `uq_zelyra_number_series_scope` UNIQUE (`series_key`, `scope_key`)"
+        ));
+    }
+
+    #[test]
+    fn invalid_number_series_formats_are_rejected() {
+        for format in ["KD-0001", "KD-{0001}-{0002}", "KD-{counter}", "KD-{0001"] {
+            let source = format!(
+                "table customers {{ customer_number: String auto_sequence(\"{format}\") }}"
+            );
+            let program = parse(&lex(&source).unwrap()).unwrap();
+            let errors = build_schema(&program).unwrap_err();
+            assert!(
+                errors[0].message.contains("auto_sequence format"),
+                "{format}"
+            );
+        }
+        let source = "table customers { customer_number: String(6) auto_sequence(\"KD-{0001}\") }";
+        let program = parse(&lex(source).unwrap()).unwrap();
+        let errors = build_schema(&program).unwrap_err();
+        assert!(errors[0].message.contains("does not fit"));
+        let program = parse(
+            &lex("table customers { customer_number: Int auto_sequence(\"KD-{0001}\") }").unwrap(),
+        )
+        .unwrap();
+        let errors = build_schema(&program).unwrap_err();
+        assert!(errors[0].message.contains("only on String columns"));
     }
 
     #[test]
@@ -8359,6 +8658,22 @@ mod tests {
         assert_eq!(columns[3].default, None);
         assert_eq!(columns[4].default, None);
         assert!(!columns[1].primary_key);
+    }
+
+    #[test]
+    fn mariadb_primary_key_metadata_ignores_composite_unique_column_key_label() {
+        // MariaDB may report COLUMN_KEY=PRI for non-null columns in a
+        // composite UNIQUE key when the table has no explicit primary key.
+        // The constraint-level flag is authoritative.
+        let schema = parse_mariadb_columns(
+            "_zelyra_number_sequences\tseries_key\tvarchar\tNO\tPRI\t\t128\t\t\tN\t0\n_zelyra_number_sequences\tscope_key\tvarchar\tNO\tPRI\t\t128\t\t\tN\t0\nitems\tid\tbigint\tNO\tPRI\tauto_increment\t\t\t\tN\t1\n",
+        )
+        .unwrap();
+        assert!(schema.tables[0]
+            .columns
+            .iter()
+            .all(|column| !column.primary_key));
+        assert!(schema.tables[1].columns[0].primary_key);
     }
 
     #[test]

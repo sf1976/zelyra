@@ -27,7 +27,7 @@ Ressourcendisziplin und ehrliche Beweisaussagen leiten jede Phase. Das
 [Manifest](MANIFESTO.de.md) beschreibt die Prinzipien; die Roadmap kennzeichnet
 den tatsächlich implementierten Stand.
 
-Das aktuelle stabile Release ist 1.2.28 und wurde unter https://github.com/sf1976/zelyra/releases/tag/v1.2.28 veröffentlicht. **Aktuelle Meilensteine** ist die
+Das aktuelle stabile Release ist 1.2.29 und wurde unter https://github.com/sf1976/zelyra/releases/tag/v1.2.29 veröffentlicht. **Aktuelle Meilensteine** ist die
 verbindliche Übersicht der nächsten Vorhaben. Ältere, nummerierte Release-
 Abschnitte bleiben als historische Planung und Nachweise erhalten; sie legen
 für sich keine aktuellen Releaseziele fest. Langfristige Ideen stehen im
@@ -399,7 +399,7 @@ abgeschlossen.
   Release-Gates bestanden. Die umfassendere Berechtigungs-/Sicherheitsmatrix
   bleibt ein offener Folgepunkt. Siehe den
   [Arbeitsplan 1.2.28](release-plans/1.2.28-typed-crud-actions.de.md).
-- [~] **1.2.29 — begrenzte sichere Datei-Uploads:** Die Architekturaufnahme ist
+- [x] **1.2.29 — begrenzte sichere Datei-Uploads (veröffentlicht):** Die Architekturaufnahme ist
   abgeschlossen. Der HTTP-Server liest Requests jetzt begrenzt als Bytes und
   leitet gültige Multipart-Bodies durch den Decoder; die öffentliche Text-
   `Request`-API und das globale Limit von 1 MiB bleiben unverändert. Routen
@@ -481,10 +481,24 @@ abgeschlossen.
   konnte. Der Code wird zusätzlich mit lokalem Rust 1.98 geprüft. Eine statische Analyse von
   `/opt/siedelmann-laravel/app` fand Uploadabläufe bei Rechnungen, Verträgen,
   Einstellungen, Postbriefen und eingehender Mail; der Importer erzeugt sie
-  nicht. Offen sind ein vollständiges Anwendungsbackup und zusätzliche
-  Cleanup-E2E-Prüfungen für Absturzreste und Fehlerwiederherstellung.
+  nicht. `tests/mariadb-upload-cleanup-e2e.sh` simuliert nun einen Absturz mit
+  zurückgebliebenem Staging-/Manifestpaar und prüft Vorschau und ausdrückliche
+  Bereinigung. Das Upload-POST-E2E sendet den erfolgreichen Multipart-Upload
+  über eine echte lokale HTTP-Verbindung und prüft Verweis und Dateibytes;
+  zusätzlich prüft es die Bereinigung nach Datenbank-Rollback. Das
+  Dateispeicher-Backup schließt Datenbank,
+  Projektkonfiguration und Geheimnisse ausdrücklich aus. Ein koordiniertes
+  vollständiges Anwendungsbackup bleibt ein separates Folgepaket; die
+  Datenbank muss separat und bei gestopptem Zelyra gesichert/wiederhergestellt
+  werden.
   Siehe den [Plan für sichere Uploads 1.2.29](release-plans/1.2.29-secure-uploads.de.md).
-- [~] **1.2.30 — Abdeckung echter Laravel-Migrationsabläufe:** Standalone-Forms
+  Veröffentlicht als [`v1.2.29`](https://github.com/sf1976/zelyra/releases/tag/v1.2.29);
+  alle Release-Gates bestanden, Linux-/Windows-Artefakte und Prüfsummen
+  veröffentlicht.
+- [~] **1.2.30 — Abdeckung echter Laravel-Migrationsabläufe:** Der
+  Releasekandidat ergänzt mandantensichere skalare Referenzen und die unten
+  beschriebene Grundlage für geprüfte Token-Forms. Das verbessert den Import
+  der Akzeptanzwebseite, schließt ihn aber nicht ab. Standalone-Forms
   unterstützen geprüfte lokale Routen mit erfassten Pfadparametern, ein
   compilergeprüftes schreibgeschütztes `verify sql<T>` vor dem GET-Rendern und
   `require_match` für direkte SQL-Aktionen. Das erforderliche erste `SELECT`
@@ -501,6 +515,12 @@ abgeschlossen.
   die Einschränkung im Scaffold genannt wird. Es findet dabei kein
   Datenbankzugriff statt; das bleibt ein offener Importablauf und ist kein
   Laufzeittest der Abmeldung.
+  Mandantengebundene Kollisionsprüfungen und Updates automatisch vergebener
+  Rechnungsnummern enthalten nun den authentifizierten Mandantenschlüssel;
+  Locale-Marker generierter Master-Detail-Legenden überstehen das HTML-Escaping.
+  Generische Nummernkreise, mandantenbezogene Zähler, berechnete Tabellenfelder
+  und CRUD-Steuerelemente für FileRef bleiben nicht unterstützt. Geprüfte
+  Datei-Forms und privater FileRef-Speicher sind bereits vorhanden.
   `table ... scoped by`-Spalten können nun zusätzlich ein skalares nominales
   ID-Feld mit `references <table>` als SQL-Fremdschlüssel deklarieren. Der
   Projektlinker erhält dabei den modul-lokalen Tenant-ID-Alias. Der Importer
@@ -511,7 +531,12 @@ abgeschlossen.
   tatsächlicher MariaDB-11.8-Lauf bestätigte, dass eine eigene Referenz gelingt
   und eine mandantenfremde Referenz mit FK-Fehler abgewiesen wird; der
   wiederholbare Test `tests/mariadb-tenant-relations-e2e.sh` prüft nun sowohl
-  Record-Relationen als auch skalare nominale Referenzen. Laravels
+  Record-Relationen als auch skalare nominale Referenzen. Generierte Namen
+  zusammengesetzter Schlüssel kollidieren nun nicht mehr mit bereits
+  vorhandenen eindeutigen Tenant-Einzelspalten. Das Laravel-Importer-Auth-E2E
+  richtet das generierte Identitätspaket in einer separaten, kurzlebigen
+  MariaDB ein und prüft native Anmeldung, gespeicherte Session und Abmeldung;
+  Laravel-Zugangsdaten und Anwendungszeilen werden nicht importiert. Laravels
   `SET NULL` auf einer solchen zusammengesetzten Relation kann Zelyra nicht
   sicher abbilden; der prüfpflichtige Scaffold ersetzt dies sichtbar durch
   `RESTRICT` und schreibt den Unterschied als Reviewhinweis aus. Kein
@@ -521,8 +546,8 @@ abgeschlossen.
   und Laufzeitteststatus trennt. Der Source-Only-Integrationstest gleicht den
   Bericht mit Dateiplan und Generierungsmanifest ab und bestätigt, dass aus
   der Generierung keine Laufzeitabdeckung abgeleitet wird. Der letzte Lauf
-  gegen `/opt/siedelmann-laravel/app` erfasste 565 PHP-Dateien und 2.229
-  Befunde (1.367 manuell/ungelöst und 862 teilweise unterstützt).
+  gegen `/opt/siedelmann-laravel/app` erfasste 572 PHP-Dateien und 2.263
+  Befunde (1.387 manuell/ungelöst und 876 teilweise unterstützt).
   Die Quellprüfung des Gesamtprojekts bestätigt zudem die generierten
   Login-/Logout- und Abmelderouten, validiert den Paket-Lock offline und
   führt module plan für pkg:imported_identity aus, einschließlich
@@ -561,16 +586,27 @@ abgeschlossen.
   Vollständigkeit des Verhaltensgraphen oder eine erfolgte Übersetzung.
   Der jüngste ausdrückliche Live-Schemacheck vergleicht zusätzlich bekannte
   MariaDB-Speichertypen einschließlich Decimal-Präzision und -Skalierung sowie
-  Fremdschlüssel-Zielspalten. Statische Integer-, Bool-, Text-, Decimal-,
+  vollständige Fremdschlüssel-Quell-/Zielspaltentupel einschließlich
+  zusammengesetzter Mandantenschlüssel. Statische Integer-, Bool-, Text-, Decimal-,
   Time- und `now`-Defaults werden verglichen, sofern Zelyra sie sicher
   interpretieren kann; Berichte geben Default-Inhalte nicht aus und listen
-  nicht unterstützte Ausdrücke als ungeprüft. Der erneute Vergleich fand
-  117 Default- und 297 SQL-Typabweichungen (414 insgesamt). Er verglich 80
-  Kandidaten und untersuchte 1.250 Spalten. Engine, Charset, Collation und
-  Trigger bleiben ungeprüft. Die echte Datenbank wurde schreibgeschützt
-  verbunden, ohne Anwendungszeilen zu lesen. Das ersetzt den früheren Befund „keine
-  Schemadifferenzen“, der nur den damals dokumentierten Metadatenausschnitt
-  verglich.
+  nicht unterstützte Ausdrücke als ungeprüft. Der jüngste Lauf untersuchte
+  89 Tabellen mit 1.293 Spalten und verglich alle 80 generierten Kandidaten.
+  Er fand 297 SQL-Typ-, 117 statische Default- und 59 Fremdschlüsselabweichungen
+  (insgesamt 473). Alle 59 betreffen einfache Fremdschlüssel in der Live-DB,
+  während die generierten mandantengebundenen Relationen zusammengesetzte
+  Schlüssel `(tenant_id, relation_id) -> (tenant_id, id)` verlangen; bei 29
+  unterscheidet sich zusätzlich die Löschaktion, weil der sichere Kandidat
+  `RESTRICT` statt Laravels `SET NULL` verwendet. MariaDB kann unter einem
+  zusammengesetzten `ON DELETE SET NULL` den Beziehungsschlüssel nicht nullen,
+  ohne zugleich den erforderlichen Mandantenschlüssel zu nullen. Der Importer
+  markiert die Abweichungen zur Prüfung und behauptet keine
+  Verhaltensgleichheit.
+  Engine, Charset, Collation und Trigger bleiben ungeprüft. Dieser
+  schreibgeschützte Befund gilt für das untersuchte Quelldatenbankschema und
+  kann sich mit dessen Änderungen ändern. Die frühere Aussage „keine
+  Schemadifferenzen“ bezog sich nur auf den damals verglichenen
+  Metadatenausschnitt.
 - [ ] **1.3.0 — kanonische Struktur und Bytecode-Standard:** Das optionale,
   versionierte Projektlayout (`routes/`, `domain/`, `schema/`, `public/`,
   `assets/`, `plugins/`), Architekturprüfungen und eine sichere
@@ -612,7 +648,7 @@ Diese Meilensteine sind in Arbeit und noch nicht veröffentlicht. Bereits teilwe
 - [x] **Offline-Paketgerüst:** `zelyra module init <verzeichnis> --name <paketname> [--version <semver>]` erstellt ein kleines, compilerprüfbares lokales Paket, bindet seine CLI-Kompatibilität an die aktuelle Minor-Linie, startet ohne deklarierte Effekte und überschreibt keine vorhandenen Ziele. Der Integrationstest sperrt, prüft und startet das erzeugte Paket; ungültige Namen, doppelte Versionsoptionen und Überschreibungsversuche werden abgewiesen.
 - [~] Getypte öffentliche Funktionen/Records/Enums/Generics, Exporte, Abhängigkeitsgraphen, Zyklus-/Sichtbarkeitsdiagnosen und Capability-Weitergabe sind implementiert und getestet. Optionale `[package].effects`-Obergrenzen weisen Funktionseffekte außerhalb der Paketfreigabe zurück; sie erteilen keine Laufzeit-Capabilities der Anwendung.
 - [~] **Wiederverwendbare Anwendungsmodule und Webkonfiguration:** `zelyra module list` zeigt jetzt den geladenen Modulgraphen, öffentliche Exporte, lokale Paketidentität/-version/Prüfsumme, Abhängigkeitsaliasnamen und deklarierte Effektobergrenzen deterministisch in menschen- oder maschinenlesbarer Ausgabe. Der Befehl erteilt keine Laufzeit-Capabilities und gibt keine Geheimnisse aus. Login/Authentifizierung, Import, Export, Berichte und ähnliche Geschäftsabläufe sollen versionierte Zelyra-Module sein, die projektübergreifend wiederverwendbar sind – keine Laravel-spezifischen Kopien. Pakete stellen typisierte Schema-Metadaten nun über `zelyra module list` bereit; Pflicht-, Standardwert- und Typregeln werden geprüft, Standardwerte für Geheimnisse abgelehnt und Einstellungswerte niemals ausgegeben. Nicht geheime Werte und Env-Referenzen für Geheimnisse lassen sich in `zelyra.settings.toml` persistieren; Env-Geheimnisse werden gemäß dem deklarierten Skalartyp konvertiert und validiert, ohne Variablennamen oder Werte auszugeben. Ungültige, leere oder übergroße Werte werden vor Ausführung abgewiesen; Zwischenwerte werden genullt. `zelyra module settings check` prüft Typen, Pflichtfelder, Defaults und Secret-Verfügbarkeit ohne Werte auszugeben. JSON-Ausgaben weisen die Pflichtfeld-Eigenschaft explizit aus. `zelyra run` und `zelyra serve` blockieren Starts mit fehlenden oder ungültigen Pflichtwerten, ohne Geheimnisnamen auszugeben. Paketcode kann eigene deklarierte Werte jetzt über `module_setting<T>("name")` lesen: der Literalname und exakte Schematyp werden statisch geprüft, und die Laufzeit trennt Werte nach Quelldatei/Paket und redigiert sie in Debug-Ausgaben. Der Zugriff ist für AST, MIR und Bytecode integriert; das ist kein Nachweis vollständiger Parität der experimentellen Backends. Zelyra Studio bietet jetzt eine geschützte lokale Oberfläche zum Bearbeiten typisierter Paketwerte mit Revisionsabgleich, atomarem Schreiben und Rollback bei ungültiger Konfiguration; bestehende Geheimniswerte und Env-Namen werden nicht ausgelesen oder angezeigt. Wenn Paketeinstellungen und `admin_permission` im Auth-Block konfiguriert sind, stellt `zelyra serve` zusätzlich `/__zelyra/module-settings` bereit. Die Seite verlangt diese Berechtigung, Same-Origin-CSRF-Prüfung, serverseitige Schema-Validierung und Revisionsabgleich. Sie zeigt weder Geheimniswerte noch gespeicherte Env-Referenzen. Änderungen gelten für neue Läufe und erfordern einen Serverneustart. Fehlende Pflichtwerte müssen vor dem Start von `serve` mit Studio oder CLI eingerichtet werden. Sichere Secret-Verwaltung jenseits von Prozessumgebungsvariablen und allgemeine capabilitybewusste Einstellungsformulare bleiben offen. Keine UI erteilt Capabilities implizit. Lokale Paketwiederverwendung und CLI-Inventar allein erfüllen dieses Ziel nicht.
-- [~] **Module für Geschäftsdaten-Austausch:** Wiederverwendbare lokale Pakete `csv_export` und das reine `csv_import` liegen in `examples/business_modules`. Der Export kodiert deterministisch UTF-8 und schreibt Dateien mit ausdrücklich deklariertem `FileSystem`-Effekt und Root-Prüfung; der Import dekodiert begrenzte Eingaben, verlangt nicht leere Kopfspalten und weist Zeilen mit abweichender Spaltenzahl zurück. Ein CLI-Integrationstest prüft gültige und fehlerhafte Daten mit AST, MIR und Bytecode. CSV-Dateien sind auf 16 MiB begrenzt und werden im Speicher verarbeitet. ODBC-Import mit Vorschau/Feldzuordnung/transaktionalem Datenbank-Import, PDF-Druck, Excel-kompatibler Export und breitere Backendkompatibilität bleiben offen; das Beispiel schließt das Geschäftsdaten-Austauschziel nicht ab.
+- [~] **Module für Geschäftsdaten-Austausch:** Wiederverwendbare lokale Pakete `csv_export` und das reine `csv_import` liegen in `examples/business_modules`. Der Export kodiert deterministisch UTF-8 und schreibt Dateien mit ausdrücklich deklariertem `FileSystem`-Effekt und Root-Prüfung; der Import dekodiert begrenzte Eingaben, verlangt nicht leere Kopfspalten, weist Zeilen mit abweichender Spaltenzahl zurück, zeigt höchstens 100 Datenzeilen als Vorschau und ordnet eindeutig benannte Quellspalten explizit benannten Zielspalten zu. Ein CLI-Integrationstest prüft gültige und fehlerhafte Daten, Vorschaugrenzen, fehlende/mehrdeutige Spalten und doppelte Zielnamen mit AST, MIR und Bytecode. CSV-Dateien sind auf 16 MiB begrenzt und werden im Speicher verarbeitet. Eine Vorschau-UI, Typkonvertierung, ODBC-Import, transaktionaler Datenbankimport, PDF-Druck, Excel-kompatibler Export und breitere Backendkompatibilität bleiben offen; das Beispiel schließt das Geschäftsdaten-Austauschziel nicht ab.
 - [~] **Nachweis für modularen Docker-Betrieb:** `examples/customer_orders_modules` wurde geprüft und als eigenständige Docker-Quellanwendung gebündelt. Der generierte Docker-E2E-Test führte außerdem den mehrmoduligen Kunden-/Auftragsablauf aus und exportierte und startete Kunden- und Inventarmodul getrennt gegen einen isolierten MariaDB-Testdienst. Das belegt nur die ausgeführten Pfade; das Bundle hält `complete_deployment: false`, und andere Backends sowie Anwendungskonfigurationen sind nicht geprüft. Ein paketbasiertes Beispiel verbindet Root-Anwendung, Billing-Paket und separates Storage-/Datenbankpaket. Die Laufzeit verwendet jetzt `sql_decode`, bevor SQL-Zeilen als Array behandelt werden. Ein optionaler Integrationstest mit isoliertem MariaDB legt eine eindeutig benannte Datenbank an, führt den Aufruf Root → Billing → Storage aus und räumt sie wieder auf. Der Test besteht. Auch ein Docker-Image, das aus dem aktuellen lokalen Quellstand gebaut wurde, führt diesen Aufruf gegen die entbehrliche MariaDB aus und gibt `0` aus. Der Dockerfile führt jetzt während des Image-Builds `zelyra check main.zyl` mit dem gepinnten Compiler aus. Ein negativer Docker-Build mit dem älteren Pin `e33e101` bricht dort mit `E-MOD-001` für `pkg:storage` ab; ein inkompatibler Pin kann somit kein Image erzeugen. Ein veröffentlichter paketfähiger Compiler-Pin muss noch validiert werden. Ein Compose-Smoke mit Commit `bfc177655edae4e175014bff1aa0baedcc63b192` baute und startete das paketbasierte Webbundle; `GET /` lieferte die gerenderte Seite. Docker-Bundles ohne Seiten, Forms, CRUD, API oder Auth-Routen werden jetzt vor dem Schreiben abgelehnt. Das Bundle meldet weiter `complete_deployment: false`; HTTP-Verhalten einzelner Ressourcen und Kompatibilität eines veröffentlichten Images bleiben offen. Am 2026-10-17 mit `tests/generated-project-docker-e2e.sh` erneut geprüft: Die lokale CLI wurde aus diesem Arbeitsstand gebaut; für den Compose-Test wurden die Ports 28081–28084 und 23309 verwendet und der Modulcompiler auf den vollständigen Commit `84c1d4e2a0f9f7b968d91dfd51a121a2cf2ad1c1` gepinnt. Der Lauf bestand mit Setup, Wiederherstellung, CRUD und mehrmoduligem Geschäftsablauf der generierten Anwendung sowie separatem Build/Start, HTTP- und Berechtigungstests für Kunden- und Inventar-Export. Entfernt wurden nur testeigene Container, Netzwerke, Volumes und temporäre Dateien; andere laufende Container blieben unangetastet. Das belegt diese Quellmodul- und MariaDB-Pfade, aber keine allgemeine Paket-/Backend- oder Deployment-Parität.
 - [~] Die versionierte Rust-Hostservice-API v7 ist für Uhr, Umgebung, Zufall, Konsole, HTTP, Mail, Prozesse, Dateisystem und Datenbank an den AST-Interpreter angebunden ([aktueller Vertrag](runtime-host-services.de.md)). MIR und Bytecode nutzen denselben Provider in den jeweils implementierten Teilmengen. Bytecode v22 unterstützt Inline-Lambdas, gespeicherte Capturing-Lambdas mit typisiertem Capture-Layout sowie statische und dynamische benannte Funktionswerte für `map`/`filter`/`find`/`reduce` und direkte Aufrufe typisierter benannter Funktionswerte in lokalen Variablen. Direkte Aufrufe typisierter benannter Funktionswerte aus lokalen Variablen prüfen Signaturen und Capabilities. Typgeprüfte Record-Copy-updates und Enum-Payloads sowie MIR-abgesenkte Match-Anweisungen/-Ausdrücke sowie `now()`/Clock, `env(name)`/Environment und `read_console(prompt)`/Console sowie `random_int`/`uuid_v4`/Random sowie `read_text`/`read_text_result`, `file_exists`/`dir_exists`, `file_size`, `list_dir` und Root-geprüftes `write_text`/`write_text_result`/`write_text_new_result`/`atomic_write_text_result`/`append_text_result`/`delete_file`/`delete_file_result`/`copy_file_new_result`/`rename_file_result`/FileSystem; Artefakt-Capabilities werden geprüft und die Ausführung benötigt explizite Projektfreigaben. `execute` erteilt standardmäßig keine Freigaben. Bytecode unterstützt `run_process`, `http_get`, `http_request`, `http_json` und `http_result` zusätzlich zu den aufgeführten Clock-, Environment-, Console-, Random- und FileSystem-Aufrufen; `mail_deliver` verwendet dort ebenfalls den injizierten Host nach ausdrücklicher `Email`-Freigabe und gemeinsamer SMTP-/Netzwerk-Policyprüfung; Tests nutzen einen Fake-Transport. Bytecode v21 führt geprüfte SQL- und `mail_queue`-Operationen mit optionalen PDF-Anhängen in einem injizierten Transaktions-Batch aus; `Email` und `Database(write)` werden vor der Auswertung der Nachrichtenfelder geprüft. Andere Transaktionseffekte bleiben nicht unterstützt. MIR deckt mehr davon, aber ebenfalls nur teilweise ab. SQL-, Netzwerk- und Mailprüfungen erfolgen vor dem Provideraufruf. Diese API ist keine stabile native Plugin-ABI.
 - [ ] Zuerst reine Zelyra-Pakete unterstützen. Rust-basierte Host-Integrationen kontrolliert ermöglichen; die instabile Rust-ABI nicht als öffentliche Pluginschnittstelle verwenden. Dynamisches Laden gegebenenfalls später über versionierte Host-API, stabile C-ABI oder Komponentenmodell prüfen.
@@ -620,6 +656,60 @@ Diese Meilensteine sind in Arbeit und noch nicht veröffentlicht. Bereits teilwe
 - [ ] Erweiterbarkeit mit einem Referenz-Datenbankadapter und dem Entwurf einer ausschließlich lesenden Banking-Anbindung (FinTS/HBCI und EBICS) demonstrieren: explizite Autorisierung, Geheimnisschutz, Audit und Mock-Tests. Keine pauschale Bankkompatibilität ohne institutsspezifische Tests behaupten.
 - [ ] Paketvertrauen, Veröffentlichung, Supply-Chain-Sicherheit, Kompatibilität, CLI-/Studio-Anbindung, Diagnostik, positive/negative Tests und ausführbare Beispiele dokumentieren.
 - [ ] Freigabekriterium: 1.1.5 erst nach bestandenen Kompatibilitäts-, Berechtigungsverweigerungs-, Abhängigkeits-, Offline-/Reproduzierbarkeits- und Integrationstests als fertig kennzeichnen.
+
+### 🧪 [~] Geschäfts-CRUD vor 1.3.0 abschließen
+
+Die fünf im 1.2.30-Review gemeldeten Hürden für Geschäftsbelege sind jetzt
+Release-Arbeit. Die Mandantenfilterung der bestehenden Rechnungsnummern-
+Kollisionssuche und die Lokalisierung generierter Master-Detail-Legenden sind
+im 1.2.30-Kandidaten korrigiert. Der erste Nummernkreis-Baustein ist im
+aktuellen unveröffentlichten Branch implementiert und wird noch releaseweit
+geprüft; berechnete Felder und generierte Uploads sind weiterhin offen:
+
+- [~] **1.2.31 — mandantenbezogene Belegnummernkreise:** Der Branch parst
+  `auto_sequence("KD-{0001}")` und `auto_sequence("AG-{year}-{0001}")`, nimmt
+  eine verwaltete Zählertabelle in den Schema-Plan auf und vergibt Nummern in
+  der Anlegen-Transaktion. Der Zähler ist nach Mandant und – bei `{year}` –
+  UTC-Kalenderjahr getrennt. Vorhandene Werte werden geprüft und übersprungen;
+  generierte Create-Routen ignorieren übermittelte Nummern und Edit-Formulare
+  lassen generierte Nummern aus. Unit-Tests und ein MariaDB-Integrationstest
+  prüfen Mandantentrennung, Rollback, Altwert-Kollisionen, gefälschte Eingaben
+  und parallele Vergabe. Derselbe Integrationstest läuft auch mit PostgreSQL
+  16. Auf MariaDB 11.8 und PostgreSQL 16 wurde das verwaltete Schema außerdem
+  jeweils angewendet und danach ohne Drift erneut geplant. Der
+  MariaDB-Inspektor unterscheidet zusammengesetzte Unique-Schlüssel jetzt
+  anhand der echten Primärschlüssel-Constraint. Die vollständige Release-CI,
+  Versionsmatrix, Tutorial-Kompatibilität und Veröffentlichung sind noch
+  offen. Eine lückenlose Vergabe wird nicht garantiert.
+- [ ] **1.2.31 Rest — mandantenbezogene Belegnummernkreise:** PostgreSQL
+  zusätzlich auf der unterstützten Versionsmatrix prüfen, Laufzeit- und
+  Migrationsverhalten für SQLite mit stabilem Diagnosecode prüfen, Release-
+  Gates abschließen und die Kompatibilität mit der bisherigen
+  `invoice_number`-Vergabe prüfen. Konkurrenz, Rollback, Mandantentrennung,
+  Eindeutigkeit und Formatprüfung bleiben erforderlich; nicht unterstützte
+  Backends müssen ausdrücklich abgewiesen werden.
+- [ ] **1.2.32 — typisierte berechnete Geschäftsfelder:** Reine, typisierte
+  und deterministische Ausdrücke für abgeleitete Felder ergänzen, einschließlich
+  unterstützter skalarer und Decimal-Operationen. Abhängigkeitsgraphen prüfen;
+  Zyklen, unbekannte Felder, Effects und Schreibversuche auf berechnete Werte
+  abweisen. CRUD und unterstützte API-Schreibvorgänge berechnen Werte
+  serverseitig vor dem Speichern neu. Eine Live-Formularvorschau ist nur
+  unverbindlich und muss dieselbe geprüfte Ausdruckssemantik verwenden.
+  Decimal-Skala/Rundung, Nullfortpflanzung, Edit-Verhalten und Backendumfang
+  festlegen. Tests prüfen manipulierte Eingaben, Reihenfolge, Fehler, exakte
+  Geldrechnung sowie Create/Edit/API-Parität.
+- [ ] **1.2.33 — FileRef-Unterstützung im generierten CRUD:** Begrenzte,
+  deklarative Anhangsregeln für Schema und CRUD ergänzen und sichere
+  Uploadfelder auf Create/Edit sowie geschützte Download-Links auf Details
+  erzeugen. Bestehende Multipart-Prüfung, privaten FileRef-Speicher,
+  Prüfsummen, Mandantentrennung, Transaktionsbereinigung, CSRF und Rechte
+  wiederverwenden. Rohe FileRef-Werte nie ausgeben und clientseitige Referenzen
+  nicht als vertrauenswürdig behandeln. Tests prüfen Upload, Ersetzung,
+  Erhalt bei fehlender neuer Datei, Rollback-Bereinigung, verweigerte fremde
+  Downloads, MIME-/Größenlimits und generierte Routen. Damit wird die aktuelle
+  Lücke zwischen geprüften eigenständigen File-Forms und CRUD geschlossen.
+
+Siehe den [Plan zum Abschluss des Geschäfts-CRUD](release-plans/1.2.31-1.2.33-business-crud.de.md).
 
 ### 🗺️ [ ] Zelyra 1.3.0 — typisierte MIR und Rust-Bytecode-VM
 
@@ -630,6 +720,8 @@ Diese Meilensteine sind in Arbeit und noch nicht veröffentlicht. Bereits teilwe
 - [~] **Skalare Konstantenfaltung in MIR:** Die explizite API `optimize_scalar_constants` faltet geprüfte Unary-, Binary- und BinaryChain-Ausdrücke der Typen `Int`, `UInt`, `Float`, `Bool` und `Char` über gemeinsame Operator-Helfer von AST/VM. Funktionsaufrufe und andere nichtliterale beziehungsweise nebenwirkungsbehaftete Operanden bleiben unangetastet; Laufzeitfehler und ihre Quellspans bleiben erhalten. `zelyra run --backend mir --optimize-mir` aktiviert den Pass ausdrücklich; normales `run` und MIR ohne diese Option bleiben unverändert. Das Schrittbudget zählt die ausgeführten MIR-Schritte nach der Optimierung; ein Differenzialtest bestätigt für das Beispiel weniger Schritte. Tests vergleichen außerdem AST und optimiertes MIR hinsichtlich Ergebnis, Division-durch-null-Diagnose und sichtbarer Funktionsausgabe und prüfen die CLI-Ablehnung unpassender Backends. Weitere Optimierungspässe bleiben offen.
 - [~] **Bytecode-v25-Ausführungsschritt:** `mir/src/bytecode.rs` übersetzt die erreichbare Aufrufmenge mit unterstützten Skalar- und Aggregatwerten aus verifizierter MIR in ein deterministisches versioniertes Binärformat. Die VM nutzt iterative Aufrufrahmen, Quellspans, Schritt-/Tiefenlimits und Prüfungen für Stack, Kontrollfluss und Aufrufanzahl. Begrenzte Encode-/Decode-APIs prüfen Artefakte strukturell und lehnen fehlerhafte Eingaben ab. AST, MIR und Bytecode delegieren unäre und binäre Wertoperationen sowie gemeinsame reine Built-ins für Konvertierungen und Unicode-Textoperationen einschließlich `text_contains`, `text_trim`, `text_chars`, `text_to_lower`, `text_to_upper`, `text_ucfirst`, `text_starts_with`, `text_ends_with`, `text_replace`, `text_split`, `text_index_of`, `text_repeat`, `text_is_empty`, `text_capitalize`, `text_trim_start`, `text_trim_end`, `text_is_blank`, `text_substring`, `parse_bool`, `text_replace_result`, `text_split_result`, `text_pad_left` und `text_pad_right` – an gemeinsame Runtime-Helfer; der Bytecode-Compiler behält seine dokumentierte Typ-Teilmenge. Enum-Payloads und MIR-abgesenkte Match-Anweisungen/-Ausdrücke mit Guards sind über Encode/Decode differentiell geprüft. Differentialtests decken Arithmetik, Verzweigungen, Kurzschlusslogik, skalare `while`-/`loop`-Kontrollflüsse mit `break`/`continue`, einfach gebundene Integer-`range`-Schleifen (auch absteigend und leer), Array-/Set-Iteration mit Tupeldestrukturierung, Array-/Tupelkonstruktion und Indexierung, Arrayverkettung, Decimal-Arithmetik, Duration-Addition/Subtraktion, Zeitvergleiche, veränderliche Arrayupdates einschließlich `push_mut`/`pop_mut`, strukturelle Array-/Tupel-/Option-/Result-Gleichheit, neue/bestehende Tupelzuweisungen, typisierte generische Record-Konstruktion, Record-Spread-/Copy-with-Update einschließlich generischer Typargumente, Feldzugriffe und Array<Record>-Iteration, typisierte Map-Literale und Lookups mit Duplikatschlüsselregeln, Inline-Lambda-, statische und dynamische benannte Funktionsreferenz-`map`/`filter`/`find`/`reduce`-Aufrufe mit AST/MIR-/Encode-Decode-Differenzialtests, Laufzeitprüfung von Funktionsvor- und -nachbedingungen sowie Schleifeninvarianten (einschließlich break, continue, Return und verschachtelter Returns), gemeinsam genutzte reine Built-ins, Limits, fehlerhafte Tupelwerte, die fail-closed-Ablehnung nicht unterstützter Effekte und ausdrücklich freigegebene Clock-/Environment-/Console-/Random-Aufrufe mit verifizierter Capability-Vorprüfung vor Argumentauswertung ab. `zelyra run --backend bytecode` kann diesen Teilumfang jetzt ausdrücklich und ausschließlich auf Opt-in ausführen; einfache statische SQL-Ausdrücke nutzen die explizite Datenbankverbindung, Capability-/Schema-/Parametertypprüfung und read-only Speicherprüfung; SQL-Transaktionen und `mail_queue` mit optionalen PDF-Anhängen laufen ab Bytecode v21 als geprüfter Batch; andere Transaktionseffekte bleiben nicht unterstützt. AST bleibt Standard. CLI-Tests gleichen Exitcodes mit AST ab, prüfen das Schrittbudget und belegen die fail-closed-Ablehnung nicht unterstützter Konsolenausgabe. Siehe den [Bytecode-Leitfaden](bytecode.de.md). vollständige Closure-Parität über den unterstützten Sprachumfang, persistenter Cache, Signaturen, Effektinferenz, Hostservice-Abdeckung über die unterstützten Aufrufe `now()`/`env(name)`/`read_console(prompt)`, `random_int`, `uuid_v4`, `http_get`, `http_request`, `http_json`, `http_result`, `read_text`, `read_text_result`, `file_exists`, `dir_exists`, `file_size`, `write_text` und `write_text_result` hinaus, vollständige Sprachunterstützung, breite Differentialabdeckung und die Auswahl als Standardbackend bleiben offen; der experimentelle CLI-Schalter ist nur ein Opt-in; Runtime-Berechtigungen müssen aus vertrauenswürdiger Autorisierung stammen.
 - [~] Interpreter und VM teilen Runtime-Semantik und Host-Services teilweise: Reine Standardbibliotheksoperationen sowie Operatoren auf Runtime-Werten verwenden für AST, MIR und Bytecode dieselbe Implementierung. Der Bytecode-Compiler begrenzt Operatoren weiterhin auf seine dokumentierte Teilmenge; die gemeinsamen Helfer erweitern das akzeptierte Bytecode-Format nicht stillschweigend. Host-Services und ausgewählte SQL-/Policy-Helfer sind ebenfalls gemeinsam. SQL-Transaktionssemantik, vollständige Capability-/Effektbehandlung, Verträge, Fehlerverhalten, Ressourcenabrechnung und Modul-APIs benötigen weiterhin einen systematischen Paritätsabgleich.
+- [~] **AST-Laufzeitkonstruktion vereinheitlicht:** Programmausführung und direkte Funktionsausführung verwenden jetzt denselben Interpreter-Konstruktor für Symboltabellen, Schemametadaten, HostServices, Capabilities, Laufzeitrichtlinien, Transaktionen und Ressourcengrenzen. Dadurch entfällt doppelte Sicherheits-/Policy-Verdrahtung, ohne die AST-Auswertungssemantik zu ändern. Die Runtime-Tests bestehen; breitere Backend-Parität und iterative AST-Auswertung bleiben offen.
+- [~] **Gemeinsame Interpreter-Ressourcenlimits:** AST und MIR nutzen jetzt denselben Helfer für Standard- und Maximalaufruftiefe sowie für die begrenzte Worker-Stackgröße; MIR-Parallelzweige verwenden dieselbe Stackregel. Backendlokale Grenzwerte entfallen dadurch, die rekursiven Interpreter werden aber nicht iterativ.
 - [~] **AST-Typprüfung strukturiert:** Kontrollfluss-/Match-Exhaustiveness-Analyse liegt in `runtime/src/type_checker/flow.rs`; Typbeziehungen, Generic-Inferenz, Aliasauflösung und Typannotationsvalidierung liegen in `runtime/src/type_checker/type_relations.rs`. Rückgabe-/Fallthrough-, Loop- und Guard-Regeln sowie die Typregeln blieben unverändert. Gezielte Match-, Generic-Record-/Funktions- und Aliasfehler-Tests sowie Workspace-Tests bestehen. Dies ist interne Strukturierung; weitere Teilung, Flow-Diagnostik und vollständige MIR-/Bytecode-Parität bleiben offen.
 - [ ] AST-Interpreter als auswählbare Referenz behalten, bis die VM den gesamten unterstützten Sprachumfang korrekt abdeckt. Differential-, Property-, Fuzz-, Sicherheits- und Regressionstests ergänzen.
 - [~] Opt-in-CLI-Ausführung ist für AST, MIR und die unterstützte Bytecode-Teilmenge vorhanden. MIR-/Bytecode-Inspektion, sicheres versioniertes Caching, stabile maschinenlesbare Diagnosen und Studio-Integration bleiben offen, ohne bestehendes CLI-Verhalten zu brechen.

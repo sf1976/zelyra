@@ -234,8 +234,8 @@ pub fn execute_function_with_host_services_and_capabilities_and_policies(
     policy: Option<&RuntimePolicy>,
     host_services: Arc<dyn HostServices>,
 ) -> Result<Value, RuntimeError> {
-    let depth = effective_call_depth(policy.and_then(|policy| policy.max_stack_depth));
-    run_on_runtime_stack(runtime_stack_size(depth), || {
+    let depth = effective_function_call_depth(policy.and_then(|policy| policy.max_stack_depth));
+    run_on_runtime_stack(runtime_stack_size_for_depth(depth), || {
         let (result, _) = execute_function_on_runtime_stack(
             program,
             name,
@@ -285,8 +285,8 @@ pub fn execute_function_captured_with_host_services_and_capabilities_and_policie
     policy: Option<&RuntimePolicy>,
     host_services: Arc<dyn HostServices>,
 ) -> FunctionExecutionOutcome {
-    let depth = effective_call_depth(policy.and_then(|policy| policy.max_stack_depth));
-    match run_on_runtime_stack(runtime_stack_size(depth), || {
+    let depth = effective_function_call_depth(policy.and_then(|policy| policy.max_stack_depth));
+    match run_on_runtime_stack(runtime_stack_size_for_depth(depth), || {
         Ok(execute_function_on_runtime_stack(
             program,
             name,
@@ -335,8 +335,8 @@ pub fn execute_function_captured_with_transactional_query<'services>(
                         + Send
                         + 'services),
 ) -> FunctionExecutionOutcome {
-    let depth = effective_call_depth(policy.and_then(|policy| policy.max_stack_depth));
-    match run_on_runtime_stack(runtime_stack_size(depth), move || {
+    let depth = effective_function_call_depth(policy.and_then(|policy| policy.max_stack_depth));
+    match run_on_runtime_stack(runtime_stack_size_for_depth(depth), move || {
         Ok(execute_function_on_runtime_stack(
             program,
             name,
@@ -380,8 +380,8 @@ pub fn execute_function_captured_with_mariadb_transaction(
     policy: Option<&RuntimePolicy>,
     transaction: Arc<Mutex<zelyra_database::MariaDbInteractiveTransaction>>,
 ) -> FunctionExecutionOutcome {
-    let depth = effective_call_depth(policy.and_then(|policy| policy.max_stack_depth));
-    match run_on_runtime_stack(runtime_stack_size(depth), || {
+    let depth = effective_function_call_depth(policy.and_then(|policy| policy.max_stack_depth));
+    match run_on_runtime_stack(runtime_stack_size_for_depth(depth), || {
         Ok(execute_function_on_runtime_stack(
             program,
             name,
@@ -414,12 +414,6 @@ pub fn execute_function_captured_with_mariadb_transaction(
     }
 }
 
-struct RuntimeServices<'services> {
-    host_services: Arc<dyn HostServices>,
-    database_transaction: Option<Arc<Mutex<zelyra_database::MariaDbInteractiveTransaction>>>,
-    transactional_query: Option<&'services mut super::TransactionalQuery<'services>>,
-}
-
 fn execute_function_on_runtime_stack<'services>(
     program: &Program,
     name: &str,
@@ -429,62 +423,13 @@ fn execute_function_on_runtime_stack<'services>(
     policy: Option<&RuntimePolicy>,
     services: RuntimeServices<'services>,
 ) -> (Result<Value, RuntimeError>, Vec<String>) {
-    let mut interpreter = Interpreter {
-        functions: program
-            .functions
-            .iter()
-            .map(|function| (function.name.clone(), function))
-            .collect(),
-        view_definitions: program
-            .views
-            .iter()
-            .map(|view| (view.name.clone(), view.clone()))
-            .collect(),
-        output: Vec::new(),
-        next_class_object_id: Arc::new(AtomicU64::new(1)),
-        parallel_worker: false,
-        step_budget: StepBudget::new(policy.as_ref().and_then(|policy| policy.step_budget)),
-        call_depth_limit: effective_call_depth(
-            policy.as_ref().and_then(|policy| policy.max_stack_depth),
-        ),
-        call_depth: 0,
-        database_url: database_url.map(str::to_owned),
-        database_transaction: services.database_transaction,
-        transactional_query: services.transactional_query,
-        storage_schema: zelyra_database::build_schema(program),
-        storage_checked: false,
-        scoped_tables: program
-            .tables
-            .iter()
-            .filter(|table| table.tenant_scope.is_some())
-            .map(|table| table.name.clone())
-            .collect(),
-        granted_capabilities: grants.cloned(),
-        filesystem_policy: policy.and_then(|policy| policy.filesystem.clone()),
-        network_policy: policy.and_then(|policy| policy.network.clone()),
-        process_policy: policy.and_then(|policy| policy.process.clone()),
-        mail_policy: policy.and_then(|policy| policy.mail.clone()),
-        package_settings: policy.and_then(|policy| policy.package_settings.clone()),
-        host_services: services.host_services,
-        sql_record_definitions: sql_results::definitions(program),
-        record_definitions: program
-            .records
-            .iter()
-            .map(|record| (record.name.clone(), record.clone()))
-            .collect(),
-        type_aliases: program
-            .types
-            .iter()
-            .map(|definition| (definition.name.clone(), definition.target.clone()))
-            .collect(),
-        enum_definitions: program
-            .enums
-            .iter()
-            .map(|definition| (definition.name.clone(), definition.clone()))
-            .collect(),
-        active_capabilities: Vec::new(),
-        active_type_substitutions: Vec::new(),
-    };
+    let mut interpreter = Interpreter::new(
+        program,
+        database_url.map(str::to_owned),
+        grants.cloned(),
+        policy.cloned(),
+        services,
+    );
     let result = interpreter.call(name, args, Span::default());
     (result, interpreter.output)
 }
@@ -586,8 +531,9 @@ fn execute_internal_captured_with_host_services(
     policy: Option<RuntimePolicy>,
     host_services: Arc<dyn HostServices>,
 ) -> ExecutionOutcome {
-    let depth = effective_call_depth(policy.as_ref().and_then(|policy| policy.max_stack_depth));
-    match run_on_runtime_stack(runtime_stack_size(depth), || {
+    let depth =
+        effective_function_call_depth(policy.as_ref().and_then(|policy| policy.max_stack_depth));
+    match run_on_runtime_stack(runtime_stack_size_for_depth(depth), || {
         Ok(execute_internal_on_runtime_stack(
             program,
             database_url,
@@ -611,79 +557,22 @@ fn execute_internal_on_runtime_stack(
     policy: Option<RuntimePolicy>,
     host_services: Arc<dyn HostServices>,
 ) -> ExecutionOutcome {
-    let mut interpreter = Interpreter {
-        functions: program
-            .functions
-            .iter()
-            .map(|f| (f.name.clone(), f))
-            .collect(),
-        view_definitions: program
-            .views
-            .iter()
-            .map(|view| (view.name.clone(), view.clone()))
-            .collect(),
-        output: Vec::new(),
-        next_class_object_id: Arc::new(AtomicU64::new(1)),
-        parallel_worker: false,
-        step_budget: StepBudget::new(policy.as_ref().and_then(|policy| policy.step_budget)),
-        call_depth_limit: effective_call_depth(
-            policy.as_ref().and_then(|policy| policy.max_stack_depth),
-        ),
-        call_depth: 0,
+    let mut interpreter = Interpreter::new(
+        program,
         database_url,
-        database_transaction: None,
-        transactional_query: None,
-        storage_schema: zelyra_database::build_schema(program),
-        storage_checked: false,
-        scoped_tables: program
-            .tables
-            .iter()
-            .filter(|table| table.tenant_scope.is_some())
-            .map(|table| table.name.clone())
-            .collect(),
         granted_capabilities,
-        filesystem_policy: policy.as_ref().and_then(|policy| policy.filesystem.clone()),
-        network_policy: policy.as_ref().and_then(|policy| policy.network.clone()),
-        process_policy: policy.as_ref().and_then(|policy| policy.process.clone()),
-        mail_policy: policy.as_ref().and_then(|policy| policy.mail.clone()),
-        package_settings: policy
-            .as_ref()
-            .and_then(|policy| policy.package_settings.clone()),
-        host_services,
-        sql_record_definitions: sql_results::definitions(program),
-        record_definitions: program
-            .records
-            .iter()
-            .map(|record| (record.name.clone(), record.clone()))
-            .collect(),
-        type_aliases: program
-            .types
-            .iter()
-            .map(|definition| (definition.name.clone(), definition.target.clone()))
-            .collect(),
-        enum_definitions: program
-            .enums
-            .iter()
-            .map(|definition| (definition.name.clone(), definition.clone()))
-            .collect(),
-        active_capabilities: Vec::new(),
-        active_type_substitutions: Vec::new(),
-    };
+        policy,
+        RuntimeServices {
+            host_services,
+            database_transaction: None,
+            transactional_query: None,
+        },
+    );
     let error = interpreter.call("main", Vec::new(), Span::default()).err();
     ExecutionOutcome {
         output: interpreter.output,
         error,
     }
-}
-
-fn effective_call_depth(configured_depth: Option<usize>) -> usize {
-    configured_depth
-        .unwrap_or(MAX_FUNCTION_CALL_DEPTH)
-        .min(MAX_CONFIGURED_FUNCTION_CALL_DEPTH)
-}
-
-pub(super) fn runtime_stack_size(depth: usize) -> usize {
-    2 * 1024 * 1024 + depth.min(MAX_CONFIGURED_FUNCTION_CALL_DEPTH) * 192 * 1024
 }
 
 fn run_on_runtime_stack<T: Send>(

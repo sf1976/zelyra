@@ -1128,6 +1128,10 @@ pub struct ColumnDef {
     pub storage_name: Option<String>,
     /// Optional total precision and fractional scale for fixed-point database columns.
     pub decimal_precision: Option<(u32, u32)>,
+    /// Declarative business number format. `{0001}` is a zero-padded,
+    /// transactionally allocated counter and `{year}` is the UTC year.
+    /// Allocated values are monotonic but intentionally not gapless.
+    pub auto_sequence: Option<String>,
     pub required: bool,
     pub primary_key: bool,
     pub auto: bool,

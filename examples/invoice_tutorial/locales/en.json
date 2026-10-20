@@ -1,6 +1,7 @@
 {
   "invoice.number.label": "Invoice number",
   "invoice.number.auto_hint": "Assigned automatically when the invoice is saved.",
+  "number.series.auto_hint": "Assigned automatically when the record is saved.",
   "invoice.issued_at.label": "Issued on",
   "invoice.overview.title": "Invoice overview",
   "invoice.nav.document_title": "Invoice office · Zelyra",

@@ -27,3 +27,97 @@ pub fn decode_table(source_text: String, delimiter: Char) -> Result<String[][], 
         Err(message) => { return Err(message) }
     }
 }
+
+/// Return a bounded preview containing the header and at most `max_rows` data rows.
+/// The limit is intentionally capped so the preview remains suitable for a UI.
+pub fn preview_table(rows: String[][], max_rows: Int) -> Result<String[][], String> {
+    if len(rows) == 0 {
+        return Err("CSV preview requires a header row")
+    }
+    if max_rows < 0 || max_rows > 100 {
+        return Err("CSV preview row limit must be between 0 and 100")
+    }
+    headers = rows[0]
+    mutable preview: String[][] = [headers]
+    mutable row_index = 1
+    mutable copied = 0
+    while row_index < len(rows) && copied < max_rows {
+        if len(rows[row_index]) != len(headers) {
+            return Err("CSV preview contains a row with a different number of columns than the header")
+        }
+        preview = append(preview, rows[row_index])
+        row_index = row_index + 1
+        copied = copied + 1
+    }
+    return Ok(preview)
+}
+
+/// Reorder and rename CSV columns using explicit source and target names.
+/// Every source name must occur exactly once and target names must be unique.
+/// The returned first row contains `target_columns`; remaining rows are values.
+pub fn map_columns(
+    rows: String[][],
+    source_columns: String[],
+    target_columns: String[]
+) -> Result<String[][], String> {
+    if len(rows) == 0 {
+        return Err("CSV mapping requires a header row")
+    }
+    if len(source_columns) == 0 || len(source_columns) != len(target_columns) {
+        return Err("CSV source and target column lists must have the same non-zero length")
+    }
+    headers = rows[0]
+    mutable source_indexes: Int[] = []
+    mutable mapping_index = 0
+    while mapping_index < len(source_columns) {
+        if source_columns[mapping_index] == "" || target_columns[mapping_index] == "" {
+            return Err("CSV mapping column names must not be empty")
+        }
+        mutable prior_target = 0
+        mutable duplicate_target = false
+        while prior_target < mapping_index {
+            if target_columns[prior_target] == target_columns[mapping_index] {
+                duplicate_target = true
+            }
+            prior_target = prior_target + 1
+        }
+        if duplicate_target {
+            return Err("CSV target column names must be unique")
+        }
+        mutable source_index = 0
+        mutable matches = 0
+        mutable found_index = 0
+        while source_index < len(headers) {
+            if headers[source_index] == source_columns[mapping_index] {
+                matches = matches + 1
+                found_index = source_index
+            }
+            source_index = source_index + 1
+        }
+        if matches == 0 {
+            return Err("CSV source column is missing: " + source_columns[mapping_index])
+        }
+        if matches > 1 {
+            return Err("CSV source column is ambiguous: " + source_columns[mapping_index])
+        }
+        source_indexes = append(source_indexes, found_index)
+        mapping_index = mapping_index + 1
+    }
+
+    mutable mapped: String[][] = [target_columns]
+    mutable row_index = 1
+    while row_index < len(rows) {
+        if len(rows[row_index]) != len(headers) {
+            return Err("CSV row " + to_string(row_index + 1) + " has a different number of columns than the header")
+        }
+        mutable mapped_row: String[] = []
+        mutable column_index = 0
+        while column_index < len(source_indexes) {
+            mapped_row = append(mapped_row, rows[row_index][source_indexes[column_index]])
+            column_index = column_index + 1
+        }
+        mapped = append(mapped, mapped_row)
+        row_index = row_index + 1
+    }
+    return Ok(mapped)
+}

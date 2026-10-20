@@ -20,11 +20,12 @@ use std::{
 use zelyra_ast::{ArrayIndexAssignOp, BinaryOp, Span, Type, UnaryOp};
 use zelyra_hir::{FunctionId, LocalId};
 use zelyra_runtime::{
-    deliver_outbox_message_with_host, execute_http_request_with_host,
-    inspect_filesystem_path_with_host, normalize_map_entries, random_int_with_host_services,
-    uuid_v4_with_host_services, FileSystemPolicy, FunctionValue, HostHttpResponse, HostServices,
-    MailPolicy, NetworkPolicy, PackageSettings, ProcessPolicy, RuntimeError, RuntimePolicy,
-    StepBudget, StepBudgetError, SystemHostServices, Value, MAX_CONFIGURED_FUNCTION_CALL_DEPTH,
+    deliver_outbox_message_with_host, effective_function_call_depth,
+    execute_http_request_with_host, inspect_filesystem_path_with_host, normalize_map_entries,
+    random_int_with_host_services, runtime_stack_size_for_depth, uuid_v4_with_host_services,
+    FileSystemPolicy, FunctionValue, HostHttpResponse, HostServices, MailPolicy, NetworkPolicy,
+    PackageSettings, ProcessPolicy, RuntimeError, RuntimePolicy, StepBudget, StepBudgetError,
+    SystemHostServices, Value,
 };
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -35,9 +36,7 @@ pub struct ExecutionLimits {
 
 pub(crate) fn bounded_execution_limits(limits: ExecutionLimits) -> ExecutionLimits {
     ExecutionLimits {
-        max_stack_depth: limits
-            .max_stack_depth
-            .min(MAX_CONFIGURED_FUNCTION_CALL_DEPTH),
+        max_stack_depth: effective_function_call_depth(Some(limits.max_stack_depth)),
         ..limits
     }
 }
@@ -46,7 +45,7 @@ impl Default for ExecutionLimits {
     fn default() -> Self {
         Self {
             max_steps: 100_000,
-            max_stack_depth: 20,
+            max_stack_depth: effective_function_call_depth(None),
         }
     }
 }
@@ -267,7 +266,7 @@ fn execute_function_captured_with_host_services_and_database_url(
         Ok(function) => function,
         Err(error) => return failed_outcome(error),
     };
-    let stack_size = 2 * 1024 * 1024 + limits.max_stack_depth.min(500) * 192 * 1024;
+    let stack_size = runtime_stack_size_for_depth(limits.max_stack_depth);
     std::thread::scope(|scope| {
         let handle = std::thread::Builder::new()
             .name("zelyra-mir-interpreter".into())
@@ -571,7 +570,7 @@ impl Machine<'_> {
             }
         }
 
-        let stack_size = 2 * 1024 * 1024 + self.limits.max_stack_depth.min(500) * 192 * 1024;
+        let stack_size = runtime_stack_size_for_depth(self.limits.max_stack_depth);
         let results = std::thread::scope(|scope| {
             let handles = bindings
                 .iter()
@@ -3455,6 +3454,7 @@ mod tests {
     use std::sync::Mutex;
     use zelyra_lexer::lex;
     use zelyra_parser::parse;
+    use zelyra_runtime::MAX_CONFIGURED_FUNCTION_CALL_DEPTH;
 
     #[test]
     fn execution_limits_cannot_raise_native_call_depth_above_the_shared_cap() {
@@ -3464,6 +3464,10 @@ mod tests {
         });
         assert_eq!(limits.max_steps, 17);
         assert_eq!(limits.max_stack_depth, MAX_CONFIGURED_FUNCTION_CALL_DEPTH);
+        assert_eq!(
+            ExecutionLimits::default().max_stack_depth,
+            effective_function_call_depth(None)
+        );
     }
 
     #[test]

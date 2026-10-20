@@ -1601,10 +1601,7 @@ impl SchemaAnalyzer {
             .collect::<BTreeSet<_>>();
         for candidate in &mut unique {
             let mut changed_fields = BTreeMap::<String, String>::new();
-            let source_is_tenant_scoped = candidate
-                .columns
-                .iter()
-                .any(|scope| scope.name == "tenant_id" && !scope.nullable);
+            let source_is_tenant_scoped = tenant_scoped_tables.contains(&candidate.table);
             for column in &mut candidate.columns {
                 if let Some(target) = column
                     .references_table
@@ -3483,6 +3480,62 @@ mod tests {
             .unwrap()
             .iter()
             .any(|note| note.as_str().unwrap().contains("candidate uses `RESTRICT`")));
+    }
+
+    #[test]
+    fn only_proven_scoped_tables_restrict_tenant_composite_set_null_relations() {
+        let mut analyzer = SchemaAnalyzer::default();
+        analyzer.scan(
+            "database/migrations/create_tenants.php",
+            "<?php Schema::create('tenants', function ($table) { $table->id(); });",
+        );
+        analyzer.scan(
+            "database/migrations/create_customers.php",
+            "<?php Schema::create('customers', function ($table) { $table->id(); $table->foreignId('tenant_id')->constrained('tenants')->cascadeOnDelete(); $table->string('name'); });",
+        );
+        analyzer.scan(
+            "database/migrations/create_orders.php",
+            "<?php Schema::create('orders', function ($table) { $table->id(); $table->unsignedBigInteger('tenant_id'); $table->foreignId('customer_id')->nullable()->constrained('customers')->nullOnDelete(); });",
+        );
+        analyzer.scan(
+            "database/migrations/create_scoped_orders.php",
+            "<?php Schema::create('scoped_orders', function ($table) { $table->id(); $table->foreignId('tenant_id')->constrained('tenants')->cascadeOnDelete(); $table->foreignId('customer_id')->nullable()->constrained('customers')->nullOnDelete(); });",
+        );
+
+        let plan = analyzer.finish();
+        let candidate = |table: &str| {
+            plan["candidates"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .find(|candidate| candidate["table"] == table)
+                .unwrap()
+        };
+        let order_relation = candidate("orders")["columns"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|column| column["source_column_name"] == "customer_id")
+            .unwrap();
+        assert_eq!(order_relation["on_delete"], "set_null");
+        assert!(!candidate("orders")["backend_review_notes"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|note| note.as_str().unwrap().contains("tenant-safe composite")));
+
+        let scoped_order_relation = candidate("scoped_orders")["columns"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|column| column["source_column_name"] == "customer_id")
+            .unwrap();
+        assert_eq!(scoped_order_relation["on_delete"], "restrict");
+        assert!(candidate("scoped_orders")["backend_review_notes"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|note| note.as_str().unwrap().contains("tenant-safe composite")));
     }
 
     #[test]
