@@ -17,6 +17,12 @@ table invoice_audit_logs {
     action: String(32) required
 }
 
+view InvoicePrint {
+    html {
+        <html><body><h1>Invoice {invoice_number}</h1><p>Total: {integrity_hash}</p><slot /></body></html>
+    }
+}
+
 crud Invoice -> invoices {
     title: "Invoices"
     list { invoice_number is_locked }
@@ -56,6 +62,22 @@ crud Invoice -> invoices {
                 VALUES (:invoice_id, 'must_roll_back')
             }
             1 / 0
+        }
+    }
+
+    action email_pdf {
+        label: "Queue invoice PDF"
+        uses Email, Database(write)
+        execute {
+            transaction {
+                mail_queue(
+                    "customer@example.test",
+                    "Invoice " + row.invoice_number,
+                    "Your invoice is attached.",
+                    "invoice-" + row.invoice_number + ".pdf",
+                    render_pdf("InvoicePrint", row)
+                )
+            }
         }
     }
 }

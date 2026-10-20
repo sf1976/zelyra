@@ -1,4 +1,5 @@
 [capabilities]
 database_read = true
 database_write = true
+email = true
 clock = true

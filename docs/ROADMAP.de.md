@@ -352,8 +352,10 @@ abgeschlossen.
   `hash_sha256`, `now()`, PDF-Rendering und Outbox-Mail mit deren bestehenden
   Einschränkungen. Kein impliziter Namespace `crypto::` und keine ungeprüfte
   SQL-Interpolation. Grundlage: Die AST-Runtime kann SQL über einen geliehenen
-  Request-Transaktions-Callback ausführen; verschachtelte Transaktionen und
-  Parallelblöcke werden abgewiesen. Der Parser speichert getrennte Execute-/
+  Request-Transaktions-Callback ausführen; ein `transaction`-Block in einer
+  Action ist eine logische Gruppe in dieser äußeren Transaktion und kann weder
+  selbst bestätigen noch eine zweite Verbindung öffnen. Parallelblöcke werden
+  weiterhin abgewiesen. Der Parser speichert getrennte Execute-/
   Guard-Knoten; die CLI erstellt nun typisierte `row`-/`session`-Scopes,
   prüft Unit-/Bool-Ergebnisse und erzwingt explizite Capabilities sowie
   Projektfreigaben. Die Web-Ausführung lädt den Datensatz nun mit `FOR UPDATE`,
@@ -361,10 +363,12 @@ abgeschlossen.
   erneut, wertet den reinen Guard aus und führt typisiertes SQL sowie den
   automatischen Audit-Eintrag über die geliehene Transaktionsbrücke aus. Ein
   MariaDB-HTTP-E2E belegt Status-/Hash-/Zeitstempeländerung, einen Audit-Eintrag,
-  Ablehnung einer Wiederholung und Rollback nach einem späteren Runtime-Fehler.
-  Granulare `Database(read/write)`-Freigaben öffnen außerdem korrekt die
-  Datenbank-Sperre der Web-Runtime. PostgreSQL-E2E, umfassendere PDF-/Outbox-
-  Effekte sowie vollständige Berechtigungs-/Sicherheitsmatrizen bleiben offen.
+  Ablehnung einer Wiederholung, Rollback nach einem späteren Runtime-Fehler
+  sowie eine unversandte Outbox-Nachricht mit echtem lokal gerendertem
+  PDF-Anhang. Nur ein ausdrücklich gestarteter Worker darf diese Nachricht
+  versenden. Granulare `Database(read/write)`-Freigaben öffnen außerdem korrekt
+  die Datenbank-Sperre der Web-Runtime. PostgreSQL-E2E, mandantengebundene
+  Action-E2E sowie vollständige Berechtigungs-/Sicherheitsmatrizen bleiben offen.
   Siehe den
   [Arbeitsplan 1.2.28](release-plans/1.2.28-typed-crud-actions.de.md).
 - [ ] **1.2.29 — begrenzte sichere Datei-Uploads (Design-Gate):** Vor einem

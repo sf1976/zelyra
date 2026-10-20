@@ -324,12 +324,16 @@ security and compatibility gates stated for that milestone.
   lowering for typed `row`/`session` scopes. Web execution now loads the target
   under `FOR UPDATE`, revalidates tenant membership/ownership in the same
   transaction, evaluates the pure guard, then executes typed SQL and automatic
-  audit insertion through the borrowed transaction bridge. A MariaDB HTTP E2E
-  proves state/hash/time update, one audit insert, repeat-guard rejection, and
-  rollback after a later runtime failure. Granular `Database(read/write)`
-  grants also open the web database gate correctly. PostgreSQL action E2E,
-  richer PDF/outbox effect coverage, and full security/permission matrix tests
-  remain open. See the
+  audit insertion through the borrowed transaction bridge. A `transaction`
+  block inside an action is a logical batch on the caller-owned transaction;
+  it cannot commit or open a second connection. Its checked `mail_queue` path
+  supports locally rendered PDF attachments. MariaDB HTTP E2E proves
+  state/hash/time update, one audit insert, repeat-guard rejection, rollback
+  after a later runtime failure, and an outbox row with a real PDF attachment
+  that remains pending for a separately started worker. Granular
+  `Database(read/write)` grants also open the web database gate correctly.
+  PostgreSQL action E2E, tenant-scoped action E2E, and the full
+  security/permission matrix remain open. See the
   [1.2.28 work plan](release-plans/1.2.28-typed-crud-actions.en.md).
 - [ ] **1.2.29 — bounded secure file upload foundation (subject to design
   gate):** Specify and test multipart size limits, file metadata types,

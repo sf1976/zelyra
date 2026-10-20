@@ -2441,7 +2441,7 @@ fn ast_sql_uses_the_borrowed_request_transaction_for_each_query() {
 }
 
 #[test]
-fn borrowed_request_transaction_bridge_rejects_nested_and_parallel_escape_paths() {
+fn borrowed_request_transaction_bridge_runs_transaction_blocks_in_the_outer_transaction() {
     let transaction_program = parse(
         &lex("table invoices { id: Id primary auto status: String required } fn main() uses Database(write) { transaction { sql { UPDATE invoices SET status = 'locked' WHERE id = 1 } } }").unwrap(),
     )
@@ -2452,39 +2452,47 @@ fn borrowed_request_transaction_bridge_rejects_nested_and_parallel_escape_paths(
         parse(&lex("fn main() { parallel { result = await 1 } }").unwrap()).unwrap();
     check(&parallel_program).expect("parallel expression is statically valid");
 
-    for (program, expected) in [
-        (
-            &transaction_program,
-            "nested transaction blocks are unavailable",
-        ),
-        (
-            &parallel_program,
-            "parallel execution is unavailable inside a borrowed database transaction",
-        ),
-    ] {
-        let mut query_count = 0;
-        let mut query_executor = |_query: &zelyra_database::Query| {
-            query_count += 1;
-            Ok(zelyra_database::QueryResult::default())
-        };
-        let outcome = execute_function_captured_with_transactional_query(
-            program,
-            "main",
-            Vec::new(),
-            "mysql://zelyra:zelyra@127.0.0.1/zelyra",
-            None,
-            None,
-            &mut query_executor,
-        );
-        assert!(outcome
-            .error
-            .as_ref()
-            .is_some_and(|error| error.message.contains(expected)));
-        assert_eq!(
-            query_count, 0,
-            "unsafe operation must not use another connection"
-        );
-    }
+    let mut observed = Vec::new();
+    let mut query_executor = |query: &zelyra_database::Query| {
+        observed.push(query.sql.clone());
+        Ok(zelyra_database::QueryResult::default())
+    };
+    let outcome = execute_function_captured_with_transactional_query(
+        &transaction_program,
+        "main",
+        Vec::new(),
+        "mariadb://zelyra:zelyra@127.0.0.1/zelyra",
+        None,
+        None,
+        &mut query_executor,
+    );
+    assert!(outcome.error.is_none(), "{:?}", outcome.error);
+    assert_eq!(
+        observed,
+        [" UPDATE invoices SET status = 'locked' WHERE id = 1 "]
+    );
+
+    let mut query_count = 0;
+    let mut query_executor = |_query: &zelyra_database::Query| {
+        query_count += 1;
+        Ok(zelyra_database::QueryResult::default())
+    };
+    let outcome = execute_function_captured_with_transactional_query(
+        &parallel_program,
+        "main",
+        Vec::new(),
+        "mariadb://zelyra:zelyra@127.0.0.1/zelyra",
+        None,
+        None,
+        &mut query_executor,
+    );
+    assert!(outcome.error.as_ref().is_some_and(|error| error
+        .message
+        .contains("parallel execution is unavailable inside a borrowed database transaction")));
+    assert_eq!(
+        query_count, 0,
+        "parallel must not escape the outer transaction"
+    );
 }
 
 #[test]

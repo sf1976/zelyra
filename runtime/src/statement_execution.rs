@@ -346,21 +346,38 @@ impl<'program, 'services> Interpreter<'program, 'services> {
                 }
                 Err(self.runtime_error(*span, "non-exhaustive match at runtime"))
             }
-            Stmt::Transaction { span, .. } => {
+            Stmt::Transaction { body, span } => {
                 if self.transactional_query.is_some() {
-                    return Err(self.runtime_error(
-                        *span,
-                        "nested transaction blocks are unavailable inside a borrowed database transaction",
-                    ));
+                    // A transaction block inside a caller-owned transaction is
+                    // a logical batch, not a second transaction. The outer
+                    // request owns commit/rollback and every queued query uses
+                    // its borrowed executor.
+                    let queries = transaction_queries(self, body, env, *span)?;
+                    self.ensure_database_storage(*span)?;
+                    for query in queries {
+                        let result = match self.transactional_query.as_deref_mut() {
+                            Some(query_executor) => query_executor(&query),
+                            None => {
+                                return Err(RuntimeError {
+                                    message: "borrowed database transaction is unavailable".into(),
+                                    span: *span,
+                                });
+                            }
+                        };
+                        if let Err(error) = result {
+                            return Err(RuntimeError {
+                                message: format!("database transaction failed: {error}"),
+                                span: *span,
+                            });
+                        }
+                    }
+                    return Ok(Flow::Continue);
                 }
                 let Some(database_url) = self.database_url.clone() else {
                     return Err(self.runtime_error(
                         *span,
                         "transaction execution requires a database runtime",
                     ));
-                };
-                let Stmt::Transaction { body, .. } = statement else {
-                    unreachable!();
                 };
                 let queries = transaction_queries(self, body, env, *span)?;
                 self.ensure_database_storage(*span)?;

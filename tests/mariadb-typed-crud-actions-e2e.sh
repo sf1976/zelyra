@@ -13,6 +13,7 @@ cleanup() {
     local status=$?
     if [[ -n "${server_pid}" ]]; then kill "${server_pid}" 2>/dev/null || true; wait "${server_pid}" 2>/dev/null || true; fi
     if declare -F client >/dev/null && [[ -n "${db_name:-}" ]]; then
+        client -e "DELETE FROM _zelyra_outbox WHERE JSON_UNQUOTE(JSON_EXTRACT(payload, '$.attachments[0].filename')) = CONCAT('invoice-', '${invoice}-rollback', '.pdf');" >/dev/null 2>&1 || true
         client -e "DELETE FROM invoice_audit_logs WHERE invoice_id IN (SELECT id FROM invoices WHERE invoice_number LIKE '${invoice}%'); DELETE FROM invoices WHERE invoice_number LIKE '${invoice}%';" >/dev/null 2>&1 || true
     fi
     if [[ "${status}" -ne 0 && -f "${temp_dir}/server.log" ]]; then cat "${temp_dir}/server.log" >&2; fi
@@ -57,6 +58,7 @@ PY
 
 "${zelyra_bin}" check "${project_file}"
 DATABASE_URL="${database_url}" "${zelyra_bin}" db setup "${project_file}"
+DATABASE_URL="${database_url}" "${zelyra_bin}" outbox setup "${project_file}"
 client --batch -e "INSERT INTO invoices (invoice_number, is_locked) VALUES ('${invoice}', false), ('${invoice}-rollback', false)"
 id="$(client --batch --skip-column-names -e "SELECT id FROM invoices WHERE invoice_number='${invoice}'")"
 rollback_id="$(client --batch --skip-column-names -e "SELECT id FROM invoices WHERE invoice_number='${invoice}-rollback'")"
@@ -80,4 +82,8 @@ grep -Fq "Invoice is already locked." "${temp_dir}/guard-result.html"
 load_form "${rollback_id}" fail_after_writes "${temp_dir}/fail.html"; token="$(csrf_from "${temp_dir}/fail.html")"
 status="$(post_action "${rollback_id}" fail_after_writes "${token}" "${temp_dir}/fail-result.html")"; [[ "${status}" == 500 ]]
 [[ "$(client --batch --skip-column-names -e "SELECT CONCAT(is_locked, '|', (SELECT COUNT(*) FROM invoice_audit_logs WHERE invoice_id=${rollback_id})) FROM invoices WHERE id=${rollback_id}")" == "0|0" ]]
+
+load_form "${rollback_id}" email_pdf "${temp_dir}/email.html"; token="$(csrf_from "${temp_dir}/email.html")"
+status="$(post_action "${rollback_id}" email_pdf "${token}" "${temp_dir}/email-result.html")"; [[ "${status}" == 303 ]]
+[[ "$(client --batch --skip-column-names -e "SELECT CONCAT(COUNT(*), '|', MIN(delivered_at IS NULL), '|', MIN(JSON_UNQUOTE(JSON_EXTRACT(payload, '$.attachments[0].filename')) = CONCAT('invoice-', '${invoice}-rollback', '.pdf')), '|', MIN(JSON_UNQUOTE(JSON_EXTRACT(payload, '$.attachments[0].content')) LIKE 'JVBER%')) FROM _zelyra_outbox WHERE event_type='zelyra.mail.send' AND JSON_UNQUOTE(JSON_EXTRACT(payload, '$.to'))='customer@example.test'")" == "1|1|1|1" ]]
 echo "Typed CRUD action MariaDB E2E passed."
