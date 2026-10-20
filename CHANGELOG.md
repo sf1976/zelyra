@@ -1,5 +1,25 @@
 ## Unreleased
 
+## 1.2.31 — 2026-10-20
+
+- Add declared, tenant-aware business number series for generated CRUD using
+  `auto_sequence("KD-{0001}")` and optional UTC-year scopes. Allocation is
+  transaction-protected, ignores submitted values, checks existing values,
+  and is explicitly not gapless. MariaDB and PostgreSQL are supported;
+  SQLite is rejected for runtime allocation. / Deklarierte,
+  mandantenbezogene Geschäftsnummernkreise für generiertes CRUD mit
+  `auto_sequence("KD-{0001}")` und optionalem UTC-Jahresscope ergänzen. Die
+  Vergabe ist transaktionsgeschützt, ignoriert übermittelte Werte, prüft
+  vorhandene Nummern und ist ausdrücklich nicht lückenlos. MariaDB und
+  PostgreSQL werden unterstützt; SQLite wird für die Laufzeitvergabe
+  abgewiesen.
+- Read MariaDB primary-key status from actual primary-key constraints instead
+  of the ambiguous `COLUMN_KEY` summary, preventing composite unique indexes
+  from producing false schema drift. / Primärschlüsselstatus in MariaDB aus
+  den tatsächlichen Primärschlüssel-Constraints statt der mehrdeutigen
+  `COLUMN_KEY`-Zusammenfassung lesen, damit zusammengesetzte Unique-Indizes
+  keinen falschen Schema-Drift erzeugen.
+
 ## 1.2.30 — 2026-10-20
 
 - Add typed scalar ID references with `references <table>`, preserving nominal

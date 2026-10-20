@@ -603,26 +603,35 @@ These milestones are in progress and unreleased. Items with `[~]` are partially 
 - [ ] Document package publishing/trust policy, dependency and supply-chain security, compatibility rules, CLI/Studio integration, diagnostics, positive and negative tests, and runnable examples.
 - [ ] Release gate: no 1.1.5 completion claim without passing compatibility, capability-denial, dependency, offline/reproducibility, and integration tests.
 
-### 🗺️ [ ] Business CRUD completion before 1.3.0
+### 🧪 [~] Business CRUD completion before 1.3.0
 
 The five invoice/business hurdles reported during the 1.2.30 review are now
 tracked as release work. Tenant scoping for the existing invoice-number
 collision lookup and localization of generated master-detail legends are fixed
-in the 1.2.30 candidate. The remaining capabilities are assigned below and
-must be compiler-checked, documented, and tested across relevant database and
-execution paths before 1.3.0:
+in the 1.2.30 candidate. The first number-series implementation is present on
+the current unreleased branch and remains under release-level verification;
+computed fields and generated uploads remain open:
 
-- [ ] **1.2.31 — tenant-aware document number series:** Add explicit,
-  transactional sequence declarations usable by customer, quote, order,
-  delivery, and invoice fields. Support deterministic literal/year/padded
-  counter formats and independent per-tenant counters where the table is
-  scoped. Uniqueness must match the declared tenant scope and survive
-  concurrent requests. Never imply mathematically gapless numbers: rolled-back
-  reservations and legally voided documents need an explicit audit policy;
-  consumed numbers are not silently reused. Keep legacy `invoice_number`
-  generation backward compatible. Test concurrent allocation, rollback,
-  tenant isolation, uniqueness, format validation, and MariaDB/PostgreSQL
-  support (or reject unsupported backends explicitly).
+- [~] **1.2.31 — tenant-aware document number series:** The branch now parses
+  `auto_sequence("KD-{0001}")` and `auto_sequence("AG-{year}-{0001}")`, adds
+  a managed counter table to schema planning, and allocates values in the
+  create transaction with counters scoped by tenant and UTC year when present.
+  Existing values are checked and skipped; generated CRUD create routes ignore
+  submitted numbers and edit forms omit generated number fields. Unit coverage
+  and a MariaDB integration test cover tenant separation, rollback, existing
+  collisions, forged values, yearly formats, and concurrent allocation. The
+  same integration test also passes on PostgreSQL 16. On MariaDB 11.8 and
+  PostgreSQL 16 the managed schema was applied and replanned with no drift.
+  MariaDB inspection now distinguishes composite unique keys using the actual
+  primary-key constraint. Full release CI, the supported-version matrix,
+  tutorial compatibility and publication remain open. No gapless numbering
+  guarantee is made.
+- [ ] **1.2.31 remaining — tenant-aware document number series:** Verify the
+  supported version matrix, test SQLite runtime and migration behavior with a
+  stable diagnostic, complete release gates, and audit compatibility with
+  legacy `invoice_number` generation. Retain concurrency, rollback, tenant
+  isolation, uniqueness and format checks; reject unsupported backends
+  explicitly.
 - [ ] **1.2.32 — typed computed business fields:** Add pure, typed,
   deterministic derived-field expressions for supported scalar/Decimal
   operations. Check dependency graphs and reject cycles, unknown fields,

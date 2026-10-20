@@ -453,6 +453,42 @@ Typische Abbildung:
 | `Bool` | boolescher Datenbankwert |
 | `Timestamp` | Zeitstempelwert |
 
+### Deklarierte Nummernkreise
+
+Ein `String`-Feld kann für generierte CRUD-Anlegeformulare einen
+transaktionalen Nummernkreis deklarieren:
+
+~~~zelyra
+table customers {
+    id: Id primary auto
+    customer_number: String(32) required auto_sequence("KD-{0001}")
+    name: String(255) required
+}
+
+table quotes {
+    id: Id primary auto
+    quote_number: String(40) required auto_sequence("AG-{year}-{0001}")
+}
+~~~
+
+`{0001}` bedeutet einen mindestens vier Stellen breiten, mit Nullen
+aufgefüllten Zähler. Der Zähler darf nicht breiter als der reservierte Teil
+des Formats werden. `{year}` wird durch das aktuelle UTC-Kalenderjahr ersetzt
+und führt pro Jahr einen eigenen Zähler. Zulässig sind Literaltext, genau ein
+Zählertoken und höchstens ein Jahrestoken. Unbekannte oder unvollständige
+Tokens sowie Formate, die nicht in die String-Spaltenlänge passen, werden
+abgewiesen.
+
+Der Schema-Plan ergänzt `_zelyra_number_sequences`. Prüfe den Plan und wende
+ihn mit `zelyra db apply main.zyl` bewusst an, bevor das CRUD-Formular
+verwendet wird. MariaDB und PostgreSQL unterstützen die Laufzeitvergabe;
+SQLite wird mit einer klaren Fehlermeldung abgewiesen. Die Vergabe läuft in
+derselben Transaktion wie das Speichern. Vom Browser übermittelte Werte
+werden ignoriert, und generierte Nummern sind im Bearbeiten-Formular nicht
+schreibbar. Zelyra prüft vorhandene Nummern vor der Vergabe. Nummern sind
+nicht lückenlos garantiert und stornierte Belege dürfen nicht still
+wiederverwendet werden.
+
 ### MariaDB sicher vorbereiten
 
 Lege für die Anwendung eine eigene Datenbank und einen eigenen Benutzer an.
