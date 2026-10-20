@@ -399,8 +399,9 @@ security and compatibility gates stated for that milestone.
   E2E proves preview, referenced-file preservation, and explicit orphan removal.
   Replacing a file on an authorized edit now removes the previous blob only
   after the database action commits; cleanup failure leaves a managed orphan
-  for the explicit reference-aware cleanup command. Deleting a record does not
-  yet remove its file immediately, and backup/restore remain open. Non-Unix
+  for the explicit reference-aware cleanup command. Permanent CRUD deletion removes an upload after commit only when no declared
+  FileRef still uses it; soft-delete retains the recoverable file. Backup/restore
+  remain open. Non-Unix
   creation fails closed pending ACL support.
   `FileRef` maps to `CHAR(36)`/`UUID`/`TEXT` by backend, checked file forms must
   match a same-named reference column, automatic CRUD cannot render it as text,
@@ -423,9 +424,8 @@ security and compatibility gates stated for that milestone.
   `/opt/siedelmann-laravel/app` identified upload
   flows in invoices,
   contracts, settings, postal letters, and inbound mail; the importer does not
-  generate them. Remaining release gates include immediate file removal after
-  record deletion, backup/restore, and additional cleanup E2E coverage for
-  concurrent service shutdown, crash remnants, and failure recovery. See the
+  generate them. Remaining release gates include backup/restore and additional cleanup E2E
+  coverage for concurrent service shutdown, crash remnants, and failure recovery. See the
   [1.2.29 secure upload plan](release-plans/1.2.29-secure-uploads.en.md).
 - [~] **1.2.30 — Laravel import workflow coverage:** Standalone forms now
   support checked local routes with captured path parameters, a compiler-checked

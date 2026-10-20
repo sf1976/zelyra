@@ -3159,6 +3159,12 @@ fn multipart_upload_commits_reference_and_removes_file_after_sql_rollback() {
         .expect("the upload E2E script provides a disposable MariaDB URL");
     zelyra_database::execute_query(
         &database_url,
+        "DROP TABLE IF EXISTS zelyra_upload_shared_e2e",
+        Vec::new(),
+    )
+    .expect("drop test-only shared upload reference table");
+    zelyra_database::execute_query(
+        &database_url,
         "DROP TABLE IF EXISTS zelyra_upload_e2e",
         Vec::new(),
     )
@@ -3169,6 +3175,12 @@ fn multipart_upload_commits_reference_and_removes_file_after_sql_rollback() {
         Vec::new(),
     )
     .expect("create test-only upload table");
+    zelyra_database::execute_query(
+        &database_url,
+        "CREATE TABLE zelyra_upload_shared_e2e (id BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY, document CHAR(36) NULL, owner_id BIGINT NOT NULL DEFAULT 7)",
+        Vec::new(),
+    )
+    .expect("create test-only shared upload reference table");
     let storage_root = std::env::temp_dir().join(format!(
         "zelyra-upload-e2e-{}-{}",
         std::process::id(),
@@ -3280,6 +3292,11 @@ fn multipart_upload_commits_reference_and_removes_file_after_sql_rollback() {
                 id: Id primary auto
                 document: FileRef?
                 title: String(80)?
+                owner_id: Int required default 7
+            }
+            table zelyra_upload_shared_e2e {
+                id: Id primary auto
+                document: FileRef?
                 owner_id: Int required default 7
             }
             fn main() {}
@@ -3616,6 +3633,93 @@ fn multipart_upload_commits_reference_and_removes_file_after_sql_rollback() {
         "failed SQL action must remove only its staged/published file and manifest"
     );
 
+    let mut delete_crud = crud.clone();
+    delete_crud.csrf = CsrfProtection::new("csrf-token");
+    delete_crud.schema = zelyra_database::build_schema(&edit_program).expect("build delete schema");
+    zelyra_database::execute_query(
+        &database_url,
+        "INSERT INTO zelyra_upload_shared_e2e (document, owner_id) VALUES (:document, 7)",
+        vec![(
+            "document".into(),
+            zelyra_database::QueryValue::String(replacement_ref.clone()),
+        )],
+    )
+    .expect("add a second declared reference to the replacement file");
+    let delete_response = dispatch_crud_delete(
+        &delete_crud,
+        &Request {
+            method: "POST".into(),
+            target: format!("/uploads/{id}/delete"),
+            path: format!("/uploads/{id}/delete"),
+            headers: HashMap::from([
+                ("host".into(), "localhost".into()),
+                ("origin".into(), "http://localhost".into()),
+            ]),
+            body: "_zelyra_csrf=csrf-token".into(),
+            remote_addr: None,
+        },
+        &HashMap::from([("id".into(), id.clone())]),
+        Some(&storage_root),
+        CrudMutationContext {
+            database_url: Some(&database_url),
+            audit_table: None,
+            audit_chain: false,
+            actor_user_id: Some(7),
+            tenant_context: None,
+            validation_program: Some(&edit_program),
+            crud_policy_functions: &[],
+            granted_permissions: Vec::new(),
+        },
+    );
+    assert_eq!(delete_response.status, 303, "{}", delete_response.body);
+    assert!(
+        storage.read_verified(0, replacement_ref, 1024).is_ok(),
+        "deleting one row must retain an upload still referenced by another row"
+    );
+    let mut delete_shared_crud = delete_crud.clone();
+    delete_shared_crud.table = "zelyra_upload_shared_e2e".into();
+    let delete_shared_response = dispatch_crud_delete(
+        &delete_shared_crud,
+        &Request {
+            method: "POST".into(),
+            target: "/shared/1/delete".into(),
+            path: "/shared/1/delete".into(),
+            headers: HashMap::from([
+                ("host".into(), "localhost".into()),
+                ("origin".into(), "http://localhost".into()),
+            ]),
+            body: "_zelyra_csrf=csrf-token".into(),
+            remote_addr: None,
+        },
+        &HashMap::from([("id".into(), "1".into())]),
+        Some(&storage_root),
+        CrudMutationContext {
+            database_url: Some(&database_url),
+            audit_table: None,
+            audit_chain: false,
+            actor_user_id: Some(7),
+            tenant_context: None,
+            validation_program: Some(&edit_program),
+            crud_policy_functions: &[],
+            granted_permissions: Vec::new(),
+        },
+    );
+    assert_eq!(
+        delete_shared_response.status, 303,
+        "{}",
+        delete_shared_response.body
+    );
+    assert!(
+        storage.read_verified(0, replacement_ref, 1024).is_err(),
+        "the final permanent CRUD deletion should remove its unreferenced upload after commit"
+    );
+
+    zelyra_database::execute_query(
+        &database_url,
+        "DROP TABLE zelyra_upload_shared_e2e",
+        Vec::new(),
+    )
+    .expect("drop test-only shared upload reference table");
     zelyra_database::execute_query(&database_url, "DROP TABLE zelyra_upload_e2e", Vec::new())
         .expect("drop test-only upload table");
     std::fs::remove_dir_all(storage_root).unwrap();

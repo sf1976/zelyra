@@ -2344,6 +2344,7 @@ impl WebApp {
                             crud,
                             request,
                             &path_params,
+                            self.upload_storage_root.as_deref(),
                             CrudMutationContext {
                                 database_url: self.database_url.as_deref(),
                                 audit_table: self
@@ -9803,10 +9804,90 @@ fn crud_scope_params(
     params
 }
 
+fn is_file_ref_column_type(
+    ty: &Type,
+    aliases: &HashMap<&str, &Type>,
+    visited: &mut HashSet<String>,
+) -> bool {
+    match ty {
+        Type::Option(inner) => is_file_ref_column_type(inner, aliases, visited),
+        Type::Named(name) if name == "FileRef" => true,
+        Type::Named(name) => {
+            if !visited.insert(name.clone()) {
+                return false;
+            }
+            aliases
+                .get(name.as_str())
+                .is_some_and(|target| is_file_ref_column_type(target, aliases, visited))
+        }
+        _ => false,
+    }
+}
+
+fn file_ref_is_still_referenced(
+    program: &Program,
+    database_url: &str,
+    tenant_id: i64,
+    file_ref: &str,
+) -> Result<bool, String> {
+    let aliases = program
+        .types
+        .iter()
+        .map(|alias| (alias.name.as_str(), &alias.target))
+        .collect::<HashMap<_, _>>();
+    let is_postgres = zelyra_database::is_postgres_url(database_url);
+    for table in &program.tables {
+        for column in &table.columns {
+            if !is_file_ref_column_type(&column.ty, &aliases, &mut HashSet::new()) {
+                continue;
+            }
+            let file_column = column
+                .storage_name
+                .as_deref()
+                .unwrap_or(column.name.as_str());
+            let tenant_column = table.tenant_scope.as_ref().map(|scope| {
+                table
+                    .columns
+                    .iter()
+                    .find(|candidate| candidate.name == scope.column)
+                    .and_then(|candidate| candidate.storage_name.as_deref())
+                    .unwrap_or(scope.column.as_str())
+            });
+            let mut sql = format!(
+                "SELECT 1 FROM {} WHERE {} = :zelyra_file_ref",
+                quote_ident(&table.name, is_postgres),
+                quote_ident(file_column, is_postgres)
+            );
+            let mut params = vec![(
+                "zelyra_file_ref".into(),
+                zelyra_database::QueryValue::String(file_ref.to_owned()),
+            )];
+            if let Some(tenant_column) = tenant_column {
+                sql.push_str(&format!(
+                    " AND {} = :zelyra_upload_tenant_id",
+                    quote_ident(tenant_column, is_postgres)
+                ));
+                params.push((
+                    "zelyra_upload_tenant_id".into(),
+                    zelyra_database::QueryValue::Int(tenant_id),
+                ));
+            }
+            sql.push_str(" LIMIT 1");
+            let rows = zelyra_database::execute_read_only_query(database_url, &sql, params)
+                .map_err(|error| format!("{}.{}: {error}", table.name, column.name))?;
+            if !rows.rows.is_empty() {
+                return Ok(true);
+            }
+        }
+    }
+    Ok(false)
+}
+
 fn dispatch_crud_delete(
     crud: &CrudRoute,
     request: &Request,
     path_params: &HashMap<String, String>,
+    upload_storage_root: Option<&Path>,
     context: CrudMutationContext<'_>,
 ) -> Response {
     let CrudMutationContext {
@@ -9952,9 +10033,70 @@ fn dispatch_crud_delete(
                     .map(|condition| format!(" AND {condition}"))
                     .collect::<String>()
             ),
-            params: scope_params,
+            params: scope_params.clone(),
         }
     });
+    let file_refs_before_delete = if crud.soft_delete.is_none() {
+        validation_program
+            .and_then(|program| program.tables.iter().find(|table| table.name == crud.table))
+            .map(|table| {
+                let aliases = validation_program
+                    .expect("program exists when file table is selected")
+                    .types
+                    .iter()
+                    .map(|alias| (alias.name.as_str(), &alias.target))
+                    .collect::<HashMap<_, _>>();
+                let file_columns = table
+                    .columns
+                    .iter()
+                    .filter(|column| {
+                        is_file_ref_column_type(&column.ty, &aliases, &mut HashSet::new())
+                    })
+                    .map(|column| {
+                        quote_ident(
+                            column
+                                .storage_name
+                                .as_deref()
+                                .unwrap_or(column.name.as_str()),
+                            is_postgres,
+                        )
+                    })
+                    .collect::<Vec<_>>();
+                if file_columns.is_empty() {
+                    return Vec::new();
+                }
+                let conditions = scope_conditions
+                    .iter()
+                    .map(|condition| format!(" AND {condition}"))
+                    .collect::<String>();
+                let query = format!(
+                    "SELECT {} FROM {} WHERE {} = :id{} LIMIT 1",
+                    file_columns.join(", "),
+                    quote_ident(&crud.table, is_postgres),
+                    quote_ident("id", is_postgres),
+                    conditions
+                );
+                match zelyra_database::execute_read_only_query(
+                    database_url,
+                    &query,
+                    scope_params.clone(),
+                ) {
+                    Ok(result) => result
+                        .rows
+                        .into_iter()
+                        .flat_map(|row| row.into_iter())
+                        .filter(|value| !value.is_empty())
+                        .collect(),
+                    Err(error) => {
+                        eprintln!("zelyra web: file references could not be loaded before CRUD deletion: {error}");
+                        Vec::new()
+                    }
+                }
+            })
+            .unwrap_or_default()
+    } else {
+        Vec::new()
+    };
     let (query, success_message) = if let Some(soft_delete) = &crud.soft_delete {
         (
             format!(
@@ -10055,6 +10197,36 @@ fn dispatch_crud_delete(
             "Internal Server Error",
             "The record could not be deleted.",
         );
+    }
+    if crud.soft_delete.is_none() && !file_refs_before_delete.is_empty() {
+        if let (Some(program), Some(storage_root)) = (validation_program, upload_storage_root) {
+            match file_storage::FileStorage::new(storage_root) {
+                Ok(storage) => {
+                    let upload_tenant_id = tenant_context.map_or(0, |tenant| tenant.tenant_id);
+                    for file_ref in file_refs_before_delete {
+                        match file_ref_is_still_referenced(
+                            program,
+                            database_url,
+                            upload_tenant_id,
+                            &file_ref,
+                        ) {
+                            Ok(false) => {
+                                if let Err(error) = storage.remove(upload_tenant_id, &file_ref) {
+                                    eprintln!("zelyra web: deleted record upload cleanup failed: {error}");
+                                }
+                            }
+                            Ok(true) => {}
+                            Err(error) => eprintln!(
+                                "zelyra web: remaining upload references could not be checked; retaining file: {error}"
+                            ),
+                        }
+                    }
+                }
+                Err(error) => eprintln!(
+                    "zelyra web: private upload storage could not be opened after record deletion: {error}"
+                ),
+            }
+        }
     }
     Response::redirect(append_query_parameter(
         &crud.path,
