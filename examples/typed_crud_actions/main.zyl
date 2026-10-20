@@ -1,0 +1,70 @@
+database main {
+    engine: mariadb
+    database: "typed_crud_actions_test"
+}
+
+table invoices {
+    id: Id primary auto
+    invoice_number: String(80) required unique
+    is_locked: Bool required default false
+    locked_at: Timestamp?
+    integrity_hash: String(64)?
+}
+
+table invoice_audit_logs {
+    id: Id primary auto
+    invoice_id: Int required
+    action: String(32) required
+}
+
+crud Invoice -> invoices {
+    title: "Invoices"
+    list { invoice_number is_locked }
+
+    action lock {
+        label: "Lock invoice"
+        guard when row.is_locked == true {
+            error: "Invoice is already locked."
+        }
+        uses Database(write), Clock
+        execute {
+            invoice_id = row.id
+            locked_at = now()
+            integrity_hash = hash_sha256(row.invoice_number)
+            sql {
+                UPDATE invoices
+                SET is_locked = true, locked_at = :locked_at, integrity_hash = :integrity_hash
+                WHERE id = :invoice_id
+            }
+            sql {
+                INSERT INTO invoice_audit_logs (invoice_id, action)
+                VALUES (:invoice_id, 'locked')
+            }
+        }
+    }
+
+    action fail_after_writes {
+        label: "Test rollback"
+        uses Database(write)
+        execute {
+            invoice_id = row.id
+            sql {
+                UPDATE invoices SET is_locked = true WHERE id = :invoice_id
+            }
+            sql {
+                INSERT INTO invoice_audit_logs (invoice_id, action)
+                VALUES (:invoice_id, 'must_roll_back')
+            }
+            1 / 0
+        }
+    }
+}
+
+page "/" {
+    html {
+        <h1>Typed CRUD action test fixture</h1>
+        <a href="/invoices">Invoices</a>
+    }
+}
+
+fn main() {}

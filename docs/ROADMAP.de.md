@@ -342,7 +342,7 @@ abgeschlossen.
   [Arbeitsplan 1.2.27](release-plans/1.2.27-laravel-website-importer.de.md).
   Die Grundlage ist implementiert und zusammengeführt; alle PR-Prüfungen
   bestanden.
-- [ ] **1.2.28 — typisierte CRUD-Domain-Actions:** Einen typgeprüften
+- [~] **1.2.28 — typisierte CRUD-Domain-Actions:** Einen typgeprüften
   Ausführungskontext mit expliziten Datensatz-, Benutzer- und verifizierten
   Mandantenwerten ergänzen. Den Sprach-Typ- und Effektprüfer wiederverwenden,
   explizite Berechtigungen verlangen, transaktionssicheres SQL und erlaubte
@@ -356,9 +356,16 @@ abgeschlossen.
   Parallelblöcke werden abgewiesen. Der Parser speichert getrennte Execute-/
   Guard-Knoten; die CLI erstellt nun typisierte `row`-/`session`-Scopes,
   prüft Unit-/Bool-Ergebnisse und erzwingt explizite Capabilities sowie
-  Projektfreigaben. Die Web-CRUD-Integration bleibt fail-closed, bis
-  Datensatzladen, Guard-Auswertung und Aktionsausführung dieselbe gesperrte
-  Request-Transaktion verwenden. Siehe den
+  Projektfreigaben. Die Web-Ausführung lädt den Datensatz nun mit `FOR UPDATE`,
+  prüft Mandantenzugriff und -mitgliedschaft innerhalb derselben Transaktion
+  erneut, wertet den reinen Guard aus und führt typisiertes SQL sowie den
+  automatischen Audit-Eintrag über die geliehene Transaktionsbrücke aus. Ein
+  MariaDB-HTTP-E2E belegt Status-/Hash-/Zeitstempeländerung, einen Audit-Eintrag,
+  Ablehnung einer Wiederholung und Rollback nach einem späteren Runtime-Fehler.
+  Granulare `Database(read/write)`-Freigaben öffnen außerdem korrekt die
+  Datenbank-Sperre der Web-Runtime. PostgreSQL-E2E, umfassendere PDF-/Outbox-
+  Effekte sowie vollständige Berechtigungs-/Sicherheitsmatrizen bleiben offen.
+  Siehe den
   [Arbeitsplan 1.2.28](release-plans/1.2.28-typed-crud-actions.de.md).
 - [ ] **1.2.29 — begrenzte sichere Datei-Uploads (Design-Gate):** Vor einem
   `File`-Formularfeld Multipart-Größenlimits, Metadatentypen, Inhaltsprüfung,

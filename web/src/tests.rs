@@ -3,6 +3,19 @@ use std::net::TcpListener;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
 #[test]
+fn database_timestamps_convert_to_zelyra_utc_milliseconds() {
+    assert_eq!(
+        timestamp_value("2026-10-20 04:25:38.161000"),
+        zelyra_ast::temporal::parse_timestamp_input("2026-10-20T04:25:38.161Z")
+    );
+    assert_eq!(
+        timestamp_value("2026-10-20 04:25:38"),
+        zelyra_ast::temporal::parse_timestamp_input("2026-10-20T04:25:38Z")
+    );
+    assert_eq!(timestamp_value("not-a-timestamp"), None);
+}
+
+#[test]
 fn table_validation_predicate_runs_before_form_writes_and_returns_declared_message() {
     let source = r#"
         table invoices {
@@ -645,6 +658,9 @@ fn table_validation_rejects_invalid_form_before_action_execution() {
             validation_program: Some(&lowered),
             table_validation_functions: &mappings,
             crud_policy_functions: &[],
+            crud_action_functions: &[],
+            capability_grants: None,
+            runtime_policy: None,
             granted_permissions: Vec::new(),
         },
     );
@@ -666,6 +682,9 @@ fn table_validation_rejects_invalid_form_before_action_execution() {
             validation_program: Some(&lowered),
             table_validation_functions: &mappings,
             crud_policy_functions: &[],
+            crud_action_functions: &[],
+            capability_grants: None,
+            runtime_policy: None,
             granted_permissions: Vec::new(),
         },
     );
@@ -5528,6 +5547,9 @@ fn execute_form_action_rejects_postgres_chained_audit() {
         validation_program: None,
         table_validation_functions: &[],
         crud_policy_functions: &[],
+        crud_action_functions: &[],
+        capability_grants: None,
+        runtime_policy: None,
         granted_permissions: &[],
     };
     let err = execute_form_action(

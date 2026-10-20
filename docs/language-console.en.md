@@ -38,4 +38,4 @@ The sandbox transaction starts only when a project URL is resolved from the proc
 
 ## Multiline input
 
-Continuation is detected from unclosed strings and braces. An incomplete pipe at EOF reports a parse error. `Ctrl+C` discards only the current input buffer; `Ctrl+D` or `:quit` exits the session.
+Continuation is detected from unclosed strings and curly, square, or round delimiters. Delimiters inside strings and single-line comments are ignored. An incomplete pipe at EOF reports a parse error. `Ctrl+C` discards only the current input buffer; `Ctrl+D` or `:quit` exits the session.

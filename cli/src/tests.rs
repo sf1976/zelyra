@@ -1,6 +1,18 @@
 use super::*;
 
 #[test]
+fn database_web_gate_accepts_any_explicit_database_operation_grant() {
+    assert!(database_runtime_capability_granted(None));
+    assert!(!database_runtime_capability_granted(Some(&HashSet::new())));
+    assert!(database_runtime_capability_granted(Some(&HashSet::from([
+        "Database(read)".to_owned(),
+    ]))));
+    assert!(database_runtime_capability_granted(Some(&HashSet::from([
+        "Database(write)".to_owned(),
+    ]))));
+}
+
+#[test]
 fn typed_crud_action_bodies_are_checked_in_row_and_session_scope() {
     let directory = env::temp_dir().join(format!(
         "zelyra-typed-crud-action-{}-{}",

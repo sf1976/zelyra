@@ -38,4 +38,4 @@ Die Sandbox-Transaktion wird nur gestartet, wenn eine Projektverbindung aus Proz
 
 ## Verhalten bei mehrzeiliger Eingabe
 
-Die Fortsetzung wird anhand nicht abgeschlossener Zeichenketten und geschweifter Blöcke erkannt. Nicht abgeschlossene Eingabe am Ende einer Pipe wird als Parsefehler gemeldet. `Ctrl+C` verwirft nur den aktuellen Eingabepuffer; `Ctrl+D` beziehungsweise `:quit` beendet die Sitzung.
+Die Fortsetzung wird anhand nicht abgeschlossener Zeichenketten sowie geschweifter, eckiger und runder Klammern erkannt. Zeichen in Zeichenketten und einzeiligen Kommentaren zählen nicht als Klammern. Nicht abgeschlossene Eingabe am Ende einer Pipe wird als Parsefehler gemeldet. `Ctrl+C` verwirft nur den aktuellen Eingabepuffer; `Ctrl+D` beziehungsweise `:quit` beendet die Sitzung.

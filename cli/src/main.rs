@@ -1812,153 +1812,31 @@ fn validate_typed_crud_actions(path: &str, program: &zelyra_ast::Program) -> boo
         }
     }
 
-    let mut checked_program = program.clone();
-    let mut synthetic_functions = Vec::new();
-    let mut reserved_names = checked_program
-        .functions
-        .iter()
-        .map(|function| function.name.clone())
-        .chain(
-            checked_program
-                .records
-                .iter()
-                .map(|record| record.name.clone()),
-        )
-        .collect::<HashSet<_>>();
-    for (crud_index, crud) in checked_program.cruds.iter().enumerate() {
-        let Some(table) = checked_program
-            .tables
-            .iter()
-            .find(|table| table.name == crud.table)
-        else {
-            continue;
-        };
-        for (action_index, action) in crud.actions.iter().enumerate() {
-            if action.execute_body.is_none() && action.guard.is_none() {
-                if !action.capabilities.is_empty() {
-                    diagnostic_with_span(
-                        path,
-                        "E-CRUD-009",
-                        "`uses` is only valid on a CRUD action with an `execute` block",
-                        action.span,
-                    );
-                    valid = false;
-                }
-                continue;
-            }
-
-            let row_type = unique_internal_name(
-                format!("__ZelyraCrudActionRow_{crud_index}_{action_index}"),
-                &mut reserved_names,
-            );
-            let session_type = unique_internal_name(
-                format!("__ZelyraCrudActionSession_{crud_index}_{action_index}"),
-                &mut reserved_names,
-            );
-            checked_program.records.push(zelyra_ast::RecordDef {
-                name: row_type.clone(),
-                is_public: false,
-                is_class: false,
-                type_params: Vec::new(),
-                fields: table
-                    .columns
-                    .iter()
-                    .map(|column| zelyra_ast::RecordField {
-                        name: column.name.clone(),
-                        ty: column.ty.clone(),
-                        span: column.span,
-                    })
-                    .collect(),
-                span: action.span,
-            });
-            let tenant_type = table
-                .tenant_scope
-                .as_ref()
-                .map(|scope| scope.tenant_type.clone())
-                .unwrap_or_else(|| zelyra_ast::Type::Named("Id".into()));
-            checked_program.records.push(zelyra_ast::RecordDef {
-                name: session_type.clone(),
-                is_public: false,
-                is_class: false,
-                type_params: Vec::new(),
-                fields: vec![
-                    zelyra_ast::RecordField {
-                        name: "tenant_id".into(),
-                        ty: zelyra_ast::Type::Option(Box::new(tenant_type)),
-                        span: action.span,
-                    },
-                    zelyra_ast::RecordField {
-                        name: "user_id".into(),
-                        ty: zelyra_ast::Type::Option(Box::new(zelyra_ast::Type::Named(
-                            "Id".into(),
-                        ))),
-                        span: action.span,
-                    },
-                ],
-                span: action.span,
-            });
-
-            let params = vec![
-                zelyra_ast::Param {
-                    name: "row".into(),
-                    ty: zelyra_ast::Type::Named(row_type),
-                    span: action.span,
-                },
-                zelyra_ast::Param {
-                    name: "session".into(),
-                    ty: zelyra_ast::Type::Named(session_type),
-                    span: action.span,
-                },
-            ];
-            if let Some(body) = &action.execute_body {
-                let name = unique_internal_name(
-                    format!("__zelyra_crud_action_{crud_index}_{action_index}"),
-                    &mut reserved_names,
+    for crud in &program.cruds {
+        for action in &crud.actions {
+            if action.execute_body.is_none()
+                && action.guard.is_none()
+                && !action.capabilities.is_empty()
+            {
+                diagnostic_with_span(
+                    path,
+                    "E-CRUD-009",
+                    "`uses` is only valid on a CRUD action with an `execute` block",
+                    action.span,
                 );
-                synthetic_functions.push(zelyra_ast::Function {
-                    name,
-                    is_public: false,
-                    type_params: Vec::new(),
-                    params: params.clone(),
-                    return_type: Some(zelyra_ast::Type::Unit),
-                    capabilities: action.capabilities.clone(),
-                    requires: Vec::new(),
-                    ensures: Vec::new(),
-                    body: body.clone(),
-                    span: action.span,
-                });
-            }
-            if let Some(guard) = &action.guard {
-                let name = unique_internal_name(
-                    format!("__zelyra_crud_action_guard_{crud_index}_{action_index}"),
-                    &mut reserved_names,
-                );
-                synthetic_functions.push(zelyra_ast::Function {
-                    name,
-                    is_public: false,
-                    type_params: Vec::new(),
-                    params,
-                    return_type: Some(zelyra_ast::Type::Bool),
-                    capabilities: Vec::new(),
-                    requires: Vec::new(),
-                    ensures: Vec::new(),
-                    body: zelyra_ast::Block {
-                        statements: vec![zelyra_ast::Stmt::Return {
-                            value: Some(guard.condition.clone()),
-                            span: guard.span,
-                        }],
-                        span: guard.span,
-                    },
-                    span: guard.span,
-                });
+                valid = false;
             }
         }
     }
-
-    if synthetic_functions.is_empty() {
+    // Keep synthetic declarations in the same order as WebApp's runtime
+    // lowering so collision resolution yields identical wrapper names.
+    let (checked_program, _) = zelyra_ast::lower_table_validation_functions_owned(program.clone());
+    let (checked_program, _) = zelyra_ast::lower_crud_policy_functions_owned(checked_program);
+    let (checked_program, mappings) =
+        zelyra_ast::lower_crud_action_functions_owned(checked_program);
+    if mappings.is_empty() {
         return valid;
     }
-    checked_program.functions.extend(synthetic_functions);
     if let Err(errors) = check(&checked_program) {
         for error in errors {
             diagnostic_with_span(path, error.code, &error.message, error.span);
@@ -1979,16 +1857,6 @@ fn validate_typed_crud_actions(path: &str, program: &zelyra_ast::Program) -> boo
         valid = false;
     }
     valid
-}
-
-fn unique_internal_name(base: String, reserved: &mut HashSet<String>) -> String {
-    let mut candidate = base.clone();
-    let mut suffix = 0usize;
-    while !reserved.insert(candidate.clone()) {
-        suffix = suffix.saturating_add(1);
-        candidate = format!("{base}_{suffix}");
-    }
-    candidate
 }
 
 fn reject_typed_holes(source: &str, path: &str, program: &zelyra_ast::Program) -> bool {
@@ -7448,6 +7316,14 @@ fn validate_project_features(path: &str, program: &zelyra_ast::Program) -> Resul
     Ok(())
 }
 
+fn database_runtime_capability_granted(grants: Option<&HashSet<String>>) -> bool {
+    grants.is_none_or(|grants| {
+        grants.contains("Database")
+            || grants.contains("Database(read)")
+            || grants.contains("Database(write)")
+    })
+}
+
 fn project_capability_grants(path: &str) -> Result<Option<HashSet<String>>, String> {
     let Some(config_path) = project_config_path(path)? else {
         return Ok(None);
@@ -11035,9 +10911,8 @@ fn serve_command(mut args: impl Iterator<Item = String>) -> ExitCode {
             permissions: tableview.permissions.clone(),
         })
         .collect();
-    let database_capability_granted = capability_grants
-        .as_ref()
-        .is_none_or(|grants| grants.contains("Database"));
+    let database_capability_granted =
+        database_runtime_capability_granted(capability_grants.as_ref());
     if database_capability_granted {
         if let Some(url) = database_url_from_program(&program) {
             if let Err(error) = zelyra_database::validate_decimal_storage(&url, &schema) {
@@ -11206,6 +11081,7 @@ fn serve_command(mut args: impl Iterator<Item = String>) -> ExitCode {
     println!("Zelyra server listening on http://{actual_address}");
     let app = WebApp::with_database_url(routes, form_routes, database_url_from_program(&program))
         .with_validation_program(program)
+        .with_runtime_security(capability_grants, runtime_policy)
         .with_ui_settings(ui_language, ui_level)
         .with_ui_stylesheet_css(ui_stylesheet_css)
         .with_project_theme_css(theme_css)

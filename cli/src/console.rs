@@ -489,10 +489,18 @@ fn pretty_value(value: &RuntimeValue, depth: usize) -> String {
 }
 
 fn input_complete(input: &str) -> bool {
-    let mut depth = 0i32;
+    let mut delimiters = Vec::new();
     let mut quoted = false;
     let mut escaped = false;
-    for character in input.chars() {
+    let mut line_comment = false;
+    let mut characters = input.chars().peekable();
+    while let Some(character) = characters.next() {
+        if line_comment {
+            if character == '\n' {
+                line_comment = false;
+            }
+            continue;
+        }
         if quoted {
             if escaped {
                 escaped = false;
@@ -503,14 +511,33 @@ fn input_complete(input: &str) -> bool {
             }
             continue;
         }
+        if character == '/' && characters.peek() == Some(&'/') {
+            characters.next();
+            line_comment = true;
+            continue;
+        }
         match character {
             '"' => quoted = true,
-            '{' => depth += 1,
-            '}' => depth -= 1,
+            '{' | '[' | '(' => delimiters.push(character),
+            '}' | ']' | ')' => {
+                let expected_open = match character {
+                    '}' => '{',
+                    ']' => '[',
+                    ')' => '(',
+                    _ => unreachable!(),
+                };
+                if delimiters.last() == Some(&expected_open) {
+                    delimiters.pop();
+                } else {
+                    // Let the parser report mismatched or unexpected closers
+                    // immediately instead of waiting for another input line.
+                    return true;
+                }
+            }
             _ => {}
         }
     }
-    !quoted && depth <= 0
+    !quoted && delimiters.is_empty()
 }
 
 fn history_safe(input: &str) -> bool {
@@ -541,6 +568,18 @@ mod tests {
         assert!(!input_complete("if true {\n"));
         assert!(!input_complete("value = \"open\n"));
         assert!(input_complete("if true {\n value = 1\n}\n"));
+    }
+
+    #[test]
+    fn multiline_detection_waits_for_calls_arrays_and_tuples_but_ignores_literals() {
+        assert!(!input_complete("value = calculate(\n"));
+        assert!(!input_complete("value = [1,\n"));
+        assert!(!input_complete("value = (1,\n"));
+        assert!(input_complete("value = calculate(\n  1,\n  2\n)\n"));
+        assert!(input_complete("value = [\"(\", 2]\n"));
+        assert!(input_complete(
+            "// an opening brace { in a comment\nvalue = 1\n"
+        ));
     }
 
     #[test]

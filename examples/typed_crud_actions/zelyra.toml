@@ -1,0 +1,4 @@
+[capabilities]
+database_read = true
+database_write = true
+clock = true

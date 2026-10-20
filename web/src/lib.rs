@@ -747,6 +747,9 @@ struct FormExecutionContext<'a> {
     validation_program: Option<&'a Program>,
     table_validation_functions: &'a [zelyra_ast::TableValidationFunction],
     crud_policy_functions: &'a [zelyra_ast::CrudPolicyFunction],
+    crud_action_functions: &'a [zelyra_ast::CrudActionFunction],
+    capability_grants: Option<&'a HashSet<String>>,
+    runtime_policy: Option<&'a zelyra_runtime::RuntimePolicy>,
     granted_permissions: &'a [String],
 }
 
@@ -757,6 +760,9 @@ struct FormDispatchContext<'a> {
     validation_program: Option<&'a Program>,
     table_validation_functions: &'a [zelyra_ast::TableValidationFunction],
     crud_policy_functions: &'a [zelyra_ast::CrudPolicyFunction],
+    crud_action_functions: &'a [zelyra_ast::CrudActionFunction],
+    capability_grants: Option<&'a HashSet<String>>,
+    runtime_policy: Option<&'a zelyra_runtime::RuntimePolicy>,
     granted_permissions: Vec<String>,
 }
 
@@ -1190,6 +1196,9 @@ pub struct WebApp {
     validation_program: Option<Arc<Program>>,
     table_validation_functions: Vec<zelyra_ast::TableValidationFunction>,
     crud_policy_functions: Vec<zelyra_ast::CrudPolicyFunction>,
+    crud_action_functions: Vec<zelyra_ast::CrudActionFunction>,
+    capability_grants: Option<HashSet<String>>,
+    runtime_policy: Option<zelyra_runtime::RuntimePolicy>,
     pub cruds: Vec<CrudRoute>,
     pub tableviews: Vec<TableViewRoute>,
     pub database_url: Option<String>,
@@ -1223,6 +1232,9 @@ impl WebApp {
             validation_program: None,
             table_validation_functions: Vec::new(),
             crud_policy_functions: Vec::new(),
+            crud_action_functions: Vec::new(),
+            capability_grants: None,
+            runtime_policy: None,
             cruds: Vec::new(),
             tableviews: Vec::new(),
             database_url: None,
@@ -1260,6 +1272,9 @@ impl WebApp {
             validation_program: None,
             table_validation_functions: Vec::new(),
             crud_policy_functions: Vec::new(),
+            crud_action_functions: Vec::new(),
+            capability_grants: None,
+            runtime_policy: None,
             cruds: Vec::new(),
             tableviews: Vec::new(),
             database_url,
@@ -1296,9 +1311,23 @@ impl WebApp {
         let (lowered, mappings) = zelyra_ast::lower_table_validation_functions_owned(program);
         let (lowered, crud_policy_functions) =
             zelyra_ast::lower_crud_policy_functions_owned(lowered);
+        let (lowered, crud_action_functions) =
+            zelyra_ast::lower_crud_action_functions_owned(lowered);
         self.validation_program = Some(Arc::new(lowered));
         self.table_validation_functions = mappings;
         self.crud_policy_functions = crud_policy_functions;
+        self.crud_action_functions = crud_action_functions;
+        self
+    }
+
+    /// Installs the same project grants and runtime policy used by CLI runs.
+    pub fn with_runtime_security(
+        mut self,
+        grants: Option<HashSet<String>>,
+        policy: Option<zelyra_runtime::RuntimePolicy>,
+    ) -> Self {
+        self.capability_grants = grants;
+        self.runtime_policy = policy;
         self
     }
 
@@ -1872,6 +1901,9 @@ impl WebApp {
                                 validation_program: self.validation_program.as_deref(),
                                 table_validation_functions: &self.table_validation_functions,
                                 crud_policy_functions: &self.crud_policy_functions,
+                                crud_action_functions: &self.crud_action_functions,
+                                capability_grants: self.capability_grants.as_ref(),
+                                runtime_policy: self.runtime_policy.as_ref(),
                                 granted_permissions: authenticated_permissions(
                                     self,
                                     request,
@@ -1990,6 +2022,9 @@ impl WebApp {
                                     validation_program: self.validation_program.as_deref(),
                                     table_validation_functions: &self.table_validation_functions,
                                     crud_policy_functions: &self.crud_policy_functions,
+                                    crud_action_functions: &self.crud_action_functions,
+                                    capability_grants: self.capability_grants.as_ref(),
+                                    runtime_policy: self.runtime_policy.as_ref(),
                                     granted_permissions: authenticated_permissions(
                                         self,
                                         request,
@@ -6241,6 +6276,9 @@ fn dispatch_form(
             validation_program: None,
             table_validation_functions: &[],
             crud_policy_functions: &[],
+            crud_action_functions: &[],
+            capability_grants: None,
+            runtime_policy: None,
             granted_permissions: Vec::new(),
         },
     )
@@ -6260,6 +6298,9 @@ fn dispatch_form_with_language(
         validation_program,
         table_validation_functions,
         crud_policy_functions,
+        crud_action_functions,
+        capability_grants,
+        runtime_policy,
         granted_permissions,
     } = context;
     if form.tenant_column.is_some() && tenant_context.is_none() {
@@ -6751,6 +6792,9 @@ fn dispatch_form_with_language(
                 validation_program,
                 table_validation_functions,
                 crud_policy_functions,
+                crud_action_functions,
+                capability_grants,
+                runtime_policy,
                 granted_permissions: &granted_permissions,
             },
         ) {
@@ -6765,6 +6809,9 @@ fn dispatch_form_with_language(
                     "409 Conflict",
                     "This record changed while you were editing it. Reload the form and review the latest values.",
                 );
+            }
+            if let Some(message) = error.strip_prefix("ZELYRA_ACTION_GUARD:") {
+                return action_error_response(action, 409, "409 Conflict", message.trim());
             }
             if let Some(message) = error.strip_prefix("ZELYRA_CHILD_VALIDATION:") {
                 let child_error = FieldError {
@@ -11393,10 +11440,9 @@ fn runtime_value_for_type(
         }
         Type::Date => Ok(RuntimeValue::Date(value.to_owned())),
         Type::Time => Ok(RuntimeValue::Time(value.to_owned())),
-        Type::Timestamp => value
-            .parse()
+        Type::Timestamp => timestamp_value(value)
             .map(RuntimeValue::Timestamp)
-            .map_err(|_| invalid()),
+            .ok_or_else(invalid),
         Type::Named(name) if name == "Id" || table_name_for_type(program, name).is_some() => {
             value.parse().map(RuntimeValue::Int).map_err(|_| invalid())
         }
@@ -11430,6 +11476,26 @@ fn runtime_value_for_type(
             "table validation does not support submitted type {other:?}"
         )),
     }
+}
+
+fn timestamp_value(value: &str) -> Option<i64> {
+    if let Some(timestamp) = zelyra_ast::temporal::parse_timestamp_input(value) {
+        return Some(timestamp);
+    }
+    // MariaDB and PostgreSQL render a UTC timestamp as a space-separated
+    // value and may retain microseconds, while Zelyra timestamps are UTC ms.
+    let (date, clock) = value.split_once(' ')?;
+    let (seconds, fraction) = clock.split_once('.').unwrap_or((clock, ""));
+    if fraction.len() > 6 || !fraction.bytes().all(|byte| byte.is_ascii_digit()) {
+        return None;
+    }
+    let millis = match fraction.len() {
+        0 => String::new(),
+        1 => format!(".{}00", fraction),
+        2 => format!(".{}0", fraction),
+        _ => format!(".{}", &fraction[..3]),
+    };
+    zelyra_ast::temporal::parse_timestamp_input(&format!("{date}T{seconds}{millis}Z"))
 }
 
 /// Resolve nominal table types using the same singular-to-table convention
@@ -11529,12 +11595,6 @@ fn execute_form_action_with_children(
     database_url: &str,
     context: FormExecutionContext<'_>,
 ) -> Result<(), String> {
-    if action.execute_body.is_some() || action.guard.is_some() {
-        return Err(
-            "E-CRUD-009: typed CRUD actions must pass compiler row/session checks before web execution"
-                .into(),
-        );
-    }
     let FormExecutionContext {
         actor_user_id,
         expected_snapshot,
@@ -11542,8 +11602,26 @@ fn execute_form_action_with_children(
         validation_program,
         table_validation_functions,
         crud_policy_functions,
+        crud_action_functions,
+        capability_grants,
+        runtime_policy,
         granted_permissions,
     } = context;
+    if action.execute_body.is_some() || action.guard.is_some() {
+        return execute_typed_crud_action(
+            form,
+            action,
+            values,
+            path_params,
+            database_url,
+            actor_user_id,
+            tenant_context,
+            validation_program,
+            crud_action_functions,
+            capability_grants,
+            runtime_policy,
+        );
+    }
     let is_postgres = zelyra_database::is_postgres_url(database_url);
     if is_postgres && form.audit_table.is_some() && form.audit_chain {
         return Err("PostgreSQL does not support chained audit tables (@zelyra_prev_hash/SHA2); use unchained audit logging or MariaDB/MySQL".into());
@@ -12102,6 +12180,199 @@ fn execute_form_action_with_children(
         Ok(())
     })
     .map_err(|error| error.to_string())
+}
+
+#[allow(clippy::too_many_arguments)]
+fn execute_typed_crud_action(
+    form: &FormRoute,
+    action: &zelyra_ast::FormAction,
+    values: &HashMap<String, String>,
+    path_params: &HashMap<String, String>,
+    database_url: &str,
+    actor_user_id: Option<i64>,
+    tenant_context: Option<&TenantContext>,
+    program: Option<&Program>,
+    mappings: &[zelyra_ast::CrudActionFunction],
+    grants: Option<&HashSet<String>>,
+    policy: Option<&zelyra_runtime::RuntimePolicy>,
+) -> Result<(), String> {
+    let program = program.ok_or_else(|| "E-CRUD-009: action program is unavailable".to_owned())?;
+    let table_name = form
+        .form
+        .table
+        .as_deref()
+        .ok_or_else(|| "E-CRUD-009: typed action has no target table".to_owned())?;
+    let table = program
+        .tables
+        .iter()
+        .find(|table| table.name == table_name)
+        .ok_or_else(|| format!("E-CRUD-009: action table `{table_name}` is unavailable"))?;
+    let id = path_params
+        .get("id")
+        .and_then(|id| id.parse::<i64>().ok())
+        .ok_or_else(|| "E-CRUD-009: typed actions require an existing record id".to_owned())?;
+    let crud_index = program
+        .cruds
+        .iter()
+        .position(|crud| crud.table == table_name)
+        .ok_or_else(|| format!("E-CRUD-009: CRUD declaration for `{table_name}` is unavailable"))?;
+    let action_index = program.cruds[crud_index]
+        .actions
+        .iter()
+        .position(|candidate| candidate.name == action.name)
+        .ok_or_else(|| format!("E-CRUD-009: action `{}` is unavailable", action.name))?;
+    let mapping = mappings
+        .iter()
+        .find(|mapping| mapping.crud_index == crud_index && mapping.action_index == action_index)
+        .ok_or_else(|| format!("E-CRUD-009: action `{}` was not lowered", action.name))?;
+    let is_postgres = zelyra_database::is_postgres_url(database_url);
+    let tenant_condition = match (form.tenant_column.as_deref(), tenant_context) {
+        (Some(column), Some(context)) => format!(
+            " AND {} = :zelyra_tenant_id AND {}",
+            quote_ident(column, is_postgres),
+            tenant_access_predicate(context, is_postgres)
+        ),
+        (Some(_), None) => return Err("ZELYRA_TENANT_DENIED: tenant context is required".into()),
+        _ => String::new(),
+    };
+    let recipient_condition = match (form.recipient_column.as_deref(), actor_user_id) {
+        (Some(column), Some(_)) => {
+            format!(
+                " AND {} = :zelyra_user_id",
+                quote_ident(column, is_postgres)
+            )
+        }
+        (Some(_), None) => {
+            return Err("ZELYRA_TENANT_DENIED: authenticated recipient is required".into())
+        }
+        _ => String::new(),
+    };
+
+    zelyra_database::with_decision_transaction(database_url, |transaction| {
+        if let Some(context) = tenant_context {
+            let mut authorized = false;
+            for query in tenant_access_queries(context, is_postgres, Some(context.tenant_id), true) {
+                if !transaction.execute(&query)?.rows.is_empty() {
+                    authorized = true;
+                    break;
+                }
+            }
+            if !authorized {
+                return Err(zelyra_database::DatabaseError {
+                    message: "ZELYRA_TENANT_DENIED: tenant ownership or membership is no longer valid".into(),
+                });
+            }
+        }
+        let mut params = vec![("id".into(), QueryValue::Int(id))];
+        if let Some(context) = tenant_context {
+            params.extend(tenant_query_params(context));
+        }
+        if let Some(user_id) = actor_user_id.filter(|_| form.recipient_column.is_some()) {
+            params.push(("zelyra_user_id".into(), QueryValue::Int(user_id)));
+        }
+        let columns = table
+            .columns
+            .iter()
+            .map(|column| quote_ident(&column.name, is_postgres))
+            .collect::<Vec<_>>()
+            .join(", ");
+        let row_result = transaction.execute(&zelyra_database::Query {
+            sql: format!(
+                "SELECT {columns} FROM {} WHERE {} = :id{tenant_condition}{recipient_condition} FOR UPDATE",
+                quote_ident(table_name, is_postgres),
+                quote_ident("id", is_postgres),
+            ),
+            params,
+        })?;
+        let Some(row) = row_result.rows.first() else {
+            return Err(zelyra_database::DatabaseError {
+                message: if tenant_context.is_some() || form.recipient_column.is_some() {
+                    "ZELYRA_TENANT_DENIED: record is not available to this session".into()
+                } else {
+                    "ZELYRA_CONFLICT: target record no longer exists".into()
+                },
+            });
+        };
+        let mut fields = HashMap::new();
+        for (index, column) in table.columns.iter().enumerate() {
+            let is_null = row_result
+                .nulls
+                .first()
+                .and_then(|nulls| nulls.get(index))
+                .copied()
+                .unwrap_or(false);
+            let value = if is_null && matches!(column.ty, Type::Option(_)) {
+                RuntimeValue::Option(None)
+            } else if is_null {
+                return Err(zelyra_database::DatabaseError {
+                    message: format!("database returned NULL for non-null field `{}`", column.name),
+                });
+            } else {
+                runtime_value_for_column(program, column, row.get(index).map(String::as_str))
+                    .map_err(|message| zelyra_database::DatabaseError { message })?
+            };
+            fields.insert(column.name.clone(), value);
+        }
+        let args = vec![
+            RuntimeValue::Object {
+                type_name: mapping.row_type_name.clone(),
+                type_args: Vec::new(),
+                fields,
+            },
+            RuntimeValue::Object {
+                type_name: mapping.session_type_name.clone(),
+                type_args: Vec::new(),
+                fields: [
+                    ("tenant_id".into(), RuntimeValue::Option(tenant_context.map(|ctx| Box::new(RuntimeValue::Int(ctx.tenant_id))))),
+                    ("user_id".into(), RuntimeValue::Option(actor_user_id.map(|id| Box::new(RuntimeValue::Int(id))))),
+                ].into_iter().collect(),
+            },
+        ];
+        if let Some(function) = &mapping.guard_function {
+            let outcome = zelyra_runtime::execute_function_captured_with_capabilities_and_policies(
+                program, function, args.clone(), Some(database_url), grants, policy,
+            );
+            if let Some(error) = outcome.error {
+                return Err(zelyra_database::DatabaseError { message: format!("typed action guard failed: {}", error.message) });
+            }
+            if outcome.value == Some(RuntimeValue::Bool(true)) {
+                let message = action.guard.as_ref().map(|guard| guard.message.as_str()).unwrap_or("action guard rejected this operation");
+                return Err(zelyra_database::DatabaseError { message: format!("ZELYRA_ACTION_GUARD: {message}") });
+            }
+        }
+        if let Some(function) = &mapping.execute_function {
+            let mut query = |query: &zelyra_database::Query| transaction.execute(query).map_err(|error| error.to_string());
+            let outcome = zelyra_runtime::execute_function_captured_with_transactional_query(
+                program, function, args, database_url, grants, policy, &mut query,
+            );
+            if let Some(error) = outcome.error {
+                return Err(zelyra_database::DatabaseError { message: format!("typed CRUD action failed: {}", error.message) });
+            }
+        }
+        if let (Some(audit_table), Some(audit_event)) =
+            (form.audit_table.as_deref(), form.audit_event.as_deref())
+        {
+            let (record_id, mut details) =
+                form_audit_details(form, audit_event, path_params, None, values);
+            if let Some(context) = tenant_context {
+                details.push_str(&format!(";tenant_id={}", context.tenant_id));
+            }
+            for query in audit_insert_queries_for(
+                audit_table,
+                form.audit_chain,
+                actor_user_id,
+                audit_event,
+                record_id,
+                &details,
+                is_postgres,
+            )
+            .map_err(|message| zelyra_database::DatabaseError { message })?
+            {
+                transaction.execute(&query)?;
+            }
+        }
+        Ok(())
+    }).map_err(|error| error.message)
 }
 
 fn form_query_parameters(

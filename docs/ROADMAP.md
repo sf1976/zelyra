@@ -311,7 +311,7 @@ security and compatibility gates stated for that milestone.
   [`v1.2.27`](https://github.com/sf1976/zelyra/releases/tag/v1.2.27); its PR
   and release workflows passed all checks. See the
   [1.2.27 importer plan](release-plans/1.2.27-laravel-website-importer.en.md).
-- [ ] **1.2.28 — typed CRUD domain actions:** Add a checked execution context
+- [~] **1.2.28 — typed CRUD domain actions:** Add a checked execution context
   for action statements with explicit row, authenticated user, and verified
   tenant values. Reuse the language type/effect checker, require explicit
   permissions, support transaction-safe SQL plus allowlisted typed calls, and
@@ -320,14 +320,17 @@ security and compatibility gates stated for that milestone.
   `hash_sha256` and `now()` spellings and their capability rules; PDF rendering
   and mail outbox calls must follow their existing transaction and attachment
   restrictions. No implicit `crypto::` namespace or raw SQL interpolation.
-  Foundation: the AST runtime can route SQL through a borrowed request
-  transaction callback, with nested transactions and parallel blocks rejected;
-  the parser stores explicit execute/guard nodes and CLI checking now builds
-  typed `row`/`session` scopes, checks Unit/Bool results, and enforces explicit
-  capabilities and project grants. Web CRUD integration remains fail-closed
-  until row loading, guard evaluation, and action execution share the locked
-  request transaction.
-  See the [1.2.28 work plan](release-plans/1.2.28-typed-crud-actions.en.md).
+  The parser stores explicit execute/guard nodes; CLI and web use common AST
+  lowering for typed `row`/`session` scopes. Web execution now loads the target
+  under `FOR UPDATE`, revalidates tenant membership/ownership in the same
+  transaction, evaluates the pure guard, then executes typed SQL and automatic
+  audit insertion through the borrowed transaction bridge. A MariaDB HTTP E2E
+  proves state/hash/time update, one audit insert, repeat-guard rejection, and
+  rollback after a later runtime failure. Granular `Database(read/write)`
+  grants also open the web database gate correctly. PostgreSQL action E2E,
+  richer PDF/outbox effect coverage, and full security/permission matrix tests
+  remain open. See the
+  [1.2.28 work plan](release-plans/1.2.28-typed-crud-actions.en.md).
 - [ ] **1.2.29 — bounded secure file upload foundation (subject to design
   gate):** Specify and test multipart size limits, file metadata types,
   content validation, tenant ownership, private storage outside `public/`,
