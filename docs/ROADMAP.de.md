@@ -391,13 +391,16 @@ abgeschlossen.
   abgeschlossen. Der HTTP-Parser verarbeitet derzeit UTF-8-Textkörper mit einem
   globalen Limit von 1 MiB; Binär-Multipart benötigt daher einen ausdrücklich
   begrenzten, byteorientierten Request-Pfad. Eine statische Analyse von
+  Ein eigenständiger byteerhaltender Multipart-Decoder mit Limits für Body,
+  Parts, Header, Feldnamen und Dateinamen ist in `web/src/multipart.rs`
+  implementiert; Parser-Tests prüfen Binärdaten, fehlerhafte Grenzen, doppelte
+  Header und Limitfehler. Er ist noch nicht mit HTTP-Request-Lesen verbunden
+  und bietet weder File-Felder noch Speicherung an. Eine statische Analyse von
   `/opt/siedelmann-laravel/app` fand Uploadabläufe bei Rechnungen, Verträgen,
-  Einstellungen, Postbriefen und eingehender Mail; der Importer erzeugt diese
-  Abläufe derzeit nicht. Vor einem `File`-Formularfeld sind Multipart-Limits,
-  Allowlist-Inhaltsprüfung, opake mandantengebundene Speicher-IDs, autorisierte
-  Downloads, Commit-/Rollback-Aufräumen und Backup-/Löschsemantik umzusetzen
-  und zu testen. Abnahmekriterien und Architekturentscheidung stehen im
-  [Plan für sichere Uploads 1.2.29](release-plans/1.2.29-secure-uploads.de.md).
+  Einstellungen, Postbriefen und eingehender Mail; der Importer erzeugt sie
+  nicht. Offen sind Inhaltsprüfung, private mandantengebundene Speicherung,
+  autorisierte Downloads, transaktionales Aufräumen und Backup-/Löschsemantik.
+  Siehe den [Plan für sichere Uploads 1.2.29](release-plans/1.2.29-secure-uploads.de.md).
 - [ ] **1.2.30 — Abdeckung echter Laravel-Migrationsabläufe:** Den getesteten
   Routen-/Controller-/View-zu-Modul-Umfang am Laravel-Projekt erweitern, aber
   nur für compilergeprüfte, wiederverwendbare Feature-/Domain-/UI-Module mit

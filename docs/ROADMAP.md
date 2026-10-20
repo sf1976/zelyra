@@ -350,13 +350,16 @@ security and compatibility gates stated for that milestone.
 - [~] **1.2.29 — bounded secure file upload foundation:** Architecture inventory
   is complete. The HTTP parser currently accepts UTF-8 string bodies with a
   1 MiB global limit, so binary multipart data needs an explicitly bounded
-  byte-oriented request path. A static analysis of `/opt/siedelmann-laravel/app`
-  identified upload-related flows in invoices, contracts, settings, postal
-  letters, and inbound mail; the importer does not currently generate them.
-  Before adding a `File` form field, implement and test multipart limits,
-  allowlisted content validation, opaque tenant-owned storage identities,
-  authorized downloads, commit/rollback cleanup, and backup/delete semantics.
-  The acceptance criteria and architecture decision are in the
+  byte-oriented request path. A standalone byte-preserving multipart decoder
+  with bounded body, part, header, field-name, and filename sizes is implemented
+  in `web/src/multipart.rs`; parser tests cover binary payloads, malformed
+  boundaries, duplicate headers, and limit failures. It is not connected to HTTP
+  request reading and does not expose File fields or storage. A static analysis
+  of `/opt/siedelmann-laravel/app` identified upload flows in invoices,
+  contracts, settings, postal letters, and inbound mail; the importer does not
+  generate them. Remaining release gates include content validation, private
+  tenant-owned storage, authorized downloads, transactional cleanup, and
+  backup/delete semantics. See the
   [1.2.29 secure upload plan](release-plans/1.2.29-secure-uploads.en.md).
 - [ ] **1.2.30 — Laravel import workflow coverage:** Expand only from
   compiler-checked, reusable feature/domain/UI modules backed by route-to-

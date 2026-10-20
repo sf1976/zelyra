@@ -25,6 +25,7 @@ mod http;
 mod i18n;
 mod mfa;
 mod module_settings;
+pub mod multipart;
 mod password_reset;
 mod server;
 mod ui;
