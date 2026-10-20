@@ -928,8 +928,12 @@ fn generated_bounded_integer_expressions_match_independent_oracle_and_backends()
 }
 
 #[test]
-fn integer_division_and_remainder_failures_match_ast_mir_and_bytecode_spans() {
+fn checked_integer_arithmetic_failures_match_ast_mir_and_bytecode_spans() {
     let source = r#"
+fn add(left: Int, right: Int) -> Int { return left + right }
+fn subtract(left: Int, right: Int) -> Int { return left - right }
+fn multiply(left: Int, right: Int) -> Int { return left * right }
+fn negate(value: Int) -> Int { return -value }
 fn divide(left: Int, right: Int) -> Int { return left / right }
 fn remainder(left: Int, right: Int) -> Int { return left % right }
 fn main() {}
@@ -937,21 +941,25 @@ fn main() {}
     let ast = parse(&lex(source).expect("source lexes")).expect("source parses");
     let mir = crate::lower(&ast).expect("source type-checks and lowers");
     for (name, arguments) in [
+        ("add", vec![Value::Int(i64::MAX), Value::Int(1)]),
+        ("subtract", vec![Value::Int(i64::MIN), Value::Int(1)]),
+        ("multiply", vec![Value::Int(i64::MAX), Value::Int(2)]),
+        ("negate", vec![Value::Int(i64::MIN)]),
         ("divide", vec![Value::Int(1), Value::Int(0)]),
         ("remainder", vec![Value::Int(1), Value::Int(0)]),
         ("divide", vec![Value::Int(i64::MIN), Value::Int(-1)]),
         ("remainder", vec![Value::Int(i64::MIN), Value::Int(-1)]),
     ] {
         let expected = zelyra_runtime::execute_function(&ast, name, arguments.clone(), None)
-            .expect_err("AST must reject zero division and signed overflow");
+            .expect_err("AST must reject checked integer arithmetic failures");
         let mir_error =
             execution::execute_function(&mir, name, arguments.clone(), ExecutionLimits::default())
-                .expect_err("MIR must reject zero division and signed overflow");
-        let bytecode = compile(&mir, name).expect("error-path function compiles");
+                .expect_err("MIR must reject checked integer arithmetic failures");
+        let bytecode = compile(&mir, name).expect("arithmetic error-path function compiles");
         let decoded = decode(&encode(&bytecode).expect("error-path bytecode encodes"))
             .expect("error-path bytecode verifies after decoding");
         let actual = execute(&decoded, arguments, ExecutionLimits::default())
-            .expect_err("bytecode must reject zero division and signed overflow");
+            .expect_err("bytecode must reject checked integer arithmetic failures");
         assert_eq!(mir_error.message, expected.message, "MIR {name}");
         assert_eq!(mir_error.span, expected.span, "MIR source span {name}");
         assert_eq!(actual.message, expected.message, "bytecode {name}");
