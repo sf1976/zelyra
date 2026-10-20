@@ -4486,3 +4486,40 @@ Provides an elevated, modern card layout for master-detail forms with partitione
   font-size: 1rem;
 }
 ```
+
+## FileRef attachments in generated CRUD (1.2.33)
+
+Declare an opaque `FileRef` column with its upload policy to make it available
+as a generated CRUD upload field:
+
+```zelyra
+table contracts {
+    id: Id primary auto
+    title: String(200) required
+    signed_pdf: FileRef? attachment {
+        max_size: "20MB"
+        allowed_types: ["application/pdf"]
+    }
+}
+
+crud Contract -> contracts {}
+```
+
+The full compiler-checked example is `examples/file_ref_crud.zyl`.
+
+The attachment block uses the same checked size and MIME constraints as
+table-backed `File` form fields. Generated create/edit pages render a native
+file input. An omitted file on edit keeps the existing reference; a new upload
+uses the existing private, integrity-checked storage and is published only
+through the normal CSRF-protected CRUD action. Detail and list pages show a
+download link rather than the internal FileRef. Downloads are addressed as
+`/contracts/{id}/files/signed_pdf` and pass through the CRUD permission,
+record, tenant and recipient checks. Raw FileRef values are not accepted as
+ordinary text inputs. FileRef columns cannot be used for CRUD search or
+filtering.
+
+Supported MIME values currently include PDF, PNG and JPEG. The size limit is
+bounded by the existing upload policy (at most 100 MiB per field and the
+existing per-request aggregate limit). Projects using ordinary `FileRef`
+columns without generated CRUD can continue to use explicit checked upload
+forms.

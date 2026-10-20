@@ -75,6 +75,7 @@ fn number_series_allocator_is_atomic_and_scoped_per_tenant() {
             decimal_precision: None,
             auto_sequence: Some("KD-{0001}".into()),
             computed: None,
+            attachment: None,
             required: true,
             primary_key: false,
             auto: false,
@@ -550,6 +551,25 @@ fn computed_optional_fields_use_typed_option_matching_for_null_values() {
     let mut present = HashMap::from([("net_amount".to_owned(), "10.00".to_owned())]);
     evaluate_computed_columns(&lowered, &mappings, "invoice_items", &mut present).unwrap();
     assert_eq!(present.get("gross_amount").map(String::as_str), Some("20"));
+}
+
+#[test]
+fn crud_file_download_fields_come_from_table_attachment_metadata() {
+    let program = zelyra_parser::parse(
+        &zelyra_lexer::lex(
+            r#"table contracts { id: Id primary auto signed_pdf: FileRef? attachment {
+                max_size: "20MB"
+                allowed_types: ["application/pdf"]
+            } } fn main() {}"#,
+        )
+        .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(
+        crud_file_fields(Some(&program), "contracts"),
+        BTreeMap::from([("signed_pdf".to_owned(), 20_000_000)])
+    );
+    assert!(crud_file_fields(Some(&program), "missing").is_empty());
 }
 
 #[test]
@@ -1203,6 +1223,7 @@ fn legacy_invoice_number_generation_remains_for_fields_without_a_sequence() {
             decimal_precision: None,
             auto_sequence: Some("RE-{0001}".into()),
             computed: None,
+            attachment: None,
             required: true,
             primary_key: false,
             auto: false,
@@ -1595,6 +1616,7 @@ fn default_shell_crud(layout_html: Option<String>) -> CrudRoute {
         path: "/machines".into(),
         title: "Maschinen".into(),
         table: "machines".into(),
+        file_columns: Vec::new(),
         tenant_column: None,
         recipient_column: None,
         unread_column: None,
@@ -2124,6 +2146,7 @@ fn relation_form_route() -> FormRoute {
             decimal_precision: None,
             auto_sequence: None,
             computed: None,
+            attachment: None,
             required: true,
             primary_key: false,
             auto: false,
@@ -4297,7 +4320,10 @@ fn multipart_upload_commits_reference_and_removes_file_after_sql_rollback() {
             database main { engine: mariadb }
             table zelyra_upload_e2e {
                 id: Id primary auto
-                document: FileRef?
+                document: FileRef? attachment {
+                    max_size: "1KB"
+                    allowed_types: ["application/pdf"]
+                }
                 owner_id: Int required
             }
             form Upload -> zelyra_upload_e2e {
@@ -5521,6 +5547,7 @@ fn renders_crud_list_with_escaped_rows_and_pagination() {
         path: "/machines".into(),
         title: "Machines".into(),
         table: "machines".into(),
+        file_columns: Vec::new(),
         tenant_column: None,
         recipient_column: None,
         unread_column: Some("read_at".into()),
@@ -5788,6 +5815,40 @@ fn renders_crud_list_with_escaped_rows_and_pagination() {
 }
 
 #[test]
+fn crud_lists_render_file_refs_as_download_links_instead_of_raw_values() {
+    let mut route = default_shell_crud(None);
+    route.file_columns = vec!["signed_pdf".into()];
+    let columns = ["id", "signed_pdf"];
+    let rows = [vec![
+        "42".into(),
+        "f4dcb4cc-87e1-4ed5-9d9f-4d0e16a5035f".into(),
+    ]];
+    let html = render_crud_list(
+        &route,
+        CrudListView {
+            query_columns: &columns,
+            display_columns: &columns,
+            filter_columns: &[],
+            sort_columns: &columns,
+            rows: &rows,
+            search: "",
+            query_values: &HashMap::new(),
+            sort: "id",
+            order: "ASC",
+            page: 1,
+            per_page: 50,
+            archived: false,
+            unread_count: None,
+            success: None,
+            success_title: None,
+        },
+    );
+    assert!(html.contains("/machines/42/files/signed_pdf"));
+    assert!(html.contains("/files/signed_pdf\">"));
+    assert!(!html.contains("f4dcb4cc-87e1-4ed5-9d9f-4d0e16a5035f"));
+}
+
+#[test]
 fn renders_relationship_labels_in_crud_views() {
     let schema = Schema {
         database: None,
@@ -5849,6 +5910,7 @@ fn renders_relationship_labels_in_crud_views() {
         path: "/machines".into(),
         title: "Machines".into(),
         table: "machines".into(),
+        file_columns: Vec::new(),
         tenant_column: None,
         recipient_column: None,
         unread_column: None,
@@ -5906,6 +5968,7 @@ fn crud_requires_database_url() {
         path: "/machines".into(),
         title: "Machines".into(),
         table: "machines".into(),
+        file_columns: Vec::new(),
         tenant_column: None,
         recipient_column: None,
         unread_column: None,
@@ -5948,6 +6011,7 @@ fn database_capability_denies_crud_before_connecting() {
         path: "/machines".into(),
         title: "Machines".into(),
         table: "machines".into(),
+        file_columns: Vec::new(),
         tenant_column: None,
         recipient_column: None,
         unread_column: None,
@@ -6254,6 +6318,7 @@ fn protects_crud_delete_with_delete_permission() {
         path: "/customers".into(),
         title: "Customers".into(),
         table: "customers".into(),
+        file_columns: Vec::new(),
         tenant_column: None,
         recipient_column: None,
         unread_column: None,
@@ -6388,6 +6453,7 @@ fn crud_delete_requires_csrf() {
         path: "/machines".into(),
         title: "Machines".into(),
         table: "machines".into(),
+        file_columns: Vec::new(),
         tenant_column: None,
         recipient_column: None,
         unread_column: None,
@@ -6427,6 +6493,7 @@ fn renders_crud_delete_confirmation_form() {
         path: "/machines".into(),
         title: "Machines".into(),
         table: "machines".into(),
+        file_columns: Vec::new(),
         tenant_column: None,
         recipient_column: None,
         unread_column: None,

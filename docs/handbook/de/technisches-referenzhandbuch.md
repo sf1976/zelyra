@@ -4645,3 +4645,42 @@ Dieses Rezept gestaltet Belegformulare mit geteilten Kopfdaten, strukturierter P
   font-size: 1rem;
 }
 ```
+
+## FileRef-Anhänge im generierten CRUD (1.2.33)
+
+Eine undurchsichtige `FileRef`-Spalte wird mit ihrer Upload-Richtlinie als
+generiertes CRUD-Dateifeld verwendet:
+
+```zelyra
+table contracts {
+    id: Id primary auto
+    title: String(200) required
+    signed_pdf: FileRef? attachment {
+        max_size: "20MB"
+        allowed_types: ["application/pdf"]
+    }
+}
+
+crud Contract -> contracts {}
+```
+
+Das vollständige, compilergeprüfte Beispiel liegt in
+`examples/file_ref_crud.zyl`.
+
+Der `attachment`-Block nutzt dieselbe geprüfte Größen- und MIME-Richtlinie wie
+tabellengebundene `File`-Formularfelder. Generierte Anlegen-/Bearbeiten-Seiten
+zeigen ein natives Datei-Eingabefeld. Wird beim Bearbeiten keine neue Datei
+gesendet, bleibt die bestehende Referenz erhalten. Ein neuer Upload verwendet
+den vorhandenen privaten, integritätsgeprüften Speicher und wird erst über die
+normale CSRF-geschützte CRUD-Aktion veröffentlicht. Listen und Detailseiten
+zeigen einen Download-Link statt der internen FileRef. Downloads laufen über
+`/contracts/{id}/files/signed_pdf` und durchlaufen CRUD-Rechte, Datensatz-,
+Mandanten- und Empfängerprüfung. Rohe FileRef-Werte werden nicht als normale
+Textfelder akzeptiert. FileRef-Spalten können nicht für CRUD-Suche oder Filter
+verwendet werden.
+
+Unterstützte MIME-Typen sind derzeit PDF, PNG und JPEG. Die Größe ist durch die
+vorhandene Upload-Richtlinie begrenzt (höchstens 100 MiB pro Feld sowie das
+bestehende Request-Gesamtlimit). Projekte mit gewöhnlichen `FileRef`-Spalten
+ohne generiertes CRUD können weiterhin explizite, geprüfte Upload-Formulare
+verwenden.

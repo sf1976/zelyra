@@ -2798,6 +2798,7 @@ impl<'a> Parser<'a> {
         let mut storage_name = None;
         let mut auto_sequence = None;
         let mut computed = None;
+        let mut attachment = None;
         let mut required = false;
         let mut primary_key = false;
         let mut auto = false;
@@ -2893,6 +2894,83 @@ impl<'a> Parser<'a> {
                     computed = Some(self.expression()?);
                     self.expect(TokenKind::RParen, "`)` after computed expression")?;
                 }
+                TokenKind::Ident(ref value) if value == "attachment" => {
+                    let option_span = self.current().span;
+                    self.advance();
+                    if attachment.is_some() {
+                        return Err(ParseError {
+                            message: "`attachment` may be specified only once".into(),
+                            span: option_span,
+                        });
+                    }
+                    self.expect(TokenKind::LBrace, "`{` after `attachment`")?;
+                    let mut max_size_bytes = None;
+                    let mut allowed_types = None;
+                    loop {
+                        self.skip_newlines();
+                        if self.at(&TokenKind::RBrace) {
+                            break;
+                        }
+                        match self.current().kind.clone() {
+                            TokenKind::Ident(ref name) if name == "max_size" => {
+                                let span = self.current().span;
+                                self.advance();
+                                if max_size_bytes.is_some() {
+                                    return Err(ParseError {
+                                        message: "duplicate `max_size` in attachment options"
+                                            .into(),
+                                        span,
+                                    });
+                                }
+                                self.expect(TokenKind::Colon, "`:` after max_size")?;
+                                let text =
+                                    self.string_value("maximum attachment size, such as `10MB`")?;
+                                max_size_bytes = Some(parse_file_size(&text).ok_or_else(|| ParseError {
+                                    message: "max_size must be a positive byte size such as `10MB` or `512KiB`".into(),
+                                    span,
+                                })?);
+                            }
+                            TokenKind::Ident(ref name) if name == "allowed_types" => {
+                                let span = self.current().span;
+                                self.advance();
+                                if allowed_types.is_some() {
+                                    return Err(ParseError {
+                                        message: "duplicate `allowed_types` in attachment options"
+                                            .into(),
+                                        span,
+                                    });
+                                }
+                                self.expect(TokenKind::Colon, "`:` after allowed_types")?;
+                                self.expect(TokenKind::LBracket, "`[` before allowed_types")?;
+                                let mut mime_types = Vec::new();
+                                self.skip_newlines();
+                                while !self.at(&TokenKind::RBracket) && !self.at(&TokenKind::Eof) {
+                                    mime_types.push(self.string_value("allowed MIME type")?);
+                                    self.skip_newlines();
+                                    if self.at(&TokenKind::Comma) {
+                                        self.advance();
+                                        self.skip_newlines();
+                                    } else if !self.at(&TokenKind::RBracket) {
+                                        return self
+                                            .error("expected `,` or `]` after allowed MIME type");
+                                    }
+                                }
+                                self.expect(TokenKind::RBracket, "`]` after allowed_types")?;
+                                allowed_types = Some(mime_types);
+                            }
+                            _ => {
+                                return self.error(
+                                    "expected `max_size` or `allowed_types` in attachment options",
+                                )
+                            }
+                        }
+                    }
+                    self.expect(TokenKind::RBrace, "`}` after attachment options")?;
+                    attachment = Some(zelyra_ast::FileUploadOptions {
+                        max_size_bytes: max_size_bytes.unwrap_or(0),
+                        allowed_types: allowed_types.unwrap_or_default(),
+                    });
+                }
                 _ => break,
             }
         }
@@ -2904,6 +2982,7 @@ impl<'a> Parser<'a> {
             decimal_precision,
             auto_sequence,
             computed,
+            attachment,
             required,
             primary_key,
             auto,
@@ -5823,6 +5902,24 @@ mod tests {
         assert!(
             total.computed.as_ref().unwrap().span.end > total.computed.as_ref().unwrap().span.start
         );
+    }
+
+    #[test]
+    fn parses_file_ref_attachment_constraints_on_table_columns() {
+        let program = parse(
+            &lex(r#"table contracts { signed_pdf: FileRef? attachment {
+                    max_size: "20MB"
+                    allowed_types: ["application/pdf"]
+                } }"#)
+            .unwrap(),
+        )
+        .expect("FileRef attachment declaration should parse");
+        let attachment = program.tables[0].columns[0]
+            .attachment
+            .as_ref()
+            .expect("attachment options should be retained in the AST");
+        assert_eq!(attachment.max_size_bytes, 20 * 1_000_000);
+        assert_eq!(attachment.allowed_types, ["application/pdf"]);
     }
 
     #[test]

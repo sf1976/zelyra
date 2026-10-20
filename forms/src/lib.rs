@@ -39,6 +39,39 @@ pub fn check_program(program: &zelyra_ast::Program, schema: &Schema) -> Result<(
                     span: column.span,
                 });
             }
+            if let Some(options) = &column.attachment {
+                if !is_file_ref_type(&column.ty, &program.types) {
+                    errors.push(FormError {
+                        message: format!(
+                            "attachment constraints require a FileRef column (`{}.{}`)",
+                            table.name, column.name
+                        ),
+                        span: column.span,
+                    });
+                } else {
+                    check_file_field(
+                        &FormField {
+                            name: column.name.clone(),
+                            ty: Some(Type::Named("File".into())),
+                            label: None,
+                            placeholder: None,
+                            required: column.required,
+                            min_length: None,
+                            max: None,
+                            min_value: None,
+                            max_value: None,
+                            choices: Vec::new(),
+                            widget: None,
+                            appearance: None,
+                            file_upload: Some(options.clone()),
+                            readonly: false,
+                            span: column.span,
+                        },
+                        true,
+                        &mut errors,
+                    );
+                }
+            }
         }
     }
     for record in &program.records {
@@ -316,17 +349,54 @@ pub fn check_program(program: &zelyra_ast::Program, schema: &Schema) -> Result<(
     for crud in &program.cruds {
         let table = schema.tables.iter().find(|table| table.name == crud.table);
         if let Some(definition) = program.tables.iter().find(|table| table.name == crud.table) {
+            for configured in crud.search.iter().chain(&crud.filters) {
+                if definition
+                    .columns
+                    .iter()
+                    .find(|column| column.name == *configured)
+                    .is_some_and(|column| is_file_ref_type(&column.ty, &program.types))
+                {
+                    errors.push(FormError {
+                        message: format!(
+                            "FileRef column `{configured}` cannot be used as a CRUD search or filter field"
+                        ),
+                        span: definition
+                            .columns
+                            .iter()
+                            .find(|column| column.name == *configured)
+                            .map_or(crud.span, |column| column.span),
+                    });
+                }
+            }
             for column in definition
                 .columns
                 .iter()
                 .filter(|column| is_file_ref_type(&column.ty, &program.types))
             {
+                if column.attachment.is_none() {
+                    errors.push(FormError {
+                        message: format!(
+                            "CRUD `{}` FileRef column `{}` requires `attachment` constraints",
+                            crud.name, column.name
+                        ),
+                        span: column.span,
+                    });
+                }
+            }
+            let total_upload_bytes = definition
+                .columns
+                .iter()
+                .filter_map(|column| column.attachment.as_ref())
+                .fold(0_u64, |total, options| {
+                    total.saturating_add(options.max_size_bytes)
+                });
+            if total_upload_bytes > 255 * 1024 * 1024 {
                 errors.push(FormError {
                     message: format!(
-                        "CRUD `{}` cannot expose FileRef column `{}` as a text field; file-aware CRUD rendering is not implemented",
-                        crud.name, column.name
+                        "aggregate attachment size for CRUD `{}` exceeds the 255 MiB request budget",
+                        crud.name
                     ),
-                    span: column.span,
+                    span: crud.span,
                 });
             }
         }
@@ -1464,6 +1534,7 @@ mod tests {
                     decimal_precision: None,
                     auto_sequence: None,
                     computed: None,
+                    attachment: None,
                     required: false,
                     primary_key: false,
                     auto: false,
@@ -1562,7 +1633,7 @@ mod tests {
     }
 
     #[test]
-    fn generated_crud_does_not_render_file_refs_as_text_controls() {
+    fn generated_crud_requires_checked_file_ref_attachment_metadata() {
         let program = zelyra_parser::parse(
             &zelyra_lexer::lex(
                 "table documents { id: Id primary auto document: FileRef? } crud Document -> documents {} fn main() {}",
@@ -1572,12 +1643,48 @@ mod tests {
         .unwrap();
         let schema = build_schema(&program).unwrap();
         let errors = check_program(&program, &schema)
-            .expect_err("automatic CRUD cannot expose an opaque FileRef as text yet");
+            .expect_err("generated CRUD requires explicit attachment constraints");
         assert!(errors.iter().any(|error| {
             error
                 .message
-                .contains("cannot expose FileRef column `document` as a text field")
+                .contains("FileRef column `document` requires `attachment`")
         }));
+
+        let configured = zelyra_parser::parse(
+            &zelyra_lexer::lex(
+                r#"table documents { id: Id primary auto document: FileRef? attachment { max_size: "10MB" allowed_types: ["application/pdf"] } } crud Document -> documents {} fn main() {}"#,
+            )
+            .unwrap(),
+        )
+        .unwrap();
+        let schema = build_schema(&configured).unwrap();
+        check_program(&configured, &schema)
+            .expect("FileRef columns with bounded upload policy may use generated CRUD");
+
+        for (source, expected) in [
+            (
+                r#"table documents { id: Id primary auto document: String? attachment { max_size: "1MB" allowed_types: ["application/pdf"] } } crud Document -> documents {} fn main() {}"#,
+                "attachment constraints require a FileRef column",
+            ),
+            (
+                r#"table documents { id: Id primary auto document: FileRef? attachment { allowed_types: ["application/pdf"] } } crud Document -> documents {} fn main() {}"#,
+                "maximum file size",
+            ),
+            (
+                r#"table documents { id: Id primary auto document: FileRef? attachment { max_size: "1MB" allowed_types: ["application/x-msdownload"] } } crud Document -> documents {} fn main() {}"#,
+                "is not supported for file field",
+            ),
+            (
+                r#"table documents { id: Id primary auto document: FileRef? attachment { max_size: "1MB" allowed_types: ["application/pdf"] } } crud Document -> documents { search { document } } fn main() {}"#,
+                "cannot be used as a CRUD search or filter field",
+            ),
+        ] {
+            let invalid = zelyra_parser::parse(&zelyra_lexer::lex(source).unwrap()).unwrap();
+            let schema = build_schema(&invalid).unwrap();
+            let errors = check_program(&invalid, &schema)
+                .expect_err("invalid FileRef attachment declaration must be diagnosed");
+            assert!(errors.iter().any(|error| error.message.contains(expected)));
+        }
     }
 
     #[test]
@@ -1967,6 +2074,7 @@ mod tests {
                 decimal_precision: None,
                 auto_sequence: None,
                 computed: None,
+                attachment: None,
                 required: true,
                 primary_key: false,
                 auto: false,

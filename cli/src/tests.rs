@@ -1,6 +1,62 @@
 use super::*;
 
 #[test]
+fn generated_crud_maps_file_ref_attachment_metadata_to_upload_fields() {
+    let program = parse(
+        &lex(r#"
+            table contracts {
+                id: Id primary auto
+                signed_pdf: FileRef? attachment {
+                    max_size: "20MB"
+                    allowed_types: ["application/pdf"]
+                }
+            }
+            crud Contract -> contracts {}
+            fn main() {}
+            "#)
+        .unwrap(),
+    )
+    .unwrap();
+    let schema = zelyra_database::build_schema(&program).unwrap();
+    let route = generated_crud_form(
+        &program,
+        &program.cruds[0],
+        &program.tables[0],
+        &schema,
+        false,
+        CrudGenerationContext {
+            layout_html: None,
+            before_form_html: None,
+            after_form_html: None,
+            field_content_html: HashMap::new(),
+            csrf: CsrfProtection::generate().unwrap(),
+            membership_table: None,
+            audit_table: None,
+            audit_chain: false,
+        },
+    );
+    let field = route
+        .form
+        .fields
+        .iter()
+        .find(|field| field.name == "signed_pdf")
+        .expect("attachment should appear in the generated form");
+    assert_eq!(field.ty, Some(Type::Named("File".into())));
+    assert!(!field.required);
+    assert_eq!(
+        field
+            .file_upload
+            .as_ref()
+            .map(|options| options.max_size_bytes),
+        Some(20_000_000)
+    );
+    assert_eq!(
+        field.file_upload.as_ref().unwrap().allowed_types,
+        ["application/pdf"]
+    );
+}
+
+#[test]
 fn database_web_gate_accepts_any_explicit_database_operation_grant() {
     assert!(database_runtime_capability_granted(None));
     assert!(!database_runtime_capability_granted(Some(&HashSet::new())));

@@ -1346,6 +1346,8 @@ pub struct ColumnDef {
     /// Candidate expression for a server-derived column. The compiler checks
     /// its field scope and result type; mutation-path evaluation is separate.
     pub computed: Option<Expr>,
+    /// Upload constraints for an opaque FileRef column exposed by generated CRUD.
+    pub attachment: Option<FileUploadOptions>,
     pub required: bool,
     pub primary_key: bool,
     pub auto: bool,

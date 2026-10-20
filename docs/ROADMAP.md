@@ -656,7 +656,7 @@ computed fields and generated uploads remain open:
   recalculated value shown on the error response. Decimal scale and rounding
   are implemented. API `PATCH`, broader backend tests, and complete release
   gates remain open. See `examples/computed_api.zyl`.
-- [ ] **1.2.33 — FileRef-aware generated CRUD:** Add bounded declarative
+- [~] **1.2.33 — FileRef-aware generated CRUD:** Add bounded declarative
   attachment constraints to schema/CRUD metadata and render safe upload fields
   on create/edit plus authorized download links on details. Reuse existing
   multipart validation, private FileRef storage, checksum validation, tenant
@@ -665,6 +665,16 @@ computed fields and generated uploads remain open:
   replacement, omitted-file preservation, rollback cleanup, cross-tenant
   download denial, MIME/size limits, and generated route behavior. This fills
   the current gap between existing checked standalone File forms and CRUD.
+  Implemented so far: table-column `attachment { max_size, allowed_types }`
+  metadata for `FileRef`, compile-time MIME/size/type checks, generated native
+  upload controls, and list/detail download links that hide the raw reference.
+  Existing upload staging, edit retention/replacement, cleanup after failed
+  actions, tenant/permission checks, and delete-time reference-aware cleanup
+  are reused. Parser/form/route/render tests pass. A disposable MariaDB/HTTP
+  test passed for the underlying upload form route: persistence, edit
+  preservation/replacement, rollback cleanup, and authorized downloads. It
+  does not yet exercise the full CLI-generated CRUD path or cross-tenant
+  denial; those release checks remain open.
 
 See the [business CRUD completion plan](release-plans/1.2.31-1.2.33-business-crud.en.md).
 

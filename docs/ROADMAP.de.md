@@ -709,7 +709,7 @@ geprüft; berechnete Felder und generierte Uploads sind weiterhin offen:
   API-`PATCH`, weitere Datenbankläufe und
   vollständige Release-Prüfungen sind noch offen. Beispiel:
   `examples/computed_api.zyl`.
-- [ ] **1.2.33 — FileRef-Unterstützung im generierten CRUD:** Begrenzte,
+- [~] **1.2.33 — FileRef-Unterstützung im generierten CRUD:** Begrenzte,
   deklarative Anhangsregeln für Schema und CRUD ergänzen und sichere
   Uploadfelder auf Create/Edit sowie geschützte Download-Links auf Details
   erzeugen. Bestehende Multipart-Prüfung, privaten FileRef-Speicher,
@@ -719,6 +719,17 @@ geprüft; berechnete Felder und generierte Uploads sind weiterhin offen:
   Erhalt bei fehlender neuer Datei, Rollback-Bereinigung, verweigerte fremde
   Downloads, MIME-/Größenlimits und generierte Routen. Damit wird die aktuelle
   Lücke zwischen geprüften eigenständigen File-Forms und CRUD geschlossen.
+  Bisher umgesetzt: Tabellenmetadaten
+  `attachment { max_size, allowed_types }` für `FileRef`, Compile-Time-Prüfung
+  von MIME-Typ, Größe und Spaltentyp, generierte native Uploadfelder sowie
+  Downloadlinks auf Listen- und Detailseiten ohne rohe Referenzwerte. Vorhandene
+  Upload-Staging-, Edit-Erhalt-/Ersetzungs- und Fehlerbereinigung, Mandanten-/
+  Rechteprüfung sowie referenzbewusste Bereinigung beim Löschen werden genutzt.
+  Parser-, Formular-, Routengenerator- und Render-Tests bestehen. Ein echter
+  Wegwerf-MariaDB-/HTTP-Test bestand für die zugrunde liegende Upload-Formroute:
+  Speichern, Erhalt/Ersetzung beim Edit, Rollback-Bereinigung und autorisierte
+  Downloads. Der vollständige CLI-generierte CRUD-Pfad und die explizite
+  Ablehnung mandantenfremder Downloads sind noch Release-Prüfungen.
 
 Siehe den [Plan zum Abschluss des Geschäfts-CRUD](release-plans/1.2.31-1.2.33-business-crud.de.md).
 

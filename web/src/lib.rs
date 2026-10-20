@@ -581,6 +581,8 @@ pub struct CrudRoute {
     pub path: String,
     pub title: String,
     pub table: String,
+    /// FileRef columns exposed as private attachment downloads, never as raw IDs.
+    pub file_columns: Vec<String>,
     pub tenant_column: Option<String>,
     /// Restricts this resource to the authenticated user's records.
     pub recipient_column: Option<String>,
@@ -9558,6 +9560,17 @@ fn crud_file_fields(program: Option<&Program>, table: &str) -> BTreeMap<String, 
         return BTreeMap::new();
     };
     let mut fields = BTreeMap::new();
+    if let Some(definition) = program
+        .tables
+        .iter()
+        .find(|candidate| candidate.name == table)
+    {
+        for column in &definition.columns {
+            if let Some(options) = &column.attachment {
+                fields.insert(column.name.clone(), options.max_size_bytes);
+            }
+        }
+    }
     for field in program
         .forms
         .iter()
@@ -11406,6 +11419,13 @@ fn render_crud_list_with_actions(
                     .and_then(|index| row.get(index))
                     .map(String::as_str)
                     .unwrap_or("");
+                if let Some(file_cell) =
+                    render_crud_file_cell(crud, column, query_columns, row, language)
+                {
+                    html.push_str(&file_cell);
+                    html.push_str("</dd></dl>");
+                    continue;
+                }
                 let value =
                     display_crud_database_value(value, &crud.schema, &crud.table, column, language);
                 html.push_str("<dl><dt>");
@@ -11449,6 +11469,13 @@ fn render_crud_list_with_actions(
                     .and_then(|index| row.get(index))
                     .map(String::as_str)
                     .unwrap_or("");
+                if let Some(file_cell) =
+                    render_crud_file_cell(crud, column, query_columns, row, language)
+                {
+                    html.push_str(&file_cell);
+                    html.push_str("</td>");
+                    continue;
+                }
                 let value =
                     display_crud_database_value(value, &crud.schema, &crud.table, column, language);
                 if let Some(href) =
@@ -11502,6 +11529,40 @@ fn render_crud_list_with_actions(
     }
     html.push_str("</nav></main>");
     html
+}
+
+fn render_crud_file_cell(
+    crud: &CrudRoute,
+    column: &str,
+    query_columns: &[&str],
+    row: &[String],
+    language: UiLanguage,
+) -> Option<String> {
+    if !crud.file_columns.iter().any(|name| name == column) {
+        return None;
+    }
+    let file_ref = query_columns
+        .iter()
+        .position(|name| *name == column)
+        .and_then(|index| row.get(index))
+        .map(String::as_str)
+        .unwrap_or("");
+    if file_ref.is_empty() || file_ref == "\\N" {
+        return Some("—".into());
+    }
+    let Some(id) = query_columns
+        .iter()
+        .position(|name| *name == "id")
+        .and_then(|index| row.get(index))
+    else {
+        return Some(html_escape(&tr(language, "file.download")));
+    };
+    let href = format!("{}/{}/files/{column}", crud.path, id);
+    Some(format!(
+        "<a href=\"{}\">{}</a>",
+        html_escape(&href),
+        html_escape(&tr(language, "file.download"))
+    ))
 }
 
 fn crud_list_detail_href(

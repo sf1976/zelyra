@@ -10795,6 +10795,12 @@ fn serve_command(mut args: impl Iterator<Item = String>) -> ExitCode {
                 .clone()
                 .unwrap_or_else(|| zelyra_web::localized_identifier(ui_language, &crud.name)),
             table: crud.table.clone(),
+            file_columns: table
+                .columns
+                .iter()
+                .filter(|column| column.attachment.is_some())
+                .map(|column| column.name.clone())
+                .collect(),
             tenant_column: crud
                 .tenant_column
                 .as_deref()
@@ -11289,14 +11295,17 @@ fn generated_crud_form(
             let generated_number_series = !edit && column.auto_sequence.is_some();
             zelyra_ast::FormField {
                 name: column.name.clone(),
-                ty: None,
+                ty: column
+                    .attachment
+                    .as_ref()
+                    .map(|_| Type::Named("File".into())),
                 label: generated_invoice_number.then(|| "@i18n:invoice.number.label".into()),
                 placeholder: generated_invoice_number
                     .then(|| "@i18n:invoice.number.auto_hint".into())
                     .or_else(|| {
                         generated_number_series.then(|| "@i18n:number.series.auto_hint".into())
                     }),
-                required: false,
+                required: column.attachment.is_some() && column.required,
                 min_length: None,
                 max: None,
                 min_value: None,
@@ -11304,10 +11313,11 @@ fn generated_crud_form(
                 choices: Vec::new(),
                 widget: None,
                 appearance: None,
-                file_upload: None,
-                readonly: generated_invoice_number
-                    || generated_number_series
-                    || column.computed.is_some(),
+                file_upload: column.attachment.clone(),
+                readonly: column.attachment.is_none()
+                    && (generated_invoice_number
+                        || generated_number_series
+                        || column.computed.is_some()),
                 span: column.span,
             }
         })
