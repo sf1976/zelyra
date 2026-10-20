@@ -72,7 +72,7 @@ impl Interpreter<'_, '_> {
                         active_type_substitutions: self.active_type_substitutions.clone(),
                     };
                     let mut child_env = env.clone();
-                    let stack_size = execution_api::runtime_stack_size(child.call_depth_limit);
+                    let stack_size = runtime_stack_size_for_depth(child.call_depth_limit);
                     std::thread::Builder::new()
                         .name("zelyra-parallel".into())
                         .stack_size(stack_size)
