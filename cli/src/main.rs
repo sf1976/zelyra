@@ -10134,7 +10134,7 @@ fn tableview_type_filter_kind(ty: &Type) -> TableViewFilterKind {
         Type::Named(name) if name == "Id" => TableViewFilterKind::Integer,
         Type::Bool => TableViewFilterKind::Bool,
         Type::String | Type::Char => TableViewFilterKind::Text,
-        Type::Named(name) if matches!(name.as_str(), "Email" | "Url" | "Uuid") => {
+        Type::Named(name) if matches!(name.as_str(), "Email" | "Url" | "Uuid" | "FileRef") => {
             TableViewFilterKind::Text
         }
         _ => TableViewFilterKind::Other,

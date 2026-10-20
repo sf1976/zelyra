@@ -202,7 +202,7 @@ pub fn build_schema(program: &Program) -> Result<Schema, Vec<SchemaError>> {
                 }
             }
             if let Type::Named(name) = &definition.ty {
-                let known_named_type = ["Id", "Email", "Url", "Uuid", "Money"]
+                let known_named_type = ["Id", "Email", "Url", "Uuid", "Money", "FileRef"]
                     .contains(&name.as_str())
                     || program
                         .types
@@ -749,6 +749,11 @@ fn column_mapping(
         Type::Named(ref name) if name == "Email" => "VARCHAR(255)",
         Type::Named(ref name) if name == "Url" => "VARCHAR(2048)",
         Type::Named(ref name) if name == "Uuid" => match backend {
+            Backend::Postgres => "UUID",
+            Backend::MariaDb => "CHAR(36)",
+            Backend::Sqlite => "TEXT",
+        },
+        Type::Named(ref name) if name == "FileRef" => match backend {
             Backend::Postgres => "UUID",
             Backend::MariaDb => "CHAR(36)",
             Backend::Sqlite => "TEXT",
@@ -6105,6 +6110,22 @@ mod tests {
         for (engine, expected) in [("mariadb", "DATETIME(3)"), ("postgres", "TIMESTAMPTZ(3)")] {
             let schema = schema(&format!("database main {{ engine: {engine} }} table dates {{ id: Id primary stamp: Timestamp required }}"));
             assert_eq!(schema.tables[0].columns[1].sql_type, expected);
+        }
+    }
+
+    #[test]
+    fn file_ref_uses_uuid_storage_without_becoming_a_relation() {
+        for (engine, expected) in [
+            ("mariadb", "CHAR(36)"),
+            ("postgres", "UUID"),
+            ("sqlite", "TEXT"),
+        ] {
+            let schema = schema(&format!(
+                "database main {{ engine: {engine} }} table documents {{ id: Id primary file_ref: FileRef? }}"
+            ));
+            assert_eq!(schema.tables[0].columns[1].name, "file_ref");
+            assert_eq!(schema.tables[0].columns[1].sql_type, expected);
+            assert!(schema.tables[0].foreign_keys.is_empty());
         }
     }
 

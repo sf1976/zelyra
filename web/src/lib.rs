@@ -11513,7 +11513,7 @@ fn runtime_value_for_type(
         Type::Named(name) if name == "Money" => zelyra_ast::decimal::parse_scaled(value, 9)
             .map(RuntimeValue::Decimal)
             .ok_or_else(invalid),
-        Type::Named(name) if matches!(name.as_str(), "Email" | "Url" | "Uuid") => {
+        Type::Named(name) if matches!(name.as_str(), "Email" | "Url" | "Uuid" | "FileRef") => {
             Ok(RuntimeValue::String(value.to_owned()))
         }
         Type::Named(name) => {
@@ -11597,7 +11597,10 @@ fn relation_target_for_field(form: &FormRoute, field: &zelyra_ast::FormField) ->
     let Type::Named(name) = ty? else {
         return None;
     };
-    if matches!(name.as_str(), "Id" | "Email" | "Url" | "Uuid" | "Money") {
+    if matches!(
+        name.as_str(),
+        "Id" | "Email" | "Url" | "Uuid" | "Money" | "FileRef"
+    ) {
         return None;
     }
     let schema = form.schema.as_ref()?;

@@ -369,6 +369,10 @@ security and compatibility gates stated for that milestone.
   no-follow opens, signature-based PDF/PNG/JPEG selection, and size/SHA-256
   checks, but it is not connected to HTTP, Forms, database transactions, or
   download authorization. Non-Unix creation fails closed pending ACL support.
+  `FileRef` maps to `CHAR(36)`/`UUID`/`TEXT` by backend, checked file forms must
+  match a same-named reference column, automatic CRUD cannot render it as text,
+  and JSON API inputs reject the opaque reference. These compiler boundaries
+  do not enable HTTP uploads yet.
   A static analysis of
   `/opt/siedelmann-laravel/app` identified upload
   flows in invoices,

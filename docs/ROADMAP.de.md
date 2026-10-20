@@ -404,13 +404,19 @@ abgeschlossen.
   Eingaben ohne Absturz. Compilergeprüfte `File`-Formmetadaten prüfen jetzt
   Größenlimits und die PDF-/PNG-/JPEG-Allowlist, weisen tabellengebundene
   Formulare sowie Speicher- und Action-Kontexte ab und rendern ein
-  Multipart-Dateifeld ohne Dateinamen-Ausgabe.
+  Multipart-Dateifeld ohne Dateinamen-Ausgabe. Tabellengebundene Datei-Felder
+  benötigen jetzt eine gleichnamige `FileRef`-Spalte.
   Übermittlungen erhalten weiterhin HTTP 415. Ein Unix-Speicherprimitiv
   unterstützt Staging, atomare Veröffentlichung, opake mandantengebundene
   Referenzen, private Dateirechte, No-Follow-Öffnen, Signaturauswahl für
   PDF/PNG/JPEG sowie Größen-/SHA-256-Prüfung. Es ist noch nicht mit HTTP, Forms,
   Datenbanktransaktionen oder Download-Berechtigungen verbunden; Nicht-Unix-
-  Anlegen schlägt bis zur ACL-Unterstützung geschlossen fehl. Eine statische Analyse von
+  Anlegen schlägt bis zur ACL-Unterstützung geschlossen fehl. `FileRef` wird je
+  Backend als `CHAR(36)`/`UUID`/`TEXT` abgebildet. Geprüfte
+  Datei-Formulare müssen auf eine gleichnamige Referenzspalte zeigen;
+  automatisches CRUD darf `FileRef` nicht als Textfeld rendern und JSON-API-
+  Eingaben dürfen die opake Referenz nicht setzen. Diese Compilerschranken
+  aktivieren HTTP-Uploads noch nicht. Eine statische Analyse von
   `/opt/siedelmann-laravel/app` fand Uploadabläufe bei Rechnungen, Verträgen,
   Einstellungen, Postbriefen und eingehender Mail; der Importer erzeugt sie
   nicht. Offen sind Inhaltsprüfung, private mandantengebundene Speicherung,

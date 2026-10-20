@@ -66,6 +66,10 @@ pub fn check_program(program: &zelyra_ast::Program, schema: &Schema) -> Result<(
             .table
             .as_deref()
             .and_then(|name| schema.tables.iter().find(|table| table.name == name));
+        let table_definition = form
+            .table
+            .as_deref()
+            .and_then(|name| program.tables.iter().find(|table| table.name == name));
         if form.table.is_some() && table.is_none() {
             errors.push(FormError {
                 message: format!(
@@ -84,6 +88,12 @@ pub fn check_program(program: &zelyra_ast::Program, schema: &Schema) -> Result<(
                 });
             }
             let schema_column = table.and_then(|table| find_column(table, &field.name));
+            let declared_column = table_definition.and_then(|table| {
+                table
+                    .columns
+                    .iter()
+                    .find(|column| column.name == field.name)
+            });
             if form.table.is_some() && schema_column.is_none() {
                 errors.push(FormError {
                     message: format!(
@@ -93,10 +103,25 @@ pub fn check_program(program: &zelyra_ast::Program, schema: &Schema) -> Result<(
                     span: field.span,
                 });
             }
-            if form.table.is_some() && field.file_upload.is_some() {
+            if field.file_upload.is_some() {
+                if form.table.is_some()
+                    && !declared_column
+                        .is_some_and(|column| is_file_ref_type(&column.ty, &program.types))
+                {
+                    errors.push(FormError {
+                        message: format!(
+                            "file field `{}` requires a FileRef column with the same name in a table-backed form",
+                            field.name
+                        ),
+                        span: field.span,
+                    });
+                }
+            } else if declared_column
+                .is_some_and(|column| is_file_ref_type(&column.ty, &program.types))
+            {
                 errors.push(FormError {
                     message: format!(
-                        "file field `{}` is not supported in a table-backed form until file references can be stored",
+                        "FileRef column `{}` must use a checked File form field",
                         field.name
                     ),
                     span: field.span,
@@ -118,17 +143,7 @@ pub fn check_program(program: &zelyra_ast::Program, schema: &Schema) -> Result<(
                 });
             }
             check_file_field(field, true, &mut errors);
-            let declared_type = form
-                .table
-                .as_deref()
-                .and_then(|name| program.tables.iter().find(|table| table.name == name))
-                .and_then(|table| {
-                    table
-                        .columns
-                        .iter()
-                        .find(|column| column.name == field.name)
-                })
-                .map(|column| &column.ty);
+            let declared_type = declared_column.map(|column| &column.ty);
             validate_constraints(field, declared_type, &mut errors);
         }
         let declared_upload_bytes = form
@@ -162,6 +177,21 @@ pub fn check_program(program: &zelyra_ast::Program, schema: &Schema) -> Result<(
     }
     for crud in &program.cruds {
         let table = schema.tables.iter().find(|table| table.name == crud.table);
+        if let Some(definition) = program.tables.iter().find(|table| table.name == crud.table) {
+            for column in definition
+                .columns
+                .iter()
+                .filter(|column| is_file_ref_type(&column.ty, &program.types))
+            {
+                errors.push(FormError {
+                    message: format!(
+                        "CRUD `{}` cannot expose FileRef column `{}` as a text field; file-aware CRUD rendering is not implemented",
+                        crud.name, column.name
+                    ),
+                    span: column.span,
+                });
+            }
+        }
         let mut action_names = HashSet::new();
         for action in &crud.actions {
             if !action_names.insert(action.name.clone()) {
@@ -313,6 +343,25 @@ fn check_file_field(field: &FormField, can_receive_file: bool, errors: &mut Vec<
         }),
         (None, false) => {}
     }
+}
+
+fn is_file_ref_type(ty: &Type, definitions: &[zelyra_ast::TypeDef]) -> bool {
+    fn resolve(
+        ty: &Type,
+        definitions: &[zelyra_ast::TypeDef],
+        visited: &mut HashSet<String>,
+    ) -> bool {
+        match ty {
+            Type::Named(name) if name == "FileRef" => true,
+            Type::Option(inner) => resolve(inner, definitions, visited),
+            Type::Named(name) if visited.insert(name.clone()) => definitions
+                .iter()
+                .find(|definition| definition.name == *name)
+                .is_some_and(|definition| resolve(&definition.target, definitions, visited)),
+            _ => false,
+        }
+    }
+    resolve(ty, definitions, &mut HashSet::new())
 }
 
 fn contains_file_type(ty: &Type) -> bool {
@@ -1064,7 +1113,7 @@ mod tests {
     }
 
     #[test]
-    fn rejects_file_inputs_in_table_backed_forms_until_file_references_exist() {
+    fn table_backed_file_inputs_require_a_matching_file_ref_column() {
         let mut document = field("document", Type::Named("File".into()), false, None);
         document.file_upload = Some(zelyra_ast::FileUploadOptions {
             max_size_bytes: 10 * 1024 * 1024,
@@ -1119,11 +1168,57 @@ mod tests {
             functions: Vec::new(),
         };
         let schema = zelyra_database::build_schema(&program).expect("valid table schema");
-        let errors = check_program(&program, &schema).expect_err("file storage is not implemented");
+        let errors = check_program(&program, &schema)
+            .expect_err("a text column cannot receive an uploaded file reference");
+        assert!(errors
+            .iter()
+            .any(|error| { error.message.contains("requires a FileRef column") }));
+
+        let mut file_ref_program = program.clone();
+        file_ref_program.tables[0].columns[0].ty =
+            Type::Option(Box::new(Type::Named("FileRef".into())));
+        let schema = zelyra_database::build_schema(&file_ref_program).expect("FileRef schema");
+        check_program(&file_ref_program, &schema)
+            .expect("a bounded File input may target its matching optional FileRef column");
+
+        file_ref_program.types.push(zelyra_ast::TypeDef {
+            name: "DocumentRef".into(),
+            is_public: false,
+            target: Type::Named("FileRef".into()),
+            span: Span::default(),
+        });
+        file_ref_program.tables[0].columns[0].ty =
+            Type::Option(Box::new(Type::Named("DocumentRef".into())));
+        let schema =
+            zelyra_database::build_schema(&file_ref_program).expect("aliased FileRef schema");
+        check_program(&file_ref_program, &schema)
+            .expect("aliases of FileRef retain file-field handling");
+
+        file_ref_program.forms[0].fields[0].file_upload = None;
+        let schema = zelyra_database::build_schema(&file_ref_program).expect("FileRef schema");
+        let errors = check_program(&file_ref_program, &schema)
+            .expect_err("FileRef values cannot be submitted as plain text");
+        assert!(errors
+            .iter()
+            .any(|error| error.message.contains("must use a checked File form field")));
+    }
+
+    #[test]
+    fn generated_crud_does_not_render_file_refs_as_text_controls() {
+        let program = zelyra_parser::parse(
+            &zelyra_lexer::lex(
+                "table documents { id: Id primary auto document: FileRef? } crud Document -> documents {} fn main() {}",
+            )
+            .unwrap(),
+        )
+        .unwrap();
+        let schema = build_schema(&program).unwrap();
+        let errors = check_program(&program, &schema)
+            .expect_err("automatic CRUD cannot expose an opaque FileRef as text yet");
         assert!(errors.iter().any(|error| {
             error
                 .message
-                .contains("not supported in a table-backed form")
+                .contains("cannot expose FileRef column `document` as a text field")
         }));
     }
 

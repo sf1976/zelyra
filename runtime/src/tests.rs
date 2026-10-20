@@ -5319,6 +5319,20 @@ fn validates_api_types_and_path_parameters() {
 }
 
 #[test]
+fn file_refs_cannot_be_declared_as_external_json_api_fields() {
+    let program = parse(
+        &lex("api POST \"/documents\" { input { document: FileRef } output Unit } fn main() {}")
+            .unwrap(),
+    )
+    .unwrap();
+    let errors = check_apis(&program)
+        .expect_err("opaque file references cannot be forged in normal JSON requests");
+    assert!(errors
+        .iter()
+        .any(|error| error.message.contains("unknown API input type `FileRef`")));
+}
+
+#[test]
 fn validates_api_handler_signature() {
     let program = parse(
             &lex("type CustomerId = Id table customers { id: Id primary auto } fn get_customer(id: CustomerId) -> Customer { } api GET \"/customers/{id}\" { handler get_customer input { id: CustomerId } output Customer } fn main() { }").unwrap(),

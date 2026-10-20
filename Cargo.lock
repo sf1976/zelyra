@@ -2496,6 +2496,8 @@ version = "1.2.28"
 dependencies = [
  "zelyra-ast",
  "zelyra-database",
+ "zelyra-lexer",
+ "zelyra-parser",
 ]
 
 [[package]]

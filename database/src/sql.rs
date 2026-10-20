@@ -1035,7 +1035,7 @@ fn result_types_compatible(expected: &Type, actual: &Type) -> bool {
     match expected {
         Type::Named(name) if actual == &Type::Int => name.to_ascii_lowercase().ends_with("id"),
         Type::Named(name) if actual == &Type::String => {
-            matches!(name.as_str(), "Email" | "Url" | "Uuid")
+            matches!(name.as_str(), "Email" | "Url" | "Uuid" | "FileRef")
         }
         Type::Option(inner) => result_types_compatible(inner, actual),
         _ => false,
@@ -1274,10 +1274,13 @@ fn sql_types_compatible(expected: &Type, actual: &Type) -> bool {
     match actual {
         Type::Named(name) if expected == &Type::Int => {
             name.to_ascii_lowercase().ends_with("id")
-                || !matches!(name.as_str(), "Email" | "Url" | "Uuid" | "Money")
+                || !matches!(
+                    name.as_str(),
+                    "Email" | "Url" | "Uuid" | "Money" | "FileRef"
+                )
         }
         Type::Named(name) if expected == &Type::String => {
-            matches!(name.as_str(), "Email" | "Url" | "Uuid")
+            matches!(name.as_str(), "Email" | "Url" | "Uuid" | "FileRef")
         }
         Type::Option(inner) => sql_types_compatible(expected, inner),
         _ => false,
