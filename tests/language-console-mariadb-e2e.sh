@@ -81,10 +81,18 @@ count_rows() {
 run_console() {
     local mode="$1"
     local input="$2"
-    printf '%b' "${input}" | "${zelyra_bin}" console "${project_dir}/main.zyl" "${mode}"
+    local backend="${3:-ast}"
+    printf '%b' "${input}" | "${zelyra_bin}" console "${project_dir}/main.zyl" "${mode}" --backend "${backend}"
 }
 
 run_console --sandbox "sql { INSERT INTO console_probe (name) VALUES ('implicit rollback') }\n"
+[[ "$(count_rows)" == 0 ]]
+
+bytecode_rollback="$(run_console --sandbox "sql { INSERT INTO console_probe (name) VALUES ('bytecode rollback') }\n" bytecode 2>&1)"
+if [[ "${bytecode_rollback}" == *'error['* ]]; then
+    printf 'error: bytecode REPL sandbox returned a runtime error:\n%s\n' "${bytecode_rollback}" >&2
+    exit 1
+fi
 [[ "$(count_rows)" == 0 ]]
 
 run_console --sandbox "sql { INSERT INTO console_probe (name) VALUES ('explicit rollback') }\n:rollback\n"

@@ -12,9 +12,16 @@ EOF
 bindings="$(printf 'x = 10\ny = 20\nx + y\n' | "${zelyra_bin}" console "${project}/main.zyl" --sandbox)"
 [[ "${bindings}" == *'=> 30'* ]]
 
+bytecode_bindings="$(printf 'x = 10\ny = 20\nx + y\n' | "${zelyra_bin}" console "${project}/main.zyl" --sandbox --backend bytecode)"
+[[ "${bytecode_bindings}" == *'=> 30'* ]]
+
 recovery="$(printf '1 / 0\n"weiter"\n' | "${zelyra_bin}" console "${project}/main.zyl" --sandbox 2>&1)"
 [[ "${recovery}" == *'division by zero'* ]]
 [[ "${recovery}" == *'=> "weiter"'* ]]
+
+bytecode_recovery="$(printf '1 / 0\n"weiter"\n' | "${zelyra_bin}" console "${project}/main.zyl" --sandbox --backend bytecode 2>&1)"
+[[ "${bytecode_recovery}" == *'division by zero'* ]]
+[[ "${bytecode_recovery}" == *'=> "weiter"'* ]]
 
 meta="$(printf ':tenant 42\ntenant_id\nsession.tenant_id\n:help\n' | "${zelyra_bin}" console "${project}/main.zyl" --sandbox 2>&1)"
 [[ "${meta}" == *'=> 42'* ]]

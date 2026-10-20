@@ -254,7 +254,7 @@ pub use operators::{evaluate_binary_value, evaluate_unary_value};
 pub use package_settings::PackageSettings;
 use pdf_template::interpolate_pdf_data;
 pub use pure_builtins::{execute_pure_builtin, is_pure_builtin};
-pub use repl::{ReplError, ReplEvaluation, ReplSession};
+pub use repl::{ReplError, ReplEvaluation, ReplExecutionContext, ReplSession};
 pub use step_budget::{StepBudget, StepBudgetError};
 
 /// Render a declared view with supplied record data without executing project code.

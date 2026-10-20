@@ -34,9 +34,9 @@ use zelyra_runtime::{
     check, check_apis, check_capabilities_with_grants,
     execute_function_captured_with_capabilities_and_policies,
     execute_function_with_capabilities_and_policies, verify as verify_program, FileSystemPolicy,
-    MailPolicy, NetworkPolicy, ProcessPolicy, RuntimePolicy, SystemHostServices,
-    Value as RuntimeValue, VerificationResult, VerificationStatus, KNOWN_CAPABILITIES,
-    MAX_CONFIGURED_FUNCTION_CALL_DEPTH,
+    HostFileMetadata, HostHttpResponse, HostServices, MailPolicy, NetworkPolicy, ProcessPolicy,
+    RuntimePolicy, SystemHostServices, Value as RuntimeValue, VerificationResult,
+    VerificationStatus, KNOWN_CAPABILITIES, MAX_CONFIGURED_FUNCTION_CALL_DEPTH,
 };
 use zelyra_web::{
     audit_insert_queries, html_escape, parse_urlencoded, serve_app, serve_app_listener, ApiRoute,
