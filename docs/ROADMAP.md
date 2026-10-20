@@ -379,8 +379,16 @@ security and compatibility gates stated for that milestone.
   returns only checksum-verified bytes with private attachment headers. CRUD
   detail pages show a localized download link and never display the opaque
   FileRef. The HTTP/storage path is not crash-atomic across filesystem and
-  database commits; a crash can leave an orphan. Replacement/deletion, cleanup,
-  and backup/restore remain open. Non-Unix creation fails closed pending ACL
+  database commits; a crash can leave an orphan. `zelyra files cleanup`
+  previews old unreferenced blobs and abandoned staging pairs, rechecks declared
+  FileRef columns, caps filesystem entries and fetched reference rows at 100,000
+  each, and refuses symlinks or
+  inconsistent paths. It defaults to 30 days and requires both `--apply` and
+  `--maintenance-window` to delete; operators must stop project servers and
+  workers. A disposable MariaDB E2E proves preview, referenced-file
+  preservation, and explicit orphan removal. This acknowledgement is not a
+  technical service lock, so concurrent uploads remain outside the guarantee.
+  Replacement/deletion and backup/restore remain open. Non-Unix creation fails closed pending ACL
   support.
   `FileRef` maps to `CHAR(36)`/`UUID`/`TEXT` by backend, checked file forms must
   match a same-named reference column, automatic CRUD cannot render it as text,
@@ -400,7 +408,8 @@ security and compatibility gates stated for that milestone.
   flows in invoices,
   contracts, settings, postal letters, and inbound mail; the importer does not
   generate them. Remaining release gates include replacement/deletion,
-  crash-orphan cleanup, and backup/restore. See the
+  backup/restore, and additional cleanup E2E coverage for concurrent service
+  shutdown, crash remnants, and failure recovery. See the
   [1.2.29 secure upload plan](release-plans/1.2.29-secure-uploads.en.md).
 - [~] **1.2.30 — Laravel import workflow coverage:** Standalone forms now
   support checked local routes with captured path parameters, a compiler-checked

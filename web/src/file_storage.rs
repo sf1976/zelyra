@@ -9,7 +9,11 @@ use rand_core::{OsRng, RngCore};
 use sha2::{Digest, Sha256};
 use std::fs::{self, File, OpenOptions};
 use std::io::{self, Read, Write};
-use std::path::{Path, PathBuf};
+use std::{
+    collections::{HashMap, HashSet},
+    path::{Path, PathBuf},
+    time::SystemTime,
+};
 
 const MAX_UPLOAD_BYTES: u64 = 100 * 1024 * 1024;
 
@@ -21,6 +25,15 @@ pub struct StoredFile {
     pub media_type: &'static str,
     pub size_bytes: u64,
     pub sha256: String,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct OldUnreferencedUpload {
+    pub tenant_id: i64,
+    pub file_ref: String,
+    pub size_bytes: u64,
+    pub modified_at: SystemTime,
+    pub staging_artifact: bool,
 }
 
 #[derive(Debug)]
@@ -292,6 +305,163 @@ impl FileStorage {
         Ok(())
     }
 
+    /// Finds old, well-formed managed upload pairs not referenced by the
+    /// caller's current database snapshot. The caller must bound the scan and
+    /// must recheck references before applying removals.
+    pub fn old_unreferenced_uploads(
+        &self,
+        referenced: &HashSet<(i64, String)>,
+        older_than: SystemTime,
+        max_entries: usize,
+    ) -> Result<Vec<OldUnreferencedUpload>, FileStorageError> {
+        if max_entries == 0 {
+            return Err(FileStorageError(
+                "upload cleanup scan limit must be positive".into(),
+            ));
+        }
+        let tenants_path = self.root.join("tenants");
+        let tenants_metadata = match fs::symlink_metadata(&tenants_path) {
+            Ok(metadata)
+                if metadata.file_type().is_symlink()
+                    || !metadata.is_dir()
+                    || !tenants_path_is_contained(&self.root, &tenants_path)? =>
+            {
+                return Err(FileStorageError(
+                    "private upload tenant root is not a contained directory".into(),
+                ));
+            }
+            Ok(metadata) => metadata,
+            Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(Vec::new()),
+            Err(error) => return Err(storage_error(error)),
+        };
+        let _ = tenants_metadata;
+
+        let mut scanned = 0usize;
+        let mut candidates = Vec::new();
+        for tenant_entry in fs::read_dir(&tenants_path).map_err(storage_error)? {
+            scanned = scanned.saturating_add(1);
+            if scanned > max_entries {
+                return Err(FileStorageError(
+                    "upload cleanup scan exceeded its entry limit".into(),
+                ));
+            }
+            let tenant_entry = tenant_entry.map_err(storage_error)?;
+            let tenant_name = tenant_entry.file_name();
+            let Some(tenant_name) = tenant_name.to_str() else {
+                continue;
+            };
+            let Ok(tenant_id) = tenant_name.parse::<i64>() else {
+                continue;
+            };
+            if tenant_id < 0 || tenant_id.to_string() != tenant_name {
+                continue;
+            }
+            let tenant_path = tenant_entry.path();
+            let tenant_metadata = fs::symlink_metadata(&tenant_path).map_err(storage_error)?;
+            if tenant_metadata.file_type().is_symlink() || !tenant_metadata.is_dir() {
+                return Err(FileStorageError(
+                    "private upload tenant entry is not a real directory".into(),
+                ));
+            }
+            if !tenants_path_is_contained(&self.root, &tenant_path)? {
+                return Err(FileStorageError(
+                    "private upload tenant directory escapes the storage root".into(),
+                ));
+            }
+            let mut entries = HashMap::new();
+            for entry in fs::read_dir(&tenant_path).map_err(storage_error)? {
+                scanned = scanned.saturating_add(1);
+                if scanned > max_entries {
+                    return Err(FileStorageError(
+                        "upload cleanup scan exceeded its entry limit".into(),
+                    ));
+                }
+                let entry = entry.map_err(storage_error)?;
+                let name = entry.file_name();
+                let Some(name) = name.to_str() else {
+                    continue;
+                };
+                let metadata = fs::symlink_metadata(entry.path()).map_err(storage_error)?;
+                if metadata.file_type().is_symlink() {
+                    continue;
+                }
+                entries.insert(name.to_owned(), metadata);
+            }
+
+            for (name, blob_metadata) in &entries {
+                let (file_ref, staging_artifact, manifest_name) =
+                    if let Some(file_ref) = name.strip_suffix(".stage") {
+                        let Some(file_ref) = file_ref.strip_prefix('.') else {
+                            continue;
+                        };
+                        (file_ref, true, format!(".{file_ref}.meta.stage"))
+                    } else if is_canonical_uuid(name) {
+                        (name.as_str(), false, format!("{name}.meta"))
+                    } else {
+                        continue;
+                    };
+                if !is_canonical_uuid(file_ref) || !blob_metadata.is_file() {
+                    continue;
+                }
+                if !staging_artifact && referenced.contains(&(tenant_id, file_ref.to_owned())) {
+                    continue;
+                }
+                let Some(manifest_metadata) = entries.get(&manifest_name) else {
+                    continue;
+                };
+                if !manifest_metadata.is_file() {
+                    continue;
+                }
+                let blob_modified = blob_metadata.modified().map_err(storage_error)?;
+                let manifest_modified = manifest_metadata.modified().map_err(storage_error)?;
+                let modified_at = blob_modified.max(manifest_modified);
+                if modified_at >= older_than {
+                    continue;
+                }
+                candidates.push(OldUnreferencedUpload {
+                    tenant_id,
+                    file_ref: file_ref.to_owned(),
+                    size_bytes: blob_metadata.len(),
+                    modified_at,
+                    staging_artifact,
+                });
+            }
+        }
+        candidates.sort_by(|left, right| {
+            (
+                left.tenant_id,
+                left.file_ref.as_str(),
+                left.staging_artifact,
+            )
+                .cmp(&(
+                    right.tenant_id,
+                    right.file_ref.as_str(),
+                    right.staging_artifact,
+                ))
+        });
+        Ok(candidates)
+    }
+
+    /// Removes one old staging pair previously returned by
+    /// `old_unreferenced_uploads`. It never accepts a path from the caller.
+    pub fn remove_staging(&self, tenant_id: i64, file_ref: &str) -> Result<(), FileStorageError> {
+        if tenant_id < 0 || !is_canonical_uuid(file_ref) {
+            return Err(FileStorageError("invalid tenant or file reference".into()));
+        }
+        let tenant = self.tenant_directory(tenant_id)?;
+        let blob = tenant.join(format!(".{file_ref}.stage"));
+        let manifest = tenant.join(format!(".{file_ref}.meta.stage"));
+        let blob_exists = regular_file_exists(&blob)?;
+        let manifest_exists = regular_file_exists(&manifest)?;
+        if manifest_exists {
+            fs::remove_file(manifest).map_err(storage_error)?;
+        }
+        if blob_exists {
+            fs::remove_file(blob).map_err(storage_error)?;
+        }
+        Ok(())
+    }
+
     fn tenant_directory(&self, tenant_id: i64) -> Result<PathBuf, FileStorageError> {
         let tenants = self.root.join("tenants");
         ensure_private_directory(&self.root, &tenants)?;
@@ -463,6 +633,22 @@ fn ensure_contained(root: &Path, path: &Path) -> Result<(), FileStorageError> {
         ));
     }
     Ok(())
+}
+
+fn tenants_path_is_contained(root: &Path, path: &Path) -> Result<bool, FileStorageError> {
+    let canonical = fs::canonicalize(path).map_err(storage_error)?;
+    Ok(canonical.starts_with(root))
+}
+
+fn regular_file_exists(path: &Path) -> Result<bool, FileStorageError> {
+    match fs::symlink_metadata(path) {
+        Ok(metadata) if metadata.file_type().is_symlink() || !metadata.is_file() => Err(
+            FileStorageError("private upload artifact is not a regular file".into()),
+        ),
+        Ok(_) => Ok(true),
+        Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(false),
+        Err(error) => Err(storage_error(error)),
+    }
 }
 
 #[cfg(unix)]
@@ -675,6 +861,67 @@ mod tests {
         fs::remove_file(manifest).unwrap();
         let _ = fs::remove_dir_all(root);
         let _ = fs::remove_dir_all(outside);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn old_upload_scan_is_bounded_and_excludes_database_references() {
+        let root = temporary_root();
+        let store = FileStorage::new(&root).unwrap();
+        let metadata = store
+            .stage(9, b"%PDF-1.7\nold upload", 1024, &pdf_allowed())
+            .unwrap()
+            .publish()
+            .unwrap();
+        let referenced = HashSet::from([(9, metadata.file_ref.clone())]);
+        let future_cutoff = SystemTime::now() + std::time::Duration::from_secs(60);
+
+        assert!(store
+            .old_unreferenced_uploads(&referenced, future_cutoff, 100)
+            .unwrap()
+            .is_empty());
+        let candidates = store
+            .old_unreferenced_uploads(&HashSet::new(), future_cutoff, 100)
+            .unwrap();
+        assert_eq!(candidates.len(), 1);
+        assert_eq!(candidates[0].tenant_id, 9);
+        assert_eq!(candidates[0].file_ref, metadata.file_ref);
+        assert!(!candidates[0].staging_artifact);
+        assert!(store
+            .old_unreferenced_uploads(&HashSet::new(), future_cutoff, 1)
+            .is_err());
+
+        store.remove(9, &metadata.file_ref).unwrap();
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn old_upload_scan_finds_abandoned_staging_pairs_and_removes_them_safely() {
+        let root = temporary_root();
+        let store = FileStorage::new(&root).unwrap();
+        let mut staged = store
+            .stage(12, b"%PDF-1.7\nabandoned", 1024, &pdf_allowed())
+            .unwrap();
+        let file_ref = staged.metadata.file_ref.clone();
+        // Simulate a process crash: prevent the Rust Drop cleanup and leave
+        // the generated stage pair behind for a later maintenance scan.
+        staged.staging_path.take();
+        staged.metadata_staging_path.take();
+        let future_cutoff = SystemTime::now() + std::time::Duration::from_secs(60);
+        let candidates = store
+            .old_unreferenced_uploads(&HashSet::new(), future_cutoff, 100)
+            .unwrap();
+        assert_eq!(candidates.len(), 1);
+        assert_eq!(candidates[0].file_ref, file_ref);
+        assert!(candidates[0].staging_artifact);
+
+        store.remove_staging(12, &file_ref).unwrap();
+        assert!(store
+            .old_unreferenced_uploads(&HashSet::new(), future_cutoff, 100)
+            .unwrap()
+            .is_empty());
+        let _ = fs::remove_dir_all(root);
     }
 
     #[cfg(unix)]

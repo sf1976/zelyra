@@ -419,9 +419,17 @@ abgeschlossen.
   Entfernen prüft Blob und Manifest vor jeder Änderung und entfernt zuerst das
   Manifest; ein ungültiges Manifest löst daher keine Teillöschung aus. Der
   HTTP-/Speicherpfad ist über Datei- und Datenbankcommit nicht crash-atomar;
-  ein Absturz kann ein verwaistes Objekt hinterlassen. Geschützte Downloads
-  sind bereits enthalten; Ersetzen/Löschen, Bereinigung und Backup/Restore sind
-  offen. Nicht-Unix-
+  ein Absturz kann ein verwaistes Objekt hinterlassen. `zelyra files cleanup`
+  zeigt alte, nicht referenzierte Blobs und verwaiste Staging-Paare zunächst
+  nur an, prüft deklarierte FileRef-Spalten erneut, begrenzt Datei- und
+  Datenbankreferenz-Scans auf je 100.000 Einträge und bricht bei Symlinks oder
+  inkonsistenten Pfaden ab. Ein Wegwerf-MariaDB-E2E bestätigt Vorschau,
+  Erhalt referenzierter Dateien und ausdrückliches Löschen des Waisen. Das
+  Mindestalter beträgt standardmäßig 30 Tage; zum Löschen sind `--apply` und
+  `--maintenance-window` erforderlich. Betreiber müssen Server und Worker
+  stoppen; die Bestätigung ist keine technische Dienstsperre, daher sind
+  gleichzeitige Uploads nicht abgedeckt. Ersetzen/Löschen und Backup/Restore
+  bleiben offen. Nicht-Unix-
   Anlegen schlägt bis zur ACL-Unterstützung geschlossen fehl. `FileRef` wird je
   Backend als `CHAR(36)`/`UUID`/`TEXT` abgebildet. Geprüfte
   Datei-Formulare müssen auf eine gleichnamige Referenzspalte zeigen;
@@ -440,8 +448,8 @@ abgeschlossen.
   konnte. Der Code wird zusätzlich mit lokalem Rust 1.98 geprüft. Eine statische Analyse von
   `/opt/siedelmann-laravel/app` fand Uploadabläufe bei Rechnungen, Verträgen,
   Einstellungen, Postbriefen und eingehender Mail; der Importer erzeugt sie
-  nicht. Offen sind Ersetzen/Löschen, Bereinigung nach Prozessabstürzen und
-  Backup/Restore.
+  nicht. Offen sind Ersetzen/Löschen, Backup/Restore und zusätzliche Cleanup-
+  E2E-Prüfungen für laufende Dienste, Absturzreste und Fehlerwiederherstellung.
   Siehe den [Plan für sichere Uploads 1.2.29](release-plans/1.2.29-secure-uploads.de.md).
 - [~] **1.2.30 — Abdeckung echter Laravel-Migrationsabläufe:** Standalone-Forms
   unterstützen geprüfte lokale Routen mit erfassten Pfadparametern, ein
