@@ -7,10 +7,9 @@ database_url="${DATABASE_URL:-}"
 suffix="$(date +%s%N)"
 email="zelyra-tenant-api-${suffix}@example.test"
 password="ZelyraTenantApi-${suffix}-Password"
-address="127.0.0.1:$((40000 + $$ % 20000))"
-base_url="http://${address}"
 temp_dir="$(mktemp -d "${TMPDIR:-/tmp}/zelyra-tenant-api.XXXXXX")"
 server_pid=""
+base_url=""
 
 if [[ "${database_url}" == mariadb://* ]]; then
     parts="${database_url#mariadb://}"
@@ -52,9 +51,25 @@ INSERT INTO users (email, password_hash) VALUES ('${email}', '${password_hash}')
 SET @user_id = (SELECT id FROM users WHERE email = '${email}');
 INSERT INTO tenant_memberships (user_id, tenant_id, active) VALUES (@user_id, 10, TRUE), (@user_id, 20, TRUE);
 SQL
-DATABASE_URL="${test_url}" "${zelyra_bin}" serve "${project_file}" "${address}" >"${temp_dir}/server.log" 2>&1 &
+# Let the OS assign an unused loopback port. A PID-derived port can collide
+# with another parallel CI integration test, and `serve` may then select a
+# fallback port that the test would not know about.
+DATABASE_URL="${test_url}" "${zelyra_bin}" serve "${project_file}" "127.0.0.1:0" >"${temp_dir}/server.log" 2>&1 &
 server_pid=$!
-for _ in $(seq 1 30); do if curl -sSf "${base_url}/login" -o "${temp_dir}/login.html"; then break; fi; sleep 1; done
+for _ in $(seq 1 120); do
+    announced_url="$(sed -n 's/^Zelyra server listening on \(http:\/\/[^[:space:]]*\).*/\1/p' "${temp_dir}/server.log" | tail -n 1)"
+    if [[ -n "${announced_url}" ]]; then
+        base_url="${announced_url}"
+        if curl -sSf "${base_url}/login" -o "${temp_dir}/login.html"; then break; fi
+    fi
+    if ! kill -0 "${server_pid}" >/dev/null 2>&1; then
+        cat "${temp_dir}/server.log" >&2
+        echo "error: Zelyra server exited before becoming ready" >&2
+        exit 1
+    fi
+    sleep 0.25
+done
+[[ -s "${temp_dir}/login.html" ]] || { cat "${temp_dir}/server.log" >&2; echo "error: login page did not become ready" >&2; exit 1; }
 csrf="$(sed -n 's/.*name="_zelyra_csrf" value="\([^"]*\)".*/\1/p' "${temp_dir}/login.html")"
 cookie="${temp_dir}/cookies"
 login_status="$(curl -sS -o /dev/null -w '%{http_code}' --header "Origin: ${base_url}" --cookie-jar "${cookie}" --data-urlencode "_zelyra_csrf=${csrf}" --data-urlencode "email=${email}" --data-urlencode "password=${password}" "${base_url}/login")"
