@@ -636,6 +636,13 @@ fn generate_scaffold(
         let requested_table_names = selection.requested_names;
         let included_table_names = selection.included_names;
         let included_tables = selection.candidates;
+        let route_target_tables = if requested_table_names.is_empty() {
+            included_table_names.as_slice()
+        } else {
+            requested_table_names.as_slice()
+        };
+        let route_candidates =
+            route_candidates_for_tables(&report_json["graph"], route_target_tables);
         let login_evidence = if table_scoped
             && !requested_table_names
                 .iter()
@@ -800,6 +807,8 @@ fn generate_scaffold(
             "included_tables": included_table_names.clone(),
             "excluded_framework_tables": selection.excluded_framework_names,
             "relation_dependencies": included_table_names.iter().filter(|table| !requested_table_names.contains(table)).collect::<Vec<_>>(),
+            "route_candidates": route_candidates.clone(),
+            "route_candidates_generated": false,
             "business_helpers": included_business_candidates.iter().filter_map(|candidate| candidate["function"].as_str()).collect::<Vec<_>>(),
             "business_module": if generated_business_count > 0 { Some("src/imported_business.zyl") } else { None::<&str> },
             "service_helpers": included_service_candidates.iter().map(|candidate| json!({
@@ -862,6 +871,14 @@ fn generate_scaffold(
         write_new_file(
             &staging.join("SOURCE_FILE_PLAN.json"),
             &source_file_plan_source,
+        )?;
+        write_new_file(
+            &staging.join("ROUTE_CANDIDATES.json"),
+            &format!(
+                "{}\n",
+                serde_json::to_string_pretty(&route_candidates)
+                    .map_err(|_| "could not serialize route candidates".to_owned())?
+            ),
         )?;
         write_new_file(
             &staging.join("MIGRATION_FILES.md"),
@@ -1011,7 +1028,7 @@ fn generate_scaffold(
         write_new_file(
             &staging.join("README.md"),
             &format!(
-                "# Zelyra migration scaffold\n\nThis is a separate, compiler-checkable starting point. It contains no copied Laravel PHP, configuration, secrets, personal records, or production data. It includes {generated_table_count} schema declaration candidate(s) from a restricted static migration subset; these declarations do not apply database changes and must be reviewed. It also contains {generated_business_count} pure model projection helper(s) translated from a narrow static PHP subset in `src/imported_business.zyl`, imported from `main.zyl` through Zelyra's normal module system. These helpers do not include model casts, call sites, authorization, or surrounding workflows; review their assumptions and wire them explicitly. It contains {generated_service_count} narrow pure service helper(s) in `src/imported_services.zyl`, imported through the normal module system. Their statically resolved callers are listed, but their controller/service workflows are not automatically rewired. It contains {generated_enum_adapter_count} typed adapters for literal Laravel enum values in `src/imported_enums.zyl`. They map stored strings to Zelyra enum variants and back, but do not add database constraints or wire application call sites; parse every value read from storage and validate writes explicitly. It contains {generated_validation_form_count} standalone form declaration candidate(s) from a strict subset of literal Laravel validation rules in `src/imported_forms.zyl`. This file is deliberately not imported by `main.zyl`, so the suggestions do not create endpoints until explicitly included and reviewed. They are not connected to Laravel routes or handlers and do not perform Laravel validation or persistence; omitted rules and fields are recorded in `GENERATION_SELECTION.json`. Laravel command and scheduler metadata is listed in `MIGRATION_TASKS.md`; PHP handlers are not imported. Every statically inventoried PHP source file and its proposed migration disposition is listed in `MIGRATION_FILES.md` and `SOURCE_FILE_PLAN.json`; entries are not claims that behavior was translated. Blade URL, asset, and shared-layout references are recorded in `VIEW_LINKS.json`; `VIEW_LAYOUTS.md` maps each `@extends` consumer and its `@section` values to the layout's `@yield` slots. Zelyra already provides reusable named `view` layouts. When a shared Blade layout is found, the scaffold emits the Zelyra starter `view ImportedAppShell` in `src/imported_layouts.zyl` and imports that module; each translated page can bind it with `view: ImportedAppShell`. The shared frame is therefore reusable immediately, while original navigation/auth behavior and Blade page bodies still require review and translation. Two strict standalone notice shapes may also be emitted as presentation components in `src/imported_views.zyl`: a static confirmation and a module notice with one escaped `String` property. Inspect `VIEW_TRANSLATIONS.md` and `VIEW_TRANSLATIONS.json`. Neither emits a Laravel route, handler, or dynamic workflow. Referenced public assets are copied into the generated `public/` tree when they are regular files within the configured size limits; `ASSET_COPY.md` and `ASSET_COPY.json` list copied and skipped assets. URLs remain origin-relative, and host filesystem paths are never emitted as application URLs. The complete schema selection and added relation dependencies are listed in `GENERATION_SELECTION.json`; the migration report remains the full-project analysis.\n\nStart with `zelyra check main.zyl`, then review `MIGRATION_REPORT.md`, `MIGRATION_TODO.md`, `MIGRATION_TASKS.md`, `MIGRATION_FILES.md`, `VIEW_LINKS.json`, `VIEW_LAYOUTS.md`, `VIEW_TRANSLATIONS.md`, `VIEW_TRANSLATIONS.json`, `ASSET_COPY.md`, `ASSET_COPY.json`, `SOURCE_FILE_PLAN.json`, and `GENERATION_SELECTION.json` before connecting or changing a database.\n",
+                "# Zelyra migration scaffold\n\nThis is a separate, compiler-checkable starting point. It contains no copied Laravel PHP, configuration, secrets, personal records, or production data. It includes {generated_table_count} schema declaration candidate(s) from a restricted static migration subset; these declarations do not apply database changes and must be reviewed. It also contains {generated_business_count} pure model projection helper(s) translated from a narrow static PHP subset in `src/imported_business.zyl`, imported from `main.zyl` through Zelyra's normal module system. These helpers do not include model casts, call sites, authorization, or surrounding workflows; review their assumptions and wire them explicitly. It contains {generated_service_count} narrow pure service helper(s) in `src/imported_services.zyl`, imported through the normal module system. Their statically resolved callers are listed, but their controller/service workflows are not automatically rewired. It contains {generated_enum_adapter_count} typed adapters for literal Laravel enum values in `src/imported_enums.zyl`. They map stored strings to Zelyra enum variants and back, but do not add database constraints or wire application call sites; parse every value read from storage and validate writes explicitly. It contains {generated_validation_form_count} standalone form declaration candidate(s) from a strict subset of literal Laravel validation rules in `src/imported_forms.zyl`. This file is deliberately not imported by `main.zyl`, so the suggestions do not create endpoints until explicitly included and reviewed. They are not connected to Laravel routes or handlers and do not perform Laravel validation or persistence; omitted rules and fields are recorded in `GENERATION_SELECTION.json`. Laravel command and scheduler metadata is listed in `MIGRATION_TASKS.md`; PHP handlers are not imported. Every statically inventoried PHP source file and its proposed migration disposition is listed in `MIGRATION_FILES.md` and `SOURCE_FILE_PLAN.json`; entries are not claims that behavior was translated. `ROUTE_CANDIDATES.json` separates statically resolved routes from conventionally named resource controllers and routes that merely consume the selected model; neither means a route was generated. Blade URL, asset, and shared-layout references are recorded in `VIEW_LINKS.json`; `VIEW_LAYOUTS.md` maps each `@extends` consumer and its `@section` values to the layout's `@yield` slots. Zelyra already provides reusable named `view` layouts. When a shared Blade layout is found, the scaffold emits the Zelyra starter `view ImportedAppShell` in `src/imported_layouts.zyl` and imports that module; each translated page can bind it with `view: ImportedAppShell`. The shared frame is therefore reusable immediately, while original navigation/auth behavior and Blade page bodies still require review and translation. Two strict standalone notice shapes may also be emitted as presentation components in `src/imported_views.zyl`: a static confirmation and a module notice with one escaped `String` property. Inspect `VIEW_TRANSLATIONS.md` and `VIEW_TRANSLATIONS.json`. Neither emits a Laravel route, handler, or dynamic workflow. Referenced public assets are copied into the generated `public/` tree when they are regular files within the configured size limits; `ASSET_COPY.md` and `ASSET_COPY.json` list copied and skipped assets. URLs remain origin-relative, and host filesystem paths are never emitted as application URLs. The complete schema selection and added relation dependencies are listed in `GENERATION_SELECTION.json`; the migration report remains the full-project analysis.\n\nStart with `zelyra check main.zyl`, then review `MIGRATION_REPORT.md`, `MIGRATION_TODO.md`, `MIGRATION_TASKS.md`, `MIGRATION_FILES.md`, `VIEW_LINKS.json`, `VIEW_LAYOUTS.md`, `VIEW_TRANSLATIONS.md`, `VIEW_TRANSLATIONS.json`, `ASSET_COPY.md`, `ASSET_COPY.json`, `SOURCE_FILE_PLAN.json`, `ROUTE_CANDIDATES.json`, and `GENERATION_SELECTION.json` before connecting or changing a database.\n",
                 generated_validation_form_count = generated_validation_form_count
             ),
         )?;
@@ -1506,6 +1523,157 @@ fn select_schema_candidates(
         excluded_framework_names,
         candidates: included_candidates,
     })
+}
+
+/// Trace selected table candidates to statically resolved controller routes
+/// through conventional Laravel model/table names. This inventory is never
+/// treated as route translation or behavioral equivalence.
+fn route_candidates_for_tables(graph: &Value, selected_tables: &[String]) -> Value {
+    let selected_models = selected_tables
+        .iter()
+        .filter_map(|table| conventional_model_name(table).map(|model| (model, table.clone())))
+        .collect::<BTreeMap<_, _>>();
+    let edges = graph["edges"].as_array().into_iter().flatten();
+    let mut model_actions = BTreeMap::<String, BTreeSet<String>>::new();
+    let mut model_controllers = BTreeMap::<String, BTreeSet<String>>::new();
+    for edge in edges.clone() {
+        if edge["kind"] != "controller_model_use" || edge["status"] != "resolved" {
+            continue;
+        }
+        let (Some(action), Some(model)) =
+            (edge["from"]["name"].as_str(), edge["to"]["name"].as_str())
+        else {
+            continue;
+        };
+        if selected_models.contains_key(model) {
+            model_actions
+                .entry(model.to_owned())
+                .or_default()
+                .insert(action.to_owned());
+            let controller = action
+                .split_once('@')
+                .map(|(controller, _)| controller)
+                .unwrap_or(action);
+            model_controllers
+                .entry(model.to_owned())
+                .or_default()
+                .insert(controller.to_owned());
+        }
+    }
+
+    let route_nodes = graph["nodes"].as_array().into_iter().flatten();
+    let route_nodes = route_nodes
+        .filter(|node| node["kind"] == "route")
+        .filter_map(|node| node["id"].as_str().map(|id| (id.to_owned(), node)))
+        .collect::<BTreeMap<_, _>>();
+    let mut candidates = Vec::<Value>::new();
+    let mut consumers = Vec::<Value>::new();
+    for edge in graph["edges"].as_array().into_iter().flatten() {
+        if edge["kind"] != "route_controller_action" || edge["status"] != "resolved" {
+            continue;
+        }
+        let (Some(route_id), Some(action)) =
+            (edge["from"]["id"].as_str(), edge["to"]["name"].as_str())
+        else {
+            continue;
+        };
+        let Some(route) = route_nodes.get(route_id) else {
+            continue;
+        };
+        for (model, table) in &selected_models {
+            let controller_name = action
+                .split_once('@')
+                .map(|(name, _)| name)
+                .unwrap_or(action);
+            let direct_model_use = model_actions
+                .get(model)
+                .is_some_and(|actions| actions.contains(action));
+            // Laravel route model binding often means show/edit/update/destroy
+            // do not mention the model class in the method body. Once the
+            // graph has direct model-use evidence for a conventionally named
+            // resource controller, include its other resolved route actions
+            // as candidates too, without claiming they were translated.
+            let resource_controller_match = controller_name
+                .eq_ignore_ascii_case(&format!("{model}Controller"))
+                && model_controllers
+                    .get(model)
+                    .is_some_and(|controllers| controllers.contains(controller_name));
+            if !direct_model_use && !resource_controller_match {
+                continue;
+            }
+            let candidate = json!({
+                "table": table,
+                "model": model,
+                "route": route["name"],
+                "route_source_file": route["file"],
+                "route_source_span": route["source_span"],
+                "route_context": route["route_context"],
+                "controller_action": action,
+                "resource_controller_match": resource_controller_match,
+                "controller_source_file": edge["to"]["file"],
+                "controller_source_span": edge["to"]["source_span"],
+                "resolution": if direct_model_use {
+                    "statically_resolved_route_and_model_use"
+                } else {
+                    "statically_resolved_route_with_conventional_resource_controller_evidence"
+                },
+                "table_model_mapping": "conventional_laravel_pluralization_candidate_requires_confirmation",
+                "translation_status": "analysis_only_route_handler_view_and_security_behavior_not_generated"
+            });
+            if resource_controller_match {
+                candidates.push(candidate);
+            } else {
+                consumers.push(candidate);
+            }
+        }
+    }
+    let sort_routes = |routes: &mut Vec<Value>| {
+        routes.sort_by(|left, right| {
+            left["table"]
+                .as_str()
+                .cmp(&right["table"].as_str())
+                .then_with(|| left["route"].as_str().cmp(&right["route"].as_str()))
+        })
+    };
+    sort_routes(&mut candidates);
+    sort_routes(&mut consumers);
+    json!({
+        "schema_version": "1",
+        "semantics": "conventionally_named_resource_routes_are_candidates; related_routes_are_model_consumers; neither category is route_generation_or_behavioral_equivalence",
+        "count": candidates.len(),
+        "routes": candidates,
+        "model_consumer_count": consumers.len(),
+        "model_consumer_routes": consumers
+    })
+}
+
+fn conventional_model_name(table: &str) -> Option<String> {
+    if !is_safe_table_identifier(table) {
+        return None;
+    }
+    let singular = if let Some(stem) = table.strip_suffix("ies") {
+        format!("{stem}y")
+    } else if ["ches", "shes", "xes", "zes", "sses"]
+        .iter()
+        .any(|suffix| table.ends_with(suffix))
+    {
+        table[..table.len().saturating_sub(2)].to_owned()
+    } else if table.ends_with('s') && !table.ends_with("ss") {
+        table[..table.len().saturating_sub(1)].to_owned()
+    } else {
+        return None;
+    };
+    let mut model = String::new();
+    for segment in singular.split('_') {
+        if segment.is_empty() {
+            return None;
+        }
+        let mut characters = segment.chars();
+        let first = characters.next()?;
+        model.push(first.to_ascii_uppercase());
+        model.push_str(characters.as_str());
+    }
+    Some(model)
 }
 
 fn is_safe_table_identifier(value: &str) -> bool {
@@ -3116,6 +3284,104 @@ mod tests {
                 .collect::<Vec<_>>(),
             ["customers", "orders", "order_lines"]
         );
+    }
+
+    #[test]
+    fn selected_tables_trace_conventional_model_uses_to_resolved_routes_without_claiming_import() {
+        let graph = json!({
+            "nodes": [{
+                "id": "route:routes/web.php:42",
+                "kind": "route",
+                "name": "get /customers",
+                "file": "routes/web.php",
+                "source_span": { "start": { "line": 4 } },
+                "route_context": { "inherited_middleware": ["auth"] }
+            }, {
+                "id": "route:routes/web.php:99",
+                "kind": "route",
+                "name": "get /invoices/new",
+                "file": "routes/web.php",
+                "source_span": { "start": { "line": 9 } },
+                "route_context": { "inherited_middleware": ["auth"] }
+            }, {
+                "id": "route:routes/web.php:120",
+                "kind": "route",
+                "name": "get /customers/{customer}",
+                "file": "routes/web.php",
+                "source_span": { "start": { "line": 12 } },
+                "route_context": { "inherited_middleware": ["auth"] }
+            }],
+            "edges": [
+                {
+                    "kind": "controller_model_use",
+                    "status": "resolved",
+                    "from": { "name": "CustomerController@index" },
+                    "to": { "name": "Customer" }
+                },
+                {
+                    "kind": "route_controller_action",
+                    "status": "resolved",
+                    "from": { "id": "route:routes/web.php:42" },
+                    "to": {
+                        "name": "CustomerController@index",
+                        "file": "app/Http/Controllers/CustomerController.php",
+                        "source_span": { "start": { "line": 8 } }
+                    }
+                },
+                {
+                    "kind": "route_controller_action",
+                    "status": "resolved",
+                    "from": { "id": "route:routes/web.php:120" },
+                    "to": {
+                        "name": "CustomerController@show",
+                        "file": "app/Http/Controllers/CustomerController.php",
+                        "source_span": { "start": { "line": 25 } }
+                    }
+                },
+                {
+                    "kind": "controller_model_use",
+                    "status": "resolved",
+                    "from": { "name": "InvoiceController@create" },
+                    "to": { "name": "Customer" }
+                },
+                {
+                    "kind": "route_controller_action",
+                    "status": "resolved",
+                    "from": { "id": "route:routes/web.php:99" },
+                    "to": {
+                        "name": "InvoiceController@create",
+                        "file": "app/Http/Controllers/InvoiceController.php",
+                        "source_span": { "start": { "line": 19 } }
+                    }
+                }
+            ]
+        });
+        let candidates = route_candidates_for_tables(&graph, &["customers".into()]);
+        assert_eq!(candidates["count"], 2);
+        assert_eq!(candidates["model_consumer_count"], 1);
+        assert_eq!(candidates["routes"][0]["route"], "get /customers");
+        assert_eq!(
+            candidates["routes"][1]["route"],
+            "get /customers/{customer}"
+        );
+        assert_eq!(
+            candidates["routes"][1]["resolution"],
+            "statically_resolved_route_with_conventional_resource_controller_evidence"
+        );
+        assert_eq!(
+            candidates["model_consumer_routes"][0]["route"],
+            "get /invoices/new"
+        );
+        assert_eq!(candidates["routes"][0]["table"], "customers");
+        assert_eq!(
+            candidates["routes"][0]["translation_status"],
+            "analysis_only_route_handler_view_and_security_behavior_not_generated"
+        );
+        assert_eq!(
+            conventional_model_name("customer_groups").as_deref(),
+            Some("CustomerGroup")
+        );
+        assert_eq!(conventional_model_name("people"), None);
     }
 
     #[test]

@@ -1443,6 +1443,23 @@ fn language_console_keeps_bindings_and_recovers_after_runtime_errors_in_piped_in
 }
 
 #[test]
+fn language_console_rejects_unimplemented_bytecode_backend_instead_of_falling_back_to_ast() {
+    let (directory, source) =
+        temporary_project_source("language-console-backend", "fn main() {}\n");
+    let output = Command::new(binary())
+        .args(["console", source.to_str().unwrap(), "--backend", "bytecode"])
+        .output()
+        .expect("language console should report the backend limitation");
+    assert!(!output.status.success());
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("currently supports only --backend ast"),
+        "unexpected stderr: {stderr}"
+    );
+    fs::remove_dir_all(directory).unwrap();
+}
+
+#[test]
 fn standard_layout_namespaces_resolve_and_remain_opt_in() {
     let directory = temporary_directory("standard-layout-namespaces");
     for path in ["schema", "domain/sales", "routes", "public", "assets"] {
