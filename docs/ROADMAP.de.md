@@ -286,7 +286,7 @@ abgeschlossen.
   Zeilenfilterung. Compiler-, Capability-, Contract-, Schrittbudget- und
   Stacktiefenprüfungen bleiben aktiv. Siehe [Sprachkonsolen-Anleitung](language-console.de.md) und den
   [Arbeitsplan 1.2.26](release-plans/1.2.26-interactive-language-console.en.md).
-- [~] **1.2.27 — Grundlage für den Import von Laravel-Webseiten:** Einen neu
+- [x] **1.2.27 — Grundlage für den Import von Laravel-Webseiten:** Einen neu
   entwickelten, zuerst schreibgeschützten Importer für ausgewählte
   Webseitenfunktionen in native Zelyra-Module bereitstellen; keine Laravel-
   Frameworkkompatibilität und keine PHP-Laufzeitunterstützung. Routen,
@@ -338,6 +338,8 @@ abgeschlossen.
   in einem versionierten Bericht erhalten. Abnahmeprojekt ist
   `/opt/siedelmann-laravel/app`; weitere Abdeckung folgt in 1.2.30. Siehe den
   [Arbeitsplan 1.2.27](release-plans/1.2.27-laravel-website-importer.de.md).
+  Die Grundlage ist implementiert und zusammengeführt; alle PR-Prüfungen
+  bestanden.
 - [ ] **1.2.28 — typisierte CRUD-Domain-Actions:** Einen typgeprüften
   Ausführungskontext mit expliziten Datensatz-, Benutzer- und verifizierten
   Mandantenwerten ergänzen. Den Sprach-Typ- und Effektprüfer wiederverwenden,
@@ -347,7 +349,8 @@ abgeschlossen.
   Transaktion. Vorhandene Schreibweisen und Effekte verwenden:
   `hash_sha256`, `now()`, PDF-Rendering und Outbox-Mail mit deren bestehenden
   Einschränkungen. Kein impliziter Namespace `crypto::` und keine ungeprüfte
-  SQL-Interpolation.
+  SQL-Interpolation. Siehe den
+  [Arbeitsplan 1.2.28](release-plans/1.2.28-typed-crud-actions.de.md).
 - [ ] **1.2.29 — begrenzte sichere Datei-Uploads (Design-Gate):** Vor einem
   `File`-Formularfeld Multipart-Größenlimits, Metadatentypen, Inhaltsprüfung,
   Mandantenzuordnung, private Ablage außerhalb von `public/`, autorisierte

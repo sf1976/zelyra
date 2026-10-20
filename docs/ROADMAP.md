@@ -262,7 +262,7 @@ security and compatibility gates stated for that milestone.
   without adding authorization or row filtering. PostgreSQL sandbox and bytecode REPL remain
   unsupported. Preserve compiler, capability, contract, step-budget, and stack
   depth checks.
-- [~] **1.2.27 — Laravel website import foundation:** Reintroduce a new,
+- [x] **1.2.27 — Laravel website import foundation:** Reintroduce a new,
   read-only-first importer for migrating selected website behavior into native
   Zelyra modules; this is not Laravel framework compatibility or PHP runtime
   support. Generation requires `--table <name>` or an explicit
@@ -307,7 +307,8 @@ security and compatibility gates stated for that milestone.
   minimal Laravel fixture.
   Keep unresolved behavior and exact source locations visible in a versioned
   report. The `/opt/siedelmann-laravel/app` project is the acceptance fixture;
-  broader route/workflow coverage continues in 1.2.30. See the
+  broader route/workflow coverage continues in 1.2.30. The foundation is
+  implemented and merged; its PR workflow passed all checks. See the
   [1.2.27 importer plan](release-plans/1.2.27-laravel-website-importer.en.md).
 - [ ] **1.2.28 — typed CRUD domain actions:** Add a checked execution context
   for action statements with explicit row, authenticated user, and verified
@@ -318,6 +319,7 @@ security and compatibility gates stated for that milestone.
   `hash_sha256` and `now()` spellings and their capability rules; PDF rendering
   and mail outbox calls must follow their existing transaction and attachment
   restrictions. No implicit `crypto::` namespace or raw SQL interpolation.
+  See the [1.2.28 work plan](release-plans/1.2.28-typed-crud-actions.en.md).
 - [ ] **1.2.29 — bounded secure file upload foundation (subject to design
   gate):** Specify and test multipart size limits, file metadata types,
   content validation, tenant ownership, private storage outside `public/`,
