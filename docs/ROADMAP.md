@@ -437,8 +437,12 @@ security and compatibility gates stated for that milestone.
   `/opt/siedelmann-laravel/app` identified upload
   flows in invoices,
   contracts, settings, postal letters, and inbound mail; the importer does not
-  generate them. Remaining release gates include whole-application backup and
-  additional cleanup E2E coverage for crash remnants and failure recovery. See the
+  generate them. `tests/mariadb-upload-cleanup-e2e.sh` now simulates a crashed
+  upload leaving a staged blob/manifest pair and verifies preview and explicit
+  cleanup, alongside rollback cleanup in the upload POST E2E. File-storage
+  backup intentionally excludes the database, configuration, and secrets;
+  coordinated whole-application backup remains a separate follow-up, with the
+  database backed up/restored separately while Zelyra is stopped. See the
   [1.2.29 secure upload plan](release-plans/1.2.29-secure-uploads.en.md).
 - [~] **1.2.30 — Laravel import workflow coverage:** Standalone forms now
   support checked local routes with captured path parameters, a compiler-checked

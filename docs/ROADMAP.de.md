@@ -481,8 +481,14 @@ abgeschlossen.
   konnte. Der Code wird zusätzlich mit lokalem Rust 1.98 geprüft. Eine statische Analyse von
   `/opt/siedelmann-laravel/app` fand Uploadabläufe bei Rechnungen, Verträgen,
   Einstellungen, Postbriefen und eingehender Mail; der Importer erzeugt sie
-  nicht. Offen sind ein vollständiges Anwendungsbackup und zusätzliche
-  Cleanup-E2E-Prüfungen für Absturzreste und Fehlerwiederherstellung.
+  nicht. `tests/mariadb-upload-cleanup-e2e.sh` simuliert nun einen Absturz mit
+  zurückgebliebenem Staging-/Manifestpaar und prüft Vorschau und ausdrückliche
+  Bereinigung; das Upload-POST-E2E prüft bereits die Bereinigung nach
+  Datenbank-Rollback. Das Dateispeicher-Backup schließt Datenbank,
+  Projektkonfiguration und Geheimnisse ausdrücklich aus. Ein koordiniertes
+  vollständiges Anwendungsbackup bleibt ein separates Folgepaket; die
+  Datenbank muss separat und bei gestopptem Zelyra gesichert/wiederhergestellt
+  werden.
   Siehe den [Plan für sichere Uploads 1.2.29](release-plans/1.2.29-secure-uploads.de.md).
 - [~] **1.2.30 — Abdeckung echter Laravel-Migrationsabläufe:** Standalone-Forms
   unterstützen geprüfte lokale Routen mit erfassten Pfadparametern, ein
