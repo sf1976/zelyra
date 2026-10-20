@@ -639,8 +639,9 @@ syntax or a unit test alone does not establish production readiness.
   submitted numbers and edit forms omit generated number fields. Unit coverage
   and a MariaDB integration test cover tenant separation, rollback, existing
   collisions, forged values, yearly formats, and concurrent allocation. The
-  same integration test also passes on PostgreSQL 16 and is added to CI for
-  both backends. On MariaDB 11.8 and
+  same integration test also passes on PostgreSQL 16. CI now runs it across
+  MariaDB 10.11/11.4/11.8/12.3 and MySQL 8.4, as well as PostgreSQL 16; these
+  matrix runs are pending. On MariaDB 11.8 and
   PostgreSQL 16 the managed schema was applied and replanned with no drift.
   MariaDB inspection now distinguishes composite unique keys using the actual
   primary-key constraint. Full release CI, the supported-version matrix,

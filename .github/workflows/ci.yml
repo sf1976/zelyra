@@ -633,6 +633,10 @@ jobs:
           esac
           echo "Testing MariaDB ${server_version}"
           docker image inspect "mariadb:${expected_version}" --format '{{json .RepoDigests}}'
+      - name: Verify transactional tenant number series on this MariaDB version
+        env:
+          ZELYRA_TEST_DATABASE_URL: mariadb://root:root@127.0.0.1:3306/zelyra_ci
+        run: cargo test --locked -p zelyra-web number_series_allocator_is_atomic_and_scoped_per_tenant -- --ignored --nocapture
       - name: Exercise Zelyra Studio against this MariaDB version
         env:
           ZELYRA_STUDIO_E2E_BACKEND: mariadb
@@ -733,3 +737,7 @@ jobs:
           python3 ./tests/temporal-sql-e2e.py
           python3 ./tests/typed-sql-results-e2e.py
           python3 ./tests/null-edit-snapshots-e2e.py
+      - name: Verify transactional tenant number series on MySQL
+        env:
+          ZELYRA_TEST_DATABASE_URL: mysql://root:root@127.0.0.1:3306/zelyra_ci
+        run: cargo test --locked -p zelyra-web number_series_allocator_is_atomic_and_scoped_per_tenant -- --ignored --nocapture
