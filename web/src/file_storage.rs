@@ -27,7 +27,9 @@ pub struct StoredFile {
 pub struct StagedUpload {
     metadata: StoredFile,
     staging_path: Option<PathBuf>,
+    metadata_staging_path: Option<PathBuf>,
     final_path: PathBuf,
+    metadata_final_path: PathBuf,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -106,6 +108,8 @@ impl FileStorage {
         let file_ref = random_uuid()?;
         let staging_path = tenant_directory.join(format!(".{file_ref}.stage"));
         let final_path = tenant_directory.join(&file_ref);
+        let metadata_staging_path = tenant_directory.join(format!(".{file_ref}.meta.stage"));
+        let metadata_final_path = tenant_directory.join(format!("{file_ref}.meta"));
         let mut file = create_private_file(&staging_path).map_err(storage_error)?;
         if let Err(error) = file.write_all(bytes).and_then(|()| file.sync_all()) {
             drop(file);
@@ -113,18 +117,102 @@ impl FileStorage {
             return Err(storage_error(error));
         }
         let sha256 = sha256_hex(bytes);
+        let metadata = StoredFile {
+            file_ref,
+            tenant_id,
+            media_type,
+            size_bytes,
+            sha256,
+        };
+        let metadata_bytes = format!(
+            "{}\n{}\n{}\n",
+            metadata.media_type, metadata.size_bytes, metadata.sha256
+        );
+        let mut metadata_file = match create_private_file(&metadata_staging_path) {
+            Ok(file) => file,
+            Err(error) => {
+                let _ = fs::remove_file(&staging_path);
+                return Err(storage_error(error));
+            }
+        };
+        if let Err(error) = metadata_file
+            .write_all(metadata_bytes.as_bytes())
+            .and_then(|()| metadata_file.sync_all())
+        {
+            drop(metadata_file);
+            let _ = fs::remove_file(&staging_path);
+            let _ = fs::remove_file(&metadata_staging_path);
+            return Err(storage_error(error));
+        }
 
         Ok(StagedUpload {
-            metadata: StoredFile {
-                file_ref,
+            metadata,
+            staging_path: Some(staging_path),
+            metadata_staging_path: Some(metadata_staging_path),
+            final_path,
+            metadata_final_path,
+        })
+    }
+
+    /// Reads a tenant-owned upload by its opaque id and verifies bytes against
+    /// the private manifest that was committed with the blob.
+    pub fn read_verified(
+        &self,
+        tenant_id: i64,
+        file_ref: &str,
+        max_size_bytes: u64,
+    ) -> Result<(StoredFile, Vec<u8>), FileStorageError> {
+        self.file_path(tenant_id, file_ref)?;
+        let metadata_path = self.metadata_path(tenant_id, file_ref)?;
+        let metadata = fs::symlink_metadata(&metadata_path).map_err(storage_error)?;
+        if metadata.file_type().is_symlink() || !metadata.is_file() || metadata.len() > 512 {
+            return Err(FileStorageError(
+                "stored file manifest is not a bounded regular file".into(),
+            ));
+        }
+        let mut encoded = Vec::with_capacity(metadata.len() as usize);
+        open_private_file(&metadata_path)
+            .map_err(storage_error)?
+            .take(513)
+            .read_to_end(&mut encoded)
+            .map_err(storage_error)?;
+        if encoded.len() as u64 != metadata.len() || encoded.len() > 512 {
+            return Err(FileStorageError("stored file manifest is invalid".into()));
+        }
+        let encoded = std::str::from_utf8(&encoded)
+            .map_err(|_| FileStorageError("stored file manifest is invalid".into()))?;
+        let mut fields = encoded.lines();
+        let media_type = match fields.next().unwrap_or_default() {
+            "application/pdf" => "application/pdf",
+            "image/png" => "image/png",
+            "image/jpeg" => "image/jpeg",
+            _ => return Err(FileStorageError("stored file manifest is invalid".into())),
+        };
+        let size_bytes = fields
+            .next()
+            .and_then(|value| value.parse::<u64>().ok())
+            .filter(|size| *size > 0 && *size <= max_size_bytes)
+            .ok_or_else(|| FileStorageError("stored file manifest is invalid".into()))?;
+        let sha256 = fields.next().unwrap_or_default();
+        if fields.next().is_some() || !is_sha256_hex(sha256) {
+            return Err(FileStorageError("stored file manifest is invalid".into()));
+        }
+        let bytes = self.read(tenant_id, file_ref, sha256, max_size_bytes)?;
+        if bytes.len() as u64 != size_bytes || detect_media_type(&bytes) != Some(media_type) {
+            return Err(FileStorageError(
+                "stored file content does not match its manifest".into(),
+            ));
+        }
+        Ok((
+            StoredFile {
+                file_ref: file_ref.to_owned(),
                 tenant_id,
                 media_type,
                 size_bytes,
-                sha256,
+                sha256: sha256.to_owned(),
             },
-            staging_path: Some(staging_path),
-            final_path,
-        })
+            bytes,
+        ))
     }
 
     /// Reads a blob only when its reference is a canonical generated UUID and
@@ -169,11 +257,22 @@ impl FileStorage {
     /// filename, or directory supplied by a request.
     pub fn remove(&self, tenant_id: i64, file_ref: &str) -> Result<(), FileStorageError> {
         let path = self.file_path(tenant_id, file_ref)?;
+        let metadata_path = self.metadata_path(tenant_id, file_ref)?;
         match fs::symlink_metadata(&path) {
+            Ok(metadata) if metadata.file_type().is_symlink() || !metadata.is_file() => {
+                return Err(FileStorageError(
+                    "stored file reference does not identify a regular file".into(),
+                ));
+            }
+            Ok(_) => fs::remove_file(path).map_err(storage_error)?,
+            Err(error) if error.kind() == io::ErrorKind::NotFound => {}
+            Err(error) => return Err(storage_error(error)),
+        }
+        match fs::symlink_metadata(&metadata_path) {
             Ok(metadata) if metadata.file_type().is_symlink() || !metadata.is_file() => Err(
-                FileStorageError("stored file reference does not identify a regular file".into()),
+                FileStorageError("stored file manifest is not a regular file".into()),
             ),
-            Ok(_) => fs::remove_file(path).map_err(storage_error),
+            Ok(_) => fs::remove_file(metadata_path).map_err(storage_error),
             Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(()),
             Err(error) => Err(storage_error(error)),
         }
@@ -196,6 +295,11 @@ impl FileStorage {
         ensure_contained(&self.root, &path)?;
         Ok(path)
     }
+
+    fn metadata_path(&self, tenant_id: i64, file_ref: &str) -> Result<PathBuf, FileStorageError> {
+        let path = self.file_path(tenant_id, file_ref)?;
+        Ok(path.with_file_name(format!("{file_ref}.meta")))
+    }
 }
 
 impl StagedUpload {
@@ -211,18 +315,33 @@ impl StagedUpload {
             .staging_path
             .as_ref()
             .ok_or_else(|| FileStorageError("upload staging file is no longer available".into()))?;
+        let metadata_staging_path = self.metadata_staging_path.as_ref().ok_or_else(|| {
+            FileStorageError("upload metadata staging file is no longer available".into())
+        })?;
         fs::hard_link(staging_path, &self.final_path).map_err(storage_error)?;
-        if let Err(error) = fs::remove_file(staging_path) {
+        if let Err(error) = fs::hard_link(metadata_staging_path, &self.metadata_final_path) {
             let _ = fs::remove_file(&self.final_path);
             return Err(storage_error(error));
         }
+        if let Err(error) = fs::remove_file(staging_path) {
+            let _ = fs::remove_file(&self.final_path);
+            let _ = fs::remove_file(&self.metadata_final_path);
+            return Err(storage_error(error));
+        }
         self.staging_path = None;
+        if let Err(error) = fs::remove_file(metadata_staging_path) {
+            let _ = fs::remove_file(&self.final_path);
+            let _ = fs::remove_file(&self.metadata_final_path);
+            return Err(storage_error(error));
+        }
+        self.metadata_staging_path = None;
         if let Err(error) = sync_directory(
             self.final_path
                 .parent()
                 .expect("generated upload path has a parent"),
         ) {
             let _ = fs::remove_file(&self.final_path);
+            let _ = fs::remove_file(&self.metadata_final_path);
             return Err(storage_error(error));
         }
         Ok(self.metadata.clone())
@@ -234,7 +353,14 @@ impl Drop for StagedUpload {
         if let Some(path) = self.staging_path.take() {
             let _ = fs::remove_file(path);
         }
+        if let Some(path) = self.metadata_staging_path.take() {
+            let _ = fs::remove_file(path);
+        }
     }
+}
+
+fn is_sha256_hex(value: &str) -> bool {
+    value.len() == 64 && value.bytes().all(|byte| byte.is_ascii_hexdigit())
 }
 
 fn detect_media_type(bytes: &[u8]) -> Option<&'static str> {
@@ -418,6 +544,12 @@ mod tests {
         let metadata = staged.publish().expect("publish staged file");
         assert_eq!(metadata.media_type, "application/pdf");
         assert_eq!(metadata.size_bytes, bytes.len() as u64);
+        let reopened = FileStorage::new(&root).expect("reopen private store");
+        let (verified, verified_bytes) = reopened
+            .read_verified(42, &metadata.file_ref, 1024)
+            .expect("read persisted manifest and verify the blob");
+        assert_eq!(verified, metadata);
+        assert_eq!(verified_bytes, bytes);
         assert_eq!(
             store
                 .read(42, &metadata.file_ref, &metadata.sha256, 1024)
@@ -430,7 +562,24 @@ mod tests {
         assert!(store
             .read(43, &metadata.file_ref, &metadata.sha256, 1024)
             .is_err());
+        let manifest = root
+            .join("tenants/42")
+            .join(format!("{}.meta", metadata.file_ref));
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            assert_eq!(
+                fs::metadata(&manifest).unwrap().permissions().mode() & 0o777,
+                0o600
+            );
+        }
+        fs::write(&manifest, "application/pdf\n999\n0000000000000000000000000000000000000000000000000000000000000000\n")
+            .unwrap();
+        assert!(reopened
+            .read_verified(42, &metadata.file_ref, 1024)
+            .is_err());
         store.remove(42, &metadata.file_ref).unwrap();
+        assert!(!manifest.exists());
         let _ = fs::remove_dir_all(root);
     }
 
@@ -455,10 +604,31 @@ mod tests {
         let store = FileStorage::new(&root).unwrap();
         let staged = store.stage(1, b"%PDF-1.7", 100, &pdf_allowed()).unwrap();
         let directory = root.join("tenants/1");
-        assert_eq!(fs::read_dir(&directory).unwrap().count(), 1);
+        assert_eq!(fs::read_dir(&directory).unwrap().count(), 2);
         drop(staged);
         assert_eq!(fs::read_dir(&directory).unwrap().count(), 0);
         let _ = fs::remove_dir_all(root);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn failed_manifest_publication_does_not_leave_a_visible_blob() {
+        use std::os::unix::fs::symlink;
+        let root = temporary_root();
+        let outside = temporary_root().with_extension("manifest-collision");
+        fs::create_dir_all(&outside).unwrap();
+        let store = FileStorage::new(&root).unwrap();
+        let staged = store.stage(5, b"%PDF-1.7", 100, &pdf_allowed()).unwrap();
+        let file_ref = staged.metadata().file_ref.clone();
+        let directory = root.join("tenants/5");
+        let manifest = directory.join(format!("{file_ref}.meta"));
+        symlink(outside.join("target"), &manifest).unwrap();
+        assert!(staged.publish().is_err());
+        assert!(!directory.join(&file_ref).exists());
+        assert_eq!(fs::read_dir(&directory).unwrap().count(), 1);
+        fs::remove_file(manifest).unwrap();
+        let _ = fs::remove_dir_all(root);
+        let _ = fs::remove_dir_all(outside);
     }
 
     #[cfg(unix)]

@@ -407,11 +407,13 @@ abgeschlossen.
   Multipart-Dateifeld ohne Dateinamen-Ausgabe. Tabellengebundene Datei-Felder
   benötigen jetzt eine gleichnamige `FileRef`-Spalte.
   Übermittlungen erhalten weiterhin HTTP 415. Ein Unix-Speicherprimitiv
-  unterstützt Staging, atomare Veröffentlichung, opake mandantengebundene
-  Referenzen, private Dateirechte, No-Follow-Öffnen, Signaturauswahl für
-  PDF/PNG/JPEG sowie Größen-/SHA-256-Prüfung. Es ist noch nicht mit HTTP, Forms,
-  Datenbanktransaktionen oder Download-Berechtigungen verbunden; Nicht-Unix-
-  Anlegen schlägt bis zur ACL-Unterstützung geschlossen fehl. `FileRef` wird je
+  unterstützt Staging, opake mandantengebundene Referenzen, private
+  Sidecar-Manifeste, verifizierte Lesezugriffe, private Dateirechte,
+  No-Follow-Öffnen, Signaturauswahl für PDF/PNG/JPEG sowie Größen-/SHA-256-
+  Prüfung. Bei Teilfehlern werden beide endgültigen Einträge entfernt. Es ist
+  noch nicht mit HTTP, Forms, Datenbanktransaktionen oder Download-
+  Berechtigungen verbunden; Nicht-Unix-Anlegen schlägt bis zur ACL-
+  Unterstützung geschlossen fehl. `FileRef` wird je
   Backend als `CHAR(36)`/`UUID`/`TEXT` abgebildet. Geprüfte
   Datei-Formulare müssen auf eine gleichnamige Referenzspalte zeigen;
   automatisches CRUD darf `FileRef` nicht als Textfeld rendern und JSON-API-

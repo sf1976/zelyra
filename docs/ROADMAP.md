@@ -365,10 +365,12 @@ security and compatibility gates stated for that milestone.
   storage/action contexts, and renders a multipart file input without echoing
   client filenames. Submissions
   are still rejected with 415. A Unix-only private storage primitive now
-  provides staged publication, opaque tenant-scoped references, file modes,
-  no-follow opens, signature-based PDF/PNG/JPEG selection, and size/SHA-256
-  checks, but it is not connected to HTTP, Forms, database transactions, or
-  download authorization. Non-Unix creation fails closed pending ACL support.
+  provides staged publication, opaque tenant-scoped references, private
+  sidecar manifests, verified reads, file modes, no-follow opens,
+  signature-based PDF/PNG/JPEG selection, and size/SHA-256 checks. Partial
+  publication failures remove both final entries. It is not connected to HTTP,
+  Forms, database transactions, or download authorization. Non-Unix creation
+  fails closed pending ACL support.
   `FileRef` maps to `CHAR(36)`/`UUID`/`TEXT` by backend, checked file forms must
   match a same-named reference column, automatic CRUD cannot render it as text,
   and JSON API inputs reject the opaque reference. These compiler boundaries
