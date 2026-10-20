@@ -111,6 +111,52 @@ def check_source_file_inventory(source: Path, output: Path) -> bool:
     return True
 
 
+def check_import_coverage(output: Path) -> bool:
+    try:
+        coverage = json.loads((output / "IMPORT_COVERAGE.json").read_text(encoding="utf-8"))
+        file_plan = json.loads((output / "SOURCE_FILE_PLAN.json").read_text(encoding="utf-8"))
+        generation = json.loads((output / "GENERATION_SELECTION.json").read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as error:
+        print(f"error: generated coverage report cannot be read: {error}", file=sys.stderr)
+        return False
+
+    scope = coverage.get("scope", {})
+    findings = coverage.get("findings", {})
+    generated = coverage.get("generated_artifacts", {})
+    behavior = coverage.get("behavior_verification", {})
+    safety = coverage.get("safety", {})
+    expected = {
+        "schema_version": "1",
+        "source_files_scanned": len(file_plan),
+        "full_behavior_coverage_claimed": False,
+        "schema_candidates": len(generation.get("included_tables", [])),
+        "compiler_check": "passed",
+        "executed_by_scaffold_generation": False,
+        "generated_workflows_are_behavior_tested": False,
+        "php_executed": False,
+        "database_changes_applied": False,
+    }
+    actual = {
+        "schema_version": coverage.get("schema_version"),
+        "source_files_scanned": scope.get("source_files_scanned"),
+        "full_behavior_coverage_claimed": scope.get("full_behavior_coverage_claimed"),
+        "schema_candidates": generated.get("schema_candidates"),
+        "compiler_check": generated.get("compiler_check"),
+        "executed_by_scaffold_generation": behavior.get("executed_by_scaffold_generation"),
+        "generated_workflows_are_behavior_tested": behavior.get("generated_workflows_are_behavior_tested"),
+        "php_executed": safety.get("php_executed"),
+        "database_changes_applied": safety.get("database_changes_applied"),
+    }
+    if actual != expected:
+        print(f"error: importer coverage report contradicts generated artifacts: {actual!r}", file=sys.stderr)
+        return False
+    if findings.get("total") != findings.get("unresolved_or_manual", 0) + findings.get("partial", 0) + findings.get("by_status", {}).get("direct", 0):
+        print("error: importer coverage finding totals are inconsistent", file=sys.stderr)
+        return False
+    print("Importer coverage report matches the source inventory and generated selection.")
+    return True
+
+
 def main() -> int:
     if len(sys.argv) != 2:
         print(
@@ -155,6 +201,8 @@ def main() -> int:
             return generate.returncode
 
         if not check_source_file_inventory(source, output):
+            return 1
+        if not check_import_coverage(output):
             return 1
 
         check = subprocess.run(

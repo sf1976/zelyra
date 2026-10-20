@@ -493,6 +493,13 @@ abgeschlossen.
   innerhalb der erzeugten Shell liegt. Es wird keine E-Mail versendet und weder
   Datenbank noch Scaffold bleiben zurück. Das ist ein HTTP-Integrationstest,
   kein Browser-Automationstest.
+  Jedes generierte Gerüst enthält jetzt `IMPORT_COVERAGE.json`, das
+  Quellinventar, Befundklassifizierungen, erzeugte Artefakte, Compilerstatus
+  und Laufzeitteststatus trennt. Der Source-Only-Integrationstest gleicht den
+  Bericht mit Dateiplan und Generierungsmanifest ab und bestätigt, dass aus
+  der Generierung keine Laufzeitabdeckung abgeleitet wird. Der letzte Lauf
+  gegen `/opt/siedelmann-laravel/app` erfasste 565 PHP-Dateien und 2.229
+  Befunde (1.367 manuell/ungelöst und 862 teilweise unterstützt).
   Die Quellprüfung des Gesamtprojekts bestätigt zudem die generierten
   Login-/Logout- und Abmelderouten, validiert den Paket-Lock offline und
   führt module plan für pkg:imported_identity aus, einschließlich
@@ -519,8 +526,8 @@ abgeschlossen.
   wiederholen; das Skript entfernt geerbte Datenbank-URLs aus der Umgebung und
   löscht das temporäre Gerüst. Es startet weder den HTTP-Ablauf noch eine
   Datenbankverbindung. Das Gerüst ist weiterhin keine vollständige Migration:
-  ein erneuter Source-Only-Lauf meldet nun 2.226 Befunde (1.298 manuell,
-  862 teilweise, 66 ungelöst) in 562 Quelldateien. Diese Zahlen beschreiben
+  der letzte Source-Only-Lauf meldet nun 2.229 Befunde (1.367 manuell/ungelöst,
+  862 teilweise) in 565 Quelldateien. Diese Zahlen beschreiben
   Analysebefunde und keine Zahl migrierter Funktionen. Laravel,
   Composer-Pakete, PHP-Controller, Blade-Laufzeitdateien und Zugangsdaten werden
   nicht kopiert. Der Source-Only-Integrationstest vergleicht den unabhängig

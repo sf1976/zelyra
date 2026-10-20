@@ -325,6 +325,88 @@ struct CommandOutput {
     included_tables: Vec<String>,
 }
 
+#[allow(clippy::too_many_arguments)]
+fn import_coverage_report(
+    analysis: &Value,
+    source_file_plan: &Value,
+    generation_selection: &Value,
+    counts: FindingCounts,
+    generated_tables: usize,
+    generated_business_helpers: usize,
+    generated_enum_adapters: usize,
+    generated_validation_candidates: usize,
+    generated_service_helpers: usize,
+    generated_view_components: usize,
+    generated_layouts: usize,
+    generated_route_workflows: usize,
+    generated_auth_packages: usize,
+    copied_assets: usize,
+) -> Value {
+    let files = source_file_plan
+        .as_array()
+        .map(Vec::as_slice)
+        .unwrap_or_default();
+    let files_without_pattern = files
+        .iter()
+        .filter(|file| file["source_pattern_status"] == "no_supported_pattern")
+        .count();
+    let files_with_findings = files
+        .iter()
+        .filter(|file| file["finding_count"].as_u64().unwrap_or(0) > 0)
+        .count();
+    let files_with_generated_outputs = files
+        .iter()
+        .filter(|file| {
+            file["translated_outputs"]
+                .as_array()
+                .is_some_and(|outputs| !outputs.is_empty())
+        })
+        .count();
+    json!({
+        "schema_version": "1",
+        "scope": {
+            "source_project": analysis["source_project"],
+            "selection_mode": generation_selection["mode"],
+            "source_files_scanned": files.len(),
+            "source_files_with_findings": files_with_findings,
+            "source_files_without_supported_pattern": files_without_pattern,
+            "source_files_with_explicit_generated_outputs": files_with_generated_outputs,
+            "scan_boundary": "bounded_static_php_source_scan",
+            "full_behavior_coverage_claimed": false
+        },
+        "findings": {
+            "total": counts.total,
+            "unresolved_or_manual": counts.unresolved,
+            "partial": counts.partial,
+            "by_status": analysis["summary"]
+        },
+        "generated_artifacts": {
+            "schema_candidates": generated_tables,
+            "pure_business_helpers": generated_business_helpers,
+            "enum_adapters": generated_enum_adapters,
+            "standalone_validation_candidates": generated_validation_candidates,
+            "pure_service_helpers": generated_service_helpers,
+            "static_view_components": generated_view_components,
+            "layout_starters": generated_layouts,
+            "native_route_workflows": generated_route_workflows,
+            "reusable_auth_packages": generated_auth_packages,
+            "copied_public_assets": copied_assets,
+            "compiler_check": "passed"
+        },
+        "behavior_verification": {
+            "executed_by_scaffold_generation": false,
+            "generated_workflows_are_behavior_tested": false,
+            "evidence": "Run the separately documented disposable-database integration tests for each workflow; generation does not infer test results."
+        },
+        "safety": {
+            "php_executed": false,
+            "env_files_read": analysis["env_files_read"],
+            "database_changes_applied": false,
+            "application_rows_read": false
+        }
+    })
+}
+
 pub(super) fn command(mut arguments: impl Iterator<Item = String>) -> ExitCode {
     if arguments.next().as_deref() != Some("laravel") {
         eprintln!("Usage: zelyra import laravel analyze <project> --report <path> [--format markdown|json] [--inspect-database] | generate <project> --output <target> (--table <name>... | --all-supported)");
@@ -1191,6 +1273,10 @@ fn generate_scaffold(
                 generated_validation_form_count = generated_validation_form_count
             ),
         )?;
+        append_generated_text(
+            &staging.join("README.md"),
+            "\n`IMPORT_COVERAGE.json` separates statically inventoried source files, findings, generated artifacts, compiler-check status, and runtime behavior tests. A passed compiler check is not evidence that an imported workflow behaves like Laravel; the report deliberately records workflow behavior as unverified by scaffold generation.\n",
+        )?;
         if let Some((session_table, _)) = &native_auth {
             append_generated_text(
                 &staging.join("README.md"),
@@ -1458,6 +1544,27 @@ fn generate_scaffold(
                 .ok_or("staged source path is not valid UTF-8")?,
         )
         .map_err(|_| "generated scaffold failed the Zelyra compiler check".to_owned())?;
+
+        let import_coverage = import_coverage_report(
+            &report_json,
+            &source_file_plan,
+            &generation_selection,
+            counts,
+            generated_table_count,
+            generated_business_count,
+            generated_enum_adapter_count,
+            generated_validation_form_count,
+            generated_service_count,
+            generated_view_component_count as usize,
+            generated_layout_count,
+            usize::from(generated_route_workflow.is_some()),
+            usize::from(native_auth.is_some()),
+            asset_copy_report["copied_count"].as_u64().unwrap_or(0) as usize,
+        );
+        let mut coverage_source = serde_json::to_string_pretty(&import_coverage)
+            .map_err(|_| "could not serialize importer coverage report".to_owned())?;
+        coverage_source.push('\n');
+        write_new_file(&staging.join("IMPORT_COVERAGE.json"), &coverage_source)?;
 
         let staged_external_report = if let Some((destination, requested_path)) =
             report_target.as_ref()

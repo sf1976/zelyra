@@ -451,6 +451,13 @@ security and compatibility gates stated for that milestone.
   test also verifies the rendered success page is inside the generated shell.
   It sends no mail and leaves no database or scaffold behind. This is an HTTP
   integration test, not browser automation.
+  Every generated scaffold now includes `IMPORT_COVERAGE.json`, which
+  separates source inventory, finding classifications, generated artifacts,
+  compiler status, and behavior-test status. The source-only integration test
+  checks it against the source-file plan and generation manifest and confirms
+  generation did not claim workflow runtime coverage. Its latest run against
+  `/opt/siedelmann-laravel/app` accounted for 565 PHP files and 2,229 findings
+  (1,367 manual/unresolved and 862 partial).
   The source-only full-project check also asserts the generated native
   login/logout and unsubscribe routes, validates the package lock offline, and
   runs module plan for pkg:imported_identity to verify its package identity
@@ -475,9 +482,9 @@ security and compatibility gates stated for that milestone.
   the script strips ambient database URLs and removes its temporary scaffold.
   This check does not run the generated HTTP workflow or connect to a database.
   The scaffold
-  remains an incomplete migration: a source-only rerun now reports 2,226
-  findings (1,298 manual, 862 partial, and 66 unresolved across 562 source
-  files). These are analysis findings, not a migrated-feature count.
+  remains an incomplete migration: the latest source-only rerun reports 2,229
+  findings (1,367 manual/unresolved and 862 partial across 565 source files).
+  These are analysis findings, not a migrated-feature count.
   Laravel, Composer packages, PHP controllers, Blade runtime files, and source
   credentials are not copied. The source-only integration check compares an
   independently traversed PHP source tree with `SOURCE_FILE_PLAN.json` and
