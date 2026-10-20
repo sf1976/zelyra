@@ -303,8 +303,12 @@ abgeschlossen.
   Serveranbieter für begrenzte Katalogabfragen und meldet beim ersten
   Abnahmeprojekt 80 Tabellen/1.215 Spalten. Die lokale Docker-Datenbank dieses
   Hosts erforderte einen ausdrücklich TLS-deaktivierten Einzelaufruf; TLS wird
-  nie automatisch deaktiviert. Ungelöste Abläufe und genaue Quellpositionen in einem
-  versionierten Bericht erhalten. Abnahmeprojekt ist
+  nie automatisch deaktiviert. Ein vollständiger Scaffold verglich 78
+  Migrationstabellenkandidaten mit null Schemaabweichungen; zwei Live-Tabellen
+  lagen außerhalb des Migrationsscanners. `main.zyl` und das separate
+  Validierungskandidatenmodul bestanden Compilerprüfungen. Das beweist keine
+  Routen- oder Ablaufmigration. Ungelöste Abläufe und genaue Quellpositionen
+  in einem versionierten Bericht erhalten. Abnahmeprojekt ist
   `/opt/siedelmann-laravel/app`; weitere Abdeckung folgt in 1.2.30. Siehe den
   [Arbeitsplan 1.2.27](release-plans/1.2.27-laravel-website-importer.de.md).
 - [ ] **1.2.28 — typisierte CRUD-Domain-Actions:** Einen typgeprüften

@@ -276,8 +276,12 @@ security and compatibility gates stated for that milestone.
   requests no container environment values, detects the server vendor for
   bounded metadata queries, and reports 80 tables/1,215 columns on the first
   fixture. This host's local Docker DB required an explicit TLS-disabled
-  invocation; TLS is never disabled automatically. Keep unresolved behavior and exact source locations visible
-  in a versioned report. The `/opt/siedelmann-laravel/app` project is the
+  invocation; TLS is never disabled automatically. A full scaffold compared
+  78 migration-table candidates with zero schema differences; two live tables
+  were outside the migration scanner. Its `main.zyl` and separate validation
+  candidate module both passed compiler checks. This does not prove route or
+  workflow migration. Keep unresolved behavior and exact source locations
+  visible in a versioned report. The `/opt/siedelmann-laravel/app` project is the
   acceptance fixture; broader route/workflow coverage continues in 1.2.30. See the
   [1.2.27 importer plan](release-plans/1.2.27-laravel-website-importer.en.md).
 - [ ] **1.2.28 — typed CRUD domain actions:** Add a checked execution context
