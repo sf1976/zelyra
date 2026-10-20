@@ -728,7 +728,7 @@ syntax or a unit test alone does not establish production readiness.
   This is a manual paired procedure, not a single crash-atomic application
   backup. Full release gates remain open.
 
-See the [business CRUD completion plan](release-plans/1.2.31-1.2.33-business-crud.en.md).
+See the [business CRUD completion plan](release-plans/1.2.31-1.2.32-business-crud.en.md).
 
 ### 🗺️ [ ] Zelyra 1.3.0 — typed MIR and Rust bytecode VM
 

@@ -779,7 +779,7 @@ keine Produktionsreife.
   bleibt ein manueller Ablauf bei gestopptem Server und kein absturzatomisches
   Gesamtarchiv. Vollständige Release-Gates bleiben offen.
 
-Siehe den [Plan zum Abschluss des Geschäfts-CRUD](release-plans/1.2.31-1.2.33-business-crud.de.md).
+Siehe den [Plan zum Abschluss des Geschäfts-CRUD](release-plans/1.2.31-1.2.32-business-crud.de.md).
 
 ### 🗺️ [ ] Zelyra 1.3.0 — typisierte MIR und Rust-Bytecode-VM
 
