@@ -3250,25 +3250,44 @@ fn multipart_upload_commits_reference_and_removes_file_after_sql_rollback() {
         WebApp::with_database_url(Vec::new(), vec![route.clone()], Some(database_url.clone()))
             .with_upload_storage(&storage_root);
     let bytes = b"%PDF-1.7\ntransactional upload";
-    let parts = [multipart::MultipartPart {
-        name: "document".into(),
-        filename: Some("document.pdf".into()),
-        content_type: Some("application/pdf".into()),
-        data: bytes,
-    }];
-    let request = Request {
-        method: "POST".into(),
-        target: "/upload".into(),
-        path: "/upload".into(),
-        headers: HashMap::from([
-            ("host".into(), "localhost".into()),
-            ("origin".into(), "http://localhost".into()),
-        ]),
-        body: "_zelyra_csrf=csrf-token".into(),
-        remote_addr: None,
-    };
-    let committed = app.dispatch_with_multipart(&request, &parts);
-    assert_eq!(committed.status, 303, "{}", committed.body);
+    let boundary = "zelyra-upload-e2e-boundary";
+    let mut body = format!(
+        "--{boundary}\r\nContent-Disposition: form-data; name=\"_zelyra_csrf\"\r\n\r\ncsrf-token\r\n--{boundary}\r\nContent-Disposition: form-data; name=\"document\"; filename=\"document.pdf\"\r\nContent-Type: application/pdf\r\n\r\n"
+    )
+    .into_bytes();
+    body.extend_from_slice(bytes);
+    body.extend_from_slice(format!("\r\n--{boundary}--\r\n").as_bytes());
+    let listener = TcpListener::bind("127.0.0.1:0").expect("bind HTTP upload test listener");
+    let address = listener
+        .local_addr()
+        .expect("read HTTP upload test address");
+    let server = std::thread::spawn(move || {
+        let (mut stream, _) = listener.accept().expect("accept HTTP upload test request");
+        handle_connection(&mut stream, &app).expect("handle HTTP upload test request");
+    });
+    let mut client = TcpStream::connect(address).expect("connect to HTTP upload test server");
+    client
+        .set_read_timeout(Some(Duration::from_secs(5)))
+        .expect("set HTTP upload test timeout");
+    write!(
+        client,
+        "POST /upload HTTP/1.1\r\nHost: localhost\r\nOrigin: http://localhost\r\nContent-Type: multipart/form-data; boundary={boundary}\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+        body.len()
+    )
+    .expect("write HTTP upload test headers");
+    client
+        .write_all(&body)
+        .expect("write HTTP upload test body");
+    let mut response = Vec::new();
+    client
+        .read_to_end(&mut response)
+        .expect("read HTTP upload test response");
+    server.join().expect("join HTTP upload test server");
+    let response_head = String::from_utf8_lossy(&response);
+    assert!(
+        response_head.starts_with("HTTP/1.1 303 See Other\r\n"),
+        "{response_head}"
+    );
     let rows = zelyra_database::execute_read_only_query(
         &database_url,
         "SELECT id, document FROM zelyra_upload_e2e",
@@ -3609,6 +3628,23 @@ fn multipart_upload_commits_reference_and_removes_file_after_sql_rollback() {
         "opaque references are not shown"
     );
 
+    let parts = [multipart::MultipartPart {
+        name: "document".into(),
+        filename: Some("document.pdf".into()),
+        content_type: Some("application/pdf".into()),
+        data: bytes,
+    }];
+    let request = Request {
+        method: "POST".into(),
+        target: "/upload".into(),
+        path: "/upload".into(),
+        headers: HashMap::from([
+            ("host".into(), "localhost".into()),
+            ("origin".into(), "http://localhost".into()),
+        ]),
+        body: "_zelyra_csrf=csrf-token".into(),
+        remote_addr: None,
+    };
     let mut failing_route = route;
     failing_route.form.actions = vec![sql_action(vec![
         "INSERT INTO zelyra_upload_e2e (document, owner_id) VALUES (:document, 7)",

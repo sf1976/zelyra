@@ -68,6 +68,7 @@ export DATABASE_URL="mariadb://root:${database_password}@127.0.0.1:${database_po
 
 referenced_ref="123e4567-e89b-42d3-a456-426614174000"
 orphan_ref="123e4567-e89b-42d3-a456-426614174001"
+crash_stage_ref="123e4567-e89b-42d3-a456-426614174003"
 docker exec --env MYSQL_PWD "${container_name}" mariadb --user=root "${database_name}" \
     --execute="INSERT INTO upload_record (file) VALUES ('${referenced_ref}')"
 tenant_dir="${project_dir}/storage/zelyra/tenants/0"
@@ -82,10 +83,18 @@ for ref in "${referenced_ref}" "${orphan_ref}"; do
     chmod 600 "${tenant_dir}/${ref}" "${tenant_dir}/${ref}.meta"
     touch -d '2 days ago' "${tenant_dir}/${ref}" "${tenant_dir}/${ref}.meta"
 done
+printf '%%PDF-1.7\nleft behind by a crashed upload request\n' >"${tenant_dir}/.${crash_stage_ref}.stage"
+stage_digest="$(sha256sum "${tenant_dir}/.${crash_stage_ref}.stage" | cut -d ' ' -f 1)"
+stage_size="$(stat -c '%s' "${tenant_dir}/.${crash_stage_ref}.stage")"
+printf 'application/pdf\n%s\n%s\n' "${stage_size}" "${stage_digest}" >"${tenant_dir}/.${crash_stage_ref}.meta.stage"
+chmod 600 "${tenant_dir}/.${crash_stage_ref}.stage" "${tenant_dir}/.${crash_stage_ref}.meta.stage"
+touch -d '2 days ago' "${tenant_dir}/.${crash_stage_ref}.stage" "${tenant_dir}/.${crash_stage_ref}.meta.stage"
 
 preview="$("${zelyra_bin}" files cleanup "${project_dir}/main.zyl" --min-age-days 1)"
-grep -F "1 old unreferenced upload artifact(s) found" <<<"${preview}" >/dev/null
+grep -F "2 old unreferenced upload artifact(s) found" <<<"${preview}" >/dev/null
 grep -F "file_ref=${orphan_ref}" <<<"${preview}" >/dev/null
+grep -F "file_ref=${crash_stage_ref}" <<<"${preview}" >/dev/null
+grep -F "kind=abandoned-staging" <<<"${preview}" >/dev/null
 if grep -F "file_ref=${referenced_ref}" <<<"${preview}" >/dev/null; then
     echo "error: cleanup preview included a database-referenced upload" >&2
     exit 1
@@ -97,6 +106,8 @@ fi
 [[ -f "${tenant_dir}/${referenced_ref}.meta" ]]
 [[ ! -e "${tenant_dir}/${orphan_ref}" ]]
 [[ ! -e "${tenant_dir}/${orphan_ref}.meta" ]]
+[[ ! -e "${tenant_dir}/.${crash_stage_ref}.stage" ]]
+[[ ! -e "${tenant_dir}/.${crash_stage_ref}.meta.stage" ]]
 
 # Exercise the actual process-lifetime lock acquired by an upload-enabled
 # `zelyra serve`, not only the in-process lock primitive. Keep one old orphan
@@ -169,4 +180,4 @@ grep -F 'checksum or metadata verification failed' "${project_dir}/corrupt-resto
 [[ ! -e "${project_dir}/storage/zelyra/tenants" ]]
 "${zelyra_bin}" files restore "${project_dir}/main.zyl" --from "${backup_directory}" --apply >/dev/null
 cmp "${project_dir}/expected-upload.pdf" "${tenant_dir}/${referenced_ref}"
-echo "upload cleanup and backup MariaDB E2E passed (preview, live-server lock, checksum-verified backup and restore)"
+echo "upload cleanup and backup MariaDB E2E passed (orphan and crash-stage cleanup, live-server lock, checksum-verified backup and restore)"
