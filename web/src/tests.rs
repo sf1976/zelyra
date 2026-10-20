@@ -616,6 +616,7 @@ fn table_validation_rejects_invalid_form_before_action_execution() {
         fields: Vec::new(),
         requires_auth: false,
         permissions: Vec::new(),
+        capabilities: Vec::new(),
         statements: vec![zelyra_ast::Stmt::Expr(zelyra_ast::Expr {
             kind: zelyra_ast::ExprKind::Sql {
                 result_type: Type::Unit,
@@ -4953,6 +4954,7 @@ fn renders_action_error_without_database_details() {
         fields: Vec::new(),
         requires_auth: false,
         permissions: Vec::new(),
+        capabilities: Vec::new(),
         statements: Vec::new(),
         execute_body: None,
         guard: None,
@@ -5152,6 +5154,7 @@ fn protects_custom_form_actions_with_action_permissions() {
         fields: Vec::new(),
         requires_auth: true,
         permissions: vec!["customers.save".into()],
+        capabilities: Vec::new(),
         statements: Vec::new(),
         execute_body: None,
         guard: None,
@@ -5181,6 +5184,7 @@ fn protects_custom_form_actions_with_action_permissions() {
         fields: Vec::new(),
         requires_auth: true,
         permissions: vec!["customers.save".into()],
+        capabilities: Vec::new(),
         statements: Vec::new(),
         execute_body: None,
         guard: None,
@@ -5209,6 +5213,7 @@ fn form_action_requires_database_url() {
         fields: Vec::new(),
         requires_auth: false,
         permissions: Vec::new(),
+        capabilities: Vec::new(),
         statements: vec![zelyra_ast::Stmt::Expr(zelyra_ast::Expr {
             kind: zelyra_ast::ExprKind::Sql {
                 result_type: Type::Unit,
@@ -5509,6 +5514,7 @@ fn execute_form_action_rejects_postgres_chained_audit() {
         fields: Vec::new(),
         requires_auth: false,
         permissions: Vec::new(),
+        capabilities: Vec::new(),
         success: None,
         redirect: None,
         span: zelyra_ast::Span::default(),

@@ -2305,6 +2305,7 @@ impl<'a> Parser<'a> {
         let mut redirect = None;
         let mut requires_auth = false;
         let mut permissions = Vec::new();
+        let mut capabilities = Vec::new();
         let mut execute_body = None;
         let mut guard = None;
         self.skip_newlines();
@@ -2318,6 +2319,24 @@ impl<'a> Parser<'a> {
             } else if self.at(&TokenKind::Permits) {
                 self.advance();
                 permissions.push(self.string_value("permission")?);
+            } else if self.at(&TokenKind::Uses) {
+                self.advance();
+                loop {
+                    let (mut capability, _) = self.ident("action capability name")?;
+                    if capability == "Database" && self.at(&TokenKind::LParen) {
+                        self.advance();
+                        let (access, _) = self.ident("database access effect")?;
+                        self.expect(TokenKind::RParen, "`)` after database access effect")?;
+                        capability = format!("Database({access})");
+                    }
+                    capabilities.push(capability);
+                    self.skip_newlines();
+                    if !self.at(&TokenKind::Comma) {
+                        break;
+                    }
+                    self.advance();
+                    self.skip_newlines();
+                }
             } else if self.at(&TokenKind::Label) {
                 self.advance();
                 self.expect(TokenKind::Colon, "`:` after label")?;
@@ -2386,6 +2405,7 @@ impl<'a> Parser<'a> {
             fields,
             requires_auth,
             permissions,
+            capabilities,
             statements,
             execute_body,
             guard,
@@ -6945,6 +6965,7 @@ fn run_recurring_invoices() { }
             crud Invoice -> invoices {
                 action lock {
                     permits "invoices.lock"
+                    uses Database(write), Clock
                     guard when row.is_locked == false {
                         error: "Invoice is already locked."
                     }
@@ -6961,6 +6982,7 @@ fn run_recurring_invoices() { }
         assert_eq!(action.name, "lock");
         assert!(action.statements.is_empty());
         assert_eq!(action.permissions, ["invoices.lock"]);
+        assert_eq!(action.capabilities, ["Database(write)", "Clock"]);
         assert_eq!(action.execute_body.as_ref().unwrap().statements.len(), 2);
         let guard = action.guard.as_ref().unwrap();
         assert_eq!(guard.message, "Invoice is already locked.");

@@ -322,9 +322,11 @@ security and compatibility gates stated for that milestone.
   restrictions. No implicit `crypto::` namespace or raw SQL interpolation.
   Foundation: the AST runtime can route SQL through a borrowed request
   transaction callback, with nested transactions and parallel blocks rejected;
-  the parser stores explicit execute/guard nodes and the CLI fails closed with
-  `E-CRUD-009` until their scope checks exist. Web CRUD integration remains
-  unimplemented.
+  the parser stores explicit execute/guard nodes and CLI checking now builds
+  typed `row`/`session` scopes, checks Unit/Bool results, and enforces explicit
+  capabilities and project grants. Web CRUD integration remains fail-closed
+  until row loading, guard evaluation, and action execution share the locked
+  request transaction.
   See the [1.2.28 work plan](release-plans/1.2.28-typed-crud-actions.en.md).
 - [ ] **1.2.29 — bounded secure file upload foundation (subject to design
   gate):** Specify and test multipart size limits, file metadata types,

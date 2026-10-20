@@ -1,26 +1,62 @@
 use super::*;
 
 #[test]
-fn compiler_fails_closed_for_unchecked_typed_crud_action_bodies() {
+fn typed_crud_action_bodies_are_checked_in_row_and_session_scope() {
+    let directory = env::temp_dir().join(format!(
+        "zelyra-typed-crud-action-{}-{}",
+        std::process::id(),
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos()
+    ));
+    fs::create_dir_all(&directory).unwrap();
+    let entry = directory.join("main.zyl");
+    fs::write(&entry, "fn main() {}\n").unwrap();
+    fs::write(
+        directory.join("zelyra.toml"),
+        "[capabilities]\ndatabase_write = true\n",
+    )
+    .unwrap();
+    let entry = entry.to_string_lossy().into_owned();
     let source = r#"
         table invoices { id: Id primary auto is_locked: Bool required }
         crud Invoice -> invoices {
             action lock {
+                uses Database(write)
                 guard when row.is_locked == false { error: "Already locked." }
-                execute { sql { UPDATE invoices SET is_locked = true WHERE id = :id } }
+                execute {
+                    previous_lock_state = row.is_locked
+                    active_tenant = session.tenant_id
+                    sql { UPDATE invoices SET is_locked = true WHERE id = :row.id }
+                }
             }
         }
         fn main() {}
     "#;
     let program = zelyra_parser::parse(&zelyra_lexer::lex(source).unwrap()).unwrap();
-    assert!(!validate_typed_crud_actions("main.zyl", &program));
+    assert!(validate_typed_crud_actions(&entry, &program));
+
+    let invalid = r#"
+        table invoices { id: Id primary auto is_locked: Bool required }
+        crud Invoice -> invoices {
+            action lock {
+                guard when row.missing_field == false { error: "Already locked." }
+                execute { previous_lock_state = row.is_locked }
+            }
+        }
+        fn main() {}
+    "#;
+    let program = zelyra_parser::parse(&zelyra_lexer::lex(invalid).unwrap()).unwrap();
+    assert!(!validate_typed_crud_actions(&entry, &program));
 
     let standalone = zelyra_parser::parse(
         &zelyra_lexer::lex("form Example { action run { execute { value = 1 } } } fn main() {}")
             .unwrap(),
     )
     .unwrap();
-    assert!(!validate_typed_crud_actions("main.zyl", &standalone));
+    assert!(!validate_typed_crud_actions(&entry, &standalone));
+    fs::remove_dir_all(directory).unwrap();
 }
 
 #[test]

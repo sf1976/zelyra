@@ -354,8 +354,11 @@ abgeschlossen.
   SQL-Interpolation. Grundlage: Die AST-Runtime kann SQL über einen geliehenen
   Request-Transaktions-Callback ausführen; verschachtelte Transaktionen und
   Parallelblöcke werden abgewiesen. Der Parser speichert getrennte Execute-/
-  Guard-Knoten; die CLI weist sie bis zur fertigen Scope-Prüfung mit
-  `E-CRUD-009` fail-closed ab. Die Web-CRUD-Integration fehlt noch. Siehe den
+  Guard-Knoten; die CLI erstellt nun typisierte `row`-/`session`-Scopes,
+  prüft Unit-/Bool-Ergebnisse und erzwingt explizite Capabilities sowie
+  Projektfreigaben. Die Web-CRUD-Integration bleibt fail-closed, bis
+  Datensatzladen, Guard-Auswertung und Aktionsausführung dieselbe gesperrte
+  Request-Transaktion verwenden. Siehe den
   [Arbeitsplan 1.2.28](release-plans/1.2.28-typed-crud-actions.de.md).
 - [ ] **1.2.29 — begrenzte sichere Datei-Uploads (Design-Gate):** Vor einem
   `File`-Formularfeld Multipart-Größenlimits, Metadatentypen, Inhaltsprüfung,

@@ -1798,28 +1798,197 @@ fn validate_program(
 fn validate_typed_crud_actions(path: &str, program: &zelyra_ast::Program) -> bool {
     let mut valid = true;
     for action in program.forms.iter().flat_map(|form| form.actions.iter()) {
-        if action.execute_body.is_some() || action.guard.is_some() {
+        if action.execute_body.is_some()
+            || action.guard.is_some()
+            || !action.capabilities.is_empty()
+        {
             diagnostic_with_span(
                 path,
                 "E-FORM-002",
-                "typed execution blocks and guards are currently supported only by the CRUD action design, whose compiler checks are not yet complete",
+                "typed execution blocks, guards, and action capabilities are supported only inside CRUD actions",
                 action.span,
             );
             valid = false;
         }
     }
-    for action in program.cruds.iter().flat_map(|crud| crud.actions.iter()) {
-        if action.execute_body.is_some() || action.guard.is_some() {
-            diagnostic_with_span(
-                path,
-                "E-CRUD-009",
-                "typed CRUD action execution is not available until its row/session type checks and transaction bridge are complete",
-                action.span,
+
+    let mut checked_program = program.clone();
+    let mut synthetic_functions = Vec::new();
+    let mut reserved_names = checked_program
+        .functions
+        .iter()
+        .map(|function| function.name.clone())
+        .chain(
+            checked_program
+                .records
+                .iter()
+                .map(|record| record.name.clone()),
+        )
+        .collect::<HashSet<_>>();
+    for (crud_index, crud) in checked_program.cruds.iter().enumerate() {
+        let Some(table) = checked_program
+            .tables
+            .iter()
+            .find(|table| table.name == crud.table)
+        else {
+            continue;
+        };
+        for (action_index, action) in crud.actions.iter().enumerate() {
+            if action.execute_body.is_none() && action.guard.is_none() {
+                if !action.capabilities.is_empty() {
+                    diagnostic_with_span(
+                        path,
+                        "E-CRUD-009",
+                        "`uses` is only valid on a CRUD action with an `execute` block",
+                        action.span,
+                    );
+                    valid = false;
+                }
+                continue;
+            }
+
+            let row_type = unique_internal_name(
+                format!("__ZelyraCrudActionRow_{crud_index}_{action_index}"),
+                &mut reserved_names,
             );
-            valid = false;
+            let session_type = unique_internal_name(
+                format!("__ZelyraCrudActionSession_{crud_index}_{action_index}"),
+                &mut reserved_names,
+            );
+            checked_program.records.push(zelyra_ast::RecordDef {
+                name: row_type.clone(),
+                is_public: false,
+                is_class: false,
+                type_params: Vec::new(),
+                fields: table
+                    .columns
+                    .iter()
+                    .map(|column| zelyra_ast::RecordField {
+                        name: column.name.clone(),
+                        ty: column.ty.clone(),
+                        span: column.span,
+                    })
+                    .collect(),
+                span: action.span,
+            });
+            let tenant_type = table
+                .tenant_scope
+                .as_ref()
+                .map(|scope| scope.tenant_type.clone())
+                .unwrap_or_else(|| zelyra_ast::Type::Named("Id".into()));
+            checked_program.records.push(zelyra_ast::RecordDef {
+                name: session_type.clone(),
+                is_public: false,
+                is_class: false,
+                type_params: Vec::new(),
+                fields: vec![
+                    zelyra_ast::RecordField {
+                        name: "tenant_id".into(),
+                        ty: zelyra_ast::Type::Option(Box::new(tenant_type)),
+                        span: action.span,
+                    },
+                    zelyra_ast::RecordField {
+                        name: "user_id".into(),
+                        ty: zelyra_ast::Type::Option(Box::new(zelyra_ast::Type::Named(
+                            "Id".into(),
+                        ))),
+                        span: action.span,
+                    },
+                ],
+                span: action.span,
+            });
+
+            let params = vec![
+                zelyra_ast::Param {
+                    name: "row".into(),
+                    ty: zelyra_ast::Type::Named(row_type),
+                    span: action.span,
+                },
+                zelyra_ast::Param {
+                    name: "session".into(),
+                    ty: zelyra_ast::Type::Named(session_type),
+                    span: action.span,
+                },
+            ];
+            if let Some(body) = &action.execute_body {
+                let name = unique_internal_name(
+                    format!("__zelyra_crud_action_{crud_index}_{action_index}"),
+                    &mut reserved_names,
+                );
+                synthetic_functions.push(zelyra_ast::Function {
+                    name,
+                    is_public: false,
+                    type_params: Vec::new(),
+                    params: params.clone(),
+                    return_type: Some(zelyra_ast::Type::Unit),
+                    capabilities: action.capabilities.clone(),
+                    requires: Vec::new(),
+                    ensures: Vec::new(),
+                    body: body.clone(),
+                    span: action.span,
+                });
+            }
+            if let Some(guard) = &action.guard {
+                let name = unique_internal_name(
+                    format!("__zelyra_crud_action_guard_{crud_index}_{action_index}"),
+                    &mut reserved_names,
+                );
+                synthetic_functions.push(zelyra_ast::Function {
+                    name,
+                    is_public: false,
+                    type_params: Vec::new(),
+                    params,
+                    return_type: Some(zelyra_ast::Type::Bool),
+                    capabilities: Vec::new(),
+                    requires: Vec::new(),
+                    ensures: Vec::new(),
+                    body: zelyra_ast::Block {
+                        statements: vec![zelyra_ast::Stmt::Return {
+                            value: Some(guard.condition.clone()),
+                            span: guard.span,
+                        }],
+                        span: guard.span,
+                    },
+                    span: guard.span,
+                });
+            }
         }
+    }
+
+    if synthetic_functions.is_empty() {
+        return valid;
+    }
+    checked_program.functions.extend(synthetic_functions);
+    if let Err(errors) = check(&checked_program) {
+        for error in errors {
+            diagnostic_with_span(path, error.code, &error.message, error.span);
+        }
+        valid = false;
+    }
+    let grants = match project_capability_grants(path) {
+        Ok(grants) => grants,
+        Err(error) => {
+            diagnostic(path, "E-CAP-002", &error, 1, 1);
+            return false;
+        }
+    };
+    if let Err(errors) = check_capabilities_with_grants(&checked_program, grants.as_ref()) {
+        for error in errors {
+            diagnostic_with_span(path, "E-CAP-001", &error.message, error.span);
+        }
+        valid = false;
     }
     valid
+}
+
+fn unique_internal_name(base: String, reserved: &mut HashSet<String>) -> String {
+    let mut candidate = base.clone();
+    let mut suffix = 0usize;
+    while !reserved.insert(candidate.clone()) {
+        suffix = suffix.saturating_add(1);
+        candidate = format!("{base}_{suffix}");
+    }
+    candidate
 }
 
 fn reject_typed_holes(source: &str, path: &str, program: &zelyra_ast::Program) -> bool {
@@ -11357,6 +11526,7 @@ fn generated_crud_form(
                 fields: Vec::new(),
                 requires_auth: false,
                 permissions: Vec::new(),
+                capabilities: Vec::new(),
                 statements: vec![zelyra_ast::Stmt::Expr(zelyra_ast::Expr {
                     kind: zelyra_ast::ExprKind::Sql {
                         result_type: zelyra_ast::Type::Unit,

@@ -447,6 +447,8 @@ pub struct FormAction {
     pub fields: Vec<FormField>,
     pub requires_auth: bool,
     pub permissions: Vec<String>,
+    /// Explicit language capabilities required by the typed execution block.
+    pub capabilities: Vec<String>,
     /// Legacy action statements remain accepted for source compatibility.
     pub statements: Vec<Stmt>,
     /// Explicit, compiler-checked execution body for domain actions.
