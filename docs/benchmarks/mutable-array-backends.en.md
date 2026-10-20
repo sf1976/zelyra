@@ -36,3 +36,24 @@ All backends returned `Int(20009)`. The sample maxima show noise in the shared
 virtual machine. This benchmark does not measure memory use, cold startup, I/O,
 real web requests, or other programs. It therefore does not justify changing
 the default backend.
+
+## Source-step v26 comparison — 2026-10-20
+
+A same-host comparison used the exact v1.2.28 tag (`fa54c045`) and the
+unreleased source-step branch (`de82b6a0`). Both used the same optimized
+benchmark, six visible AMD EPYC-Milan vCPUs under KVM, Debian kernel
+`6.12.113+deb13-amd64`, Rust `1.98.1`, and three separate process runs.
+Each run contained one warm-up and nine measurements per backend.
+
+| Backend | Baseline run medians | Source-step run medians | Median of run medians |
+| --- | --- | --- | --- |
+| AST | 28.20, 29.38, 30.10 ms | 29.38, 28.42, 28.97 ms | 29.38 → 28.97 ms |
+| MIR | 23.36, 24.97, 25.16 ms | 27.01, 23.07, 23.12 ms | 24.97 → 23.12 ms |
+| Bytecode | 26.52, 27.68, 26.71 ms | 33.58, 33.78, 32.58 ms | 26.71 → 33.58 ms |
+
+The median Bytecode result is 25.8% slower in the source-step build on this
+CPU-bound workload. This is a measured regression signal, not a general
+performance claim or proof that Step markers alone caused it. The source-step
+branch remains experimental; optimize and remeasure this path before using
+this benchmark to support any default-backend decision. All runs returned the
+expected `Int(20009)`.

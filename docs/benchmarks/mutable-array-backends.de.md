@@ -36,3 +36,26 @@ Alle Backends lieferten `Int(20009)`. Die Sample-Spitzen zeigen Schwankungen der
 gemeinsam genutzten virtuellen Maschine. Der Benchmark misst weder Speicher-
 verbrauch noch kalten Start, I/O, reale Webanfragen oder andere Programme.
 Die Messung begründet daher keine Backend-Standardänderung.
+
+## Vergleich mit Quellschrittmarkierungen v26 — 20.10.2026
+
+Der Vergleich derselben optimierten Benchmarkversion verwendete exakt den
+Tag v1.2.28 (`fa54c045`) und den noch unveröffentlichten
+Quellschritt-Branch (`de82b6a0`). Beide Läufe nutzten sechs sichtbare
+AMD-EPYC-Milan-vCPUs unter KVM, Debian-Kernel `6.12.113+deb13-amd64`, Rust
+`1.98.1` und jeweils drei getrennte Prozesse. Jeder Prozess führte einen
+Warm-up und neun Messungen je Backend aus.
+
+| Backend | Laufmediane Baseline | Laufmediane Quellschritt-Branch | Median der Laufmediane |
+| --- | --- | --- | --- |
+| AST | 28,20; 29,38; 30,10 ms | 29,38; 28,42; 28,97 ms | 29,38 → 28,97 ms |
+| MIR | 23,36; 24,97; 25,16 ms | 27,01; 23,07; 23,12 ms | 24,97 → 23,12 ms |
+| Bytecode | 26,52; 27,68; 26,71 ms | 33,58; 33,78; 32,58 ms | 26,71 → 33,58 ms |
+
+Der Median des Bytecodes ist im Quellschritt-Build bei dieser
+CPU-Berechnung um 25,8 % langsamer. Das ist ein gemessenes Regressionssignal,
+keine allgemeine Leistungsbehauptung und kein Beweis, dass allein die
+Step-Markierungen die Ursache sind. Der Branch bleibt experimentell; dieser
+Pfad muss optimiert und erneut gemessen werden, bevor der Benchmark eine
+Entscheidung zum Standard-Backend stützen kann. Alle Läufe ergaben den
+Sollwert `Int(20009)`.
