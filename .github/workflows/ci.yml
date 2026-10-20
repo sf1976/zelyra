@@ -189,6 +189,11 @@ jobs:
         run: |
           cargo build -p zelyra-cli
           python3 scripts/check_release_metadata.py --binary target/debug/zelyra
+      - name: Verify language console transaction sandbox
+        env:
+          ZELYRA_BIN: target/debug/zelyra
+          ZELYRA_REPL_MARIADB_IMAGE: mariadb:11.8
+        run: ./tests/language-console-mariadb-e2e.sh
       - name: Exercise installation-aware uninstall
         env:
           ZELYRA_BIN: target/debug/zelyra
