@@ -6340,6 +6340,91 @@ fn main() {}
 }
 
 #[test]
+fn decimal_boundary_corpus_matches_ast_mir_and_serialized_bytecode() {
+    let source = r#"
+fn decimal_add(left: Decimal, right: Decimal) -> Decimal { return left + right }
+fn decimal_subtract(left: Decimal, right: Decimal) -> Decimal { return left - right }
+fn decimal_multiply(left: Decimal, right: Decimal) -> Decimal { return left * right }
+fn decimal_divide(left: Decimal, right: Decimal) -> Decimal { return left / right }
+fn decimal_remainder(left: Decimal, right: Decimal) -> Decimal { return left % right }
+fn main() {}
+"#;
+    let ast = parse(&lex(source).expect("source lexes")).expect("source parses");
+    let mir = crate::lower(&ast).expect("source type-checks and lowers");
+    let cases = [
+        (
+            "decimal_add",
+            Value::Decimal(1_234_567_890),
+            Value::Decimal(2_000_000_000),
+        ),
+        ("decimal_add", Value::Decimal(i128::MAX), Value::Decimal(1)),
+        (
+            "decimal_subtract",
+            Value::Decimal(i128::MIN),
+            Value::Decimal(1),
+        ),
+        (
+            "decimal_multiply",
+            Value::Decimal(1_234_567_890),
+            Value::Decimal(2_000_000_000),
+        ),
+        (
+            "decimal_multiply",
+            Value::Decimal(i128::MAX),
+            Value::Decimal(2_000_000_000),
+        ),
+        (
+            "decimal_divide",
+            Value::Decimal(1_000_000_000),
+            Value::Decimal(3_000_000_000),
+        ),
+        (
+            "decimal_divide",
+            Value::Decimal(1_000_000_000),
+            Value::Decimal(0),
+        ),
+        (
+            "decimal_remainder",
+            Value::Decimal(5_500_000_000),
+            Value::Decimal(2_000_000_000),
+        ),
+    ];
+
+    for (name, left, right) in cases {
+        let arguments = vec![left, right];
+        let compiled = compile(&mir, name).expect("Decimal function compiles");
+        let decoded = decode(&encode(&compiled).expect("Decimal function encodes"))
+            .expect("Decimal function decodes");
+        let ast_result = zelyra_runtime::execute_function(&ast, name, arguments.clone(), None);
+        let mir_result =
+            execution::execute_function(&mir, name, arguments.clone(), ExecutionLimits::default());
+        let bytecode_result = execute(&decoded, arguments, ExecutionLimits::default());
+
+        match ast_result {
+            Ok(expected) => {
+                let mir_value = mir_result
+                    .expect("MIR must accept the same Decimal operation")
+                    .value;
+                let bytecode_value = bytecode_result
+                    .expect("bytecode must accept the same Decimal operation")
+                    .value;
+                assert_eq!(mir_value, expected, "MIR {name}");
+                assert_eq!(bytecode_value, expected, "bytecode {name}");
+            }
+            Err(expected) => {
+                let mir_error = mir_result.expect_err("MIR must reject the same Decimal operation");
+                let bytecode_error =
+                    bytecode_result.expect_err("bytecode must reject the same Decimal operation");
+                assert_eq!(mir_error.message, expected.message, "MIR {name}");
+                assert_eq!(mir_error.span, expected.span, "MIR {name}");
+                assert_eq!(bytecode_error.message, expected.message, "bytecode {name}");
+                assert_eq!(bytecode_error.span, expected.span, "bytecode {name}");
+            }
+        }
+    }
+}
+
+#[test]
 fn bytecode_and_mir_share_checked_unary_operator_semantics() {
     let (mir, bytecode) = compile_source(
         "fn negate(value: Int) -> Int { return -value }\nfn main() {}",
