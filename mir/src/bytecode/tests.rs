@@ -6923,11 +6923,20 @@ fn main() {
 #[test]
 fn source_step_budget_boundaries_match_across_parallel_await() {
     let source = r#"
-fn increment(value: Int) -> Int { return value + 1 }
+fn spend_left() -> Int {
+    mutable value = 0
+    while value < 40 { value = value + 1 }
+    return value
+}
+fn spend_right() -> Int {
+    mutable value = 0
+    while value < 80 { value = value + 1 }
+    return value
+}
 fn main() -> Int {
     parallel {
-        left = await increment(2)
-        right = await increment(3)
+        left = await spend_left()
+        right = await spend_right()
     }
     return left + right
 }
@@ -6938,7 +6947,7 @@ fn main() -> Int {
         decode(&encode(&compile(&mir, "main").expect("main compiles")).expect("bytecode encodes"))
             .expect("bytecode verifies after decoding");
 
-    for max_steps in 0..32 {
+    for max_steps in 0..301 {
         let policy = RuntimePolicy {
             step_budget: Some(max_steps),
             ..RuntimePolicy::default()
@@ -6961,7 +6970,7 @@ fn main() -> Int {
             (Ok(ast_value), Ok(mir_value), Ok(bytecode_value)) => {
                 assert_eq!(mir_value.value, ast_value, "MIR result at budget {max_steps}");
                 assert_eq!(bytecode_value.value, ast_value, "bytecode result at budget {max_steps}");
-                assert_eq!(ast_value, Value::Int(7));
+                assert_eq!(ast_value, Value::Int(120));
             }
             (Err(ast_error), Err(mir_error), Err(bytecode_error)) => {
                 assert!(ast_error.message.contains("step budget exceeded"));
