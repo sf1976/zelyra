@@ -371,8 +371,9 @@ abgeschlossen.
   dass `session.tenant_id` und `session.user_id` aus dem authentifizierten,
   ausgewählten Mandantenkontext stammen, ein Datensatz des falschen Mandanten
   mit 404 abgewiesen wird und ein direkter Action-POST ohne Action-Berechtigung
-  403 liefert. PostgreSQL-E2E und die breitere Berechtigungs-/Sicherheitsmatrix
-  bleiben offen.
+  403 liefert. Ein PostgreSQL-HTTP-E2E mit separater Testdatenbank bestätigt
+  nun Status-/Hash-/Zeitstempel- und Audit-Änderungen sowie Rollback nach einem
+  Runtime-Fehler. Die breitere Berechtigungs-/Sicherheitsmatrix bleibt offen.
   Siehe den
   [Arbeitsplan 1.2.28](release-plans/1.2.28-typed-crud-actions.de.md).
 - [ ] **1.2.29 — begrenzte sichere Datei-Uploads (Design-Gate):** Vor einem

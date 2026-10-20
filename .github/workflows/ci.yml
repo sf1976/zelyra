@@ -383,6 +383,11 @@ jobs:
           DATABASE_URL: postgres://zelyra_ci:zelyra_ci@127.0.0.1:5432/zelyra_ci
           ZELYRA_BIN: target/debug/zelyra
         run: bash ./tests/postgres-schema-safety-e2e.sh
+      - name: Verify typed CRUD actions and transactional rollback on PostgreSQL
+        env:
+          DATABASE_URL: postgres://zelyra_ci:zelyra_ci@127.0.0.1:5432/zelyra_ci
+          ZELYRA_BIN: target/debug/zelyra
+        run: bash ./tests/postgres-typed-crud-actions-e2e.sh
       - name: Verify exact decimal forms, filters, APIs, and legacy schemas on MariaDB
         env:
           DATABASE_URL: mariadb://root:root@127.0.0.1:3306/zelyra_ci
