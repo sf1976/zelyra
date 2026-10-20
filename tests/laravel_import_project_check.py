@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import json
 import os
 import subprocess
 import sys
@@ -61,7 +62,53 @@ def main() -> int:
         if check.returncode:
             return check.returncode
 
-        print("Laravel importer scaffold generation and compiler check passed.")
+        routes = subprocess.run(
+            [str(binary), "routes", str(output / "main.zyl"), "--format", "json"],
+            env=environment,
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        if routes.returncode:
+            print(routes.stderr, file=sys.stderr, end="")
+            return routes.returncode
+        try:
+            route_entries = json.loads(routes.stdout)["routes"]
+        except (json.JSONDecodeError, KeyError, TypeError) as error:
+            print(f"error: generated route inventory is invalid JSON: {error}", file=sys.stderr)
+            return 1
+
+        route_keys = {
+            (entry.get("method"), entry.get("path"), entry.get("kind"))
+            for entry in route_entries
+            if isinstance(entry, dict)
+        }
+        expected_routes = {
+            ("GET", "/login", "authentication"),
+            ("POST", "/login", "authentication"),
+            ("POST", "/logout", "authentication"),
+            ("GET", "/csv-mailer/abmelden/{token}", "form"),
+            ("POST", "/csv-mailer/abmelden/{token}", "form"),
+        }
+        missing_routes = sorted(expected_routes - route_keys)
+        if missing_routes:
+            print(
+                "error: generated project is missing imported routes: "
+                + ", ".join(f"{method} {path} ({kind})" for method, path, kind in missing_routes),
+                file=sys.stderr,
+            )
+            return 1
+
+        identity_entry = output / "packages/imported_identity/src/lib.zyl"
+        identity_lock = output / "zelyra.lock"
+        if not identity_entry.is_file() or not identity_lock.is_file():
+            print(
+                "error: generated project is missing its locked reusable native identity package",
+                file=sys.stderr,
+            )
+            return 1
+
+        print("Laravel importer scaffold, compiler, route graph, and identity package checks passed.")
         print("Generated files were temporary and have been removed.")
     return 0
 

@@ -463,6 +463,10 @@ abgeschlossen.
   sowie die Erfolgsseite über HTTP. Sie versendet keine E-Mail und hinterlässt
   weder Datenbank noch Scaffold. Das ist ein HTTP-Integrationstest, kein
   Browser-Automationstest.
+  Die Quellprüfung des Gesamtprojekts bestätigt zudem die generierten
+  Login-/Logout- und Abmelderouten sowie das gesperrte, wiederverwendbare
+  Identity-Paket; sie prüft Deklarationen, nicht das Laufzeitverhalten der
+  Authentifizierung.
   PHP-Methodenerkennung nutzt jetzt die vorhandene lexikalische Quellpositionskarte
   und ausbalancierte Codeklammern; Regressionstests weisen
   methodenähnliche Kommentare zurück und decken verschachtelte Blöcke sowie

@@ -421,6 +421,9 @@ security and compatibility gates stated for that milestone.
   valid/invalid GET and POST, CSRF, repeated-submit timestamp stability, and
   the success page over HTTP. It sends no mail and leaves no database or
   scaffold behind. This is an HTTP integration test, not browser automation.
+  The source-only full-project check also asserts the generated native
+  login/logout and unsubscribe routes and the locked reusable identity package;
+  this verifies declarations, not authentication runtime behavior.
   PHP method recognizer uses the existing lexical source map and balanced code
   braces; regression tests reject method-shaped comments and cover nested
   blocks, typed return declarations, and lookup/update/view patterns that occur
