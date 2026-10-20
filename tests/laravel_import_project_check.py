@@ -11,6 +11,106 @@ import tempfile
 from pathlib import Path
 
 
+EXCLUDED_DIRECTORIES = {".git", "vendor", "node_modules", "storage"}
+
+
+def php_source_files(root: Path) -> set[str]:
+    """Mirror the importer's documented PHP scan boundary without following symlinks."""
+    files: set[str] = set()
+    pending = [root]
+    while pending:
+        directory = pending.pop()
+        for entry in directory.iterdir():
+            relative = entry.relative_to(root)
+            parts = relative.parts
+            if entry.is_symlink():
+                continue
+            if any(part == ".env" or part.startswith(".env.") for part in parts):
+                continue
+            if any(part in EXCLUDED_DIRECTORIES for part in parts):
+                continue
+            if parts[0] == "bootstrap" and parts[1:2] == ("cache",):
+                continue
+            if entry.is_dir():
+                pending.append(entry)
+            elif entry.is_file() and entry.suffix.lower() == ".php":
+                files.add(relative.as_posix())
+    return files
+
+
+def check_source_file_inventory(source: Path, output: Path) -> bool:
+    plan_path = output / "SOURCE_FILE_PLAN.json"
+    markdown_path = output / "MIGRATION_FILES.md"
+    try:
+        plan = json.loads(plan_path.read_text(encoding="utf-8"))
+        markdown = markdown_path.read_text(encoding="utf-8")
+    except (OSError, json.JSONDecodeError) as error:
+        print(f"error: generated source-file inventory cannot be read: {error}", file=sys.stderr)
+        return False
+
+    if not isinstance(plan, list):
+        print("error: SOURCE_FILE_PLAN.json must contain an array", file=sys.stderr)
+        return False
+    entries: dict[str, dict[str, object]] = {}
+    for entry in plan:
+        if not isinstance(entry, dict) or not isinstance(entry.get("file"), str):
+            print(
+                "error: source-file plan contains an entry without a file path",
+                file=sys.stderr,
+            )
+            return False
+        file = entry["file"]
+        if file in entries:
+            print(f"error: source-file plan lists {file} more than once", file=sys.stderr)
+            return False
+        if (
+            not entry.get("category")
+            or not entry.get("translation_status")
+            or not entry.get("proposed_action")
+        ):
+            print(
+                f"error: source-file plan has no disposition metadata for {file}",
+                file=sys.stderr,
+            )
+            return False
+        entries[file] = entry
+
+    expected = php_source_files(source)
+    actual = set(entries)
+    if missing := sorted(expected - actual):
+        print(
+            "error: PHP source files are missing from SOURCE_FILE_PLAN.json: "
+            + ", ".join(missing),
+            file=sys.stderr,
+        )
+        return False
+    if extra := sorted(actual - expected):
+        print(
+            "error: source-file plan contains paths outside the scanned PHP source set: "
+            + ", ".join(extra),
+            file=sys.stderr,
+        )
+        return False
+
+    missing_markdown = sorted(file for file in expected if f"`{file}`" not in markdown)
+    if missing_markdown:
+        print(
+            "error: PHP source files are missing from MIGRATION_FILES.md: "
+            + ", ".join(missing_markdown),
+            file=sys.stderr,
+        )
+        return False
+    rows = [line for line in markdown.splitlines() if line.startswith("| `")]
+    if len(rows) != len(expected):
+        print(
+            f"error: MIGRATION_FILES.md has {len(rows)} file rows for {len(expected)} scanned PHP files",
+            file=sys.stderr,
+        )
+        return False
+    print(f"Source-file inventory accounts for all {len(expected)} scanned PHP files.")
+    return True
+
+
 def main() -> int:
     if len(sys.argv) != 2:
         print(
@@ -53,6 +153,9 @@ def main() -> int:
         )
         if generate.returncode:
             return generate.returncode
+
+        if not check_source_file_inventory(source, output):
+            return 1
 
         check = subprocess.run(
             [str(binary), "check", str(output / "main.zyl")],
@@ -221,7 +324,7 @@ def main() -> int:
             print(bundle_lock.stderr, file=sys.stderr, end="")
             return bundle_lock.returncode
 
-        print("Laravel importer scaffold, compiler, route graph, locked identity package, module plan, and offline bundle checks passed.")
+        print("Laravel importer source-file coverage, scaffold, compiler, route graph, locked identity package, module plan, and offline bundle checks passed.")
         print("Generated files were temporary and have been removed.")
     return 0
 

@@ -471,7 +471,12 @@ security and compatibility gates stated for that milestone.
   findings (1,298 manual, 862 partial, and 66 unresolved across 562 source
   files). These are analysis findings, not a migrated-feature count.
   Laravel, Composer packages, PHP controllers, Blade runtime files, and source
-  credentials are not copied.
+  credentials are not copied. The source-only integration check compares an
+  independently traversed PHP source tree with `SOURCE_FILE_PLAN.json` and
+  `MIGRATION_FILES.md`, rejects duplicate or missing entries, and requires a
+  category, translation status, and proposed action for each file. This proves
+  coverage of the detected PHP file set, not completeness of the behavior
+  graph or that source behavior has been translated.
   The latest explicit live-schema run now compares known MariaDB storage types
   (including Decimal precision/scale) and foreign-key target columns as well as
   presence, nullability, and indexes. Unknown mappings remain listed

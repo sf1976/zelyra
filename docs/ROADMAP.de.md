@@ -517,7 +517,12 @@ abgeschlossen.
   862 teilweise, 66 ungelöst) in 562 Quelldateien. Diese Zahlen beschreiben
   Analysebefunde und keine Zahl migrierter Funktionen. Laravel,
   Composer-Pakete, PHP-Controller, Blade-Laufzeitdateien und Zugangsdaten werden
-  nicht kopiert.
+  nicht kopiert. Der Source-Only-Integrationstest vergleicht den unabhängig
+  durchlaufenen PHP-Dateibaum mit `SOURCE_FILE_PLAN.json` und
+  `MIGRATION_FILES.md`, weist doppelte oder fehlende Einträge zurück und
+  verlangt für jede Datei Kategorie, Übersetzungsstatus und vorgeschlagene
+  Aktion. Dies belegt die Abdeckung des erkannten PHP-Dateibestands, nicht die
+  Vollständigkeit des Verhaltensgraphen oder eine erfolgte Übersetzung.
   Der jüngste ausdrückliche Live-Schemacheck vergleicht zusätzlich bekannte
   MariaDB-Speichertypen einschließlich Decimal-Präzision und -Skalierung sowie
   Fremdschlüssel-Zielspalten. Statische Integer-, Bool-, Text-, Decimal-,
