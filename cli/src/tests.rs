@@ -102,6 +102,24 @@ fn typed_crud_action_database_capability_requires_project_grant() {
     "#;
     let program = zelyra_parser::parse(&zelyra_lexer::lex(source).unwrap()).unwrap();
     assert!(!validate_typed_crud_actions(&entry, &program));
+
+    fs::write(
+        directory.join("zelyra.toml"),
+        "[capabilities]\ndatabase_read = true\ndatabase_write = false\n",
+    )
+    .unwrap();
+    let read_only = r#"
+        table invoices { id: Id primary auto }
+        crud Invoice -> invoices {
+            action mark {
+                uses Database(read)
+                execute { sql { UPDATE invoices SET id = :row.id } }
+            }
+        }
+        fn main() {}
+    "#;
+    let program = zelyra_parser::parse(&zelyra_lexer::lex(read_only).unwrap()).unwrap();
+    assert!(!validate_typed_crud_actions(&entry, &program));
     fs::remove_dir_all(directory).unwrap();
 }
 
