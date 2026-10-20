@@ -553,6 +553,7 @@ semantic parity.
 - [~] A reproducible CPU benchmark compares mutable array updates across AST, MIR, and Bytecode; its method and three release runs are recorded in the [benchmark report](benchmarks/mutable-array-backends.en.md). I/O workloads, startup, memory, throughput, and compilation cost remain open.
 - [~] A deterministic, bounded scalar differential corpus now generates 96 integer expressions and checks each result against an independent host-language oracle, AST, MIR, encoded/decoded Bytecode, and VM execution. This increases arithmetic regression coverage only; it does not establish full operator, error, resource, or language parity.
 - [~] Integer `/` and `%` error paths are also compared across AST, MIR, and decoded Bytecode: division/remainder by zero and signed `Int` minimum divided/remaindered by `-1` must preserve both the diagnostic message and exact source span. This covers these four failures only; backend-specific step accounting and broader diagnostics remain open.
+- [~] Configured recursion-depth limits are compared across AST, MIR, and decoded Bytecode: the same recursive function succeeds at depth 24 with limit 40 and fails at limit 20 with the same call-site source span. This verifies the tested depth boundary, not complete stack-resource parity.
 - [ ] Release gate: no default-VM switch or production-readiness claim before feature parity, safety checks, differential tests, documented limitations, and reproducible builds.
 
 ### Cross-cutting business-platform extensions added to the 1.2.0–1.3.0 goal

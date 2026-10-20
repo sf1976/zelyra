@@ -960,6 +960,79 @@ fn main() {}
 }
 
 #[test]
+fn configured_recursion_depth_matches_ast_mir_and_bytecode() {
+    let source = r#"
+fn descend(depth: Int) -> Int {
+    if depth == 0 { return 0 }
+    return descend(depth - 1) + 1
+}
+fn main() {}
+"#;
+    let ast = parse(&lex(source).expect("source lexes")).expect("source parses");
+    let mir = crate::lower(&ast).expect("source type-checks and lowers");
+    let bytecode = compile(&mir, "descend").expect("recursive function compiles");
+    let bytecode = decode(&encode(&bytecode).expect("recursive bytecode encodes"))
+        .expect("recursive bytecode verifies after decoding");
+    let max_stack_depth = 40;
+    let policy = RuntimePolicy {
+        max_stack_depth: Some(max_stack_depth),
+        ..RuntimePolicy::default()
+    };
+    let arguments = vec![Value::Int(24)];
+    let ast_result = zelyra_runtime::execute_function_with_capabilities_and_policies(
+        &ast,
+        "descend",
+        arguments.clone(),
+        None,
+        None,
+        Some(&policy),
+    )
+    .expect("AST honors the configured depth above the default");
+    let limits = ExecutionLimits {
+        max_steps: 10_000,
+        max_stack_depth,
+    };
+    let mir_result = execution::execute_function(&mir, "descend", arguments.clone(), limits)
+        .expect("MIR honors the same configured depth");
+    let bytecode_result =
+        execute(&bytecode, arguments, limits).expect("bytecode honors the same configured depth");
+    assert_eq!(ast_result, Value::Int(24));
+    assert_eq!(mir_result.value, ast_result);
+    assert_eq!(bytecode_result.value, ast_result);
+
+    let default_policy = RuntimePolicy {
+        max_stack_depth: Some(20),
+        ..RuntimePolicy::default()
+    };
+    let ast_error = zelyra_runtime::execute_function_with_capabilities_and_policies(
+        &ast,
+        "descend",
+        vec![Value::Int(24)],
+        None,
+        None,
+        Some(&default_policy),
+    )
+    .expect_err("AST enforces the configured limit");
+    let limited = ExecutionLimits {
+        max_steps: 10_000,
+        max_stack_depth: 20,
+    };
+    let mir_error = execution::execute_function(&mir, "descend", vec![Value::Int(24)], limited)
+        .expect_err("MIR enforces the same configured limit");
+    let bytecode_error = execute(&bytecode, vec![Value::Int(24)], limited)
+        .expect_err("bytecode enforces the same configured limit");
+    assert!(ast_error.message.contains("depth"), "{}", ast_error.message);
+    assert!(mir_error.message.contains("depth"), "{}", mir_error.message);
+    assert!(
+        bytecode_error.message.contains("depth"),
+        "{}",
+        bytecode_error.message
+    );
+    assert_eq!(mir_error.span, ast_error.span);
+    assert_eq!(bytecode_error.span, ast_error.span);
+}
+
+#[test]
 fn bytecode_to_float_conversion_matches_ast_for_the_laravel_projection_shape() {
     let source = r#"
 fn useful_life(months: UInt) -> Float {

@@ -300,7 +300,7 @@ fn execute_function_captured_with_host_services_and_database_url(
                     host_services: execution_host.host_services,
                     output: Arc::new(Mutex::new(Vec::new())),
                 };
-                match machine.call(function.id, arguments, 1) {
+                match machine.call(function.id, arguments, 1, function.span) {
                     Ok(value) => ExecutionOutcome {
                         output: machine.captured_output(),
                         value: Some(value),
@@ -691,6 +691,7 @@ impl Machine<'_> {
         function_id: FunctionId,
         arguments: Vec<Value>,
         depth: usize,
+        call_span: Span,
     ) -> Result<Value, RuntimeError> {
         let function = self
             .functions
@@ -714,7 +715,7 @@ impl Machine<'_> {
         }
         self.active_capabilities
             .push(function.declared_capabilities.iter().cloned().collect());
-        let result = self.call_frame(function_id, arguments, depth);
+        let result = self.call_frame(function_id, arguments, depth, call_span);
         self.active_capabilities.pop();
         result
     }
@@ -724,6 +725,7 @@ impl Machine<'_> {
         function_id: FunctionId,
         arguments: Vec<Value>,
         depth: usize,
+        call_span: Span,
     ) -> Result<Value, RuntimeError> {
         let function = self
             .functions
@@ -736,7 +738,7 @@ impl Machine<'_> {
         if depth > self.limits.max_stack_depth {
             return Err(RuntimeError {
                 message: "MIR maximum call stack depth exceeded".into(),
-                span: function.span,
+                span: call_span,
             });
         }
         if arguments.len() != function.parameters.len() {
@@ -1725,7 +1727,7 @@ impl Machine<'_> {
                     .into_iter()
                     .map(|argument| self.expression(argument, locals, depth, span))
                     .collect::<Result<Vec<_>, _>>()?;
-                self.call(function, values, depth + 1)
+                self.call(function, values, depth + 1, span)
             }
             MirExpressionKind::Call {
                 name,
@@ -1777,7 +1779,7 @@ impl Machine<'_> {
                     .into_iter()
                     .map(|argument| self.expression(argument, locals, depth, span))
                     .collect::<Result<Vec<_>, _>>()?;
-                self.call(target, values, depth + 1)
+                self.call(target, values, depth + 1, span)
             }
             unsupported => Err(runtime_error(
                 span,
@@ -3037,7 +3039,9 @@ impl Machine<'_> {
             ));
         }
         match callback {
-            MirCallback::Function(function) => self.call(*function, arguments, callback_depth),
+            MirCallback::Function(function) => {
+                self.call(*function, arguments, callback_depth, span)
+            }
             MirCallback::Lambda {
                 params,
                 body,
