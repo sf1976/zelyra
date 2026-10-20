@@ -19,7 +19,7 @@ Each input is parsed, typechecked, and executed independently. Successful bindin
 => 30
 ```
 
-In a terminal, Rustyline provides ANSI colors for keywords, strings, and numbers; history at `~/.zelyra_history`; tab completion for project functions, tables, records, fields, and common standard functions; and `>>`/`...` prompts. `NO_COLOR` and `ZELYRA_COLOR=never` disable color. Pipe input omits prompts. Inputs containing quotes, SQL, or recognizable secret keywords are excluded from saved history. Syntax, type, and runtime failures report a diagnostic and leave the next input available.
+In a terminal, Reedline provides ANSI colors for keywords, strings, and numbers; history at `~/.zelyra_history`; tab completion for project functions, tables, records, fields, and common standard functions; and `>>`/`...` prompts. `NO_COLOR` and `ZELYRA_COLOR=never` disable color. Pipe input omits prompts. Inputs containing quotes, SQL, or recognizable secret keywords are excluded from saved history. Syntax, type, and runtime failures report a diagnostic and leave the next input available.
 
 ## Commands
 
