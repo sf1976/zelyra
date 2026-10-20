@@ -488,9 +488,10 @@ abgeschlossen.
   Datenbank noch Scaffold bleiben zurück. Das ist ein HTTP-Integrationstest,
   kein Browser-Automationstest.
   Die Quellprüfung des Gesamtprojekts bestätigt zudem die generierten
-  Login-/Logout- und Abmelderouten sowie das gesperrte, wiederverwendbare
-  Identity-Paket; sie prüft Deklarationen, nicht das Laufzeitverhalten der
-  Authentifizierung.
+  Login-/Logout- und Abmelderouten, validiert den Paket-Lock offline und
+  führt module plan für pkg:imported_identity aus, einschließlich
+  Paketidentität und Deklarationsabschluss. Das prüft Modul-/Paketverdrahtung,
+  nicht das Laufzeitverhalten der Authentifizierung.
   `tests/laravel-import-auth-e2e.sh` ergänzt den Laufzeitnachweis: Mit einem
   kleinen CI-Fixture und `/opt/siedelmann-laravel/app` werden ausschließlich
   neue Testbenutzer in einer Wegwerf-Zieldatenbank angelegt und ungültiger

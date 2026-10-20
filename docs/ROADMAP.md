@@ -444,8 +444,10 @@ security and compatibility gates stated for that milestone.
   It sends no mail and leaves no database or scaffold behind. This is an HTTP
   integration test, not browser automation.
   The source-only full-project check also asserts the generated native
-  login/logout and unsubscribe routes and the locked reusable identity package;
-  this verifies declarations, not authentication runtime behavior.
+  login/logout and unsubscribe routes, validates the package lock offline, and
+  runs module plan for pkg:imported_identity to verify its package identity
+  and declaration closure; this verifies module/package wiring, not
+  authentication runtime behavior.
   `tests/laravel-import-auth-e2e.sh` adds the separate runtime proof: against
   both a compact CI fixture and `/opt/siedelmann-laravel/app`, it provisions a
   new destination-only test account and verifies invalid login, successful

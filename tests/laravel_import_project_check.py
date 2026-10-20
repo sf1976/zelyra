@@ -119,7 +119,56 @@ def main() -> int:
             )
             return 1
 
-        print("Laravel importer scaffold, compiler, route graph, and identity package checks passed.")
+        package_lock = subprocess.run(
+            [str(binary), "package", "lock", str(output / "main.zyl"), "--check"],
+            env=environment,
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        if package_lock.returncode:
+            print(package_lock.stdout, file=sys.stderr, end="")
+            print(package_lock.stderr, file=sys.stderr, end="")
+            return package_lock.returncode
+
+        module_plan = subprocess.run(
+            [
+                str(binary),
+                "module",
+                "plan",
+                str(output / "main.zyl"),
+                "pkg:imported_identity",
+            ],
+            env=environment,
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        if module_plan.returncode:
+            print(module_plan.stdout, file=sys.stderr, end="")
+            print(module_plan.stderr, file=sys.stderr, end="")
+            return module_plan.returncode
+        try:
+            plan_document = json.loads(module_plan.stdout)
+            identity_plan = plan_document["plan"]
+            planned_declarations = identity_plan["declaration_closure"]["declarations"]
+        except (json.JSONDecodeError, KeyError, TypeError) as error:
+            print(f"error: generated identity package plan is invalid JSON: {error}", file=sys.stderr)
+            return 1
+        if (
+            plan_document.get("success") is not True
+            or identity_plan.get("selection_kind") != "package"
+            or identity_plan.get("selected_package") != "packages/imported_identity/src/lib.zyl"
+            or "packages/imported_identity/src/lib.zyl" not in identity_plan.get("source_files", [])
+            or "packages/imported_identity/src/lib.zyl::auth:users" not in planned_declarations
+        ):
+            print(
+                "error: generated identity package is not represented as a planned reusable module",
+                file=sys.stderr,
+            )
+            return 1
+
+        print("Laravel importer scaffold, compiler, route graph, locked identity package, and module-plan checks passed.")
         print("Generated files were temporary and have been removed.")
     return 0
 
