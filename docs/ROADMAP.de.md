@@ -416,7 +416,13 @@ abgeschlossen.
   Datei-Formulare müssen auf eine gleichnamige Referenzspalte zeigen;
   automatisches CRUD darf `FileRef` nicht als Textfeld rendern und JSON-API-
   Eingaben dürfen die opake Referenz nicht setzen. Diese Compilerschranken
-  aktivieren HTTP-Uploads noch nicht. Eine statische Analyse von
+  aktivieren HTTP-Uploads noch nicht. Die GitHub-Werkzeugkette wechselte auf
+  Rust 1.99.1; Clippy beanstandete dort `fetch_update` als veraltet. Die
+  Requestbudget-Reservierung nutzt jetzt eine begrenzte
+  `compare_exchange_weak`-Schleife. Ein neuer Konkurrenztest deckte auf, dass
+  eager ausgewertetes `then_some` bei fehlgeschlagener Reservierung einen Guard
+  erzeugte, der Bytes fälschlich freigab und so das Gesamtlimit überschreiten
+  konnte. Der Code wird zusätzlich mit lokalem Rust 1.98 geprüft. Eine statische Analyse von
   `/opt/siedelmann-laravel/app` fand Uploadabläufe bei Rechnungen, Verträgen,
   Einstellungen, Postbriefen und eingehender Mail; der Importer erzeugt sie
   nicht. Offen sind Inhaltsprüfung, private mandantengebundene Speicherung,

@@ -166,8 +166,11 @@ impl<'a> RequestBodyBudget<'a> {
         limit: usize,
     ) -> Option<Self> {
         use std::sync::atomic::Ordering;
-        reserve_request_body_bytes(counter, bytes, limit, Ordering::AcqRel, Ordering::Acquire)
-            .then_some(Self { bytes, counter })
+        if reserve_request_body_bytes(counter, bytes, limit, Ordering::AcqRel, Ordering::Acquire) {
+            Some(Self { bytes, counter })
+        } else {
+            None
+        }
     }
 }
 
@@ -178,11 +181,16 @@ fn reserve_request_body_bytes(
     success_order: std::sync::atomic::Ordering,
     failure_order: std::sync::atomic::Ordering,
 ) -> bool {
-    counter
-        .fetch_update(success_order, failure_order, |used| {
-            used.checked_add(bytes).filter(|total| *total <= limit)
-        })
-        .is_ok()
+    let mut used = counter.load(failure_order);
+    loop {
+        let Some(total) = used.checked_add(bytes).filter(|total| *total <= limit) else {
+            return false;
+        };
+        match counter.compare_exchange_weak(used, total, success_order, failure_order) {
+            Ok(_) => return true,
+            Err(observed) => used = observed,
+        }
+    }
 }
 
 impl Drop for RequestBodyBudget<'_> {
@@ -382,6 +390,35 @@ mod tests {
         assert_eq!(counter.load(Ordering::Acquire), 5);
         drop(guard);
         assert_eq!(counter.load(Ordering::Acquire), 0);
+    }
+
+    #[test]
+    fn concurrent_request_body_reservations_never_exceed_the_limit() {
+        use std::sync::{atomic::AtomicUsize, Arc, Barrier};
+        use std::thread;
+
+        let counter = Arc::new(AtomicUsize::new(0));
+        let barrier = Arc::new(Barrier::new(32));
+        let workers = (0..32)
+            .map(|_| {
+                let counter = counter.clone();
+                let barrier = barrier.clone();
+                thread::spawn(move || {
+                    barrier.wait();
+                    let guard = RequestBodyBudget::reserve(&counter, 1, 8);
+                    barrier.wait();
+                    guard.is_some()
+                })
+            })
+            .collect::<Vec<_>>();
+        let successful_reservations = workers
+            .into_iter()
+            .map(|worker| worker.join().expect("reservation worker must not panic"))
+            .filter(|reserved| *reserved)
+            .count();
+
+        assert_eq!(successful_reservations, 8);
+        assert_eq!(counter.load(std::sync::atomic::Ordering::Acquire), 0);
     }
 
     #[test]

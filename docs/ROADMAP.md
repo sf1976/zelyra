@@ -372,7 +372,13 @@ security and compatibility gates stated for that milestone.
   `FileRef` maps to `CHAR(36)`/`UUID`/`TEXT` by backend, checked file forms must
   match a same-named reference column, automatic CRUD cannot render it as text,
   and JSON API inputs reject the opaque reference. These compiler boundaries
-  do not enable HTTP uploads yet.
+  do not enable HTTP uploads yet. GitHub CI's rolling toolchain advanced to
+  Rust 1.99.1, where Clippy rejects the deprecated atomic `fetch_update` API.
+  Request-budget reservation now uses a bounded `compare_exchange_weak` loop.
+  A concurrent regression test exposed eager `then_some` guard construction,
+  which could release bytes after a failed reservation and admit
+  more than the configured in-flight budget. The code also checks with local
+  Rust 1.98.
   A static analysis of
   `/opt/siedelmann-laravel/app` identified upload
   flows in invoices,
