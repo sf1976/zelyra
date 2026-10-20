@@ -1,6 +1,29 @@
 use super::*;
 
 #[test]
+fn compiler_fails_closed_for_unchecked_typed_crud_action_bodies() {
+    let source = r#"
+        table invoices { id: Id primary auto is_locked: Bool required }
+        crud Invoice -> invoices {
+            action lock {
+                guard when row.is_locked == false { error: "Already locked." }
+                execute { sql { UPDATE invoices SET is_locked = true WHERE id = :id } }
+            }
+        }
+        fn main() {}
+    "#;
+    let program = zelyra_parser::parse(&zelyra_lexer::lex(source).unwrap()).unwrap();
+    assert!(!validate_typed_crud_actions("main.zyl", &program));
+
+    let standalone = zelyra_parser::parse(
+        &zelyra_lexer::lex("form Example { action run { execute { value = 1 } } } fn main() {}")
+            .unwrap(),
+    )
+    .unwrap();
+    assert!(!validate_typed_crud_actions("main.zyl", &standalone));
+}
+
+#[test]
 fn compiler_scope_gate_rejects_sql_touching_declared_tenant_tables() {
     let source = r#"
         type TenantId = Id

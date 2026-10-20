@@ -447,9 +447,21 @@ pub struct FormAction {
     pub fields: Vec<FormField>,
     pub requires_auth: bool,
     pub permissions: Vec<String>,
+    /// Legacy action statements remain accepted for source compatibility.
     pub statements: Vec<Stmt>,
+    /// Explicit, compiler-checked execution body for domain actions.
+    pub execute_body: Option<Block>,
+    /// Optional precondition evaluated against the locked target row.
+    pub guard: Option<CrudActionGuardDef>,
     pub success: Option<String>,
     pub redirect: Option<String>,
+    pub span: Span,
+}
+
+#[derive(Clone, Debug)]
+pub struct CrudActionGuardDef {
+    pub condition: Expr,
+    pub message: String,
     pub span: Span,
 }
 

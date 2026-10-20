@@ -1770,6 +1770,9 @@ fn validate_program(
         if !validate_cruds(path, &program, &schema) {
             return Err(());
         }
+        if !validate_typed_crud_actions(path, &program) {
+            return Err(());
+        }
         if !validate_tenant_access_boundaries(path, &program, &schema) {
             return Err(());
         }
@@ -1790,6 +1793,33 @@ fn validate_program(
         }
     }
     Ok(program)
+}
+
+fn validate_typed_crud_actions(path: &str, program: &zelyra_ast::Program) -> bool {
+    let mut valid = true;
+    for action in program.forms.iter().flat_map(|form| form.actions.iter()) {
+        if action.execute_body.is_some() || action.guard.is_some() {
+            diagnostic_with_span(
+                path,
+                "E-FORM-002",
+                "typed execution blocks and guards are currently supported only by the CRUD action design, whose compiler checks are not yet complete",
+                action.span,
+            );
+            valid = false;
+        }
+    }
+    for action in program.cruds.iter().flat_map(|crud| crud.actions.iter()) {
+        if action.execute_body.is_some() || action.guard.is_some() {
+            diagnostic_with_span(
+                path,
+                "E-CRUD-009",
+                "typed CRUD action execution is not available until its row/session type checks and transaction bridge are complete",
+                action.span,
+            );
+            valid = false;
+        }
+    }
+    valid
 }
 
 fn reject_typed_holes(source: &str, path: &str, program: &zelyra_ast::Program) -> bool {
@@ -9576,6 +9606,16 @@ fn validate_tenant_access_boundaries(
                 },
                 &mut |query, span| valid &= check_query(query, span, None),
             );
+            if let Some(body) = &action.execute_body {
+                visit_block_sql(body, &mut |query, span| {
+                    valid &= check_query(query, span, None)
+                });
+            }
+            if let Some(guard) = &action.guard {
+                visit_expression_sql(&guard.condition, &mut |query, span| {
+                    valid &= check_query(query, span, None)
+                });
+            }
         }
     }
     for crud in &program.cruds {
@@ -9651,6 +9691,16 @@ fn validate_tenant_access_boundaries(
                     },
                     &mut |query, span| valid &= check_query(query, span, Some(&crud.table)),
                 );
+                if let Some(body) = &action.execute_body {
+                    visit_block_sql(body, &mut |query, span| {
+                        valid &= check_query(query, span, Some(&crud.table))
+                    });
+                }
+                if let Some(guard) = &action.guard {
+                    visit_expression_sql(&guard.condition, &mut |query, span| {
+                        valid &= check_query(query, span, Some(&crud.table))
+                    });
+                }
             }
         }
     }
@@ -11314,6 +11364,8 @@ fn generated_crud_form(
                     },
                     span: table.span,
                 })],
+                execute_body: None,
+                guard: None,
                 success: Some("@i18n:form.saved".into()),
                 redirect: Some(format!("/{}", crud.table)),
                 span: table.span,

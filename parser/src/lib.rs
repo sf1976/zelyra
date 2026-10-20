@@ -2305,6 +2305,8 @@ impl<'a> Parser<'a> {
         let mut redirect = None;
         let mut requires_auth = false;
         let mut permissions = Vec::new();
+        let mut execute_body = None;
+        let mut guard = None;
         self.skip_newlines();
         while !self.at(&TokenKind::RBrace) && !self.at(&TokenKind::Eof) {
             if self.at(&TokenKind::Field) {
@@ -2343,12 +2345,36 @@ impl<'a> Parser<'a> {
             } else if self.at(&TokenKind::Redirect) {
                 self.advance();
                 redirect = Some(self.string_value("redirect path")?);
+            } else if matches!(&self.current().kind, TokenKind::Ident(name) if name == "execute") {
+                let (_, execute_span) = self.ident("`execute`")?;
+                if execute_body.is_some() {
+                    return Err(ParseError {
+                        message: "form action may declare only one `execute` block".into(),
+                        span: execute_span,
+                    });
+                }
+                execute_body = Some(self.block()?);
+            } else if matches!(&self.current().kind, TokenKind::Ident(name) if name == "guard") {
+                let (_, guard_span) = self.ident("`guard`")?;
+                if guard.is_some() {
+                    return Err(ParseError {
+                        message: "form action may declare only one `guard`".into(),
+                        span: guard_span,
+                    });
+                }
+                guard = Some(self.form_action_guard(guard_span)?);
             } else {
                 statements.push(self.statement()?);
             }
             self.skip_newlines();
         }
         let end = self.expect(TokenKind::RBrace, "`}` after form action")?;
+        if execute_body.is_some() && !statements.is_empty() {
+            return Err(ParseError {
+                message: "legacy direct statements cannot be mixed with an `execute` block".into(),
+                span: start.join(end),
+            });
+        }
         Ok(FormAction {
             name,
             label,
@@ -2361,8 +2387,42 @@ impl<'a> Parser<'a> {
             requires_auth,
             permissions,
             statements,
+            execute_body,
+            guard,
             success,
             redirect,
+            span: start.join(end),
+        })
+    }
+
+    fn form_action_guard(
+        &mut self,
+        start: Span,
+    ) -> Result<zelyra_ast::CrudActionGuardDef, ParseError> {
+        let (when, when_span) = self.ident("`when` after action guard")?;
+        if when != "when" {
+            return Err(ParseError {
+                message: "expected `when` after action `guard`".into(),
+                span: when_span,
+            });
+        }
+        let condition = self.expression()?;
+        self.expect(TokenKind::LBrace, "`{` before action guard error")?;
+        self.skip_newlines();
+        let (error, error_span) = self.ident("`error` in action guard")?;
+        if error != "error" {
+            return Err(ParseError {
+                message: "action guard requires `error: \"message\"`".into(),
+                span: error_span,
+            });
+        }
+        self.expect(TokenKind::Colon, "`:` after action guard error")?;
+        let message = self.string_value("action guard error message")?;
+        self.skip_newlines();
+        let end = self.expect(TokenKind::RBrace, "`}` after action guard error")?;
+        Ok(zelyra_ast::CrudActionGuardDef {
+            condition,
+            message,
             span: start.join(end),
         })
     }
@@ -6876,5 +6936,51 @@ fn run_recurring_invoices() { }
             parse(&lex("schedule nightly { command: sync timezone: \"UTC\" }").unwrap())
                 .unwrap_err();
         assert!(missing_cron.message.contains("requires `cron`"));
+    }
+
+    #[test]
+    fn parses_explicit_crud_action_execute_body_and_guard() {
+        let source = r#"
+            table invoices { id: Id primary auto is_locked: Bool required }
+            crud Invoice -> invoices {
+                action lock {
+                    permits "invoices.lock"
+                    guard when row.is_locked == false {
+                        error: "Invoice is already locked."
+                    }
+                    execute {
+                        digest = hash_sha256("invoice")
+                        sql { UPDATE invoices SET is_locked = true WHERE id = :id }
+                    }
+                }
+            }
+            fn main() { }
+        "#;
+        let program = parse(&lex(source).unwrap()).unwrap();
+        let action = &program.cruds[0].actions[0];
+        assert_eq!(action.name, "lock");
+        assert!(action.statements.is_empty());
+        assert_eq!(action.permissions, ["invoices.lock"]);
+        assert_eq!(action.execute_body.as_ref().unwrap().statements.len(), 2);
+        let guard = action.guard.as_ref().unwrap();
+        assert_eq!(guard.message, "Invoice is already locked.");
+        assert!(matches!(guard.condition.kind, ExprKind::Binary { .. }));
+    }
+
+    #[test]
+    fn rejects_duplicate_or_mixed_crud_action_blocks() {
+        let duplicate_guard = parse(
+            &lex(r#"crud Invoice -> invoices { action lock { guard when true { error: "one" } guard when false { error: "two" } } } fn main() {}"#).unwrap(),
+        )
+        .unwrap_err();
+        assert!(duplicate_guard.message.contains("only one `guard`"));
+
+        let mixed = parse(
+            &lex(r#"crud Invoice -> invoices { action lock { execute { value = 1 } value = 2 } } fn main() {}"#).unwrap(),
+        )
+        .unwrap_err();
+        assert!(mixed
+            .message
+            .contains("cannot be mixed with an `execute` block"));
     }
 }

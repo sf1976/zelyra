@@ -1448,6 +1448,38 @@ fn rewrite_action_functions(
         is_root,
     )?;
     action.statements = block.statements;
+    if let Some(block) = &mut action.execute_body {
+        rewrite_block(
+            block,
+            module_path,
+            module_name,
+            imports,
+            function_sets
+                .get(module_path)
+                .expect("current module functions are indexed"),
+            function_sets,
+            module_names,
+            root_functions,
+            display_path,
+            is_root,
+        )?;
+    }
+    if let Some(guard) = &mut action.guard {
+        rewrite_expr(
+            &mut guard.condition,
+            module_path,
+            module_name,
+            imports,
+            function_sets
+                .get(module_path)
+                .expect("current module functions are indexed"),
+            function_sets,
+            module_names,
+            root_functions,
+            display_path,
+            is_root,
+        )?;
+    }
     Ok(())
 }
 
@@ -1558,7 +1590,14 @@ impl TypeLinker<'_> {
                 self.rewrite_type(ty, field.span)?;
             }
         }
-        self.rewrite_statements_types(&mut action.statements)
+        self.rewrite_statements_types(&mut action.statements)?;
+        if let Some(block) = &mut action.execute_body {
+            self.rewrite_block_types(block)?;
+        }
+        if let Some(guard) = &mut action.guard {
+            self.rewrite_expression_types(&mut guard.condition)?;
+        }
+        Ok(())
     }
 
     fn rewrite_statements_types(&self, statements: &mut [Stmt]) -> Result<(), ProjectError> {

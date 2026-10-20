@@ -11529,6 +11529,12 @@ fn execute_form_action_with_children(
     database_url: &str,
     context: FormExecutionContext<'_>,
 ) -> Result<(), String> {
+    if action.execute_body.is_some() || action.guard.is_some() {
+        return Err(
+            "E-CRUD-009: typed CRUD actions must pass compiler row/session checks before web execution"
+                .into(),
+        );
+    }
     let FormExecutionContext {
         actor_user_id,
         expected_snapshot,

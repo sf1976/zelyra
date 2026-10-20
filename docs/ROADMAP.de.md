@@ -353,8 +353,9 @@ abgeschlossen.
   Einschränkungen. Kein impliziter Namespace `crypto::` und keine ungeprüfte
   SQL-Interpolation. Grundlage: Die AST-Runtime kann SQL über einen geliehenen
   Request-Transaktions-Callback ausführen; verschachtelte Transaktionen und
-  Parallelblöcke werden abgewiesen. Compiler-Scopes für Actions und die
-  Web-CRUD-Integration fehlen noch. Siehe den
+  Parallelblöcke werden abgewiesen. Der Parser speichert getrennte Execute-/
+  Guard-Knoten; die CLI weist sie bis zur fertigen Scope-Prüfung mit
+  `E-CRUD-009` fail-closed ab. Die Web-CRUD-Integration fehlt noch. Siehe den
   [Arbeitsplan 1.2.28](release-plans/1.2.28-typed-crud-actions.de.md).
 - [ ] **1.2.29 — begrenzte sichere Datei-Uploads (Design-Gate):** Vor einem
   `File`-Formularfeld Multipart-Größenlimits, Metadatentypen, Inhaltsprüfung,
