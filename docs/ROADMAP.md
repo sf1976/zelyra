@@ -464,7 +464,11 @@ security and compatibility gates stated for that milestone.
   run confirmed same-tenant references succeed and cross-tenant references are
   rejected by the FK; the repeatable
   `tests/mariadb-tenant-relations-e2e.sh` checks both record-typed and scalar
-  nominal references. Laravel `SET NULL` on such a composite key cannot be
+  nominal references. Generated composite-key names now avoid collisions with
+  existing single-column tenant unique constraints. The Laravel importer auth
+  E2E sets up the generated identity package in a separate disposable MariaDB
+  database and verifies native login, session persistence, and logout; it does
+  not import Laravel credentials or rows. Laravel `SET NULL` on such a composite key cannot be
   preserved safely: the review candidate emits `RESTRICT` and records the
   behavioral difference. No Laravel database contents or source files were
   modified.

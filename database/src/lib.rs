@@ -604,7 +604,11 @@ fn ensure_tenant_reference_keys(tables: &mut [Table], backend: Backend) {
             .chain(target.indexes.iter().filter(|index| index.unique))
             .any(|index| index.columns == columns);
         if !has_unique_key {
-            let name = generated_identifier(&format!("uq_{}_tenant_id", target.name), backend);
+            let name = available_generated_index_name(
+                target,
+                &format!("uq_{}_tenant_id", target.name),
+                backend,
+            );
             target.uniques.push(Index {
                 name,
                 columns,
@@ -613,6 +617,28 @@ fn ensure_tenant_reference_keys(tables: &mut [Table], backend: Backend) {
             });
         }
     }
+}
+
+fn available_generated_index_name(table: &Table, base: &str, backend: Backend) -> String {
+    let is_occupied = |candidate: &str| {
+        table
+            .indexes
+            .iter()
+            .chain(table.uniques.iter())
+            .any(|index| index.name == candidate)
+            || table
+                .foreign_keys
+                .iter()
+                .any(|foreign_key| foreign_key.name.as_deref() == Some(candidate))
+    };
+
+    let mut candidate = generated_identifier(base, backend);
+    let mut suffix = 2_u32;
+    while is_occupied(&candidate) {
+        candidate = generated_identifier(&format!("{base}_{suffix}"), backend);
+        suffix += 1;
+    }
+    candidate
 }
 
 fn identifier_limit(backend: Backend) -> Option<usize> {
@@ -5977,6 +6003,57 @@ mod tests {
         assert!(schema
             .create_sql()
             .contains("CONSTRAINT `uq_customer_groups_tenant_id` UNIQUE (`tenant_id`, `id`)"));
+    }
+
+    #[test]
+    fn scoped_reference_key_name_avoids_an_existing_tenant_unique_constraint() {
+        let source = r#"
+            type TenantId = Id
+            type DispatchResourceId = Id
+            table tenants {
+                id: TenantId primary auto
+            }
+            table dispatch_resources scoped by tenant_id: TenantId {
+                id: DispatchResourceId primary auto
+                tenant_id: TenantId required references tenants
+                unique { tenant_id }
+            }
+            table dispatch_orders scoped by tenant_id: TenantId {
+                id: Id primary auto
+                tenant_id: TenantId required references tenants
+                resource_id: DispatchResourceId? references dispatch_resources
+            }
+        "#;
+        let program = parse(&lex(source).unwrap()).unwrap();
+        let schema = build_schema(&program).unwrap();
+        let resource = schema
+            .tables
+            .iter()
+            .find(|table| table.name == "dispatch_resources")
+            .unwrap();
+        let generated_reference_key = resource
+            .uniques
+            .iter()
+            .find(|index| index.columns == ["tenant_id", "id"])
+            .unwrap();
+        assert_eq!(
+            generated_reference_key.name,
+            "uq_dispatch_resources_tenant_id_2"
+        );
+
+        let ddl = schema.create_sql();
+        assert!(ddl.contains("CONSTRAINT `uq_dispatch_resources_tenant_id` UNIQUE (`tenant_id`)"));
+        assert!(ddl
+            .contains("CONSTRAINT `uq_dispatch_resources_tenant_id_2` UNIQUE (`tenant_id`, `id`)"));
+
+        let mut constraint_names = Vec::new();
+        for part in ddl.split("CONSTRAINT `").skip(1) {
+            if let Some(name) = part.split('`').next() {
+                constraint_names.push(name);
+            }
+        }
+        let unique_names = constraint_names.iter().copied().collect::<HashSet<_>>();
+        assert_eq!(constraint_names.len(), unique_names.len());
     }
 
     #[test]

@@ -511,7 +511,12 @@ abgeschlossen.
   tatsächlicher MariaDB-11.8-Lauf bestätigte, dass eine eigene Referenz gelingt
   und eine mandantenfremde Referenz mit FK-Fehler abgewiesen wird; der
   wiederholbare Test `tests/mariadb-tenant-relations-e2e.sh` prüft nun sowohl
-  Record-Relationen als auch skalare nominale Referenzen. Laravels
+  Record-Relationen als auch skalare nominale Referenzen. Generierte Namen
+  zusammengesetzter Schlüssel kollidieren nun nicht mehr mit bereits
+  vorhandenen eindeutigen Tenant-Einzelspalten. Das Laravel-Importer-Auth-E2E
+  richtet das generierte Identitätspaket in einer separaten, kurzlebigen
+  MariaDB ein und prüft native Anmeldung, gespeicherte Session und Abmeldung;
+  Laravel-Zugangsdaten und Anwendungszeilen werden nicht importiert. Laravels
   `SET NULL` auf einer solchen zusammengesetzten Relation kann Zelyra nicht
   sicher abbilden; der prüfpflichtige Scaffold ersetzt dies sichtbar durch
   `RESTRICT` und schreibt den Unterschied als Reviewhinweis aus. Kein
