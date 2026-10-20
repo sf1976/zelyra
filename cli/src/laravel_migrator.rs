@@ -2054,6 +2054,7 @@ fn analyze_with_live_database(
         if database["status"] == "connected_read_only" {
             database["schema_comparison"] =
                 live_database::compare_candidates(database, &schema_generation);
+            live_database::remove_private_comparison_values(database);
         }
     }
     let report_details = ReportDetails {
