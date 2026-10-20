@@ -90,5 +90,8 @@ The bundle includes the transitive storage provider, a lockfile, Docker files,
 and a `.env.example` with `ZELYRA_DATABASE_MAIN_URL`. `zelyra check` and bundle
 generation do not connect to MariaDB. Running the generated service requires a
 reachable database with the declared schema; the bundle does not create or
-seed one. The generated bundle is a checked source package, not proof of a
-complete production deployment.
+seed one. Its runtime image carries the Zelyra binary, source package, and CA
+trust bundle from the compiler stage. Zelyra connects to MariaDB through its
+embedded driver; the image does not install a separate MariaDB client or run
+an OS package-manager update. The generated bundle is a checked source package,
+not proof of a complete production deployment.
