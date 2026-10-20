@@ -309,6 +309,14 @@ jobs:
           ZELYRA_GENERATED_AUTH_ADDRESS: 127.0.0.1:38525
           ZELYRA_BIN: target/debug/zelyra
         run: ./tests/generated-project-auth-e2e.sh
+      - name: Run Laravel-imported native authentication end-to-end test
+        env:
+          ZELYRA_LARAVEL_IMPORT_DB_PASSWORD: root
+          ZELYRA_LARAVEL_IMPORT_DB_HOST: 127.0.0.1
+          ZELYRA_LARAVEL_IMPORT_DB_PORT: 3306
+          ZELYRA_LARAVEL_IMPORT_AUTH_ADDRESS: 127.0.0.1:38536
+          ZELYRA_BIN: target/debug/zelyra
+        run: ./tests/laravel-import-auth-e2e.sh tests/fixtures/laravel-auth-minimal
       - name: Run password-reset MariaDB and SMTP end-to-end test
         env:
           DATABASE_URL: mariadb://root:root@127.0.0.1:3306/zelyra_ci

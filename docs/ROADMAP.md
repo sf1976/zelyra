@@ -446,6 +446,14 @@ security and compatibility gates stated for that milestone.
   The source-only full-project check also asserts the generated native
   login/logout and unsubscribe routes and the locked reusable identity package;
   this verifies declarations, not authentication runtime behavior.
+  `tests/laravel-import-auth-e2e.sh` adds the separate runtime proof: against
+  both a compact CI fixture and `/opt/siedelmann-laravel/app`, it provisions a
+  new destination-only test account and verifies invalid login, successful
+  login, persisted session creation, logout, and session revocation through
+  local HTTP and disposable MariaDB. It copies no Laravel credentials or user
+  rows and does not migrate custom registration, tenant-selection, or 2FA
+  flows. The local MariaDB client reports that TLS certificate verification
+  is disabled for this password-authenticated disposable test connection.
   PHP method recognizer uses the existing lexical source map and balanced code
   braces; regression tests reject method-shaped comments and cover nested
   blocks, typed return declarations, and lookup/update/view patterns that occur
