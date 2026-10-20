@@ -17,6 +17,7 @@ owner_tenant_name="Owner-only tenant ${suffix}"
 password="ZelyraTenant-${suffix}-Password"
 tenant_a_title="Tenant A invoice ${suffix}"
 tenant_b_title="Tenant B invoice ${suffix}"
+owner_action_title="Owner-only action invoice ${suffix}"
 created_title="Created invoice ${suffix}"
 owner_created_title="Owner-created invoice ${suffix}"
 edited_title="Edited invoice ${suffix}"
@@ -60,7 +61,8 @@ cleanup() {
     fi
 client --batch --skip-column-names <<SQL >/dev/null 2>&1 || true
 DROP TRIGGER IF EXISTS ${rollback_trigger};
-DELETE FROM invoices WHERE title IN ('${tenant_a_title}', '${tenant_b_title}', '${created_title}', '${owner_created_title}', '${edited_title}', '${rollback_title}');
+DELETE FROM tenant_invoice_action_log WHERE invoice_id IN (SELECT id FROM invoices WHERE title IN ('${tenant_a_title}', '${tenant_b_title}', '${owner_action_title}', '${created_title}', '${owner_created_title}', '${edited_title}', '${rollback_title}'));
+DELETE FROM invoices WHERE title IN ('${tenant_a_title}', '${tenant_b_title}', '${owner_action_title}', '${created_title}', '${owner_created_title}', '${edited_title}', '${rollback_title}');
 DELETE FROM auth_audit_log WHERE actor_user_id IN (SELECT id FROM users WHERE email IN ('${email}', '${permissionless_email}', '${membershipless_email}', '${owner_email}'));
 DELETE FROM user_permissions WHERE user_id IN (SELECT id FROM users WHERE email IN ('${email}', '${permissionless_email}', '${membershipless_email}', '${owner_email}'));
 DELETE FROM auth_sessions WHERE user_id IN (SELECT id FROM users WHERE email IN ('${email}', '${permissionless_email}', '${membershipless_email}', '${owner_email}'));
@@ -104,11 +106,14 @@ INSERT INTO tenant_user (user_id, tenant_id, role)
 VALUES (@user_id, 10, 'owner'), (@user_id, 20, 'employee'), (@permissionless_user_id, 10, 'employee');
 INSERT INTO tenants (user_id, name) VALUES (@owner_user_id, '${owner_tenant_name}');
 INSERT INTO user_permissions (user_id, permission)
-VALUES (@user_id, 'invoices.view'), (@membershipless_user_id, 'invoices.view'), (@owner_user_id, 'invoices.view');
+VALUES (@user_id, 'invoices.view'), (@user_id, 'invoices.action'), (@membershipless_user_id, 'invoices.view'), (@owner_user_id, 'invoices.view');
 INSERT INTO invoices (tenant_id, title)
 VALUES (10, '${tenant_a_title}'), (20, '${tenant_b_title}');
+INSERT INTO invoices (tenant_id, title)
+SELECT id, '${owner_action_title}' FROM tenants WHERE user_id = @owner_user_id;
 SQL
 owner_tenant_id="$(client --batch --skip-column-names -e "SELECT id FROM tenants WHERE name = '${owner_tenant_name}'")"
+owner_action_invoice_id="$(client --batch --skip-column-names -e "SELECT id FROM invoices WHERE title = '${owner_action_title}'")"
 tenant_b_id="$(client --batch --skip-column-names -e "SELECT id FROM invoices WHERE title = '${tenant_b_title}'")"
 tenant_a_id="$(client --batch --skip-column-names -e "SELECT id FROM invoices WHERE title = '${tenant_a_title}'")"
 [[ -n "${tenant_b_id}" ]]
@@ -180,6 +185,18 @@ grep -Fq "${tenant_a_title}" "${temp_dir}/tenant-a.html"
 ! grep -Fq "${tenant_b_title}" "${temp_dir}/tenant-a.html"
 ! grep -Fq 'tenant_id' "${temp_dir}/tenant-a.html"
 grep -Fq 'href="/invoices/new?tenant_id=10"' "${temp_dir}/tenant-a.html"
+echo "[5a/12] checking typed action tenant and actor context"
+tenant_action_form_status="$(curl --silent --show-error --output "${temp_dir}/tenant-action-form.html" --write-out '%{http_code}' --cookie "${cookie}" "${base_url}/invoices/${tenant_a_id}?tenant_id=10")"
+[[ "${tenant_action_form_status}" == "200" ]]
+tenant_action_csrf="$(sed -n 's/.*name="_zelyra_csrf" value="\([^"]*\)".*/\1/p' "${temp_dir}/tenant-action-form.html")"
+[[ -n "${tenant_action_csrf}" ]]
+tenant_action_status="$(curl --silent --show-error --output "${temp_dir}/tenant-action-response.html" --write-out '%{http_code}' --header "Origin: ${base_url}" --cookie "${cookie}" --data-urlencode "_zelyra_csrf=${tenant_action_csrf}" "${base_url}/invoices/${tenant_a_id}/record_actor?tenant_id=10")"
+[[ "${tenant_action_status}" == "303" ]]
+tenant_actor_id="$(client --batch --skip-column-names -e "SELECT id FROM users WHERE email='${email}'")"
+[[ "$(client --batch --skip-column-names -e "SELECT CONCAT(tenant_id, '|', actor_user_id) FROM tenant_invoice_action_log WHERE invoice_id=${tenant_a_id}")" == "10|${tenant_actor_id}" ]]
+wrong_tenant_action_status="$(curl --silent --show-error --output "${temp_dir}/wrong-tenant-action.html" --write-out '%{http_code}' --header "Origin: ${base_url}" --cookie "${cookie}" --data-urlencode "_zelyra_csrf=${tenant_action_csrf}" "${base_url}/invoices/${tenant_b_id}/record_actor?tenant_id=10")"
+[[ "${wrong_tenant_action_status}" == "404" ]]
+[[ "$(client --batch --skip-column-names -e "SELECT COUNT(*) FROM tenant_invoice_action_log WHERE invoice_id=${tenant_b_id}")" == "0" ]]
 cross_tenant_detail_status="$(curl --silent --show-error --output "${temp_dir}/cross-tenant.html" \
     --write-out '%{http_code}' --cookie "${cookie}" \
     "${base_url}/invoices/${tenant_b_id}?tenant_id=10")"
@@ -190,6 +207,18 @@ tenant_b_status="$(curl --silent --show-error --output "${temp_dir}/tenant-b.htm
 [[ "${tenant_b_status}" == "200" ]]
 grep -Fq "${tenant_b_title}" "${temp_dir}/tenant-b.html"
 ! grep -Fq "${tenant_a_title}" "${temp_dir}/tenant-b.html"
+
+owner_action_form_status="$(curl --silent --show-error --output "${temp_dir}/owner-action-form.html" \
+    --write-out '%{http_code}' --cookie "${owner_cookie}" \
+    "${base_url}/invoices/${owner_action_invoice_id}?tenant_id=${owner_tenant_id}")"
+[[ "${owner_action_form_status}" == "200" ]]
+owner_action_csrf="$(sed -n 's/.*name="_zelyra_csrf" value="\([^"]*\)".*/\1/p' "${temp_dir}/owner-action-form.html")"
+owner_action_denied_status="$(curl --silent --show-error --output "${temp_dir}/owner-action-denied.html" \
+    --write-out '%{http_code}' --header "Origin: ${base_url}" --cookie "${owner_cookie}" \
+    --data-urlencode "_zelyra_csrf=${owner_action_csrf}" \
+    "${base_url}/invoices/${owner_action_invoice_id}/record_actor?tenant_id=${owner_tenant_id}")"
+[[ "${owner_action_denied_status}" == "403" ]]
+[[ "$(client --batch --skip-column-names -e "SELECT COUNT(*) FROM tenant_invoice_action_log WHERE invoice_id=${owner_action_invoice_id}")" == "0" ]]
 
 echo "[6/12] rejecting conflicting and forged selectors"
 conflict_status="$(curl --silent --show-error --output "${temp_dir}/conflict.html" \

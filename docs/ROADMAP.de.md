@@ -367,8 +367,12 @@ abgeschlossen.
   sowie eine unversandte Outbox-Nachricht mit echtem lokal gerendertem
   PDF-Anhang. Nur ein ausdrücklich gestarteter Worker darf diese Nachricht
   versenden. Granulare `Database(read/write)`-Freigaben öffnen außerdem korrekt
-  die Datenbank-Sperre der Web-Runtime. PostgreSQL-E2E, mandantengebundene
-  Action-E2E sowie vollständige Berechtigungs-/Sicherheitsmatrizen bleiben offen.
+  die Datenbank-Sperre der Web-Runtime. Das Tenant-HTTP-E2E prüft zusätzlich,
+  dass `session.tenant_id` und `session.user_id` aus dem authentifizierten,
+  ausgewählten Mandantenkontext stammen, ein Datensatz des falschen Mandanten
+  mit 404 abgewiesen wird und ein direkter Action-POST ohne Action-Berechtigung
+  403 liefert. PostgreSQL-E2E und die breitere Berechtigungs-/Sicherheitsmatrix
+  bleiben offen.
   Siehe den
   [Arbeitsplan 1.2.28](release-plans/1.2.28-typed-crud-actions.de.md).
 - [ ] **1.2.29 — begrenzte sichere Datei-Uploads (Design-Gate):** Vor einem

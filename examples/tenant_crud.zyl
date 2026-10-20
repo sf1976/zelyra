@@ -57,10 +57,33 @@ table invoices {
     deleted_at: Timestamp?
 }
 
+table tenant_invoice_action_log {
+    id: Id primary auto
+    invoice_id: Int required
+    tenant_id: Int required
+    actor_user_id: Int required
+}
+
 crud Invoice -> invoices {
     requires auth
     permits "invoices.view"
     tenant: tenant_id
+
+    action record_actor {
+        label: "Record action actor"
+        requires auth
+        permits "invoices.action"
+        uses Database(write)
+        execute {
+            invoice_id = row.id
+            tenant_id = session.tenant_id
+            actor_user_id = session.user_id
+            sql {
+                INSERT INTO tenant_invoice_action_log (invoice_id, tenant_id, actor_user_id)
+                VALUES (:invoice_id, :tenant_id, :actor_user_id)
+            }
+        }
+    }
 
     soft_delete {
         column: deleted_at
