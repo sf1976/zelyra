@@ -968,6 +968,97 @@ fn main() {}
 }
 
 #[test]
+fn integer_boundary_operator_corpus_matches_checked_host_oracle() {
+    let source = r#"
+fn add(left: Int, right: Int) -> Int { return left + right }
+fn subtract(left: Int, right: Int) -> Int { return left - right }
+fn multiply(left: Int, right: Int) -> Int { return left * right }
+fn divide(left: Int, right: Int) -> Int { return left / right }
+fn remainder(left: Int, right: Int) -> Int { return left % right }
+fn main() {}
+"#;
+    let ast = parse(&lex(source).expect("source lexes")).expect("source parses");
+    let mir = crate::lower(&ast).expect("source type-checks and lowers");
+    let operations = [
+        ("add", i64::checked_add as fn(i64, i64) -> Option<i64>),
+        ("subtract", i64::checked_sub),
+        ("multiply", i64::checked_mul),
+        ("divide", i64::checked_div),
+        ("remainder", i64::checked_rem),
+    ];
+    let bytecode = operations
+        .iter()
+        .map(|(name, _)| {
+            let program = compile(&mir, name).expect("boundary operator compiles");
+            let encoded = encode(&program).expect("boundary operator encodes");
+            (
+                *name,
+                decode(&encoded).expect("boundary operator verifies after decoding"),
+            )
+        })
+        .collect::<std::collections::HashMap<_, _>>();
+    let values = [i64::MIN, i64::MIN + 1, -1, 0, 1, i64::MAX - 1, i64::MAX];
+
+    for (name, oracle) in operations {
+        for left in values {
+            for right in values {
+                let arguments = vec![Value::Int(left), Value::Int(right)];
+                let expected = oracle(left, right).map(Value::Int);
+                let ast_result =
+                    zelyra_runtime::execute_function(&ast, name, arguments.clone(), None);
+                let mir_result = execution::execute_function(
+                    &mir,
+                    name,
+                    arguments.clone(),
+                    ExecutionLimits::default(),
+                );
+                let bytecode_result = execute(
+                    bytecode.get(name).expect("compiled function exists"),
+                    arguments,
+                    ExecutionLimits::default(),
+                );
+
+                match expected {
+                    Some(expected) => {
+                        assert_eq!(
+                            ast_result.expect("host oracle accepted operation"),
+                            expected
+                        );
+                        assert_eq!(mir_result.expect("MIR matches host oracle").value, expected);
+                        assert_eq!(
+                            bytecode_result.expect("bytecode matches host oracle").value,
+                            expected
+                        );
+                    }
+                    None => {
+                        let ast_error = ast_result.expect_err("host oracle rejected operation");
+                        let mir_error = mir_result.expect_err("MIR rejects checked overflow");
+                        let bytecode_error =
+                            bytecode_result.expect_err("bytecode rejects checked overflow");
+                        assert_eq!(
+                            mir_error.message, ast_error.message,
+                            "MIR {name}({left}, {right})"
+                        );
+                        assert_eq!(
+                            mir_error.span, ast_error.span,
+                            "MIR span {name}({left}, {right})"
+                        );
+                        assert_eq!(
+                            bytecode_error.message, ast_error.message,
+                            "bytecode {name}({left}, {right})"
+                        );
+                        assert_eq!(
+                            bytecode_error.span, ast_error.span,
+                            "bytecode span {name}({left}, {right})"
+                        );
+                    }
+                }
+            }
+        }
+    }
+}
+
+#[test]
 fn configured_recursion_depth_matches_ast_mir_and_bytecode() {
     let source = r#"
 fn descend(depth: Int) -> Int {
