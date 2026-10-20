@@ -11,6 +11,11 @@
 - Show declared table invariant messages and source positions in the console's
   `:schema` command. / `:schema` zeigt deklarierte Tabelleninvarianten mit
   Fehlermeldung und Quellposition an.
+- Declare the REPL's aggregate database effect when project database access is
+  granted, while keeping runtime read/write grant checks in force. / Den
+  aggregierten Datenbankeffekt der REPL deklarieren, wenn das Projekt
+  Datenbankzugriff freigibt; die Laufzeitprüfung der Lese-/Schreibrechte bleibt
+  aktiv.
 
 ## 1.2.27 — 2026-10-20
 

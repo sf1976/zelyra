@@ -47,9 +47,15 @@ EOF
 printf 'DATABASE_URL=%s\n' "${test_url}" >"${project}/.env"
 
 ddl_attempt="$(printf 'sql { DROP TABLE %s }\n' "${table}" | "${zelyra_bin}" console "${project}/main.zyl" --sandbox 2>&1)"
-[[ "${ddl_attempt}" == *'DDL and transaction control are rejected'* ]]
+if [[ "${ddl_attempt}" != *'DDL and transaction control are rejected'* ]]; then
+  printf 'error: sandbox did not reject DDL as expected:\n%s\n' "${ddl_attempt}" >&2
+  exit 1
+fi
 table_exists="$(MYSQL_PWD="${db_password}" mariadb --protocol=tcp --host="${db_host}" --port="${db_port}" --user="${db_user}" --database="${db_name}" --batch --skip-column-names -e "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name = '${table}'")"
-[[ "${table_exists}" == "1" ]]
+if [[ "${table_exists}" != "1" ]]; then
+  printf 'error: sandbox DDL attempt changed the disposable schema\n' >&2
+  exit 1
+fi
 
 printf "sql { INSERT INTO ${table} (tenant_id, name) VALUES (:tenant_id, 'rolled-back') }\n" \
   | "${zelyra_bin}" console "${project}/main.zyl" --sandbox --tenant 7
