@@ -1,6 +1,22 @@
 ## Unreleased
 
 
+## 1.2.29 — 2026-10-20
+
+- Add bounded multipart uploads for compiler-checked `File` form fields,
+  private tenant-scoped storage with opaque `FileRef` values, authorized
+  downloads, replacement/deletion cleanup, and preview-first orphan cleanup.
+  Add checksum-verified file-storage backup and restore. Storage creation is
+  currently supported on Unix only; the file backup excludes the database,
+  project configuration, and secrets. / Begrenzte Multipart-Uploads für
+  compilergeprüfte `File`-Formularfelder, privaten mandantengebundenen Speicher
+  mit opaken `FileRef`-Werten, geschützte Downloads, Bereinigung bei
+  Ersetzung/Löschung und vorschaugestützte Bereinigung verwaister Dateien
+  ergänzen. Prüfsummenvalidiertes Backup und Restore des Dateispeichers
+  ergänzen. Speicheranlage wird derzeit nur unter Unix unterstützt; das
+  Dateispeicher-Backup umfasst weder Datenbank noch Projektkonfiguration oder
+  Geheimnisse.
+
 ## 1.2.28 — 2026-10-20
 
 - Add typed CRUD action execution with compiler-checked `row` and trusted
