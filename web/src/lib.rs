@@ -1919,6 +1919,11 @@ impl WebApp {
         }
         for form in &self.forms {
             if let Some(path_params) = match_path(&form.path, &request.path) {
+                // A POST-only mutation form may share its path with a checked
+                // GET page that renders the confirmation experience.
+                if form.post_only && request.method != "POST" {
+                    continue;
+                }
                 if self.database_capability_granted == Some(false) {
                     return database_capability_denied();
                 }
@@ -6378,7 +6383,25 @@ fn dispatch_form_with_language(
         .actions
         .first()
         .and_then(|action| action.confirm_page.as_ref());
+    let verified_token_route = form.form.verify.is_some();
     if request.method == "GET" {
+        if let Some(verify) = &form.form.verify {
+            let Some(database_url) = database_url else {
+                return Response::html(503, "<h1>503 Service Unavailable</h1>");
+            };
+            let zelyra_ast::ExprKind::Sql { query, .. } = &verify.kind else {
+                return Response::html(500, "<h1>500 Internal Server Error</h1>");
+            };
+            let params = path_params
+                .iter()
+                .map(|(name, value)| (name.clone(), path_parameter_query_value(value)))
+                .collect();
+            match zelyra_database::execute_read_only_query(database_url, query, params) {
+                Ok(result) if !result.rows.is_empty() => {}
+                Ok(_) => return Response::html(404, "<h1>404 Not Found</h1>"),
+                Err(_) => return Response::html(503, "<h1>503 Service Unavailable</h1>"),
+            }
+        }
         if let Some(confirmation_view) = confirmation_view {
             let rendered_form = form_with_path_params(form, path_params);
             let options = match load_relation_options(&rendered_form, database_url, tenant_context)
@@ -6386,10 +6409,15 @@ fn dispatch_form_with_language(
                 Ok(options) => options,
                 Err(error) => return relation_options_error(database_url, error),
             };
-            return Response::html(
+            let response = Response::html(
                 200,
                 render_action_confirmation(&rendered_form, confirmation_view, &options, language),
             );
+            return if verified_token_route {
+                response.with_header("Cache-Control", "no-store")
+            } else {
+                response
+            };
         }
     }
     if form.post_only && request.method != "POST" {
@@ -6535,7 +6563,12 @@ fn dispatch_form_with_language(
             };
             html = attach_form_snapshot(&html, &snapshot);
         }
-        return Response::html(200, html);
+        let response = Response::html(200, html);
+        return if verified_token_route {
+            response.with_header("Cache-Control", "no-store")
+        } else {
+            response
+        };
     }
     if request.method != "POST" {
         return Response::html(405, "<h1>405 Method Not Allowed</h1>");
@@ -6866,6 +6899,9 @@ fn dispatch_form_with_language(
             if error.starts_with("ZELYRA_TENANT_DENIED:") {
                 return Response::html(404, "<h1>404 Not Found</h1>");
             }
+            if error.starts_with("ZELYRA_NOT_FOUND:") {
+                return Response::html(404, "<h1>404 Not Found</h1>");
+            }
             if error.starts_with("ZELYRA_CONFLICT:") {
                 return action_error_response(
                     action,
@@ -7034,6 +7070,8 @@ fn crud_child_route(parent: &FormRoute, child: &CrudChildFormRoute) -> FormRoute
         name: format!("{}Child", child.definition.name),
         table: Some(child.table.name.clone()),
         path: None,
+        post_only: false,
+        verify: None,
         fields: child.fields.clone(),
         actions: Vec::new(),
         span: child.definition.span,
@@ -11978,7 +12016,22 @@ fn execute_form_action_with_children(
             None
         };
 
-        for query in &queries {
+        let first_write_query = if action.require_match {
+            let Some(select) = queries.first() else {
+                return Err(zelyra_database::DatabaseError {
+                    message: "ZELYRA_NOT_FOUND: matching record is unavailable".into(),
+                });
+            };
+            if transaction.execute(select)?.rows.is_empty() {
+                return Err(zelyra_database::DatabaseError {
+                    message: "ZELYRA_NOT_FOUND: matching record is unavailable".into(),
+                });
+            }
+            1
+        } else {
+            0
+        };
+        for query in queries.iter().skip(first_write_query) {
             transaction.execute(query)?;
         }
         let created_parent_id = if !is_edit_form(form)

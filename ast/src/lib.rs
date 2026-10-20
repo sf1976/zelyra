@@ -410,6 +410,11 @@ pub struct FormDef {
     /// Optional explicit browser route for a standalone or table-backed form.
     /// When absent, the CLI keeps the conventional `/forms/<name>` route.
     pub path: Option<String>,
+    /// Render only on POST so a checked page can own the GET side of the same
+    /// path. This form still provides the CSRF-protected mutation endpoint.
+    pub post_only: bool,
+    /// Optional read query checked on GET before any form is rendered.
+    pub verify: Option<Expr>,
     pub fields: Vec<FormField>,
     pub actions: Vec<FormAction>,
     pub span: Span,
@@ -463,6 +468,9 @@ pub struct FormAction {
     pub permissions: Vec<String>,
     /// Explicit language capabilities required by the typed execution block.
     pub capabilities: Vec<String>,
+    /// Require the first SQL statement to be a SELECT and to return a row in
+    /// the same transaction before the remaining action statements run.
+    pub require_match: bool,
     /// Legacy action statements remain accepted for source compatibility.
     pub statements: Vec<Stmt>,
     /// Explicit, compiler-checked execution body for domain actions.

@@ -422,20 +422,29 @@ abgeschlossen.
   nicht. Offen sind Inhaltsprüfung, private mandantengebundene Speicherung,
   autorisierte Downloads, transaktionales Aufräumen und Backup-/Löschsemantik.
   Siehe den [Plan für sichere Uploads 1.2.29](release-plans/1.2.29-secure-uploads.de.md).
-- [~] **1.2.30 — Abdeckung echter Laravel-Migrationsabläufe:** Ein geprüftes
-  `route:`-Override für Standalone-Forms unterstützt jetzt absolute lokale
-  Pfade und eindeutige erfasste Segmente; numerische Werte werden als Integer,
-  opake Werte als SQL-Strings gebunden. GET-seitige Tokenprüfung und eine
-  typisierte Lesen-vor-Schreiben-POST-Aktion fehlen noch; dies ist eine
-  Grundlage, kein importierter Ablauf. Den getesteten
-  Routen-/Controller-/View-zu-Modul-Umfang am Laravel-Projekt erweitern, aber
-  nur für compilergeprüfte, wiederverwendbare Feature-/Domain-/UI-Module mit
-  belegter Herkunft. Ausgewählte Module gegen eine separate wegwerfbare
-  Zelyra-Datenbank und im Browser prüfen. Abdeckung als analysiert, generiert,
-  compilergeprüft, verhaltensgeprüft, unterstützt oder manuell ausweisen.
-  Keine Gesamtmigration behaupten, wenn nicht jedes einbezogene Verhalten in
-  Zelyra getestet wurde. Laravel, Composer-Pakete, PHP-Controller oder Blade-
-  Laufzeitdateien werden nicht in die Ausgabe kopiert.
+- [~] **1.2.30 — Abdeckung echter Laravel-Migrationsabläufe:** Standalone-Forms
+  unterstützen geprüfte lokale Routen mit erfassten Pfadparametern, ein
+  compilergeprüftes schreibgeschütztes `verify sql<T>` vor dem GET-Rendern und
+  `require_match` für direkte SQL-Aktionen. Das erforderliche erste `SELECT`
+  und alle folgenden SQL-Anweisungen laufen in derselben Transaktion; ohne
+  Treffer folgt 404 vor jedem Schreibzugriff, CSRF bleibt Pflicht und
+  verifizierte Token-Seiten erhalten `Cache-Control: no-store`. Ein
+  wiederholbarer MariaDB-/Browser-E2E prüft Tokenvalidierung, ungültige GET-
+  und POST-Tokens, erfolgreiche Abmeldung, idempotente Wiederholung und den
+  Erhalt des ersten Abmeldezeitpunkts. Das ausführbare native Beispiel ist
+  `examples/csv_mailer_unsubscribe.zyl`. Der Importer erkennt jetzt das
+  quellbelegte Muster `PublicCsvMailerUnsubscribeController` und erzeugt das
+  wiederverwendbare Modul `src/imported_public_unsubscribe.zyl`, ein gemeinsames
+  Schemapaket und einen auf dieses Modul begrenzten Tabellenzugriff. Übersetzt
+  werden nur der literale SHA-256-Tokenvergleich, die Prüfung vor dem Schreiben,
+  die idempotente Abmeldung und statische Hinweistexte; abweichende Varianten
+  bleiben unübersetzt. Die Ausgabe bestand `zelyra check`; ein Lauf mit
+  Wegwerf-MariaDB und HTTP-Server bestätigte GET 200, 404 für ungültige Tokens,
+  CSRF-geschützten POST-Redirect und den gespeicherten Zeitpunkt. Das Gerüst ist
+  weiterhin keine vollständige Migration: die aktuelle Gesamtanalyse meldet
+  2.186 Befunde, davon 1.343 manuell/offen und 843 teilweise. Laravel,
+  Composer-Pakete, PHP-Controller, Blade-Laufzeitdateien und Zugangsdaten werden
+  nicht kopiert.
 - [ ] **1.3.0 — kanonische Struktur und Bytecode-Standard:** Das optionale,
   versionierte Projektlayout (`routes/`, `domain/`, `schema/`, `public/`,
   `assets/`, `plugins/`), Architekturprüfungen und eine sichere

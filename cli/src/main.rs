@@ -10643,7 +10643,7 @@ fn serve_command(mut args: impl Iterator<Item = String>) -> ExitCode {
             record_context_fields: Vec::new(),
             form_context_fields: Vec::new(),
             field_content_html: HashMap::new(),
-            post_only: false,
+            post_only: form.post_only,
             audit_table: None,
             audit_event: None,
             audit_chain: false,
@@ -11399,6 +11399,8 @@ fn generated_crud_form(
             name: format!("{}{}", crud.name, if edit { "Edit" } else { "Create" }),
             table: Some(table.name.clone()),
             path: None,
+            post_only: false,
+            verify: None,
             fields,
             actions: vec![zelyra_ast::FormAction {
                 name: "save".into(),
@@ -11412,6 +11414,7 @@ fn generated_crud_form(
                 requires_auth: false,
                 permissions: Vec::new(),
                 capabilities: Vec::new(),
+                require_match: false,
                 statements: vec![zelyra_ast::Stmt::Expr(zelyra_ast::Expr {
                     kind: zelyra_ast::ExprKind::Sql {
                         result_type: zelyra_ast::Type::Unit,
@@ -11519,6 +11522,8 @@ fn generated_crud_action(
                 name: format!("{}{}", crud.name, action.name),
                 table: Some(table.name.clone()),
                 path: None,
+                post_only: false,
+                verify: None,
                 fields: action.fields.clone(),
                 actions: vec![action.clone()],
                 span: action.span,

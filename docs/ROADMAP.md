@@ -381,19 +381,27 @@ security and compatibility gates stated for that milestone.
   tenant-owned storage, authorized downloads, transactional cleanup, and
   backup/delete semantics. See the
   [1.2.29 secure upload plan](release-plans/1.2.29-secure-uploads.en.md).
-- [~] **1.2.30 — Laravel import workflow coverage:** A checked `route:` override
-  for standalone forms now supports absolute local paths and unique captured
-  segments; captured numeric values bind as integers and opaque values as SQL
-  strings. GET-time token verification and a typed read-before-write POST
-  action are still missing, so this is groundwork and not an imported feature.
-  Continue to expand only from
-  compiler-checked, reusable feature/domain/UI modules backed by route-to-
-  controller-to-view evidence. Validate the selected generated modules against
-  the Laravel application using an isolated Zelyra database and browser tests.
-  Report supported, assisted, and manual coverage separately; do not call the
-  whole website imported unless every in-scope route and behavior has a tested
-  Zelyra implementation. This does not copy Laravel, Composer packages, PHP
-  controllers, or Blade runtime files into the output.
+- [~] **1.2.30 — Laravel import workflow coverage:** Standalone forms now
+  support checked local routes with captured path parameters, a compiler-checked
+  read-only `verify sql<T>` gate before GET rendering, and `require_match` for
+  direct SQL actions. The required first `SELECT` and all later SQL run on the
+  same transaction; no match returns 404 before writes, CSRF remains required,
+  and verified-token pages are marked `Cache-Control: no-store`. A repeatable
+  MariaDB/browser E2E verifies token validation, invalid-token GET and POST
+  behavior, successful unsubscribe, idempotent repeat submission, and stable
+  first-unsubscribe time. The executable native example is
+  `examples/csv_mailer_unsubscribe.zyl`. The importer now recognizes the
+  source-evidenced `PublicCsvMailerUnsubscribeController` pattern and emits a
+  reusable `src/imported_public_unsubscribe.zyl` module, a shared schema module,
+  and a scoped table access grant. It translates only a literal SHA-256 token
+  lookup, read-before-write, idempotent unsubscribe update, and static notice
+  text; unsupported variants remain ungenerated. Generated output passed
+  `zelyra check`, and a disposable MariaDB/HTTP run verified GET 200, invalid
+  token 404, CSRF-protected POST redirect, and the persisted timestamp. The
+  scaffold remains an incomplete migration: the latest full-project inventory
+  reports 2,186 findings, including 1,343 manual/unresolved and 843 partial.
+  Laravel, Composer packages, PHP controllers, Blade runtime files, and source
+  credentials are not copied.
 - [ ] **1.3.0 — canonical structure and Bytecode default:** Complete the
   opt-in versioned project layout (`routes/`, `domain/`, `schema/`, `public/`,
   `assets/`, and `plugins/`), architecture checks, and safe layout migration

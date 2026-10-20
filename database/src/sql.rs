@@ -268,6 +268,15 @@ pub fn check_program(program: &zelyra_ast::Program, schema: &Schema) -> Result<(
         });
         for action in &form.actions {
             let mut environment = HashMap::new();
+            if let Some(route) = form.path.as_deref() {
+                for name in route.split('/').filter_map(|segment| {
+                    segment
+                        .strip_prefix('{')
+                        .and_then(|name| name.strip_suffix('}'))
+                }) {
+                    environment.insert(name.to_owned(), Type::String);
+                }
+            }
             for field in &form.fields {
                 let field_type = field.ty.clone().or_else(|| {
                     source_table.and_then(|table| {

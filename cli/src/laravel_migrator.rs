@@ -14,6 +14,7 @@ mod console;
 mod generation;
 mod graph;
 mod live_database;
+mod route_workflows;
 mod service_helpers;
 mod validation_forms;
 mod view_links;
@@ -299,6 +300,7 @@ struct CommandOutput {
     generated_enum_adapters: usize,
     generated_validation_forms: usize,
     generated_service_helpers: usize,
+    generated_route_workflows: usize,
     requested_tables: Vec<String>,
     included_tables: Vec<String>,
 }
@@ -432,6 +434,7 @@ pub(super) fn command(mut arguments: impl Iterator<Item = String>) -> ExitCode {
             generated_enum_adapters: 0,
             generated_validation_forms: 0,
             generated_service_helpers: 0,
+            generated_route_workflows: 0,
             requested_tables: Vec::new(),
             included_tables: Vec::new(),
         })
@@ -465,6 +468,9 @@ pub(super) fn command(mut arguments: impl Iterator<Item = String>) -> ExitCode {
                 println!("Generated standalone validation forms: {}; not connected to routes, handlers, or persistence.", output.generated_validation_forms);
                 println!("Generated reusable pure service helpers: {}; inspect MIGRATION_TODO.md for static call sites and wiring review.", output.generated_service_helpers);
                 println!("Generated schema declarations: {} (review before configuring or applying a database schema).", output.generated_schema_tables);
+                if output.generated_route_workflows > 0 {
+                    println!("Generated native route workflows: {} (review source mappings and Database capability in GENERATION_SELECTION.json).", output.generated_route_workflows);
+                }
                 if !output.requested_tables.is_empty() {
                     println!(
                         "Requested tables: {}; included with relation dependencies: {}.",
@@ -655,8 +661,43 @@ fn generate_scaffold(
         } else {
             requested_table_names.as_slice()
         };
-        let route_candidates =
+        let mut route_candidates =
             route_candidates_for_tables(&report_json["graph"], route_target_tables);
+        let generated_route_workflow =
+            route_workflows::generate(&root, &route_candidates, &included_tables);
+        if let Some(workflow) = &generated_route_workflow {
+            let source_route = workflow.report["source_route"].as_str();
+            let source_controller = workflow.report["source_controller"].as_str();
+            for route in route_candidates["model_consumer_routes"]
+                .as_array_mut()
+                .into_iter()
+                .flatten()
+            {
+                if route["route"]
+                    .as_str()
+                    .is_some_and(|route| route.ends_with(source_route.unwrap_or_default()))
+                    && route["controller_source_file"].as_str() == source_controller
+                {
+                    route["translation_status"] =
+                        json!("generated_native_token_unsubscribe_workflow");
+                    route["generated_module"] = json!("src/imported_public_unsubscribe.zyl");
+                }
+            }
+            if let Some(files) = source_file_plan.as_array_mut() {
+                for source_file in files {
+                    if source_file["file"].as_str() == source_controller {
+                        source_file["translation_status"] =
+                            json!("partially_translated_checked_workflow");
+                        source_file["translated_outputs"] = json!([{
+                            "kind": "native_form_route_workflow",
+                            "module": "src/imported_public_unsubscribe.zyl",
+                            "workflow": "hashed_token_unsubscribe",
+                            "runtime_copied": false
+                        }]);
+                    }
+                }
+            }
+        }
         let login_evidence = if table_scoped
             && !requested_table_names
                 .iter()
@@ -705,7 +746,7 @@ fn generate_scaffold(
         } else {
             (None, None)
         };
-        let generated_schema_source = included_tables
+        let mut generated_schema_source = included_tables
             .iter()
             .filter(|candidate| {
                 native_auth.is_none()
@@ -717,6 +758,16 @@ fn generate_scaffold(
             .filter_map(|candidate| candidate["candidate_source"].as_str())
             .collect::<Vec<_>>()
             .join("\n\n");
+        if let Some(workflow) = &generated_route_workflow {
+            let table = workflow.report["source_table"].as_str().unwrap_or_default();
+            if let Some(source) = route_workflows::grant_schema_access(
+                &generated_schema_source,
+                table,
+                "src/imported_public_unsubscribe.zyl",
+            ) {
+                generated_schema_source = source;
+            }
+        }
         let generated_table_count = included_tables.len();
         let business_generation = report_json["business_logic_generation"].clone();
         let native_auth_controller_file = native_auth
@@ -847,7 +898,18 @@ fn generate_scaffold(
             "excluded_framework_tables": selection.excluded_framework_names,
             "relation_dependencies": included_table_names.iter().filter(|table| !requested_table_names.contains(table)).collect::<Vec<_>>(),
             "route_candidates": route_candidates.clone(),
-            "route_candidates_generated": false,
+            "route_candidates_generated": generated_route_workflow.is_some(),
+            "generated_route_workflow": generated_route_workflow
+                .as_ref()
+                .map(|workflow| workflow.report.clone())
+                .unwrap_or_else(|| json!({"status": "no_complete_supported_workflow_found"})),
+            "generated_runtime_capabilities": if native_auth.is_some()
+                || generated_route_workflow.is_some()
+            {
+                json!(["Database(read)", "Database(write)"])
+            } else {
+                json!([])
+            },
             "business_helpers": included_business_candidates.iter().filter_map(|candidate| candidate["function"].as_str()).collect::<Vec<_>>(),
             "business_module": if generated_business_count > 0 { Some("src/imported_business.zyl") } else { None::<&str> },
             "service_helpers": included_service_candidates.iter().map(|candidate| json!({
@@ -957,7 +1019,11 @@ fn generate_scaffold(
             .unwrap_or("laravel-migration");
         write_new_file(
             &staging.join("zelyra.toml"),
-            &render_scaffold_manifest(project_name, native_auth.is_some()),
+            &render_scaffold_manifest(
+                project_name,
+                native_auth.is_some(),
+                native_auth.is_some() || generated_route_workflow.is_some(),
+            ),
         )?;
         if let Some((_session_table, source)) = &native_auth {
             let package_root = staging.join("packages/imported_identity");
@@ -974,11 +1040,24 @@ fn generate_scaffold(
             || generated_enum_adapter_count > 0
             || generated_validation_form_count > 0
             || generated_service_count > 0
+            || generated_table_count > 0
             || generated_layout_count > 0
             || generated_view_component_count > 0
+            || generated_route_workflow.is_some()
         {
             fs::create_dir(staging.join("src"))
                 .map_err(|error| format!("could not create generated module directory: {error}"))?;
+        }
+        if generated_table_count > 0 {
+            let schema_import = if native_auth.is_some() {
+                "import \"pkg:imported_identity\" as identity\n\n"
+            } else {
+                ""
+            };
+            write_new_file(
+                &staging.join("src/imported_schema.zyl"),
+                &format!("{}{}\n", schema_import, generated_schema_source),
+            )?;
         }
         if generated_business_count > 0 {
             write_new_file(
@@ -1010,8 +1089,19 @@ fn generate_scaffold(
         if let Some(source) = &generated_static_view_source {
             write_new_file(&staging.join("src/imported_views.zyl"), source)?;
         }
+        if let Some(workflow) = &generated_route_workflow {
+            write_new_file(
+                &staging.join("src/imported_public_unsubscribe.zyl"),
+                &workflow.source,
+            )?;
+        }
         let business_import = if generated_business_count > 0 {
             "import \"src/imported_business.zyl\" as imported_business\n\n"
+        } else {
+            ""
+        };
+        let schema_import = if generated_table_count > 0 {
+            "import \"src/imported_schema.zyl\" as imported_schema\n\n"
         } else {
             ""
         };
@@ -1035,17 +1125,23 @@ fn generate_scaffold(
         } else {
             ""
         };
+        let route_workflow_import = if generated_route_workflow.is_some() {
+            "import \"src/imported_public_unsubscribe.zyl\" as imported_public_unsubscribe\n\n"
+        } else {
+            ""
+        };
         write_new_file(
             &staging.join("main.zyl"),
             &format!(
-                "{}{}{}{}{}{}# Generated scaffold: business projections, service helpers, enum adapters, standalone validation form candidates, and static view components are emitted as regular Zelyra modules. Form candidates are intentionally not imported, so they do not create routes until explicitly wired. Review and wire generated behavior explicitly.\n# Schema declarations are exact-pattern candidates and require review.\n{}\nfn main() {{\n    print(\"Review MIGRATION_TODO.md before implementing this application.\")\n}}\n",
+                "{}{}{}{}{}{}{}{}# Generated scaffold: business projections, service helpers, enum adapters, standalone validation form candidates, and static view components are emitted as regular Zelyra modules. Form candidates are intentionally not imported, so they do not create routes until explicitly wired. Review and wire generated behavior explicitly.\n# Schema declarations are exact-pattern candidates and require review.\nfn main() {{\n    print(\"Review MIGRATION_TODO.md before implementing this application.\")\n}}\n",
                 business_import,
                 enum_import,
                 service_import,
                 layout_import,
                 view_import,
+                schema_import,
+                route_workflow_import,
                 if native_auth.is_some() { "import \"pkg:imported_identity\" as identity\n\n" } else { "" },
-                generated_schema_source,
             ),
         )?;
         if native_auth.is_some() {
@@ -1076,6 +1172,16 @@ fn generate_scaffold(
                 &staging.join("README.md"),
                 &format!(
                     "\n## Reusable native authentication module\n\nA statically linked Laravel `GET /login` page, `POST /login` handler, and `users` schema produced the local package `packages/imported_identity`. The package owns the projected `users` table, the Zelyra session table `{session_table}`, and a native `auth users` declaration. When the source schema has one unambiguous conventional tenant pivot or owner relation, the package also owns those tenant-access tables and configures Zelyra's membership and owner checks. Zelyra supplies the login UI and routes; no Laravel controller, Blade template, session storage, or user data was copied. The generated package can be referenced from other Zelyra projects with a local package dependency.\n\nThe Laravel `password` field is projected to `password_hash`, and `remember_token` is omitted. This scaffold does not copy accounts or password hashes. Create new credentials with Zelyra or deliberately convert the source hashes after reviewing the source hashing scheme. Registration, account approval, Laravel's active/default tenant selection, 2FA, and custom controller policies are not transferred; review `GENERATION_SELECTION.json` before enabling access.\n"
+                ),
+            )?;
+        }
+        if let Some(workflow) = &generated_route_workflow {
+            append_generated_text(
+                &staging.join("README.md"),
+                &format!(
+                    "\n## Generated native route workflow\n\nA narrow static pattern was verified in `{}` and emitted as the reusable Zelyra module `{}`. It validates the opaque route token by comparing its SHA-256 digest, uses Zelyra's checked form route and CSRF handling, and updates the matching suppression timestamp idempotently. The module imports the generated schema module, which grants it access only to the required table. The generated manifest explicitly grants the `Database` capability required by generated authentication and this workflow; review that grant and narrow it further when the remaining application architecture is connected. The Laravel runtime, PHP source, Tailwind/CDN assets, and Blade templates were not copied. Inspect `GENERATION_SELECTION.json` and the source mappings, configure the destination database, then run `zelyra check main.zyl` and the normal security review before deployment. This is one translated vertical slice; remaining findings are not thereby resolved.\n",
+                    workflow.report["source_controller"].as_str().unwrap_or("controller"),
+                    workflow.report["module"].as_str().unwrap_or("module"),
                 ),
             )?;
         }
@@ -1302,6 +1408,15 @@ fn generate_scaffold(
         }
         write_new_file(&staging.join("MIGRATION_REPORT.md"), &report_markdown)?;
         write_new_file(&staging.join("MIGRATION_TODO.md"), &todo)?;
+        if let Some(workflow) = &generated_route_workflow {
+            let workflow_note = format!(
+                "\n## Generated public unsubscribe workflow\n\nThe importer translated the verified route pair from `{}` into `{}`. The generated GET performs a read-only hashed-token check before showing the confirmation form. Its POST requires a matching row before the update, keeps CSRF protection, and preserves first-unsubscribe timestamps with `COALESCE`. Review the route mapping and destination schema before use. This does not mean the remaining application routes, authorization policies, or behavior are imported.\n",
+                workflow.report["source_controller"].as_str().unwrap_or("controller"),
+                workflow.report["module"].as_str().unwrap_or("module")
+            );
+            append_generated_text(&staging.join("MIGRATION_REPORT.md"), &workflow_note)?;
+            append_generated_text(&staging.join("MIGRATION_TODO.md"), &workflow_note)?;
+        }
         write_new_file(&staging.join("MIGRATION_TASKS.md"), &console_tasks_markdown)?;
         if native_auth.is_some() {
             append_generated_text(
@@ -1400,6 +1515,7 @@ fn generate_scaffold(
             generated_enum_adapters: generated_enum_adapter_count,
             generated_validation_forms: generated_validation_form_count,
             generated_service_helpers: generated_service_count,
+            generated_route_workflows: usize::from(generated_route_workflow.is_some()),
             requested_tables: requested_table_names,
             included_tables: included_table_names,
         })
@@ -1457,12 +1573,19 @@ fn generated_auth_session_table_name(schema_generation: &Value) -> String {
     }
 }
 
-fn render_scaffold_manifest(project_name: &str, has_auth_package: bool) -> String {
+fn render_scaffold_manifest(
+    project_name: &str,
+    has_auth_package: bool,
+    requires_database: bool,
+) -> String {
     let mut manifest = format!("[project]\nname = \"{project_name}\"\nlanguage = \"0.1\"\n");
     if has_auth_package {
         manifest.push_str(
             "\n[package]\nname = \"laravel_import\"\nversion = \"1.0.0\"\nentry = \"main.zyl\"\n\n[dependencies.imported_identity]\npath = \"packages/imported_identity\"\nversion = \"^0.1.0\"\n",
         );
+    }
+    if requires_database {
+        manifest.push_str("\n[capabilities]\ndatabase = true\n");
     }
     manifest
 }

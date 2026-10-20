@@ -301,6 +301,8 @@ fn form_route() -> FormRoute {
             name: "CustomerCreate".into(),
             table: None,
             path: None,
+            post_only: false,
+            verify: None,
             fields: vec![zelyra_ast::FormField {
                 name: "name".into(),
                 ty: Some(Type::String),
@@ -648,6 +650,7 @@ fn table_validation_rejects_invalid_form_before_action_execution() {
         requires_auth: false,
         permissions: Vec::new(),
         capabilities: Vec::new(),
+        require_match: false,
         statements: vec![zelyra_ast::Stmt::Expr(zelyra_ast::Expr {
             kind: zelyra_ast::ExprKind::Sql {
                 result_type: Type::Unit,
@@ -5106,6 +5109,7 @@ fn renders_action_error_without_database_details() {
         requires_auth: false,
         permissions: Vec::new(),
         capabilities: Vec::new(),
+        require_match: false,
         statements: Vec::new(),
         execute_body: None,
         guard: None,
@@ -5308,6 +5312,7 @@ fn protects_custom_form_actions_with_action_permissions() {
         requires_auth: true,
         permissions: vec!["customers.save".into()],
         capabilities: Vec::new(),
+        require_match: false,
         statements: Vec::new(),
         execute_body: None,
         guard: None,
@@ -5338,6 +5343,7 @@ fn protects_custom_form_actions_with_action_permissions() {
         requires_auth: true,
         permissions: vec!["customers.save".into()],
         capabilities: Vec::new(),
+        require_match: false,
         statements: Vec::new(),
         execute_body: None,
         guard: None,
@@ -5367,6 +5373,7 @@ fn form_action_requires_database_url() {
         requires_auth: false,
         permissions: Vec::new(),
         capabilities: Vec::new(),
+        require_match: false,
         statements: vec![zelyra_ast::Stmt::Expr(zelyra_ast::Expr {
             kind: zelyra_ast::ExprKind::Sql {
                 result_type: Type::Unit,
@@ -5668,6 +5675,7 @@ fn execute_form_action_rejects_postgres_chained_audit() {
         requires_auth: false,
         permissions: Vec::new(),
         capabilities: Vec::new(),
+        require_match: false,
         success: None,
         redirect: None,
         span: zelyra_ast::Span::default(),

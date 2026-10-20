@@ -79,6 +79,59 @@ pub fn check_program(program: &zelyra_ast::Program, schema: &Schema) -> Result<(
                 span: form.span,
             });
         }
+        if let Some(verify) = &form.verify {
+            if form.post_only {
+                errors.push(FormError {
+                    message: "a form `verify` query requires a GET form route; `post_only` delegates GET handling to a page route".into(),
+                    span: verify.span,
+                });
+            }
+            match &verify.kind {
+                zelyra_ast::ExprKind::Sql { result_type, query } => {
+                    let known_tables = schema
+                        .tables
+                        .iter()
+                        .map(|table| table.name.clone())
+                        .collect::<Vec<_>>();
+                    let (command, _) =
+                        zelyra_database::sql::analyze_table_access(query, &known_tables);
+                    if command != Some("SELECT") {
+                        errors.push(FormError {
+                            message: "form `verify` must be a read-only SELECT query".into(),
+                            span: verify.span,
+                        });
+                    }
+                    let route_parameters = form
+                        .path
+                        .as_deref()
+                        .unwrap_or_default()
+                        .split('/')
+                        .filter_map(|segment| {
+                            segment
+                                .strip_prefix('{')
+                                .and_then(|name| name.strip_suffix('}'))
+                        })
+                        .map(|name| (name.to_owned(), Type::String))
+                        .collect::<HashMap<_, _>>();
+                    if let Err(sql_errors) = zelyra_database::sql::check_sql_query(
+                        query,
+                        result_type,
+                        schema,
+                        &route_parameters,
+                        verify.span,
+                    ) {
+                        errors.extend(sql_errors.into_iter().map(|error| FormError {
+                            message: error.message,
+                            span: error.span,
+                        }));
+                    }
+                }
+                _ => errors.push(FormError {
+                    message: "form `verify` requires a SQL query".into(),
+                    span: verify.span,
+                }),
+            }
+        }
         let mut names = HashSet::new();
         for field in &form.fields {
             if !names.insert(field.name.clone()) {
@@ -173,6 +226,49 @@ pub fn check_program(program: &zelyra_ast::Program, schema: &Schema) -> Result<(
             for field in &action.fields {
                 check_file_field(field, false, &mut errors);
             }
+            if action.require_match {
+                let first_query = action
+                    .statements
+                    .first()
+                    .and_then(|statement| match statement {
+                        zelyra_ast::Stmt::Expr(expression) => match &expression.kind {
+                            zelyra_ast::ExprKind::Sql { query, .. } => {
+                                Some((query, expression.span))
+                            }
+                            _ => None,
+                        },
+                        _ => None,
+                    });
+                if action.execute_body.is_some() || action.guard.is_some() {
+                    errors.push(FormError {
+                        message: "`require_match` is supported only for direct SQL form actions"
+                            .into(),
+                        span: action.span,
+                    });
+                }
+                if let Some((query, span)) = first_query {
+                    let known_tables = schema
+                        .tables
+                        .iter()
+                        .map(|table| table.name.clone())
+                        .collect::<Vec<_>>();
+                    let (command, _) =
+                        zelyra_database::sql::analyze_table_access(query, &known_tables);
+                    if command != Some("SELECT") {
+                        errors.push(FormError {
+                            message: "the first statement in a `require_match` action must be a SELECT query".into(),
+                            span,
+                        });
+                    }
+                } else {
+                    errors.push(FormError {
+                        message:
+                            "`require_match` requires a SELECT query as the first action statement"
+                                .into(),
+                        span: action.span,
+                    });
+                }
+            }
         }
     }
     for crud in &program.cruds {
@@ -200,6 +296,12 @@ pub fn check_program(program: &zelyra_ast::Program, schema: &Schema) -> Result<(
                         "duplicate action `{}` in CRUD resource `{}`",
                         action.name, crud.name
                     ),
+                    span: action.span,
+                });
+            }
+            if action.require_match {
+                errors.push(FormError {
+                    message: "`require_match` is supported only for standalone form actions".into(),
                     span: action.span,
                 });
             }
@@ -892,6 +994,8 @@ mod tests {
             name: "CustomerCreate".into(),
             table: None,
             path: None,
+            post_only: false,
+            verify: None,
             fields: vec![
                 field("name", Type::String, true, Some(5)),
                 field("email", Type::Named("Email".into()), true, None),
@@ -980,6 +1084,46 @@ mod tests {
     }
 
     #[test]
+    fn form_verify_and_require_match_validate_route_parameters_and_select_order() {
+        let source = r#"
+            table suppressions {
+                id: Id primary auto
+                token_hash: String(64) required
+                unsubscribed_at: Timestamp?
+            }
+            form Unsubscribe {
+                route: "/csv-mailer/abmelden/{token}"
+                verify sql<Int[]> {
+                    SELECT id FROM suppressions WHERE token_hash = :token
+                }
+                action unsubscribe {
+                    require_match
+                    sql<Int[]> { SELECT id FROM suppressions WHERE token_hash = :token }
+                    sql { UPDATE suppressions SET unsubscribed_at = CURRENT_TIMESTAMP WHERE token_hash = :token }
+                }
+            }
+            fn main() {}
+        "#;
+        let program = zelyra_parser::parse(&zelyra_lexer::lex(source).unwrap()).unwrap();
+        let schema = build_schema(&program).unwrap();
+        check_program(&program, &schema).unwrap();
+        zelyra_database::sql::check_program(&program, &schema).unwrap();
+
+        let invalid = source.replace(
+            "sql<Int[]> { SELECT id FROM suppressions WHERE token_hash = :token }",
+            "sql<Int[]> { UPDATE suppressions SET unsubscribed_at = CURRENT_TIMESTAMP WHERE token_hash = :token }",
+        );
+        let program = zelyra_parser::parse(&zelyra_lexer::lex(&invalid).unwrap()).unwrap();
+        let schema = build_schema(&program).unwrap();
+        let errors = check_program(&program, &schema).unwrap_err();
+        assert!(errors.iter().any(|error| {
+            error
+                .message
+                .contains("first statement in a `require_match` action must be a SELECT")
+        }));
+    }
+
+    #[test]
     fn checks_file_field_size_mime_allowlist_and_form_action_context() {
         let mut valid = form();
         valid.fields = vec![FormField {
@@ -1049,6 +1193,7 @@ mod tests {
             requires_auth: false,
             permissions: Vec::new(),
             capabilities: Vec::new(),
+            require_match: false,
             statements: Vec::new(),
             execute_body: None,
             guard: None,
@@ -1158,6 +1303,8 @@ mod tests {
                 name: "DocumentCreate".into(),
                 table: Some("documents".into()),
                 path: None,
+                post_only: false,
+                verify: None,
                 fields: vec![document],
                 actions: Vec::new(),
                 span: Span::default(),
@@ -1263,6 +1410,8 @@ mod tests {
                 name: "BulkUpload".into(),
                 table: None,
                 path: None,
+                post_only: false,
+                verify: None,
                 fields: files,
                 actions: Vec::new(),
                 span: Span::default(),
@@ -1372,6 +1521,8 @@ mod tests {
             name: "Bounded".into(),
             table: None,
             path: None,
+            post_only: false,
+            verify: None,
             fields: vec![name, amount],
             actions: Vec::new(),
             span: Span::default(),
@@ -1413,6 +1564,8 @@ mod tests {
                 name: "Invalid".into(),
                 table: None,
                 path: None,
+                post_only: false,
+                verify: None,
                 fields: vec![invalid, inverted],
                 actions: Vec::new(),
                 span: Span::default(),
@@ -1441,6 +1594,8 @@ mod tests {
             name: "Invoice".into(),
             table: None,
             path: None,
+            post_only: false,
+            verify: None,
             fields: vec![status],
             actions: Vec::new(),
             span: Span::default(),
@@ -1468,6 +1623,8 @@ mod tests {
                 name: "InvalidChoice".into(),
                 table: None,
                 path: None,
+                post_only: false,
+                verify: None,
                 fields: vec![invalid],
                 actions: Vec::new(),
                 span: Span::default(),
@@ -1504,6 +1661,8 @@ mod tests {
             name: "CustomerCreate".into(),
             table: Some("customers".into()),
             path: None,
+            post_only: false,
+            verify: None,
             fields: vec![FormField {
                 name: "name".into(),
                 ty: None,

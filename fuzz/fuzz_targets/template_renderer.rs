@@ -35,6 +35,8 @@ fuzz_target!(|input: &[u8]| {
             name: "FuzzForm".into(),
             table: None,
             path: None,
+            post_only: false,
+            verify: None,
             fields: vec![field],
             actions: Vec::new(),
             span: Span::default(),

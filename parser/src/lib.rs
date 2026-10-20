@@ -2133,6 +2133,9 @@ impl<'a> Parser<'a> {
         };
         self.expect(TokenKind::LBrace, "`{` after form name")?;
         let mut path = None;
+        let mut post_only = false;
+        let mut post_only_declared = false;
+        let mut verify = None;
         let mut fields = Vec::new();
         let mut actions = Vec::new();
         self.skip_newlines();
@@ -2147,6 +2150,33 @@ impl<'a> Parser<'a> {
                     });
                 }
                 path = Some(self.string_value("form route")?);
+            } else if self.at_word("post_only") {
+                let marker = self.advance();
+                if post_only_declared {
+                    return Err(ParseError {
+                        message: "duplicate `post_only` property in form".into(),
+                        span: marker.span,
+                    });
+                }
+                post_only = true;
+                post_only_declared = true;
+            } else if self.at_word("verify") {
+                let marker = self.advance();
+                if verify.is_some() {
+                    return Err(ParseError {
+                        message: "duplicate `verify` query in form".into(),
+                        span: marker.span,
+                    });
+                }
+                let sql_start = self.expect(TokenKind::Sql, "`sql` after form `verify`")?;
+                let expression = self.sql_expression(sql_start)?;
+                if !matches!(expression.kind, ExprKind::Sql { .. }) {
+                    return Err(ParseError {
+                        message: "form `verify` requires a SQL query".into(),
+                        span: marker.span,
+                    });
+                }
+                verify = Some(expression);
             } else if self.at(&TokenKind::Field) {
                 fields.push(self.form_field()?);
             } else if self.at(&TokenKind::Fields) {
@@ -2183,7 +2213,7 @@ impl<'a> Parser<'a> {
                 actions.push(self.form_action()?);
             } else {
                 return self
-                    .error("expected `route`, `field`, `fields`, or `action` in form definition");
+                    .error("expected `route`, `post_only`, `verify`, `field`, `fields`, or `action` in form definition");
             }
             self.skip_newlines();
         }
@@ -2192,6 +2222,8 @@ impl<'a> Parser<'a> {
             name,
             table,
             path,
+            post_only,
+            verify,
             fields,
             actions,
             span: start.join(end),
@@ -2377,6 +2409,7 @@ impl<'a> Parser<'a> {
         let mut capabilities = Vec::new();
         let mut execute_body = None;
         let mut guard = None;
+        let mut require_match = false;
         self.skip_newlines();
         while !self.at(&TokenKind::RBrace) && !self.at(&TokenKind::Eof) {
             if self.at(&TokenKind::Field) {
@@ -2406,6 +2439,15 @@ impl<'a> Parser<'a> {
                     self.advance();
                     self.skip_newlines();
                 }
+            } else if self.at_word("require_match") {
+                let marker = self.advance();
+                if require_match {
+                    return Err(ParseError {
+                        message: "duplicate `require_match` in form action".into(),
+                        span: marker.span,
+                    });
+                }
+                require_match = true;
             } else if self.at(&TokenKind::Label) {
                 self.advance();
                 self.expect(TokenKind::Colon, "`:` after label")?;
@@ -2475,6 +2517,7 @@ impl<'a> Parser<'a> {
             requires_auth,
             permissions,
             capabilities,
+            require_match,
             statements,
             execute_body,
             guard,

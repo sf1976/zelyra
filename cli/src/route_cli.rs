@@ -31,9 +31,14 @@ pub(super) fn route_entries(program: &zelyra_ast::Program) -> Vec<RouteEntry> {
             .path
             .clone()
             .unwrap_or_else(|| format!("/forms/{}", form.name));
-        for method in ["GET", "POST"] {
+        let methods: &[&str] = if form.post_only {
+            &["POST"]
+        } else {
+            &["GET", "POST"]
+        };
+        for method in methods {
             entries.push(RouteEntry {
-                method: method.into(),
+                method: (*method).into(),
                 path: path.clone(),
                 kind: "form".into(),
                 span: form.span,
@@ -364,6 +369,32 @@ mod tests {
         ] {
             assert!(!valid_form_route(route), "unexpectedly accepted {route}");
         }
+    }
+
+    #[test]
+    fn post_only_form_leaves_get_route_available_for_confirmation_page() {
+        let program = zelyra_parser::parse(
+            &zelyra_lexer::lex(
+                r#"
+                page "/csv-mailer/abmelden/{token}" { html { <p>Confirm</p> } }
+                form Unsubscribe {
+                    route: "/csv-mailer/abmelden/{token}"
+                    post_only
+                }
+                fn main() {}
+                "#,
+            )
+            .unwrap(),
+        )
+        .unwrap();
+        let entries = route_entries(&program);
+        assert!(entries.iter().any(|entry| {
+            entry.method == "GET" && entry.path == "/csv-mailer/abmelden/{token}"
+        }));
+        assert!(entries.iter().any(|entry| {
+            entry.method == "POST" && entry.path == "/csv-mailer/abmelden/{token}"
+        }));
+        assert!(route_collision_pairs(&entries).is_empty());
     }
 
     #[test]
