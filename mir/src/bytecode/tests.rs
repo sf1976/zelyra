@@ -734,10 +734,16 @@ fn bytecode_transactional_mail_queue_uses_outbox_and_preflights_before_host_call
 fn bytecode_pdf_attachment_survives_encoding_and_uses_the_shared_renderer() {
     let source = r#"
             database main { engine: mariadb database: "bytecode_test" }
+            table invoice_audits {
+                id: Id primary auto
+                invoice_number: String(32) required
+            }
             struct Invoice { number: String }
             view InvoicePrint { html { <p>{number}</p> } }
             fn queue(invoice: Invoice) uses Email, Database(write) {
+                invoice_number = invoice.number
                 transaction {
+                    sql { INSERT INTO invoice_audits (invoice_number) VALUES (:invoice_number) }
                     mail_queue("customer@example.test", "Invoice", "Attached", "invoice.pdf", render_pdf("InvoicePrint", invoice))
                 }
             }
@@ -775,8 +781,15 @@ fn bytecode_pdf_attachment_survives_encoding_and_uses_the_shared_renderer() {
     assert_eq!(outcome.error, None);
     let (queries, transactional) = host.batch.lock().unwrap().clone().expect("outbox batch");
     assert!(transactional);
-    assert_eq!(queries.len(), 1);
-    let payload = match &queries[0].params[2].1 {
+    assert_eq!(queries.len(), 2);
+    assert!(queries[0].sql.contains("INSERT INTO invoice_audits"));
+    assert_eq!(queries[0].params.len(), 1);
+    assert!(matches!(
+        &queries[0].params[0].1,
+        zelyra_database::QueryValue::String(number) if number == "INV-1"
+    ));
+    assert!(queries[1].sql.contains("INSERT INTO `_zelyra_outbox`"));
+    let payload = match &queries[1].params[2].1 {
         zelyra_database::QueryValue::String(payload) => payload,
         other => panic!("expected JSON outbox payload, got {other:?}"),
     };
@@ -787,9 +800,9 @@ fn bytecode_pdf_attachment_survives_encoding_and_uses_the_shared_renderer() {
         "the attachment contains encoded PDF bytes"
     );
 
-    // Compare the actual outbox write across all three backends. Independent
-    // checks for a PDF header would not establish parity for rendered content,
-    // attachment metadata, or the serialized outbox payload.
+    // Compare the actual SQL-plus-outbox transaction across all three
+    // backends. Independent PDF-header checks would not establish parity for
+    // SQL ordering, rendered content, or serialized attachment metadata.
     let ast_host = Arc::new(OutboxHost {
         batch: Mutex::new(None),
         validations: AtomicUsize::new(0),
@@ -821,7 +834,7 @@ fn bytecode_pdf_attachment_survives_encoding_and_uses_the_shared_renderer() {
             host_services: mir_host.clone(),
         },
     )
-    .expect("MIR executes the same PDF outbox operation");
+    .expect("MIR executes the same SQL-plus-PDF outbox transaction");
     assert_eq!(mir_outcome.value, Value::Unit);
     assert_eq!(ast_outcome.output, outcome.output);
 
@@ -838,14 +851,16 @@ fn bytecode_pdf_attachment_survives_encoding_and_uses_the_shared_renderer() {
         .clone()
         .expect("MIR outbox batch");
     assert!(ast_transactional && mir_transactional && transactional);
-    assert_eq!(ast_queries.len(), 1);
-    assert_eq!(mir_queries.len(), 1);
-    for actual in [&ast_queries[0], &mir_queries[0]] {
-        assert_eq!(actual.sql, queries[0].sql);
-        assert_eq!(
-            format!("{:?}", actual.params),
-            format!("{:?}", queries[0].params)
-        );
+    assert_eq!(ast_queries.len(), queries.len());
+    assert_eq!(mir_queries.len(), queries.len());
+    for actual_batch in [&ast_queries, &mir_queries] {
+        for (actual, expected) in actual_batch.iter().zip(&queries) {
+            assert_eq!(actual.sql, expected.sql);
+            assert_eq!(
+                format!("{:?}", actual.params),
+                format!("{:?}", expected.params)
+            );
+        }
     }
 
     let denied_host = Arc::new(OutboxHost {
