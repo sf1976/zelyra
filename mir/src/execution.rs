@@ -2702,7 +2702,6 @@ impl Machine<'_> {
         })?;
         let mut queries = Vec::with_capacity(operation_ids.len());
         for operation_id in operation_ids {
-            self.tick(span)?;
             let expression = self
                 .program
                 .expressions

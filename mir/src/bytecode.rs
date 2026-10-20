@@ -2897,7 +2897,6 @@ fn execute_bytecode_entry(
                     let mut value_cursor = 0usize;
                     let mut queries = Vec::with_capacity(operations.len());
                     for operation in operations {
-                        consume_bytecode_step(&shared_steps, instruction.span)?;
                         match operation {
                             BytecodeTransactionOperation::Sql(statement) => {
                                 zelyra_runtime::check_scoped_sql(

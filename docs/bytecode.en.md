@@ -204,8 +204,7 @@ function arguments, return values, capability declarations, and host grants.
 
 Bytecode v26 uses explicit source-step markers for the user-visible
 `--max-steps` budget, so VM opcode count no longer defines the language-level
-fuel unit. The tested statement, expression, while-loop, collection-loop, match, and if-expression boundaries match AST and MIR, including failure spans. Calls and function pre/postconditions are also covered by a separate budget sweep. Transactions, parallel work, and
-other source constructs still need broader boundary coverage. The VM also imposes a separate 10,000,000-op execution ceiling for
+fuel unit. The tested statement, expression, while-loop, collection-loop, match, and if-expression boundaries match AST and MIR, including failure spans. Calls and function pre/postconditions are also covered by a separate budget sweep. SQL-only transaction batches now have their own boundary sweep that also verifies no database host batch starts when the budget is exhausted. Mixed-effect transactions, parallel work, and other source constructs still need broader boundary coverage. The VM also imposes a separate 10,000,000-op execution ceiling for
 malformed or hand-built artifacts.
 
 `BYTECODE_VERSION` identifies version `26` of a deterministic binary format.

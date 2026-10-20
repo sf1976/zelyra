@@ -474,6 +474,93 @@ fn bytecode_sql_transaction_is_encoded_and_runs_as_one_checked_batch() {
         }
     }
 
+    let main_bytecode = decode(
+        &encode(&compile(&mir, "main").expect("main entry compiles")).expect("main entry encodes"),
+    )
+    .expect("main entry verifies after decoding");
+    for max_steps in 0..64 {
+        let policy = RuntimePolicy {
+            step_budget: Some(max_steps),
+            ..RuntimePolicy::default()
+        };
+        let ast_host = Arc::new(SqlBatchHost {
+            batch: Mutex::new(None),
+            validations: AtomicUsize::new(0),
+        });
+        let ast_outcome = zelyra_runtime::execute_captured_with_database_and_host_services(
+            &ast,
+            database.url,
+            ast_host.clone(),
+            Some(&grants),
+            Some(&policy),
+        );
+        let mir_host = Arc::new(SqlBatchHost {
+            batch: Mutex::new(None),
+            validations: AtomicUsize::new(0),
+        });
+        let mir_outcome =
+            execution::execute_function_captured_with_database_and_host_services_and_policy(
+                &mir,
+                "main",
+                Vec::new(),
+                ExecutionLimits {
+                    max_steps,
+                    max_stack_depth: 20,
+                },
+                Some(&grants),
+                Some(&policy),
+                execution::DatabaseExecution {
+                    url: database.url,
+                    host_services: mir_host.clone(),
+                },
+            );
+        let bytecode_host = Arc::new(SqlBatchHost {
+            batch: Mutex::new(None),
+            validations: AtomicUsize::new(0),
+        });
+        let bytecode_outcome = execute_with_database_and_host_services_and_policy_captured(
+            &main_bytecode,
+            Vec::new(),
+            ExecutionLimits {
+                max_steps,
+                max_stack_depth: 20,
+            },
+            Some(&grants),
+            Some(&policy),
+            database,
+            bytecode_host.clone(),
+        );
+        match (ast_outcome.error, mir_outcome.error, bytecode_outcome.error) {
+            (None, None, None) => {
+                assert_eq!(ast_outcome.output, bytecode_outcome.output);
+                assert_eq!(ast_outcome.output, mir_outcome.output);
+                assert_eq!(
+                    ast_host.batch.lock().unwrap().as_ref().map(|(queries, tx)| (queries.len(), *tx)),
+                    bytecode_host.batch.lock().unwrap().as_ref().map(|(queries, tx)| (queries.len(), *tx)),
+                    "transaction effects at budget {max_steps}"
+                );
+                assert_eq!(
+                    ast_host.batch.lock().unwrap().as_ref().map(|(queries, tx)| (queries.len(), *tx)),
+                    mir_host.batch.lock().unwrap().as_ref().map(|(queries, tx)| (queries.len(), *tx)),
+                    "MIR transaction effects at budget {max_steps}"
+                );
+            }
+            (Some(ast_error), Some(mir_error), Some(bytecode_error)) => {
+                assert!(ast_error.message.contains("step budget exceeded"));
+                assert!(mir_error.message.contains("step budget exceeded"));
+                assert!(bytecode_error.message.contains("step budget exceeded"));
+                assert_eq!(ast_error.span, bytecode_error.span, "budget {max_steps}");
+                assert_eq!(ast_error.span, mir_error.span, "MIR budget {max_steps}");
+                assert!(ast_host.batch.lock().unwrap().is_none());
+                assert!(mir_host.batch.lock().unwrap().is_none());
+                assert!(bytecode_host.batch.lock().unwrap().is_none());
+            }
+            (ast_error, mir_error, bytecode_error) => panic!(
+                "transaction budgets differ at {max_steps}: AST={ast_error:?}, MIR={mir_error:?}, Bytecode={bytecode_error:?}"
+            ),
+        }
+    }
+
     let budget_host = Arc::new(SqlBatchHost {
         batch: Mutex::new(None),
         validations: AtomicUsize::new(0),
@@ -482,7 +569,7 @@ fn bytecode_sql_transaction_is_encoded_and_runs_as_one_checked_batch() {
         &bytecode,
         vec![Value::Int(12)],
         ExecutionLimits {
-            max_steps: 2,
+            max_steps: 0,
             max_stack_depth: 20,
         },
         Some(&grants),

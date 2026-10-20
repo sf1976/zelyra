@@ -239,8 +239,7 @@ benutzerseitige `--max-steps`-Budget. VM-Befehle bestimmen damit nicht mehr
 die Sprachschritt-Einheit. Die getesteten Grenzen für Anweisungen, Ausdrücke, While-/Collections-
 Schleifen, Match und If-Ausdrücke stimmen einschließlich Fehlerpositionen
 zwischen AST und MIR überein; Aufrufe und Funktionsvor-/Nachbedingungen sind
-durch weitere Budgetläufe abgedeckt. Transaktionen, Parallelität und weitere
-Sprachkonstrukte benötigen noch umfassendere Grenzwerttests. Für
+durch weitere Budgetläufe abgedeckt. Reine SQL-Transaktionsblöcke haben jetzt einen eigenen Grenzwertlauf, der auch prüft, dass bei erschöpftem Budget kein Datenbank-Host-Batch startet. Gemischte Transaktionseffekte, Parallelität und weitere Sprachkonstrukte benötigen noch umfassendere Grenzwerttests. Für
 fehlerhafte oder handgebaute Artefakte begrenzt die VM die Ausführung zusätzlich
 auf 10.000.000 Befehle.
 
