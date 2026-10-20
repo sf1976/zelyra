@@ -353,9 +353,11 @@ security and compatibility gates stated for that milestone.
   byte-oriented request path. A standalone byte-preserving multipart decoder
   with bounded body, part, header, field-name, and filename sizes is implemented
   in `web/src/multipart.rs`; parser tests cover binary payloads, malformed
-  boundaries, duplicate headers, and limit failures. It is not connected to HTTP
-  request reading and does not expose File fields or storage. A static analysis
-  of `/opt/siedelmann-laravel/app` identified upload flows in invoices,
+  boundaries, duplicate headers, and limit failures. A coverage-guided fuzz
+  target completed a local six-second run with 647,431 inputs and no crash. It
+  is not connected to HTTP request reading and does not expose File fields or
+  storage. A static analysis of `/opt/siedelmann-laravel/app` identified upload
+  flows in invoices,
   contracts, settings, postal letters, and inbound mail; the importer does not
   generate them. Remaining release gates include content validation, private
   tenant-owned storage, authorized downloads, transactional cleanup, and

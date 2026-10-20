@@ -50,6 +50,13 @@ doc = false
 bench = false
 
 [[bin]]
+name = "multipart_decoder"
+path = "fuzz_targets/multipart_decoder.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
 name = "bytecode_decode"
 path = "fuzz_targets/bytecode_decode.rs"
 test = false

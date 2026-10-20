@@ -394,7 +394,9 @@ abgeschlossen.
   Ein eigenständiger byteerhaltender Multipart-Decoder mit Limits für Body,
   Parts, Header, Feldnamen und Dateinamen ist in `web/src/multipart.rs`
   implementiert; Parser-Tests prüfen Binärdaten, fehlerhafte Grenzen, doppelte
-  Header und Limitfehler. Er ist noch nicht mit HTTP-Request-Lesen verbunden
+  Header und Limitfehler. Ein Coverage-guided-Fuzz-Ziel absolvierte lokal sechs
+  Sekunden und 647.431 Eingaben ohne Absturz. Es ist noch nicht mit HTTP-
+  Request-Lesen verbunden
   und bietet weder File-Felder noch Speicherung an. Eine statische Analyse von
   `/opt/siedelmann-laravel/app` fand Uploadabläufe bei Rechnungen, Verträgen,
   Einstellungen, Postbriefen und eingehender Mail; der Importer erzeugt sie

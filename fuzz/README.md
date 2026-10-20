@@ -1,7 +1,7 @@
 # Zelyra coverage-guided fuzzing
 
 This isolated nightly workspace fuzzes the lexer/parser, SQL named-parameter
-binder, generated form renderer, HTTP request parser, bounded bytecode
+binder, generated form renderer, HTTP request parser and multipart decoder, bounded bytecode
 artifact decoder plus accepted-artifact round trips, and differential
 execution of generated array programs on AST, MIR, and Bytecode. The ordinary stable
 workspace and lockfile are unchanged. CI uses pinned `cargo-fuzz` 0.13.2 and
@@ -19,7 +19,7 @@ cargo run --manifest-path fuzz/Cargo.toml --example bytecode_seed -- \
 Install nightly Rust with `rust-src`, Clang, and `cargo-fuzz` 0.13.2, then run:
 
 ```sh
-for target in lexer_parser sql_binder template_renderer http_request bytecode_decode backend_differential; do
+for target in lexer_parser sql_binder template_renderer http_request multipart_decoder bytecode_decode backend_differential; do
   cargo +nightly fuzz run "$target" "fuzz/corpus/$target" -- \
     -max_total_time=60 -max_len=16384 -timeout=5
 done
