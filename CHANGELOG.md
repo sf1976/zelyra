@@ -1,5 +1,14 @@
 ## Unreleased
 
+- Harden the MariaDB/MySQL `zelyra console --sandbox` transaction boundary:
+  reject DDL, transaction-control, and session-control SQL that could bypass
+  rollback through implicit commits. Keep the sandbox limited to `SELECT`,
+  `INSERT`, `UPDATE`, and `DELETE`. / Die MariaDB-/MySQL-Transaktionsgrenze
+  von `zelyra console --sandbox` absichern: DDL sowie Transaktions- und
+  Sitzungsbefehle abweisen, die den Rollback durch implizite Commits umgehen
+  könnten. Die Sandbox auf `SELECT`, `INSERT`, `UPDATE` und `DELETE`
+  beschränken.
+
 ## 1.2.27 — 2026-10-20
 
 - Add a read-only-first Laravel website importer with source graph analysis,

@@ -4857,6 +4857,15 @@ impl MariaDbInteractiveTransaction {
 
     /// Execute one compiler-checked statement on the held connection.
     pub fn execute(&mut self, query: &Query) -> Result<QueryResult, DatabaseError> {
+        // MySQL-family DDL may implicitly commit an open transaction. Allow
+        // only statement forms with well-defined transactional behavior so a
+        // REPL sandbox cannot escape its rollback guarantee with CREATE,
+        // ALTER, DROP, transaction control, or session-level statements.
+        if !interactive_transaction_query_allowed(&query.sql) {
+            return Err(DatabaseError {
+                message: "sandbox transactions accept only SELECT/INSERT/UPDATE/DELETE; DDL and transaction control are rejected because they can bypass rollback".into(),
+            });
+        }
         let connection = self.connection.as_mut().ok_or_else(|| DatabaseError {
             message: "interactive database transaction is no longer active".into(),
         })?;
@@ -4991,6 +5000,13 @@ impl MariaDbInteractiveTransaction {
         self.finished = false;
         Ok(())
     }
+}
+
+fn interactive_transaction_query_allowed(query: &str) -> bool {
+    matches!(
+        sql::analyze_table_access(query, &[]).0,
+        Some("SELECT" | "INSERT" | "UPDATE" | "DELETE")
+    )
 }
 
 impl Drop for MariaDbInteractiveTransaction {
@@ -5748,6 +5764,36 @@ mod tests {
     use super::*;
 
     include!("../../tests/support/bounded_mutations.rs");
+
+    #[test]
+    fn interactive_sandbox_rejects_implicit_commit_and_transaction_sql() {
+        for query in [
+            "CREATE TABLE invoices (id BIGINT)",
+            "ALTER TABLE invoices ADD COLUMN note TEXT",
+            "DROP TABLE invoices",
+            "TRUNCATE TABLE invoices",
+            "START TRANSACTION",
+            "COMMIT",
+            "ROLLBACK",
+            "SET autocommit = 1",
+        ] {
+            assert!(
+                !interactive_transaction_query_allowed(query),
+                "must reject {query}"
+            );
+        }
+        for query in [
+            "SELECT id FROM invoices",
+            "INSERT INTO invoices (id) VALUES (:id)",
+            "UPDATE invoices SET id = :id",
+            "DELETE FROM invoices WHERE id = :id",
+        ] {
+            assert!(
+                interactive_transaction_query_allowed(query),
+                "must allow {query}"
+            );
+        }
+    }
 
     #[test]
     fn parses_database_console_credentials_without_losing_percent_encoded_values() {
