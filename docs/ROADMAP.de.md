@@ -510,13 +510,11 @@ abgeschlossen.
   Fremdschlüssel-Zielspalten. Statische Integer-, Bool-, Text-, Decimal-,
   Time- und `now`-Defaults werden verglichen, sofern Zelyra sie sicher
   interpretieren kann; Berichte geben Default-Inhalte nicht aus und listen
-  nicht unterstützte Ausdrücke als ungeprüft. Der jüngste Vergleich fand in
-  78 Kandidaten 114 Default- und 293 SQL-Typabweichungen. Engine, Charset,
-  Collation und Trigger bleiben ungeprüft. Die echte Datenbank wurde
-  schreibgeschützt verbunden, ohne
-  Anwendungszeilen zu lesen: 80 Tabellen und 1.215 Spalten wurden untersucht,
-  alle 78 generierten Migrationskandidaten verglichen und 293 konkrete
-  Typabweichungen gemeldet. Das ersetzt den früheren Befund „keine
+  nicht unterstützte Ausdrücke als ungeprüft. Der erneute Vergleich fand
+  117 Default- und 297 SQL-Typabweichungen (414 insgesamt). Er verglich 80
+  Kandidaten und untersuchte 1.250 Spalten. Engine, Charset, Collation und
+  Trigger bleiben ungeprüft. Die echte Datenbank wurde schreibgeschützt
+  verbunden, ohne Anwendungszeilen zu lesen. Das ersetzt den früheren Befund „keine
   Schemadifferenzen“, der nur den damals dokumentierten Metadatenausschnitt
   verglich.
 - [ ] **1.3.0 — kanonische Struktur und Bytecode-Standard:** Das optionale,
