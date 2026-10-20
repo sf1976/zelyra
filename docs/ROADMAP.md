@@ -398,8 +398,12 @@ security and compatibility gates stated for that milestone.
   text; unsupported variants remain ungenerated. Generated output passed
   `zelyra check`, and a disposable MariaDB/HTTP run verified GET 200, invalid
   token 404, CSRF-protected POST redirect, and the persisted timestamp. The
-  scaffold remains an incomplete migration: the latest full-project inventory
-  reports 2,186 findings, including 1,343 manual/unresolved and 843 partial.
+  PHP method recognizer uses the existing lexical source map and balanced code
+  braces; regression tests reject method-shaped comments and cover nested
+  blocks and typed return declarations. The real Laravel source was regenerated
+  after this change and its main scaffold passed `zelyra check`. The scaffold
+  remains an incomplete migration: the latest full-project inventory reports
+  2,186 findings, including 1,343 manual/unresolved and 843 partial.
   Laravel, Composer packages, PHP controllers, Blade runtime files, and source
   credentials are not copied.
 - [ ] **1.3.0 — canonical structure and Bytecode default:** Complete the

@@ -3,7 +3,7 @@
 //! This module deliberately recognizes only the complete public token
 //! unsubscribe pattern. Unsupported controllers remain analysis findings.
 
-use super::{compiled_regex, is_safe_table_identifier};
+use super::{compiled_regex, is_safe_table_identifier, PhpSourceMap};
 use serde_json::{json, Value};
 use std::{fs, path::Path};
 
@@ -208,23 +208,53 @@ fn safe_source_path(root: &Path, relative: &str) -> Option<std::path::PathBuf> {
     canonical.starts_with(canonical_root).then_some(canonical)
 }
 
-fn method_body<'a>(source: &'a str, method: &str) -> Option<&'a str> {
-    let pattern = format!(r"(?s)public\s+function\s+{method}\s*\([^)]*\)\s*\{{(.*?)(?:\n\s*\}})");
+fn method_declaration<'a>(source: &'a str, method: &str) -> Option<(&'a str, &'a str)> {
+    let pattern = format!(
+        r"(?s)\bpublic\s+function\s+{}\s*\([^)]*\)\s*(?::\s*[^{{}}]+)?\{{",
+        regex::escape(method)
+    );
     let regex = regex::Regex::new(&pattern).ok()?;
-    regex.captures(source)?.get(1).map(|body| body.as_str())
+    let source_map = PhpSourceMap::new(source);
+    for declaration in regex.find_iter(source) {
+        if !source_map.is_code(declaration.start()) {
+            continue;
+        }
+        let open_brace = declaration.end().checked_sub(1)?;
+        let mut depth = 0_usize;
+        for offset in open_brace..source.len() {
+            if !source_map.is_code(offset) {
+                continue;
+            }
+            match source.as_bytes()[offset] {
+                b'{' => depth = depth.checked_add(1)?,
+                b'}' => {
+                    depth = depth.checked_sub(1)?;
+                    if depth == 0 {
+                        return Some((
+                            &source[declaration.start()..=open_brace],
+                            &source[open_brace + 1..offset],
+                        ));
+                    }
+                }
+                _ => {}
+            }
+        }
+    }
+    None
 }
 
 fn recognized_controller(source: &str, token: &str) -> bool {
-    let Some(show) = method_body(source, "show") else {
+    let Some((show_declaration, show)) = method_declaration(source, "show") else {
         return false;
     };
-    let Some(unsubscribe) = method_body(source, "unsubscribe") else {
+    let Some((unsubscribe_declaration, unsubscribe)) = method_declaration(source, "unsubscribe")
+    else {
         return false;
     };
     let token = regex::escape(token);
-    let token_parameter = |method: &str| {
-        regex::Regex::new(&format!(r"(?is)function\s+{method}\s*\([^)]*\${token}\b"))
-            .is_ok_and(|regex| regex.is_match(source))
+    let token_parameter = |declaration: &str| {
+        regex::Regex::new(&format!(r"(?is)\([^)]*\${token}\b"))
+            .is_ok_and(|regex| regex.is_match(declaration))
     };
     let hash_matches = |body: &str| {
         regex::Regex::new(&format!(
@@ -242,8 +272,8 @@ fn recognized_controller(source: &str, token: &str) -> bool {
         r#"(?is)['\"]?unsubscribed_at['\"]?\s*=>\s*\$[a-z_][a-z0-9_]*->unsubscribed_at\s*\?:\s*now\s*\(\s*\).*?->save\s*\(\s*\)"#,
         "idempotent unsubscribe update pattern",
     );
-    token_parameter("show")
-        && token_parameter("unsubscribe")
+    token_parameter(show_declaration)
+        && token_parameter(unsubscribe_declaration)
         && lookup(show)
         && lookup(unsubscribe)
         && idempotent.is_match(unsubscribe)
@@ -339,6 +369,35 @@ class PublicUnsubscribeController {
             &CONTROLLER.replace("?: now()", "=> now()"),
             "token"
         ));
+    }
+
+    #[test]
+    fn ignores_method_lookalikes_in_comments_and_handles_nested_method_blocks() {
+        let commented = format!(
+            "<?php\n/* {} */\nclass EmptyController {{}}",
+            CONTROLLER.replace("<?php", "")
+        );
+        assert!(!recognized_controller(&commented, "token"));
+
+        let nested = CONTROLLER.replace(
+            "abort_unless($record, 404);",
+            "if ($record) {\n            abort_unless($record, 404);\n        } else {\n            abort_unless(false, 404);\n        }",
+        );
+        assert!(recognized_controller(&nested, "token"));
+    }
+
+    #[test]
+    fn supports_typed_method_return_declarations() {
+        let typed = CONTROLLER
+            .replace(
+                "function show(string $token) {",
+                "function show(string $token): View {",
+            )
+            .replace(
+                "function unsubscribe(string $token) {",
+                "function unsubscribe(string $token): View {",
+            );
+        assert!(recognized_controller(&typed, "token"));
     }
 
     #[test]

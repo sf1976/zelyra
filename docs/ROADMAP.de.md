@@ -440,9 +440,14 @@ abgeschlossen.
   die idempotente Abmeldung und statische Hinweistexte; abweichende Varianten
   bleiben unübersetzt. Die Ausgabe bestand `zelyra check`; ein Lauf mit
   Wegwerf-MariaDB und HTTP-Server bestätigte GET 200, 404 für ungültige Tokens,
-  CSRF-geschützten POST-Redirect und den gespeicherten Zeitpunkt. Das Gerüst ist
-  weiterhin keine vollständige Migration: die aktuelle Gesamtanalyse meldet
-  2.186 Befunde, davon 1.343 manuell/offen und 843 teilweise. Laravel,
+  CSRF-geschützten POST-Redirect und den gespeicherten Zeitpunkt. Die
+  PHP-Methodenerkennung nutzt jetzt die vorhandene lexikalische Quellpositionskarte
+  und ausbalancierte Codeklammern; Regressionstests weisen
+  methodenähnliche Kommentare zurück und decken verschachtelte Blöcke sowie
+  Rückgabetypen ab. Der reale Laravel-Import wurde danach erneut erzeugt und
+  `zelyra check` bestand. Das Gerüst ist weiterhin keine vollständige Migration:
+  die Gesamtanalyse meldet 2.186 Befunde, davon 1.343 manuell/offen und 843
+  teilweise. Laravel,
   Composer-Pakete, PHP-Controller, Blade-Laufzeitdateien und Zugangsdaten werden
   nicht kopiert.
 - [ ] **1.3.0 — kanonische Struktur und Bytecode-Standard:** Das optionale,
