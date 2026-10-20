@@ -83,7 +83,88 @@ pub(super) type TransactionalQuery<'services> = dyn FnMut(&zelyra_database::Quer
     + Send
     + 'services;
 
+pub(super) fn effective_call_depth(configured_depth: Option<usize>) -> usize {
+    configured_depth
+        .unwrap_or(MAX_FUNCTION_CALL_DEPTH)
+        .min(MAX_CONFIGURED_FUNCTION_CALL_DEPTH)
+}
+
+/// Per-execution host resources shared by every AST entry point.
+pub(super) struct RuntimeServices<'services> {
+    pub(super) host_services: Arc<dyn HostServices>,
+    pub(super) database_transaction:
+        Option<Arc<Mutex<zelyra_database::MariaDbInteractiveTransaction>>>,
+    pub(super) transactional_query: Option<&'services mut TransactionalQuery<'services>>,
+}
+
 impl<'program, 'services> AstInterpreter<'program, 'services> {
+    /// Construct the AST interpreter through one policy-wiring path for both
+    /// program entry points and direct function execution.
+    pub(super) fn new(
+        program: &'program Program,
+        database_url: Option<String>,
+        granted_capabilities: Option<HashSet<String>>,
+        policy: Option<RuntimePolicy>,
+        services: RuntimeServices<'services>,
+    ) -> Self {
+        Self {
+            functions: program
+                .functions
+                .iter()
+                .map(|function| (function.name.clone(), function))
+                .collect(),
+            view_definitions: program
+                .views
+                .iter()
+                .map(|view| (view.name.clone(), view.clone()))
+                .collect(),
+            output: Vec::new(),
+            next_class_object_id: Arc::new(AtomicU64::new(1)),
+            parallel_worker: false,
+            step_budget: StepBudget::new(policy.as_ref().and_then(|policy| policy.step_budget)),
+            call_depth_limit: effective_call_depth(
+                policy.as_ref().and_then(|policy| policy.max_stack_depth),
+            ),
+            call_depth: 0,
+            database_url,
+            database_transaction: services.database_transaction,
+            transactional_query: services.transactional_query,
+            storage_schema: zelyra_database::build_schema(program),
+            storage_checked: false,
+            scoped_tables: program
+                .tables
+                .iter()
+                .filter(|table| table.tenant_scope.is_some())
+                .map(|table| table.name.clone())
+                .collect(),
+            granted_capabilities,
+            filesystem_policy: policy.as_ref().and_then(|policy| policy.filesystem.clone()),
+            network_policy: policy.as_ref().and_then(|policy| policy.network.clone()),
+            process_policy: policy.as_ref().and_then(|policy| policy.process.clone()),
+            mail_policy: policy.as_ref().and_then(|policy| policy.mail.clone()),
+            package_settings: policy.and_then(|policy| policy.package_settings),
+            host_services: services.host_services,
+            sql_record_definitions: sql_results::definitions(program),
+            record_definitions: program
+                .records
+                .iter()
+                .map(|record| (record.name.clone(), record.clone()))
+                .collect(),
+            type_aliases: program
+                .types
+                .iter()
+                .map(|definition| (definition.name.clone(), definition.target.clone()))
+                .collect(),
+            enum_definitions: program
+                .enums
+                .iter()
+                .map(|definition| (definition.name.clone(), definition.clone()))
+                .collect(),
+            active_capabilities: Vec::new(),
+            active_type_substitutions: Vec::new(),
+        }
+    }
+
     pub(super) fn runtime_alias_type(&self, ty: &Type, span: Span) -> Result<Type, RuntimeError> {
         let mut aliases = HashMap::from([
             ("Id".into(), Type::Int),
