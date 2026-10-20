@@ -283,7 +283,7 @@ abgeschlossen.
   Zeilenfilterung. Compiler-, Capability-, Contract-, Schrittbudget- und
   Stacktiefenprüfungen bleiben aktiv. Siehe [Sprachkonsolen-Anleitung](language-console.de.md) und den
   [Arbeitsplan 1.2.26](release-plans/1.2.26-interactive-language-console.en.md).
-- [ ] **1.2.27 — Grundlage für den Import von Laravel-Webseiten:** Einen neu
+- [~] **1.2.27 — Grundlage für den Import von Laravel-Webseiten:** Einen neu
   entwickelten, zuerst schreibgeschützten Importer für ausgewählte
   Webseitenfunktionen in native Zelyra-Module bereitstellen; keine Laravel-
   Frameworkkompatibilität und keine PHP-Laufzeitunterstützung. Routen,
@@ -293,8 +293,12 @@ abgeschlossen.
   verwenden; Zugangsdaten nie ausgeben, keine Anwendungszeilen lesen, keine
   PHP-Dateien ausführen und die Quelle nicht verändern. Nur ausdrücklich
   ausgewählte, unterstützte Module in ein neues Ziel generieren und den
-  Zelyra-Compiler darüber laufen lassen. Ungelöste Abläufe und genaue
-  Quellpositionen in einem versionierten Bericht erhalten. Abnahmeprojekt ist
+  Zelyra-Compiler darüber laufen lassen. Die aktuelle Generierung liefert
+  ausgewählte Schemas, eng begrenzte reine Model-/Servicehelfer, View-/Layout-
+  und Assetkandidaten sowie `ROUTE_CANDIDATES.json` mit aufgelösten
+  Ressourcenrouten und Modelverbrauchern; Routenhandler und Verhalten werden
+  noch nicht generiert. Ungelöste Abläufe und genaue Quellpositionen in einem
+  versionierten Bericht erhalten. Abnahmeprojekt ist
   `/opt/siedelmann-laravel/app`; weitere Abdeckung folgt in 1.2.30. Siehe den
   [Arbeitsplan 1.2.27](release-plans/1.2.27-laravel-website-importer.de.md).
 - [ ] **1.2.28 — typisierte CRUD-Domain-Actions:** Einen typgeprüften

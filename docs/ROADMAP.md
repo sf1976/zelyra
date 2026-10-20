@@ -259,7 +259,7 @@ security and compatibility gates stated for that milestone.
   each explicit operation. PostgreSQL sandbox and bytecode REPL remain
   unsupported. Preserve compiler, capability, contract, step-budget, and stack
   depth checks.
-- [ ] **1.2.27 — Laravel website import foundation:** Reintroduce a new,
+- [~] **1.2.27 — Laravel website import foundation:** Reintroduce a new,
   read-only-first importer for migrating selected website behavior into native
   Zelyra modules; this is not Laravel framework compatibility or PHP runtime
   support. Analyze routes, controller actions, services, models, migrations,
@@ -268,9 +268,12 @@ security and compatibility gates stated for that milestone.
   read-only schema connection; never print credentials, read application rows,
   mutate the source, or run imported PHP. Generate only explicitly selected,
   supported modules into a new destination, then run Zelyra compiler checks.
-  Keep unresolved behavior and exact source locations visible in a versioned
-  report. The `/opt/siedelmann-laravel/app` project is the acceptance fixture;
-  broader route/workflow coverage continues in 1.2.30. See the
+  Current generation emits selected schemas, narrow pure model/service helpers,
+  view/layout and asset candidates, plus `ROUTE_CANDIDATES.json` with resolved
+  resource routes and model consumers; route handlers and behavior are still
+  not generated. Keep unresolved behavior and exact source locations visible
+  in a versioned report. The `/opt/siedelmann-laravel/app` project is the
+  acceptance fixture; broader route/workflow coverage continues in 1.2.30. See the
   [1.2.27 importer plan](release-plans/1.2.27-laravel-website-importer.en.md).
 - [ ] **1.2.28 — typed CRUD domain actions:** Add a checked execution context
   for action statements with explicit row, authenticated user, and verified
