@@ -1465,6 +1465,73 @@ fn main() {}
 }
 
 #[test]
+fn source_step_budget_boundaries_match_loop_break_and_continue() {
+    let source = r#"
+fn run() -> Int {
+    mutable i = 0
+    mutable total = 0
+    while i < 5 {
+        i = i + 1
+        if i == 2 { continue }
+        if i == 4 { break }
+        total = total + i
+    }
+    return total
+}
+fn main() {}
+"#;
+    let ast = parse(&lex(source).expect("source lexes")).expect("source parses");
+    let mir = crate::lower(&ast).expect("source type-checks and lowers");
+    let bytecode = compile(&mir, "run").expect("run function compiles");
+    let bytecode = decode(&encode(&bytecode).expect("bytecode encodes"))
+        .expect("bytecode verifies after decoding");
+
+    for max_steps in 0..129 {
+        let policy = RuntimePolicy {
+            step_budget: Some(max_steps),
+            ..RuntimePolicy::default()
+        };
+        let ast_result = zelyra_runtime::execute_function_with_capabilities_and_policies(
+            &ast,
+            "run",
+            Vec::new(),
+            None,
+            None,
+            Some(&policy),
+        );
+        let limits = ExecutionLimits {
+            max_steps,
+            ..ExecutionLimits::default()
+        };
+        let mir_result = execution::execute_function(&mir, "run", Vec::new(), limits);
+        let bytecode_result = execute(&bytecode, Vec::new(), limits);
+        match (ast_result, mir_result, bytecode_result) {
+            (Ok(ast_value), Ok(mir_value), Ok(bytecode_value)) => {
+                assert_eq!(mir_value.value, ast_value, "MIR result at budget {max_steps}");
+                assert_eq!(
+                    bytecode_value.value, ast_value,
+                    "bytecode result at budget {max_steps}"
+                );
+                assert_eq!(ast_value, Value::Int(4));
+            }
+            (Err(ast_error), Err(mir_error), Err(bytecode_error)) => {
+                assert!(ast_error.message.contains("step budget exceeded"));
+                assert!(mir_error.message.contains("step budget exceeded"));
+                assert!(bytecode_error.message.contains("step budget exceeded"));
+                assert_eq!(mir_error.span, ast_error.span, "MIR span at budget {max_steps}");
+                assert_eq!(
+                    bytecode_error.span, ast_error.span,
+                    "bytecode span at budget {max_steps}"
+                );
+            }
+            (ast, mir, bytecode) => panic!(
+                "backends disagree at budget {max_steps}: AST={ast:?}, MIR={mir:?}, bytecode={bytecode:?}"
+            ),
+        }
+    }
+}
+
+#[test]
 fn source_step_budget_boundaries_match_collection_loops_and_matches() {
     let source = r#"
 fn run() -> Int {
