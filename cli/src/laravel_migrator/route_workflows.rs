@@ -42,6 +42,7 @@ pub(super) fn generate(
     root: &Path,
     route_candidates: &Value,
     schema_candidates: &[Value],
+    has_shared_layout: bool,
 ) -> Option<GeneratedWorkflow> {
     let routes = route_candidates["model_consumer_routes"]
         .as_array()
@@ -122,8 +123,18 @@ pub(super) fn generate(
             };
             let form_name = "ImportedPublicUnsubscribe";
             let success_path = unique_success_path(path, token_name);
+            let layout_import = if has_shared_layout {
+                "import \"src/imported_layouts.zyl\" as imported_layouts\n"
+            } else {
+                ""
+            };
+            let layout_binding = if has_shared_layout {
+                "    view: ImportedAppShell\n"
+            } else {
+                ""
+            };
             let generated = format!(
-                "import \"src/imported_schema.zyl\" as imported_schema\n\n\
+                "import \"src/imported_schema.zyl\" as imported_schema\n{layout_import}\n\
                  // Generated from a statically verified Laravel token-unsubscribe workflow. Review the source mapping report before deployment.\n\
                  form {form_name} -> {table} {{\n\
                      route: {path_literal}\n\
@@ -149,6 +160,7 @@ pub(super) fn generate(
                      }}\n\
                  }}\n\
                  page {success_path_literal} {{\n\
+                 {layout_binding}\
                      html {{\n\
                          <main class=\"z-container\"><h1>{success_heading_html}</h1><p>{success_body_html}</p></main>\n\
                      }}\n\
@@ -172,6 +184,7 @@ pub(super) fn generate(
                 "verification": "sha256-token-hash-read-before-render-and-write",
                 "write_semantics": "idempotent-unsubscribed-at-coalesce-current-timestamp",
                 "csrf": "native-zelyra-form-csrf",
+                "shared_layout": if has_shared_layout { Some("ImportedAppShell") } else { None::<&str> },
                 "source_views": [confirm_view, success_view],
                 "runtime_copied": false
             });
@@ -519,9 +532,15 @@ class PublicUnsubscribeController {
             "table": "suppressions",
             "candidate_source": "table suppressions {\n    id: Id primary auto\n    token_hash: String(64) required\n    unsubscribed_at: Timestamp?\n}"
         })];
-        let result = generate(&root, &candidates, &schema).expect("supported shape generated");
+        let result =
+            generate(&root, &candidates, &schema, true).expect("supported shape generated");
         assert!(result.source.contains("verify sql<Int[]>"));
         assert!(result.source.contains("require_match"));
+        assert!(result
+            .source
+            .contains("import \"src/imported_layouts.zyl\" as imported_layouts"));
+        assert!(result.source.contains("view: ImportedAppShell"));
+        assert_eq!(result.report["shared_layout"], "ImportedAppShell");
         assert!(result
             .source
             .contains("COALESCE(unsubscribed_at, CURRENT_TIMESTAMP)"));
@@ -533,7 +552,48 @@ class PublicUnsubscribeController {
             "table": "suppressions",
             "candidate_source": "table suppressions { id: Id primary auto }"
         })];
-        assert!(generate(&root, &candidates, &incomplete_schema).is_none());
+        assert!(generate(&root, &candidates, &incomplete_schema, true).is_none());
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn generated_workflow_does_not_reference_an_unavailable_layout() {
+        let root = std::env::temp_dir().join(format!(
+            "zelyra-route-workflow-no-layout-{}-{}",
+            std::process::id(),
+            std::thread::current().name().unwrap_or("test")
+        ));
+        let _ = fs::remove_dir_all(&root);
+        let controller_dir = root.join("app/Http/Controllers");
+        let view_dir = root.join("resources/views/public");
+        fs::create_dir_all(&controller_dir).unwrap();
+        fs::create_dir_all(&view_dir).unwrap();
+        fs::write(controller_dir.join("UnsubscribeController.php"), CONTROLLER).unwrap();
+        fs::write(
+            view_dir.join("confirm.blade.php"),
+            "<h1>Confirm</h1><p>Stop messages?</p><button>Unsubscribe</button>",
+        )
+        .unwrap();
+        fs::write(
+            view_dir.join("done.blade.php"),
+            "<h1>Saved</h1><p>Address unsubscribed.</p>",
+        )
+        .unwrap();
+        let candidates = json!({"routes": [
+            {"route": "get /unsubscribe/{token}", "controller_action": "UnsubscribeController@show", "controller_source_file": "app/Http/Controllers/UnsubscribeController.php", "table": "suppressions"},
+            {"route": "post /unsubscribe/{token}", "controller_action": "UnsubscribeController@unsubscribe", "controller_source_file": "app/Http/Controllers/UnsubscribeController.php", "table": "suppressions"}
+        ]});
+        let schema = vec![json!({
+            "table": "suppressions",
+            "candidate_source": "table suppressions {\n    id: Id primary auto\n    token_hash: String(64) required\n    unsubscribed_at: Timestamp?\n}"
+        })];
+        let generated = generate(&root, &candidates, &schema, false)
+            .expect("supported workflow is still generated without a shell");
+        assert!(!generated
+            .source
+            .contains("import \"src/imported_layouts.zyl\""));
+        assert!(!generated.source.contains("view: ImportedAppShell"));
+        assert_eq!(generated.report["shared_layout"], serde_json::Value::Null);
         fs::remove_dir_all(root).unwrap();
     }
 }

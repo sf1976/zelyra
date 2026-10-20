@@ -124,6 +124,11 @@ def main() -> int:
             )
             if generated.returncode:
                 return generated.returncode
+            workflow = (scaffold / "src/imported_public_unsubscribe.zyl").read_text(encoding="utf-8")
+            if 'import "src/imported_layouts.zyl" as imported_layouts' not in workflow:
+                raise RuntimeError("generated unsubscribe module omitted its detected shared layout dependency")
+            if "view: ImportedAppShell" not in workflow:
+                raise RuntimeError("generated unsubscribe success page omitted the shared application shell")
 
             docker_run = subprocess.run(
                 [
@@ -266,6 +271,8 @@ def main() -> int:
             success = request(f"{base}/csv-mailer/abmelden")
             if success[0] != 200 or "Abmeldung gespeichert" not in success[2].decode("utf-8"):
                 raise RuntimeError("generated success route did not render")
+            if "zelyra-generated-main" not in success[2].decode("utf-8"):
+                raise RuntimeError("generated success page did not render inside the imported application shell")
             print("Laravel-imported unsubscribe MariaDB/HTTP E2E passed.")
             print("The source project was not modified; no mail was sent.")
             return 0

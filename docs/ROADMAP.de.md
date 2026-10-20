@@ -474,9 +474,13 @@ abgeschlossen.
   /opt/siedelmann-laravel/app` erzeugt das Scaffold erneut, richtet dessen
   Schema in einem frischen Wegwerf-MariaDB-Container ein und prüft gültige und
   ungültige GET-/POST-Tokens, CSRF, den stabilen Zeitstempel nach Wiederholung
-  sowie die Erfolgsseite über HTTP. Sie versendet keine E-Mail und hinterlässt
-  weder Datenbank noch Scaffold. Das ist ein HTTP-Integrationstest, kein
-  Browser-Automationstest.
+  sowie die Erfolgsseite über HTTP. Erkennt der Importer ein gemeinsames
+  Anwendungslayout, bindet die generierte Erfolgsseite diese Shell; andernfalls
+  erzeugt er keinen ungelösten Layoutverweis. Der Generierungsbericht hält die
+  Entscheidung fest. Der Test prüft außerdem, dass die gerenderte Erfolgsseite
+  innerhalb der erzeugten Shell liegt. Es wird keine E-Mail versendet und weder
+  Datenbank noch Scaffold bleiben zurück. Das ist ein HTTP-Integrationstest,
+  kein Browser-Automationstest.
   Die Quellprüfung des Gesamtprojekts bestätigt zudem die generierten
   Login-/Logout- und Abmelderouten sowie das gesperrte, wiederverwendbare
   Identity-Paket; sie prüft Deklarationen, nicht das Laufzeitverhalten der

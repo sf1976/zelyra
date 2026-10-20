@@ -683,8 +683,12 @@ fn generate_scaffold(
         };
         let mut route_candidates =
             route_candidates_for_tables(&report_json["graph"], route_target_tables);
-        let generated_route_workflow =
-            route_workflows::generate(&root, &route_candidates, &included_tables);
+        let generated_route_workflow = route_workflows::generate(
+            &root,
+            &route_candidates,
+            &included_tables,
+            generated_layout_count > 0,
+        );
         if let Some(workflow) = &generated_route_workflow {
             let source_route = workflow.report["source_route"].as_str();
             let source_controller = workflow.report["source_controller"].as_str();

@@ -432,8 +432,12 @@ security and compatibility gates stated for that milestone.
   /opt/siedelmann-laravel/app` test now regenerates the source-derived scaffold,
   applies its schema to a fresh disposable MariaDB container, and exercises
   valid/invalid GET and POST, CSRF, repeated-submit timestamp stability, and
-  the success page over HTTP. It sends no mail and leaves no database or
-  scaffold behind. This is an HTTP integration test, not browser automation.
+  the success page over HTTP. When the importer discovers a shared app layout,
+  the generated success page now binds that shell; otherwise it emits no
+  unresolved layout reference. The source report records this decision. The
+  test also verifies the rendered success page is inside the generated shell.
+  It sends no mail and leaves no database or scaffold behind. This is an HTTP
+  integration test, not browser automation.
   The source-only full-project check also asserts the generated native
   login/logout and unsubscribe routes and the locked reusable identity package;
   this verifies declarations, not authentication runtime behavior.

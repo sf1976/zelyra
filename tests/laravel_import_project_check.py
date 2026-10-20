@@ -62,6 +62,17 @@ def main() -> int:
         if check.returncode:
             return check.returncode
 
+        workflow = output / "src/imported_public_unsubscribe.zyl"
+        layout = output / "src/imported_layouts.zyl"
+        if workflow.is_file():
+            workflow_source = workflow.read_text(encoding="utf-8")
+            if not layout.is_file() or 'import "src/imported_layouts.zyl" as imported_layouts' not in workflow_source:
+                print("error: generated public workflow does not depend on the detected shared layout", file=sys.stderr)
+                return 1
+            if "view: ImportedAppShell" not in workflow_source:
+                print("error: generated public success page does not use ImportedAppShell", file=sys.stderr)
+                return 1
+
         routes = subprocess.run(
             [str(binary), "routes", str(output / "main.zyl"), "--format", "json"],
             env=environment,
