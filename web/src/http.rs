@@ -14,7 +14,38 @@ impl fmt::Display for HttpError {
 impl std::error::Error for HttpError {}
 
 pub fn parse_request(raw: &str) -> Result<Request, HttpError> {
-    let (header_text, body) = raw.split_once("\r\n\r\n").unwrap_or((raw, ""));
+    let parsed = parse_request_bytes(raw.as_bytes())?;
+    let body = std::str::from_utf8(parsed.body).map_err(|error| HttpError {
+        message: error.to_string(),
+    })?;
+    Ok(Request {
+        method: parsed.method,
+        target: parsed.target,
+        path: parsed.path,
+        headers: parsed.headers,
+        body: body.into(),
+        remote_addr: None,
+    })
+}
+
+pub(super) struct ParsedRequestBytes<'a> {
+    pub method: String,
+    pub target: String,
+    pub path: String,
+    pub headers: HashMap<String, String>,
+    pub body: &'a [u8],
+}
+
+pub(super) fn parse_request_bytes(raw: &[u8]) -> Result<ParsedRequestBytes<'_>, HttpError> {
+    let header_end = find_header_end(raw).unwrap_or(raw.len());
+    let header_text = std::str::from_utf8(&raw[..header_end]).map_err(|error| HttpError {
+        message: error.to_string(),
+    })?;
+    let body = if header_end == raw.len() {
+        &raw[raw.len()..]
+    } else {
+        &raw[header_end + 4..]
+    };
     let mut lines = header_text.split("\r\n");
     let request_line = lines.next().ok_or_else(|| HttpError {
         message: "request is empty".into(),
@@ -59,6 +90,7 @@ pub fn parse_request(raw: &str) -> Result<Request, HttpError> {
                 | "x-request-id"
                 | "x-zelyra-tenant"
                 | "x-zelyra-editor-token"
+                | "content-type"
         ) && headers.contains_key(&name)
         {
             return Err(HttpError {
@@ -97,13 +129,12 @@ pub fn parse_request(raw: &str) -> Result<Request, HttpError> {
         });
     }
     let path = target.split_once('?').map_or(target, |(path, _)| path);
-    Ok(Request {
+    Ok(ParsedRequestBytes {
         method: method.into(),
         target: target.into(),
         path: path.into(),
         headers,
-        body: body.into(),
-        remote_addr: None,
+        body,
     })
 }
 
@@ -150,7 +181,9 @@ pub(super) fn declared_content_length(header_text: &str) -> Result<Option<usize>
     Ok(content_length)
 }
 
-pub(super) fn read_http_request_from<R: Read>(reader: &mut R) -> Result<String, RequestReadError> {
+pub(super) fn read_http_request_bytes_from<R: Read>(
+    reader: &mut R,
+) -> Result<Vec<u8>, RequestReadError> {
     let mut buffer = Vec::new();
     let total_length = loop {
         let mut chunk = [0_u8; 8192];
@@ -199,7 +232,12 @@ pub(super) fn read_http_request_from<R: Read>(reader: &mut R) -> Result<String, 
     if let Some(total_length) = total_length {
         buffer.truncate(total_length);
     }
-    String::from_utf8(buffer).map_err(|error| {
+    Ok(buffer)
+}
+
+#[cfg(test)]
+pub(super) fn read_http_request_from<R: Read>(reader: &mut R) -> Result<String, RequestReadError> {
+    String::from_utf8(read_http_request_bytes_from(reader)?).map_err(|error| {
         RequestReadError::Http(HttpError {
             message: error.to_string(),
         })
@@ -225,9 +263,48 @@ impl Read for DeadlineReader<'_> {
     }
 }
 
-pub(super) fn read_http_request(
+pub(super) fn read_http_request_bytes(
     stream: &mut TcpStream,
     deadline: Instant,
-) -> Result<String, RequestReadError> {
-    read_http_request_from(&mut DeadlineReader { stream, deadline })
+) -> Result<Vec<u8>, RequestReadError> {
+    read_http_request_bytes_from(&mut DeadlineReader { stream, deadline })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::io::Cursor;
+
+    #[test]
+    fn byte_reader_preserves_non_utf8_multipart_payloads() {
+        let body = b"--b\r\nContent-Disposition: form-data; name=\"file\"; filename=\"x.bin\"\r\n\r\n\0\xff\r\n--b--\r\n";
+        let mut request = format!(
+            "POST /upload HTTP/1.1\r\nHost: localhost\r\nContent-Type: multipart/form-data; boundary=b\r\nContent-Length: {}\r\n\r\n",
+            body.len()
+        )
+        .into_bytes();
+        request.extend_from_slice(body);
+        let read = read_http_request_bytes_from(&mut Cursor::new(request.clone()))
+            .expect("read binary request");
+        let parsed = parse_request_bytes(&read).expect("parse binary request headers");
+        assert_eq!(parsed.body, body);
+        assert_eq!(
+            multipart::decode(
+                parsed.headers.get("content-type").unwrap(),
+                parsed.body,
+                multipart::MultipartLimits::default(),
+            )
+            .unwrap()[0]
+                .data,
+            b"\0\xff"
+        );
+    }
+
+    #[test]
+    fn text_request_parser_retains_its_string_body_contract() {
+        let parsed =
+            parse_request("POST /save HTTP/1.1\r\nHost: localhost\r\nContent-Length: 3\r\n\r\nabc")
+                .unwrap();
+        assert_eq!(parsed.body, "abc");
+    }
 }

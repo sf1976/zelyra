@@ -348,15 +348,15 @@ security and compatibility gates stated for that milestone.
   execution is not implemented. Released as [`v1.2.28`](https://github.com/sf1976/zelyra/releases/tag/v1.2.28); release gates passed. The broader security/permission matrix remains an open follow-up. See the
   [1.2.28 work plan](release-plans/1.2.28-typed-crud-actions.en.md).
 - [~] **1.2.29 — bounded secure file upload foundation:** Architecture inventory
-  is complete. The HTTP parser currently accepts UTF-8 string bodies with a
-  1 MiB global limit, so binary multipart data needs an explicitly bounded
-  byte-oriented request path. A standalone byte-preserving multipart decoder
-  with bounded body, part, header, field-name, and filename sizes is implemented
-  in `web/src/multipart.rs`; parser tests cover binary payloads, malformed
-  boundaries, duplicate headers, and limit failures. A coverage-guided fuzz
-  target completed a local six-second run with 647,431 inputs and no crash. It
-  is not connected to HTTP request reading and does not expose File fields or
-  storage. A static analysis of `/opt/siedelmann-laravel/app` identified upload
+  is complete. The HTTP server now reads bounded byte requests and sends valid
+  multipart bodies through the decoder; the existing public text `Request` API
+  and 1 MiB global limit remain unchanged. Valid multipart receives HTTP 415
+  until a route declares and authorizes file fields; malformed multipart
+  receives HTTP 400. Parser and live HTTP tests cover binary payloads,
+  malformed boundaries, duplicate headers, and limit failures. A
+  coverage-guided fuzz target completed a local six-second run with 647,431
+  inputs and no crash. There are still no File fields or storage. A static
+  analysis of `/opt/siedelmann-laravel/app` identified upload
   flows in invoices,
   contracts, settings, postal letters, and inbound mail; the importer does not
   generate them. Remaining release gates include content validation, private

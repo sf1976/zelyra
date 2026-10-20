@@ -13792,12 +13792,32 @@ fn handle_connection_until(
     app: &WebApp,
     deadline: Instant,
 ) -> io::Result<()> {
-    let response = match read_http_request(stream, deadline) {
-        Ok(raw) => match parse_request(&raw) {
-            Ok(mut request) => {
-                request.remote_addr = stream.peer_addr().ok();
-                let _query_deadline = zelyra_database::set_query_deadline(deadline);
-                app.dispatch(&request)
+    let response = match read_http_request_bytes(stream, deadline) {
+        Ok(raw) => match parse_request_bytes(&raw) {
+            Ok(parsed) => {
+                if let Some(content_type) = parsed.headers.get("content-type") {
+                    if content_type
+                        .split(';')
+                        .next()
+                        .is_some_and(|media_type| media_type.trim().eq_ignore_ascii_case("multipart/form-data"))
+                    {
+                        match multipart::decode(
+                            content_type,
+                            parsed.body,
+                            multipart::MultipartLimits::default(),
+                        ) {
+                            Ok(_) => Response::json(
+                                415,
+                                "{\"error\":{\"code\":\"UnsupportedMediaType\",\"message\":\"this route does not accept multipart form data yet\"}}",
+                            ),
+                            Err(_) => Response::html(400, "<h1>400 Bad Request</h1>"),
+                        }
+                    } else {
+                        dispatch_text_request(parsed, stream, app, deadline)
+                    }
+                } else {
+                    dispatch_text_request(parsed, stream, app, deadline)
+                }
             }
             Err(error) if error.message.contains("request body exceeds") => Response::json(
                 413,
@@ -13861,6 +13881,28 @@ fn handle_connection_until(
         }
     }
     Ok(())
+}
+
+fn dispatch_text_request(
+    parsed: ParsedRequestBytes<'_>,
+    stream: &TcpStream,
+    app: &WebApp,
+    deadline: Instant,
+) -> Response {
+    let body = match std::str::from_utf8(parsed.body) {
+        Ok(body) => body,
+        Err(_) => return Response::html(400, "<h1>400 Bad Request</h1>"),
+    };
+    let request = Request {
+        method: parsed.method,
+        target: parsed.target,
+        path: parsed.path,
+        headers: parsed.headers,
+        body: body.to_owned(),
+        remote_addr: stream.peer_addr().ok(),
+    };
+    let _query_deadline = zelyra_database::set_query_deadline(deadline);
+    app.dispatch(&request)
 }
 
 #[cfg(test)]

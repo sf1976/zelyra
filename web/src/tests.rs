@@ -2937,6 +2937,39 @@ fn server_drops_connections_after_reaching_its_worker_limit() {
 }
 
 #[test]
+fn multipart_binary_request_is_parsed_and_explicitly_rejected_until_route_support_exists() {
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let address = listener.local_addr().unwrap();
+    let app = Arc::new(WebApp::new(Vec::new(), Vec::new()));
+    let active_connections = Arc::new(AtomicUsize::new(0));
+    let mut client = TcpStream::connect(address).unwrap();
+    client
+        .set_read_timeout(Some(Duration::from_secs(2)))
+        .unwrap();
+    let (stream, _) = listener.accept().unwrap();
+    let worker = spawn_connection(stream, app, active_connections)
+        .unwrap()
+        .unwrap();
+
+    let body = b"--upload-boundary\r\nContent-Disposition: form-data; name=\"document\"; filename=\"invoice.pdf\"\r\nContent-Type: application/pdf\r\n\r\n%PDF\0\xff\r\n--upload-boundary--\r\n";
+    let head = format!(
+        "POST /upload HTTP/1.1\r\nHost: localhost\r\nContent-Type: multipart/form-data; boundary=upload-boundary\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+        body.len()
+    );
+    client.write_all(head.as_bytes()).unwrap();
+    client.write_all(body).unwrap();
+    let mut response = Vec::new();
+    client.read_to_end(&mut response).unwrap();
+    worker.join().unwrap();
+    let response = String::from_utf8(response).unwrap();
+    assert!(
+        response.starts_with("HTTP/1.1 415 Unsupported Media Type"),
+        "{response}"
+    );
+    assert!(response.contains("this route does not accept multipart form data yet"));
+}
+
+#[test]
 fn rejects_oversized_requests_before_reading_the_body() {
     let raw = format!(
         "POST /echo HTTP/1.1\r\nContent-Length: {}\r\n\r\n",

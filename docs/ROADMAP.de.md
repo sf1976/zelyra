@@ -388,16 +388,15 @@ abgeschlossen.
   bleibt ein offener Folgepunkt. Siehe den
   [Arbeitsplan 1.2.28](release-plans/1.2.28-typed-crud-actions.de.md).
 - [~] **1.2.29 — begrenzte sichere Datei-Uploads:** Die Architekturaufnahme ist
-  abgeschlossen. Der HTTP-Parser verarbeitet derzeit UTF-8-Textkörper mit einem
-  globalen Limit von 1 MiB; Binär-Multipart benötigt daher einen ausdrücklich
-  begrenzten, byteorientierten Request-Pfad. Eine statische Analyse von
-  Ein eigenständiger byteerhaltender Multipart-Decoder mit Limits für Body,
-  Parts, Header, Feldnamen und Dateinamen ist in `web/src/multipart.rs`
-  implementiert; Parser-Tests prüfen Binärdaten, fehlerhafte Grenzen, doppelte
-  Header und Limitfehler. Ein Coverage-guided-Fuzz-Ziel absolvierte lokal sechs
-  Sekunden und 647.431 Eingaben ohne Absturz. Es ist noch nicht mit HTTP-
-  Request-Lesen verbunden
-  und bietet weder File-Felder noch Speicherung an. Eine statische Analyse von
+  abgeschlossen. Der HTTP-Server liest Requests jetzt begrenzt als Bytes und
+  leitet gültige Multipart-Bodies durch den Decoder; die öffentliche Text-
+  `Request`-API und das globale Limit von 1 MiB bleiben unverändert. Gültiges
+  Multipart erhält bis zur Deklaration und Autorisierung von Datei-Feldern
+  HTTP 415; fehlerhaftes Multipart erhält HTTP 400. Parser- und Live-HTTP-Tests
+  prüfen Binärdaten, fehlerhafte Grenzen, doppelte Header und Limitfehler. Ein
+  Coverage-guided-Fuzz-Ziel absolvierte lokal sechs Sekunden und 647.431
+  Eingaben ohne Absturz. File-Felder und Speicherung gibt es weiterhin nicht.
+  Eine statische Analyse von
   `/opt/siedelmann-laravel/app` fand Uploadabläufe bei Rechnungen, Verträgen,
   Einstellungen, Postbriefen und eingehender Mail; der Importer erzeugt sie
   nicht. Offen sind Inhaltsprüfung, private mandantengebundene Speicherung,
