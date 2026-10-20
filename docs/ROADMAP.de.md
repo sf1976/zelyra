@@ -510,8 +510,9 @@ abgeschlossen.
   wiederholen; das Skript entfernt geerbte Datenbank-URLs aus der Umgebung und
   löscht das temporäre Gerüst. Es startet weder den HTTP-Ablauf noch eine
   Datenbankverbindung. Das Gerüst ist weiterhin keine vollständige Migration:
-  die Gesamtanalyse meldet 2.186 Befunde, davon 1.343 manuell/offen und 843
-  teilweise. Laravel,
+  ein erneuter Source-Only-Lauf meldet nun 2.226 Befunde (1.298 manuell,
+  862 teilweise, 66 ungelöst) in 562 Quelldateien. Diese Zahlen beschreiben
+  Analysebefunde und keine Zahl migrierter Funktionen. Laravel,
   Composer-Pakete, PHP-Controller, Blade-Laufzeitdateien und Zugangsdaten werden
   nicht kopiert.
   Der jüngste ausdrückliche Live-Schemacheck vergleicht zusätzlich bekannte

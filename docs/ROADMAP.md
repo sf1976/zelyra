@@ -464,8 +464,9 @@ security and compatibility gates stated for that milestone.
   the script strips ambient database URLs and removes its temporary scaffold.
   This check does not run the generated HTTP workflow or connect to a database.
   The scaffold
-  remains an incomplete migration: the latest full-project inventory reports
-  2,186 findings, including 1,343 manual/unresolved and 843 partial.
+  remains an incomplete migration: a source-only rerun now reports 2,226
+  findings (1,298 manual, 862 partial, and 66 unresolved across 562 source
+  files). These are analysis findings, not a migrated-feature count.
   Laravel, Composer packages, PHP controllers, Blade runtime files, and source
   credentials are not copied.
   The latest explicit live-schema run now compares known MariaDB storage types
