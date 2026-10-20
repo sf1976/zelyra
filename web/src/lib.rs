@@ -6750,6 +6750,49 @@ fn dispatch_form_with_language(
     } else {
         None
     };
+    // File inputs are intentionally blank on edit pages and browsers never
+    // submit their previous value. Preserve optional existing FileRefs from
+    // the server-side row when no replacement upload was supplied; never
+    // accept a client-provided reference as the fallback. The normal action
+    // transaction still locks the row and validates the signed snapshot before
+    // any write, so a concurrent edit fails with the existing conflict path.
+    let mut preserved_file_refs = HashMap::new();
+    if is_edit_form(form)
+        && rendered_form
+            .form
+            .fields
+            .iter()
+            .any(|field| field.file_upload.is_some() && !uploaded_fields.contains(&field.name))
+    {
+        let existing = match load_existing_form_values(
+            &rendered_form,
+            path_params,
+            database_url,
+            tenant_context,
+            actor_user_id,
+        ) {
+            Ok(Some(existing)) => existing,
+            Ok(None) => return Response::html(404, "<h1>404 Not Found</h1>"),
+            Err(error) if error.contains("unavailable") => {
+                return Response::html(404, "<h1>404 Not Found</h1>")
+            }
+            Err(error) => {
+                eprintln!("zelyra web: existing upload reference could not be loaded: {error}");
+                return Response::html(500, "<h1>500 Internal Server Error</h1>");
+            }
+        };
+        for field in &rendered_form.form.fields {
+            if field.file_upload.is_none() || uploaded_fields.contains(&field.name) {
+                continue;
+            }
+            if existing.nulls.contains(&field.name) {
+                values.remove(&field.name);
+            } else if let Some(file_ref) = existing.values.get(&field.name) {
+                values.insert(field.name.clone(), file_ref.clone());
+                preserved_file_refs.insert(field.name.clone(), file_ref.clone());
+            }
+        }
+    }
     if let Some(child_action) = values.remove("_zelyra_child_action") {
         if form.child_collections.is_empty() {
             return Response::html(400, "<h1>400 Bad Request</h1>");
@@ -6942,12 +6985,14 @@ fn dispatch_form_with_language(
     } else {
         values.clone()
     };
-    let validation = zelyra_forms::validate_with_uploaded_files(
+    let existing_file_fields = preserved_file_refs.keys().cloned().collect::<HashSet<_>>();
+    let validation = zelyra_forms::validate_with_existing_file_refs(
         &validation_form,
         form.table.as_ref(),
         form.schema.as_ref(),
         &parent_values,
         &uploaded_fields,
+        &existing_file_fields,
     );
     let mut errors = validation.errors;
     validate_relation_values(form, &relation_options, &values, &mut errors);

@@ -3165,7 +3165,7 @@ fn multipart_upload_commits_reference_and_removes_file_after_sql_rollback() {
     .expect("drop test-only upload table");
     zelyra_database::execute_query(
         &database_url,
-        "CREATE TABLE zelyra_upload_e2e (id BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY, document CHAR(36) NULL, owner_id BIGINT NOT NULL DEFAULT 7)",
+        "CREATE TABLE zelyra_upload_e2e (id BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY, document CHAR(36) NULL, title VARCHAR(80) NULL, owner_id BIGINT NOT NULL DEFAULT 7)",
         Vec::new(),
     )
     .expect("create test-only upload table");
@@ -3271,6 +3271,128 @@ fn multipart_upload_commits_reference_and_removes_file_after_sql_rollback() {
         .expect("verify stored upload referenced by committed row");
     assert_eq!(metadata.media_type, "application/pdf");
     assert_eq!(saved_bytes, bytes);
+
+    let edit_program = zelyra_parser::parse(
+        &zelyra_lexer::lex(
+            r#"
+            database main { engine: mariadb }
+            table zelyra_upload_e2e {
+                id: Id primary auto
+                document: FileRef?
+                title: String(80)?
+                owner_id: Int required default 7
+            }
+            fn main() {}
+            "#,
+        )
+        .expect("lex upload edit metadata"),
+    )
+    .expect("parse upload edit metadata");
+    let schema = zelyra_database::build_schema(&edit_program).expect("build edit schema");
+    let mut edit_route = route.clone();
+    edit_route.path = "/upload/{id}".into();
+    edit_route.action = edit_route.path.clone();
+    edit_route.form.name = "DocumentEdit".into();
+    edit_route.form.table = Some("zelyra_upload_e2e".into());
+    edit_route.table = edit_program.tables.first().cloned();
+    edit_route.schema = Some(schema);
+    edit_route.form.fields = vec![
+        zelyra_ast::FormField {
+            name: "document".into(),
+            ty: Some(Type::Named("File".into())),
+            label: Some("Document".into()),
+            placeholder: None,
+            required: true,
+            min_length: None,
+            max: None,
+            min_value: None,
+            max_value: None,
+            choices: Vec::new(),
+            widget: None,
+            appearance: None,
+            file_upload: Some(zelyra_ast::FileUploadOptions {
+                max_size_bytes: 1024,
+                allowed_types: vec!["application/pdf".into()],
+            }),
+            readonly: false,
+            span: zelyra_ast::Span::default(),
+        },
+        zelyra_ast::FormField {
+            name: "title".into(),
+            ty: Some(Type::String),
+            label: Some("Title".into()),
+            placeholder: None,
+            required: true,
+            min_length: None,
+            max: Some(80),
+            min_value: None,
+            max_value: None,
+            choices: Vec::new(),
+            widget: None,
+            appearance: None,
+            file_upload: None,
+            readonly: false,
+            span: zelyra_ast::Span::default(),
+        },
+    ];
+    edit_route.form.actions = vec![sql_action(vec![
+        "UPDATE zelyra_upload_e2e SET document = :document, title = :title WHERE id = :id",
+    ])];
+    let edit_app =
+        WebApp::with_database_url(Vec::new(), vec![edit_route], Some(database_url.clone()))
+            .with_upload_storage(&storage_root);
+    let edit_get = edit_app.dispatch(&Request {
+        method: "GET".into(),
+        target: format!("/upload/{id}"),
+        path: format!("/upload/{id}"),
+        headers: HashMap::from([("host".into(), "localhost".into())]),
+        body: String::new(),
+        remote_addr: None,
+    });
+    assert_eq!(edit_get.status, 200, "{}", edit_get.body);
+    assert!(edit_get.body.contains("type=\"file\""));
+    assert!(!edit_get
+        .body
+        .contains("type=\"file\" accept=\"application/pdf\" required"));
+    assert!(
+        !edit_get.body.contains(file_ref),
+        "the file input must not echo the stored FileRef"
+    );
+    let snapshot = edit_get
+        .body
+        .split("name=\"_zelyra_snapshot\" value=\"")
+        .nth(1)
+        .and_then(|value| value.split('\"').next())
+        .expect("edit GET includes a signed row snapshot");
+    let edit_post = edit_app.dispatch(&Request {
+        method: "POST".into(),
+        target: format!("/upload/{id}"),
+        path: format!("/upload/{id}"),
+        headers: HashMap::from([
+            ("host".into(), "localhost".into()),
+            ("origin".into(), "http://localhost".into()),
+        ]),
+        body: format!(
+            "_zelyra_csrf=csrf-token&_zelyra_snapshot={snapshot}&document=123e4567-e89b-42d3-a456-426614174099&title=Updated"
+        ),
+        remote_addr: None,
+    });
+    assert_eq!(edit_post.status, 303, "{}", edit_post.body);
+    let edited = zelyra_database::execute_read_only_query(
+        &database_url,
+        "SELECT document, title FROM zelyra_upload_e2e WHERE id = :id",
+        vec![(
+            "id".into(),
+            zelyra_database::QueryValue::Int(id.parse().unwrap()),
+        )],
+    )
+    .expect("read edit result");
+    assert_eq!(
+        edited.rows[0][0], *file_ref,
+        "an edit without a new upload preserves the stored reference"
+    );
+    assert_eq!(edited.rows[0][1], "Updated");
+    assert!(storage.read_verified(0, file_ref, 1024).is_ok());
 
     let program = zelyra_parser::parse(
         &zelyra_lexer::lex(

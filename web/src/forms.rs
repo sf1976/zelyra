@@ -161,6 +161,10 @@ pub(super) fn render_form_with_language(
             .unwrap_or_else(|| localized_identifier_reference(language, &field.name));
         // Sensitive values must never be reflected into HTML, including after
         // a validation error or on an edit form with a stored password hash.
+        let existing_file_value = field.file_upload.is_some()
+            && values
+                .get(&field.name)
+                .is_some_and(|value| !value.is_empty());
         let value = if matches!(input_type(route, field), "password" | "file")
             || audit_sensitive_field(&field.name)
         {
@@ -172,7 +176,10 @@ pub(super) fn render_form_with_language(
             .iter()
             .filter(|error| error.field == field.name)
             .collect::<Vec<_>>();
-        let required = is_required(route, field);
+        // An existing server-loaded file satisfies required on edit. Browsers
+        // cannot populate a file input from a stored reference, and requiring
+        // a new selection would make every unrelated edit replace the file.
+        let required = is_required(route, field) && !existing_file_value;
         let max = field_max(route, field);
         let field_input_type = input_type(route, field);
         let is_checkbox =

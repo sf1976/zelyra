@@ -631,6 +631,46 @@ pub fn validate_with_uploaded_files(
     input: &HashMap<String, String>,
     uploaded_fields: &HashSet<String>,
 ) -> ValidationResult {
+    validate_with_file_values(
+        form,
+        table_definition,
+        schema,
+        input,
+        uploaded_fields,
+        &HashSet::new(),
+    )
+}
+
+/// Validate a form while accepting server-loaded file references on edit
+/// forms. `existing_file_fields` must be derived from the currently authorized
+/// database row, never directly from request input. This lets a required file
+/// remain unchanged when the browser's file control is left empty.
+pub fn validate_with_existing_file_refs(
+    form: &FormDef,
+    table_definition: Option<&TableDef>,
+    schema: Option<&Schema>,
+    input: &HashMap<String, String>,
+    uploaded_fields: &HashSet<String>,
+    existing_file_fields: &HashSet<String>,
+) -> ValidationResult {
+    validate_with_file_values(
+        form,
+        table_definition,
+        schema,
+        input,
+        uploaded_fields,
+        existing_file_fields,
+    )
+}
+
+fn validate_with_file_values(
+    form: &FormDef,
+    table_definition: Option<&TableDef>,
+    schema: Option<&Schema>,
+    input: &HashMap<String, String>,
+    uploaded_fields: &HashSet<String>,
+    existing_file_fields: &HashSet<String>,
+) -> ValidationResult {
     let mut errors = Vec::new();
     let mut values = HashMap::new();
     let known_fields = form
@@ -650,7 +690,7 @@ pub fn validate_with_uploaded_files(
 
     for field in &form.fields {
         if field.file_upload.is_some() {
-            if uploaded_fields.contains(&field.name) {
+            if uploaded_fields.contains(&field.name) || existing_file_fields.contains(&field.name) {
                 match input.get(&field.name) {
                     Some(reference) if is_file_reference(reference) => {
                         values.insert(field.name.clone(), reference.clone());
@@ -1710,6 +1750,25 @@ mod tests {
 
         let forged = validate_with_uploaded_files(&form, None, None, &input, &HashSet::new());
         assert!(!forged.is_valid());
+        let existing = validate_with_existing_file_refs(
+            &form,
+            None,
+            None,
+            &input,
+            &HashSet::new(),
+            &HashSet::from(["document".to_owned()]),
+        );
+        assert!(existing.is_valid());
+        assert_eq!(existing.values.get("document"), Some(&file_ref.to_owned()));
+        assert!(!validate_with_existing_file_refs(
+            &form,
+            None,
+            None,
+            &HashMap::new(),
+            &HashSet::new(),
+            &HashSet::from(["document".to_owned()]),
+        )
+        .is_valid());
         assert!(!validate_with_uploaded_files(
             &form,
             None,

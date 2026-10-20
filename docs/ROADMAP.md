@@ -397,8 +397,12 @@ security and compatibility gates stated for that milestone.
   the reference and private bytes persist after a successful POST, while a later
   SQL failure rolls back the row and removes only the failed upload. Unscoped
   projects use a project-local storage tenant id of 0; scoped forms require the
-  authenticated tenant. GitHub CI's rolling toolchain advanced to
-  Rust 1.99.1, where Clippy rejects the deprecated atomic `fetch_update` API.
+  authenticated tenant. Edit forms retain an authorized existing FileRef when
+  no replacement is selected, even for required file fields; request-supplied
+  references cannot override it. A MariaDB E2E verifies the previous file
+  remains readable after changing another field. GitHub CI's rolling toolchain
+  advanced to Rust 1.99.1, where Clippy rejects the deprecated atomic
+  `fetch_update` API.
   Request-budget reservation now uses a bounded `compare_exchange_weak` loop.
   A concurrent regression test exposed eager `then_some` guard construction,
   which could release bytes after a failed reservation and admit

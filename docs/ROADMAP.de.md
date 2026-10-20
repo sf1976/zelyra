@@ -440,7 +440,11 @@ abgeschlossen.
   dass Referenz und private Bytes nach erfolgreichem POST gespeichert sind und
   ein späterer SQL-Fehler den Datensatz zurückrollt und nur den fehlgeschlagenen
   Upload entfernt. Unscoped Projekte verwenden die projektlokale Speicher-
-  Mandanten-ID 0; scoped Forms verlangen den authentifizierten Mandanten. Die
+  Mandanten-ID 0; scoped Forms verlangen den authentifizierten Mandanten.
+  Edit-Formulare behalten einen autorisiert geladenen FileRef, wenn keine neue
+  Datei ausgewählt wird, auch bei Pflichtdateien; Request-Referenzen können ihn
+  nicht überschreiben. Ein MariaDB-E2E prüft, dass die vorhandene Datei nach
+  Änderung eines anderen Felds lesbar bleibt. Die
   GitHub-Werkzeugkette wechselte auf
   Rust 1.99.1; Clippy beanstandete dort `fetch_update` als veraltet. Die
   Requestbudget-Reservierung nutzt jetzt eine begrenzte
