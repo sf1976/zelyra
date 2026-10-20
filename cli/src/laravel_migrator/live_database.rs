@@ -317,7 +317,7 @@ pub(super) fn compare_candidates(live: &Value, generation: &Value) -> Value {
                 match expected_default_value(expected) {
                     Some(expected_default) => {
                         if let Some(actual_default) = actual["_comparison_default_value"].as_str() {
-                            if !defaults_equivalent(&expected_default, actual_default) {
+                            if !defaults_equivalent(expected, &expected_default, actual_default) {
                                 differences.push(json!({
                                     "table": table_name,
                                     "column": physical_name,
@@ -493,11 +493,7 @@ pub(super) fn remove_private_comparison_values(live: &mut Value) {
 fn expected_default_value(column: &Value) -> Option<String> {
     let default = column["default"].as_str()?.strip_prefix("default ")?;
     if default == "now" {
-        return Some(if column["zelyra_type"] == "Timestamp" {
-            "CURRENT_TIMESTAMP(3)".into()
-        } else {
-            "CURRENT_TIMESTAMP".into()
-        });
+        return Some("CURRENT_TIMESTAMP".into());
     }
     if default.starts_with('"') {
         return serde_json::from_str::<String>(default).ok();
@@ -506,7 +502,38 @@ fn expected_default_value(column: &Value) -> Option<String> {
         .then(|| default.to_owned())
 }
 
-fn defaults_equivalent(expected: &str, actual: &str) -> bool {
+fn defaults_equivalent(column: &Value, expected: &str, actual: &str) -> bool {
+    match column["zelyra_type"].as_str() {
+        Some("Decimal") => {
+            if let (Some(expected), Some(actual)) =
+                (canonical_decimal(expected), canonical_decimal(actual))
+            {
+                return expected == actual;
+            }
+        }
+        Some("Time") => {
+            if let (Some(expected), Some(actual)) =
+                (canonical_time(expected), canonical_time(actual))
+            {
+                return expected == actual;
+            }
+        }
+        Some("Timestamp")
+            if matches!(
+                (
+                    expected.to_ascii_uppercase().as_str(),
+                    actual.to_ascii_uppercase().as_str()
+                ),
+                ("CURRENT_TIMESTAMP", "CURRENT_TIMESTAMP(3)")
+                    | ("CURRENT_TIMESTAMP(3)", "CURRENT_TIMESTAMP")
+                    | ("CURRENT_TIMESTAMP()", "CURRENT_TIMESTAMP(3)")
+                    | ("CURRENT_TIMESTAMP(3)", "CURRENT_TIMESTAMP()")
+            ) =>
+        {
+            return true;
+        }
+        _ => {}
+    }
     let normalize = |value: &str| {
         let trimmed = value.trim();
         let upper = trimmed.to_ascii_uppercase();
@@ -534,6 +561,57 @@ fn defaults_equivalent(expected: &str, actual: &str) -> bool {
             (expected.as_str(), actual.as_str()),
             ("0", "FALSE") | ("FALSE", "0")
         )
+}
+
+fn canonical_decimal(value: &str) -> Option<String> {
+    let (negative, unsigned) = value
+        .strip_prefix('-')
+        .map_or((false, value), |unsigned| (true, unsigned));
+    let (integer, fraction) = unsigned.split_once('.').unwrap_or((unsigned, ""));
+    if integer.is_empty()
+        || !integer.bytes().all(|byte| byte.is_ascii_digit())
+        || !fraction.bytes().all(|byte| byte.is_ascii_digit())
+    {
+        return None;
+    }
+    let integer = integer.trim_start_matches('0');
+    let integer = if integer.is_empty() { "0" } else { integer };
+    let fraction = fraction.trim_end_matches('0');
+    let is_zero = integer == "0" && fraction.is_empty();
+    Some(format!(
+        "{}{}{}",
+        if negative && !is_zero { "-" } else { "" },
+        integer,
+        if fraction.is_empty() {
+            String::new()
+        } else {
+            format!(".{fraction}")
+        }
+    ))
+}
+
+fn canonical_time(value: &str) -> Option<String> {
+    let mut parts = value.split(':');
+    let hour = parts.next()?.parse::<u8>().ok()?;
+    let minute = parts.next()?.parse::<u8>().ok()?;
+    let second = parts.next().unwrap_or("0");
+    if parts.next().is_some() || hour > 23 || minute > 59 {
+        return None;
+    }
+    let (second, fraction) = second.split_once('.').unwrap_or((second, ""));
+    let second = second.parse::<u8>().ok()?;
+    if second > 59 || !fraction.bytes().all(|byte| byte.is_ascii_digit()) {
+        return None;
+    }
+    let fraction = fraction.trim_end_matches('0');
+    Some(format!(
+        "{hour:02}:{minute:02}:{second:02}{}",
+        if fraction.is_empty() {
+            String::new()
+        } else {
+            format!(".{fraction}")
+        }
+    ))
 }
 
 fn expected_mariadb_type(column: &Value) -> Option<String> {
@@ -1210,6 +1288,27 @@ mod tests {
         assert!(!report.contains("sent"));
         assert!(!report.contains("secret-live-value"));
         assert!(!report.contains("draft"));
+    }
+
+    #[test]
+    fn compares_numeric_defaults_using_the_declared_decimal_and_time_types() {
+        let decimal = json!({"zelyra_type":"Decimal"});
+        assert!(defaults_equivalent(&decimal, "0", "0.00"));
+        assert!(defaults_equivalent(&decimal, "0012.9000", "12.9"));
+        assert!(defaults_equivalent(&decimal, "-0.000", "0"));
+        assert!(!defaults_equivalent(&decimal, "12.90", "12.91"));
+
+        let time = json!({"zelyra_type":"Time"});
+        assert!(defaults_equivalent(&time, "09:30", "09:30:00"));
+        assert!(defaults_equivalent(&time, "9:30:00.1200", "09:30:00.12"));
+        assert!(!defaults_equivalent(&time, "09:30", "09:31:00"));
+
+        let timestamp = json!({"zelyra_type":"Timestamp"});
+        assert!(defaults_equivalent(
+            &timestamp,
+            "CURRENT_TIMESTAMP",
+            "CURRENT_TIMESTAMP(3)"
+        ));
     }
 
     #[test]

@@ -433,10 +433,11 @@ security and compatibility gates stated for that milestone.
   generated migration candidates, and reported 293 concrete type differences.
   This supersedes the earlier “zero schema differences” result, which covered
   only the previously documented metadata subset. Static integer, boolean,
-  text, and `now` defaults are now compared where Zelyra can interpret them
-  safely; reports omit the actual default text, and unsupported expressions
-  are listed as unclassified. Engine, charset, collation, and triggers remain
-  unchecked.
+  text, Decimal, Time, and `now` defaults are now compared where Zelyra can
+  interpret them safely; reports omit the actual default text, and unsupported
+  expressions are listed as unclassified. The latest live comparison found
+  114 default and 293 SQL type differences across 78 candidates. Engine,
+  charset, collation, and triggers remain unchecked.
 - [ ] **1.3.0 — canonical structure and Bytecode default:** Complete the
   opt-in versioned project layout (`routes/`, `domain/`, `schema/`, `public/`,
   `assets/`, and `plugins/`), architecture checks, and safe layout migration
