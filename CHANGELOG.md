@@ -1,5 +1,21 @@
 ## Unreleased
 
+## 1.2.27 — 2026-10-20
+
+- Add a read-only-first Laravel website importer with source graph analysis,
+  explicit generation selection, schema and pure model/service candidates,
+  bounded view/assets, and reusable native authentication modules. Validate
+  generated package reuse from a separate consumer project. This is a tested
+  foundation: Laravel routes, controller workflows, Blade behavior, active
+  tenant selection, and complete deployment migration are not imported. /
+  Einen zuerst schreibgeschützten Importer für Laravel-Webseiten ergänzen:
+  Quellgraphanalyse, ausdrückliche Generierungsauswahl, Schema- sowie reine
+  Model-/Servicekandidaten, begrenzte Views/Assets und wiederverwendbare native
+  Authentifizierungsmodule. Die Paketwiederverwendung in einem separaten
+  Konsumentenprojekt prüfen. Dies ist eine getestete Grundlage: Laravel-Routen,
+  Controllerabläufe, Blade-Verhalten, aktive Mandantenauswahl und vollständige
+  Deployment-Migration werden nicht importiert.
+
 ## 1.2.26 — 2026-10-20
 
 - Add `zelyra console` with persistent typed bindings, incremental parsing and
