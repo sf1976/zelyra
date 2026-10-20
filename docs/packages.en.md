@@ -465,9 +465,13 @@ them from an untrusted remote registry.
 The `examples/business_modules` project also contains a pure `csv_import`
 package. Its `decode_table(source, delimiter)` uses the bounded CSV decoder,
 requires a header row with non-empty column names, and rejects records whose
-field count differs from the header. It returns parsed rows and performs no database writes. The example
-runs this package with AST, MIR, and Bytecode; this does not provide column
-mapping, preview UI, or transactional import into an application database.
+field count differs from the header. `preview_table(rows, max_rows)` returns
+the header and at most 100 data rows. `map_columns(rows, source_columns,
+target_columns)` explicitly reorders and renames uniquely matched source
+columns, rejecting missing or ambiguous source names and duplicate target
+names. Both helpers return values and perform no database writes. The example
+runs this package with AST, MIR, and Bytecode. It does not provide a preview
+UI, type conversion, or transactional import into an application database.
 Package-level `effects` ceilings constrain declared function effects but do
 not replace application capability grants. Package source is loaded for
 analysis and compiled normally; `check` does not execute it. `run` executes the

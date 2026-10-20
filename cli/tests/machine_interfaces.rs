@@ -294,7 +294,7 @@ fn reusable_csv_import_package_checks_rows_on_all_execution_backends() {
         String::from_utf8_lossy(&checked.stderr)
     );
 
-    let expected = b"2\nAcme GmbH\nCSV row 2 has a different number of columns than the header\nCSV header column 2 is empty\n";
+    let expected = b"2\nAcme GmbH\n2\ncustomer_name\nAcme GmbH\nINV-1\nCSV preview row limit must be between 0 and 100\nCSV source column is missing: missing\nCSV source column is ambiguous: number\nCSV target column names must be unique\nCSV row 2 has a different number of columns than the header\nCSV header column 2 is empty\n";
     for backend in ["ast", "mir", "bytecode"] {
         let output = run(&[
             "run",

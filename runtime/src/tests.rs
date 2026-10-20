@@ -7,6 +7,21 @@ use std::{io::Read, net::TcpListener};
 use zelyra_lexer::lex;
 use zelyra_parser::parse;
 
+#[test]
+fn shared_execution_limits_define_defaults_caps_and_worker_stack_budget() {
+    assert_eq!(effective_function_call_depth(None), 20);
+    assert_eq!(effective_function_call_depth(Some(37)), 37);
+    assert_eq!(
+        effective_function_call_depth(Some(usize::MAX)),
+        MAX_CONFIGURED_FUNCTION_CALL_DEPTH
+    );
+    assert_eq!(runtime_stack_size_for_depth(0), 2 * 1024 * 1024);
+    assert_eq!(
+        runtime_stack_size_for_depth(usize::MAX),
+        2 * 1024 * 1024 + MAX_CONFIGURED_FUNCTION_CALL_DEPTH * 192 * 1024
+    );
+}
+
 fn run(source: &str) -> Vec<String> {
     let program = parse(&lex(source).unwrap()).unwrap();
     check(&program).unwrap();

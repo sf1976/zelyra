@@ -505,8 +505,14 @@ vertrauenswürdigen Remote-Registry.
 Das Projekt `examples/business_modules` enthält außerdem ein reines Paket
 `csv_import`. `decode_table(source, delimiter)` nutzt den begrenzten CSV-Parser,
 verlangt eine Kopfzeile mit nicht leeren Spaltennamen und lehnt Datensätze mit
-abweichender Spaltenzahl ab.
-Es liefert die geparsten Zeilen zurück und schreibt nicht in die Datenbank.
+abweichender Spaltenzahl ab. `preview_table(rows, max_rows)` liefert die
+Kopfzeile und höchstens 100 Datenzeilen zurück. `map_columns(rows,
+source_columns, target_columns)` ordnet eindeutig gefundene Quellspalten um und
+benennt sie explizit; fehlende oder mehrdeutige Quellnamen sowie doppelte
+Zielnamen werden abgewiesen. Beide Funktionen liefern Werte zurück und
+schreiben nicht in die Datenbank. Das Beispiel prüft das Paket mit AST, MIR
+und Bytecode. Eine Vorschau-UI, Typkonvertierung und ein transaktionaler
+Datenbankimport sind damit noch nicht vorhanden.
 Das Beispiel führt das Paket mit AST, MIR und Bytecode aus. Spaltenzuordnung,
 Vorschauoberfläche und transaktionaler Import in eine Anwendungsdatenbank sind
 damit nicht enthalten.
