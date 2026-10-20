@@ -730,12 +730,16 @@ keine Produktionsreife.
   Exact-Number-HTTP-Test gegen MySQL 8.4.11 bestätigt, dass `Money` mit fünf
   Nachkommastellen abgewiesen wird. Die Präzisions-/Skalenanalyse erkennt auch
   abweichende Großschreibung und Leerzeichen in MySQL-Metadaten.
-  Validierte API-`PATCH`-Handler berechnen Felder ebenfalls neu; Unit- und
-  isolierte MariaDB-Schreibtests decken dies ab. Der PATCH-Vertrag verlangt
-  derzeit alle Pflichtfelder und führt kein partielles Zusammenführen mit
-  einem gespeicherten Datensatz aus. Weitere Backend-Läufe und vollständige
-  Release-Prüfungen sind noch offen. Beispiel:
-  `examples/computed_api.zyl`.
+  Validierte API-`PATCH`-Handler berechnen Felder ebenfalls neu. Fehlende
+  Tabellenfelder werden aus dem vorhandenen Datensatz ergänzt; mandantenfähige
+  Lesezugriffe sind auf den bestätigten Mandanten begrenzt. Ungültige
+  Teilupdates lassen den Datensatz unverändert, fehlende Datensätze liefern
+  404 und fehlende Datenbankverbindungen 503. Nominale API-Pfadparameter vom
+  Typ `Id` werden in Integer-Runtimewerte konvertiert; damit besteht der
+  vollständige Create-/PUT-/PATCH-Test unter PostgreSQL 16 und MariaDB und ist
+  in CI für beide Datenbanken eingetragen. Weitere Backend- und
+  AST/MIR/Bytecode-Parität sowie vollständige Release-Prüfungen sind noch
+  offen. Beispiel: `examples/computed_api.zyl`.
 - [~] **1.2.33 — FileRef-Unterstützung im generierten CRUD:** Begrenzte,
   deklarative Anhangsregeln für Schema und CRUD ergänzen und sichere
   Uploadfelder auf Create/Edit sowie geschützte Download-Links auf Details

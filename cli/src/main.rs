@@ -12243,6 +12243,13 @@ fn api_value_json(
         )?))));
     }
     if let Type::Named(name) = ty {
+        if name == "Id" {
+            return value
+                .as_i64()
+                .or_else(|| value.as_str().and_then(|value| value.parse::<i64>().ok()))
+                .map(RuntimeValue::Int)
+                .ok_or_else(|| format!("invalid Id JSON value `{value}`"));
+        }
         if let Some(definition) = program
             .types
             .iter()

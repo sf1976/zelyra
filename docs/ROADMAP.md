@@ -685,9 +685,11 @@ syntax or a unit test alone does not establish production readiness.
   derived fields before validation and handler execution. An invalid partial
   PATCH leaves the stored row unchanged; the MariaDB E2E then verifies a valid
   partial update using the stored unit price. Missing rows return 404 and a
-  missing database connection returns 503. The new test runs on MariaDB and
-  PostgreSQL in CI. Broader backend and AST/MIR/bytecode parity checks and full
-  release gates remain open. See
+  missing database connection returns 503. Nominal API path parameters of
+  type `Id` are converted to integer runtime values, allowing the full
+  create/PUT/PATCH test to pass on PostgreSQL 16 as well as MariaDB. The test
+  runs on both databases in CI. Broader backend and AST/MIR/bytecode parity
+  checks and full release gates remain open. See
   `examples/computed_api.zyl`.
 - [~] **1.2.33 — FileRef-aware generated CRUD:** Add bounded declarative
   attachment constraints to schema/CRUD metadata and render safe upload fields

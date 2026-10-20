@@ -3267,7 +3267,14 @@ fn computed_api_fields_are_recomputed_before_validation_and_database_write() {
     let table_name = format!("zelyra_computed_api_{}", std::process::id());
     let database_url = env::var("ZELYRA_TEST_DATABASE_URL")
         .expect("ignored integration test needs a disposable database URL");
-    let source = source.replace("__TABLE__", &table_name);
+    let engine = if zelyra_database::is_postgres_url(&database_url) {
+        "postgres"
+    } else {
+        "mariadb"
+    };
+    let source = source
+        .replace("__TABLE__", &table_name)
+        .replace("engine: mariadb", &format!("engine: {engine}"));
     let program = parse(&lex(&source).unwrap()).unwrap();
     check_apis(&program).expect("computed API contract should type-check");
     zelyra_runtime::check(&program).expect("computed API handler should type-check");
@@ -4391,6 +4398,20 @@ fn decimal_api_inputs_use_decimal_values_without_float_conversion() {
     let value: Value = serde_json::from_str("0.000000001").unwrap();
     let decoded = api_value_json(&value, &Type::Decimal, &program).unwrap();
     assert_eq!(decoded.output(), "0.000000001");
+}
+
+#[test]
+fn nominal_id_api_inputs_use_integer_runtime_values() {
+    let program = parse(&lex("fn main() {}\n").unwrap()).unwrap();
+    for value in [serde_json::json!(42), serde_json::json!("42")] {
+        assert!(matches!(
+            api_value_json(&value, &Type::Named("Id".into()), &program),
+            Ok(RuntimeValue::Int(42))
+        ));
+    }
+    for value in [serde_json::json!(true), serde_json::json!("not-an-id")] {
+        assert!(api_value_json(&value, &Type::Named("Id".into()), &program).is_err());
+    }
 }
 
 #[test]
