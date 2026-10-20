@@ -20,22 +20,52 @@ pub(super) fn grant_schema_access(source: &str, table: &str, module: &str) -> Op
     {
         return None;
     }
-    let pattern = format!(r"(?s)(table\s+{}\s*\{{.*?)(\n\}})", regex::escape(table));
+    let pattern = format!(
+        r"(?s)(table\s+{}(?:\s+scoped\s+by\s+[A-Za-z_][A-Za-z0-9_]*\s*:\s*[A-Za-z_][A-Za-z0-9_]*)?\s*\{{.*?)(\n\}})",
+        regex::escape(table)
+    );
     let regex = regex::Regex::new(&pattern).ok()?;
-    if regex
-        .captures(source)
-        .is_some_and(|captures| captures[1].contains("access {"))
-    {
-        return None;
-    }
-    let updated = regex.replace(source, |captures: &regex::Captures<'_>| {
-        let declaration = &captures[1];
+    let captures = regex.captures(source)?;
+    let declaration = captures.get(1)?.as_str();
+    let close = captures.get(2)?.as_str();
+    let after_close = captures.get(2)?.end();
+    let updated_declaration = if let Some(access_start) = declaration.find("access {") {
+        let access = &declaration[access_start..];
+        let access_close = access.find('}')?;
+        let access_contents = &access["access {".len()..access_close];
+        let grant = format!("{module:?}");
+        let list = regex::Regex::new(r"(?s)(read_write\s*:\s*\[)([^\]]*)(\])").ok()?;
+        let updated_access = if let Some(list_capture) = list.captures(access_contents) {
+            let items = list_capture.get(2)?.as_str();
+            if items.contains(&grant) {
+                return None;
+            }
+            let separator = if items.trim().is_empty() { "" } else { ", " };
+            list.replace(
+                access_contents,
+                format!("${{1}}{items}{separator}{grant}${{3}}"),
+            )
+            .into_owned()
+        } else {
+            format!("{access_contents}\n        read_write: [{grant}]\n    ")
+        };
         format!(
-            "{}\n    access {{ read_write: [{:?}] }}{}",
-            declaration, module, &captures[2]
+            "{}access {{{}}}{}",
+            &declaration[..access_start],
+            updated_access,
+            &access[access_close + 1..]
         )
-    });
-    (updated.as_ref() != source).then(|| updated.into_owned())
+    } else {
+        format!("{declaration}\n    access {{ read_write: [{module:?}] }}")
+    };
+    let updated = format!(
+        "{}{}{}{}",
+        &source[..captures.get(1)?.start()],
+        updated_declaration,
+        close,
+        &source[after_close..]
+    );
+    (updated != source).then_some(updated)
 }
 
 pub(super) fn generate(
@@ -79,6 +109,13 @@ pub(super) fn generate(
             .find(|candidate| candidate["table"].as_str() == Some(table))?
             .get("candidate_source")?
             .as_str()?;
+        // Public token flows have no authenticated tenant context. Do not
+        // emit raw SQL against a tenant-scoped table: the compiler correctly
+        // rejects that access, and bypassing it would cross the declared
+        // tenant boundary. Keep the route as an unresolved migration finding.
+        if schema.contains("scoped by tenant_id:") {
+            continue;
+        }
         let has_hash_column = hash_column.is_match(schema);
         let has_timestamp_column = timestamp_column.is_match(schema);
         if !has_hash_column || !has_timestamp_column {
@@ -487,6 +524,37 @@ class PublicUnsubscribeController {
             generated.contains("access { read_write: [\"src/imported_public_unsubscribe.zyl\"] }")
         );
         assert!(grant_schema_access(schema, "other_table", "src/workflow.zyl").is_none());
+        let scoped = "type TenantId = Id\n\ntable suppressions scoped by tenant_id: TenantId {\n    id: Id primary auto\n}\n";
+        let generated = grant_schema_access(
+            scoped,
+            "suppressions",
+            "src/imported_public_unsubscribe.zyl",
+        )
+        .expect("scoped table receives the workflow grant");
+        assert!(generated.contains(
+            "table suppressions scoped by tenant_id: TenantId {\n    id: Id primary auto\n    access { read_write: [\"src/imported_public_unsubscribe.zyl\"] }"
+        ));
+    }
+
+    #[test]
+    fn schema_grant_extends_only_the_existing_read_write_module_list() {
+        let schema = "table suppressions {\n    id: Id primary auto\n    access { read: [\"src/reports.zyl\"] write: [] read_write: [\"src/admin.zyl\"] }\n}\n";
+        let generated = grant_schema_access(
+            schema,
+            "suppressions",
+            "src/imported_public_unsubscribe.zyl",
+        )
+        .expect("workflow grant is merged into an existing access block");
+        assert!(generated.contains("read: [\"src/reports.zyl\"]"));
+        assert!(generated.contains("write: []"));
+        assert!(generated
+            .contains("read_write: [\"src/admin.zyl\", \"src/imported_public_unsubscribe.zyl\"]"));
+        assert!(grant_schema_access(
+            &generated,
+            "suppressions",
+            "src/imported_public_unsubscribe.zyl"
+        )
+        .is_none());
     }
 
     #[test]
@@ -553,6 +621,11 @@ class PublicUnsubscribeController {
             "candidate_source": "table suppressions { id: Id primary auto }"
         })];
         assert!(generate(&root, &candidates, &incomplete_schema, true).is_none());
+        let tenant_schema = vec![json!({
+            "table": "suppressions",
+            "candidate_source": "type TenantId = Id\ntable suppressions scoped by tenant_id: TenantId {\n    id: Id primary auto\n    tenant_id: TenantId required references tenants\n    token_hash: String(64) required\n    unsubscribed_at: Timestamp?\n}"
+        })];
+        assert!(generate(&root, &candidates, &tenant_schema, true).is_none());
         fs::remove_dir_all(root).unwrap();
     }
 

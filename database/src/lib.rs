@@ -219,8 +219,59 @@ pub fn build_schema(program: &Program) -> Result<Schema, Vec<SchemaError>> {
                     continue;
                 }
             }
-            let (default_storage_name, sql_type, relation) =
+            let (default_storage_name, sql_type, inferred_relation) =
                 column_mapping(definition, &table_names, &program.types, backend);
+            let relation = if let Some(target_name) = definition.references.as_deref() {
+                if inferred_relation.is_some() {
+                    errors.push(SchemaError {
+                        message: format!(
+                            "column {}.{} cannot combine a relation type with an explicit `references` target",
+                            table.name, definition.name
+                        ),
+                        span: definition.span,
+                    });
+                    None
+                } else if !table_names.contains(target_name) {
+                    errors.push(SchemaError {
+                        message: format!(
+                            "reference target {target_name} for column {}.{} does not exist",
+                            table.name, definition.name
+                        ),
+                        span: definition.span,
+                    });
+                    None
+                } else {
+                    let source_type = resolve_type(&definition.ty, &program.types);
+                    let source_type = match source_type {
+                        Type::Option(inner) => *inner,
+                        other => other,
+                    };
+                    let target_id_is_primary = program
+                        .tables
+                        .iter()
+                        .find(|candidate| candidate.name == target_name)
+                        .is_some_and(|candidate| {
+                            candidate
+                                .columns
+                                .iter()
+                                .any(|column| column.name == "id" && column.primary_key)
+                        });
+                    if source_type != Type::Named("Id".into()) || !target_id_is_primary {
+                        errors.push(SchemaError {
+                            message: format!(
+                                "reference {}.{} -> {target_name}.id requires an ID-typed source and an `id` primary key",
+                                table.name, definition.name
+                            ),
+                            span: definition.span,
+                        });
+                        None
+                    } else {
+                        Some(target_name.to_owned())
+                    }
+                }
+            } else {
+                inferred_relation
+            };
             let storage_name = definition
                 .storage_name
                 .as_deref()
@@ -5873,6 +5924,127 @@ mod tests {
     }
 
     #[test]
+    fn explicit_scalar_references_keep_column_names_and_create_scoped_constraints() {
+        let source = r#"
+            type TenantId = Id
+            type CustomerGroupId = Id
+            table tenants {
+                id: TenantId primary auto
+            }
+            table customer_groups scoped by tenant_id: TenantId {
+                id: CustomerGroupId primary auto
+                tenant_id: TenantId required references tenants on_delete cascade
+            }
+            table customers scoped by tenant_id: TenantId {
+                id: Id primary auto
+                tenant_id: TenantId required references tenants on_delete cascade
+                customer_group_id: CustomerGroupId? references customer_groups
+            }
+        "#;
+        let program = parse(&lex(source).unwrap()).unwrap();
+        let schema = build_schema(&program).unwrap();
+        let customers = schema
+            .tables
+            .iter()
+            .find(|table| table.name == "customers")
+            .unwrap();
+        assert!(customers.columns.iter().any(|column| {
+            column.name == "tenant_id" && column.sql_type == "BIGINT" && !column.nullable
+        }));
+        assert!(customers.columns.iter().any(|column| {
+            column.name == "customer_group_id" && column.sql_type == "BIGINT" && column.nullable
+        }));
+        let tenant_fk = customers
+            .foreign_keys
+            .iter()
+            .find(|foreign_key| foreign_key.column == "tenant_id")
+            .unwrap();
+        assert_eq!(tenant_fk.columns, Vec::<String>::new());
+        assert_eq!(tenant_fk.referenced_table, "tenants");
+        assert_eq!(tenant_fk.on_delete, ReferentialAction::Cascade);
+        let group_fk = customers
+            .foreign_keys
+            .iter()
+            .find(|foreign_key| foreign_key.column == "customer_group_id")
+            .unwrap();
+        assert_eq!(group_fk.columns, ["tenant_id", "customer_group_id"]);
+        assert_eq!(group_fk.referenced_table, "customer_groups");
+        assert_eq!(group_fk.referenced_columns, ["tenant_id", "id"]);
+        assert_eq!(group_fk.on_delete, ReferentialAction::Restrict);
+        assert!(schema.create_sql().contains(
+            "CONSTRAINT `fk_customers_customer_group_id` FOREIGN KEY (`tenant_id`, `customer_group_id`) REFERENCES `customer_groups` (`tenant_id`, `id`) ON DELETE RESTRICT"
+        ));
+        assert!(schema
+            .create_sql()
+            .contains("CONSTRAINT `uq_customer_groups_tenant_id` UNIQUE (`tenant_id`, `id`)"));
+    }
+
+    #[test]
+    fn explicit_scalar_references_keep_backend_ddl_and_composite_scope_keys() {
+        for (engine, scalar_type, quote) in [
+            ("mariadb", "BIGINT", '`'),
+            ("postgres", "BIGINT", '"'),
+            ("sqlite", "INTEGER", '"'),
+        ] {
+            let source = format!(
+                r#"
+                    database main {{ engine: {engine} }}
+                    type TenantId = Id
+                    type DepartmentId = Id
+                    table tenants {{ id: TenantId primary auto }}
+                    table departments scoped by tenant_id: TenantId {{
+                        id: DepartmentId primary auto
+                        tenant_id: TenantId required references tenants
+                    }}
+                    table employees scoped by tenant_id: TenantId {{
+                        id: Id primary auto
+                        tenant_id: TenantId required references tenants
+                        department_id: DepartmentId references departments
+                    }}
+                "#
+            );
+            let program = parse(&lex(&source).unwrap()).unwrap();
+            let schema = build_schema(&program).unwrap();
+            let employees = schema
+                .tables
+                .iter()
+                .find(|table| table.name == "employees")
+                .unwrap();
+            let department_id = employees
+                .columns
+                .iter()
+                .find(|column| column.name == "department_id")
+                .unwrap();
+            assert_eq!(department_id.sql_type, scalar_type, "{engine}");
+            let foreign_key = employees
+                .foreign_keys
+                .iter()
+                .find(|foreign_key| foreign_key.column == "department_id")
+                .unwrap();
+            assert_eq!(foreign_key.referenced_table, "departments", "{engine}");
+            assert_eq!(
+                foreign_key.columns,
+                ["tenant_id", "department_id"],
+                "{engine}"
+            );
+            assert_eq!(
+                foreign_key.referenced_columns,
+                ["tenant_id", "id"],
+                "{engine}"
+            );
+            let ddl = schema.create_sql();
+            assert!(ddl.contains(&format!(
+                "FOREIGN KEY ({q}tenant_id{q}, {q}department_id{q}) REFERENCES {q}departments{q} ({q}tenant_id{q}, {q}id{q}) ON DELETE RESTRICT",
+                q = quote
+            )), "{engine}: {ddl}");
+            assert!(
+                ddl.contains(&format!("UNIQUE ({q}tenant_id{q}, {q}id{q})", q = quote)),
+                "{engine}: {ddl}"
+            );
+        }
+    }
+
+    #[test]
     fn scoped_relations_reject_distinct_nominal_tenant_types_and_set_null() {
         let mismatch = r#"
             type TenantId = Id
@@ -5895,14 +6067,18 @@ mod tests {
 
         let set_null = r#"
             type TenantId = Id
+            type CustomerId = Id
+            table tenants {
+                id: TenantId primary auto
+            }
             table customers scoped by tenant_id: TenantId {
-                id: Id primary auto
-                tenant_id: TenantId required
+                id: CustomerId primary auto
+                tenant_id: TenantId required references tenants
             }
             table invoices scoped by tenant_id: TenantId {
                 id: Id primary auto
-                tenant_id: TenantId required
-                customer: Customer? on_delete set_null
+                tenant_id: TenantId required references tenants
+                customer_id: CustomerId? references customers on_delete set_null
             }
         "#;
         let program = parse(&lex(set_null).unwrap()).unwrap();

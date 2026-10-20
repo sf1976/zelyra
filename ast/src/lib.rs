@@ -1136,6 +1136,9 @@ pub struct ColumnDef {
     /// column. Valid only on a table declared with `scoped by`.
     pub unique_within_tenant: bool,
     pub default: Option<DefaultValue>,
+    /// Explicit database foreign-key target for a scalar ID column. Unlike a
+    /// relation-typed column, this preserves the scalar's nominal domain type.
+    pub references: Option<String>,
     pub on_delete: Option<ReferentialAction>,
     pub span: Span,
 }

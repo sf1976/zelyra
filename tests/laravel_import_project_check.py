@@ -249,8 +249,6 @@ def main() -> int:
             ("GET", "/login", "authentication"),
             ("POST", "/login", "authentication"),
             ("POST", "/logout", "authentication"),
-            ("GET", "/csv-mailer/abmelden/{token}", "form"),
-            ("POST", "/csv-mailer/abmelden/{token}", "form"),
         }
         missing_routes = sorted(expected_routes - route_keys)
         if missing_routes:
@@ -259,6 +257,14 @@ def main() -> int:
                 + ", ".join(f"{method} {path} ({kind})" for method, path, kind in missing_routes),
                 file=sys.stderr,
             )
+            return 1
+
+        schema_source = (output / "src/imported_schema.zyl").read_text(encoding="utf-8")
+        if "table csv_mailer_suppressions scoped by tenant_id: TenantId" not in schema_source:
+            print("error: imported tenant suppression data is missing its declared tenant scope", file=sys.stderr)
+            return 1
+        if (output / "src/imported_public_unsubscribe.zyl").exists():
+            print("error: public unsubscribe SQL must not bypass tenant isolation", file=sys.stderr)
             return 1
 
         identity_entry = output / "packages/imported_identity/src/lib.zyl"

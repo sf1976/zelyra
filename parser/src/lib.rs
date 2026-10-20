@@ -2802,6 +2802,7 @@ impl<'a> Parser<'a> {
         let mut unique = false;
         let mut unique_within_tenant = false;
         let mut default = None;
+        let mut references = None;
         let mut on_delete = None;
         loop {
             match self.current().kind.clone() {
@@ -2843,6 +2844,13 @@ impl<'a> Parser<'a> {
                     self.advance();
                     default = Some(self.default_value()?);
                 }
+                TokenKind::Ident(ref value) if value == "references" => {
+                    self.advance();
+                    if references.is_some() {
+                        return self.error("`references` may be specified only once");
+                    }
+                    references = Some(self.ident("referenced table name")?.0);
+                }
                 TokenKind::Ident(ref value) if value == "on_delete" => {
                     self.advance();
                     if on_delete.is_some() {
@@ -2880,6 +2888,7 @@ impl<'a> Parser<'a> {
             unique,
             unique_within_tenant,
             default,
+            references,
             on_delete,
             span,
         })
@@ -5605,6 +5614,27 @@ mod tests {
             program.tables[1].columns[1].on_delete,
             Some(ReferentialAction::SetNull)
         );
+    }
+
+    #[test]
+    fn parses_explicit_scalar_column_references() {
+        let source = r#"
+            type TenantId = Id
+            table tenants { id: TenantId primary auto }
+            table users {
+                tenant_id: TenantId required references tenants on_delete cascade
+            }
+        "#;
+        let program = parse(&lex(source).unwrap()).unwrap();
+        let column = &program.tables[1].columns[0];
+        assert_eq!(column.references.as_deref(), Some("tenants"));
+        assert_eq!(column.on_delete, Some(ReferentialAction::Cascade));
+
+        let duplicate = r#"table targets { id: Id primary auto } table sources { target_id: Id references targets references targets }"#;
+        let error = parse(&lex(duplicate).unwrap()).unwrap_err();
+        assert!(error
+            .message
+            .contains("`references` may be specified only once"));
     }
 
     #[test]

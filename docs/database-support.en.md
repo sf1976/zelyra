@@ -68,3 +68,26 @@ with real foreign key constraints is proven:
 - On MySQL and MariaDB, `innodb_lock_wait_timeout` enforces hard, bounded abort
   thresholds for row locks (~1s instead of 50s).
 See [evidence](release-readiness/0.9.9-relational-crud-matrix.en.md).
+
+## Typed scalar references and tenant keys (1.2.30 development)
+
+A scalar nominal ID can retain its Zelyra type while declaring an explicit
+database reference, for example `customer_group_id: CustomerGroupId?
+references customer_groups`. The target table must declare an `id` primary
+key, and both source and target IDs must resolve to `Id`. The reference is
+checked by the compiler and emitted as a database foreign key; an optional
+source ID becomes a nullable SQL column. If both tables are tenant-scoped
+with the same nominal tenant type, the FK is composite over
+`(tenant_id, relation_id) -> (tenant_id, id)`, and the target receives the
+required unique `(tenant_id, id)` key. This prevents cross-tenant references
+at the database boundary. Different tenant identity aliases are rejected.
+
+MariaDB, PostgreSQL, and SQLite DDL-generation tests cover this shape. A live
+MariaDB 11.8 check accepted an in-tenant reference and rejected a cross-tenant
+one. This is bounded evidence for the explicit scalar-reference form, not a
+claim of general database-backend parity. The Laravel importer emits this
+syntax only when a static migration proves the FK. A composite tenant FK
+cannot preserve `ON DELETE SET NULL`, because that would also clear the
+required tenant key; the importer marks the generated `RESTRICT` behavior as a
+reviewed difference rather than claiming equivalence. See the
+[1.2.30 work plan](release-plans/1.2.30-typed-schema-references.en.md).

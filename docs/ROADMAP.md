@@ -446,27 +446,28 @@ security and compatibility gates stated for that milestone.
   direct SQL actions. The required first `SELECT` and all later SQL run on the
   same transaction; no match returns 404 before writes, CSRF remains required,
   and verified-token pages are marked `Cache-Control: no-store`. A repeatable
-  MariaDB/browser E2E verifies token validation, invalid-token GET and POST
-  behavior, successful unsubscribe, idempotent repeat submission, and stable
-  first-unsubscribe time. The executable native example is
-  `examples/csv_mailer_unsubscribe.zyl`. The importer now recognizes the
-  source-evidenced `PublicCsvMailerUnsubscribeController` pattern and emits a
-  reusable `src/imported_public_unsubscribe.zyl` module, a shared schema module,
-  and a scoped table access grant. It translates only a literal SHA-256 token
-  lookup, read-before-write, idempotent unsubscribe update, and static notice
-  text; unsupported variants remain ungenerated. Generated output passed
-  `zelyra check`, and a disposable MariaDB/HTTP run verified GET 200, invalid
-  token 404, CSRF-protected POST redirect, and the persisted timestamp. The
-  repeatable `python3 tests/laravel_import_unsubscribe_e2e.py
-  /opt/siedelmann-laravel/app` test now regenerates the source-derived scaffold,
-  applies its schema to a fresh disposable MariaDB container, and exercises
-  valid/invalid GET and POST, CSRF, repeated-submit timestamp stability, and
-  the success page over HTTP. When the importer discovers a shared app layout,
-  the generated success page now binds that shell; otherwise it emits no
-  unresolved layout reference. The source report records this decision. The
-  test also verifies the rendered success page is inside the generated shell.
-  It sends no mail and leaves no database or scaffold behind. This is an HTTP
-  integration test, not browser automation.
+  MariaDB/HTTP E2E exercises the flow against the explicitly unscoped example
+  `examples/csv_mailer_unsubscribe.zyl`. For the real Laravel project
+  `/opt/siedelmann-laravel/app`, this workflow is currently not generated:
+  `csv_mailer_suppressions` is tenant-owned, while its public token route has no
+  authenticated tenant context. `tests/laravel_import_unsubscribe_e2e.py` now
+  verifies that the table remains tenant-scoped, the unsafe route is omitted,
+  and the scaffold documents this limitation. It does not connect to a
+  database; the actual project workflow remains an open migration item.
+  Scalar nominal ID columns may now add `references <table>` while preserving
+  their Zelyra type and emitting a real SQL FK. The project linker now rewrites
+  module-local tenant aliases on both columns and scope declarations. Based on
+  static migration evidence, the importer maps
+  `foreignId('tenant_id')->constrained('tenants')` to `TenantId`, table scopes,
+  and the real reference. Scoped-to-scoped relations use composite foreign
+  keys and the required `UNIQUE (tenant_id, id)` target key. A live MariaDB 11.8
+  run confirmed same-tenant references succeed and cross-tenant references are
+  rejected by the FK; the repeatable
+  `tests/mariadb-tenant-relations-e2e.sh` checks both record-typed and scalar
+  nominal references. Laravel `SET NULL` on such a composite key cannot be
+  preserved safely: the review candidate emits `RESTRICT` and records the
+  behavioral difference. No Laravel database contents or source files were
+  modified.
   Every generated scaffold now includes `IMPORT_COVERAGE.json`, which
   separates source inventory, finding classifications, generated artifacts,
   compiler status, and behavior-test status. The source-only integration test

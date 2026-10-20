@@ -14,6 +14,34 @@ fn run(source: &str) -> Vec<String> {
 }
 
 #[test]
+fn explicit_database_references_are_typechecked_against_declared_id_keys() {
+    let valid = r#"
+        type TenantId = Id
+        table tenants { id: TenantId primary auto }
+        table customers scoped by tenant_id: TenantId {
+            id: Id primary auto
+            tenant_id: TenantId required references tenants
+        }
+        fn main() {}
+    "#;
+    check(&parse(&lex(valid).unwrap()).unwrap()).expect("valid scalar ID reference");
+
+    for invalid in [
+        r#"table sources { target_id: Id references missing } fn main() {}"#,
+        r#"table targets { name: String primary } table sources { target_id: Id references targets } fn main() {}"#,
+        r#"table targets { id: String primary } table sources { target_id: String references targets } fn main() {}"#,
+        r#"table targets { id: Id primary auto } table sources { target: Target references targets } fn main() {}"#,
+    ] {
+        let errors = check(&parse(&lex(invalid).unwrap()).unwrap())
+            .expect_err("invalid scalar references must fail the checker");
+        assert!(
+            errors.iter().any(|error| error.code == "E-REF-001"),
+            "{invalid}"
+        );
+    }
+}
+
+#[test]
 fn recursion_is_bounded_and_reports_the_call_site_without_crashing() {
     let direct = "fn dive(depth: Int) -> Int { if depth == 0 { return 0 } return dive(depth - 1) + 1 } fn main() { print(dive(10000)) }";
     let program = parse(&lex(direct).unwrap()).unwrap();

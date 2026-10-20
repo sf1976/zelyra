@@ -491,29 +491,31 @@ abgeschlossen.
   und alle folgenden SQL-Anweisungen laufen in derselben Transaktion; ohne
   Treffer folgt 404 vor jedem Schreibzugriff, CSRF bleibt Pflicht und
   verifizierte Token-Seiten erhalten `Cache-Control: no-store`. Ein
-  wiederholbarer MariaDB-/Browser-E2E prüft Tokenvalidierung, ungültige GET-
-  und POST-Tokens, erfolgreiche Abmeldung, idempotente Wiederholung und den
-  Erhalt des ersten Abmeldezeitpunkts. Das ausführbare native Beispiel ist
-  `examples/csv_mailer_unsubscribe.zyl`. Der Importer erkennt jetzt das
-  quellbelegte Muster `PublicCsvMailerUnsubscribeController` und erzeugt das
-  wiederverwendbare Modul `src/imported_public_unsubscribe.zyl`, ein gemeinsames
-  Schemapaket und einen auf dieses Modul begrenzten Tabellenzugriff. Übersetzt
-  werden nur der literale SHA-256-Tokenvergleich, die Prüfung vor dem Schreiben,
-  die idempotente Abmeldung und statische Hinweistexte; abweichende Varianten
-  bleiben unübersetzt. Die Ausgabe bestand `zelyra check`; ein Lauf mit
-  Wegwerf-MariaDB und HTTP-Server bestätigte GET 200, 404 für ungültige Tokens,
-  CSRF-geschützten POST-Redirect und den gespeicherten Zeitpunkt. Die
-  wiederholbare Prüfung `python3 tests/laravel_import_unsubscribe_e2e.py
-  /opt/siedelmann-laravel/app` erzeugt das Scaffold erneut, richtet dessen
-  Schema in einem frischen Wegwerf-MariaDB-Container ein und prüft gültige und
-  ungültige GET-/POST-Tokens, CSRF, den stabilen Zeitstempel nach Wiederholung
-  sowie die Erfolgsseite über HTTP. Erkennt der Importer ein gemeinsames
-  Anwendungslayout, bindet die generierte Erfolgsseite diese Shell; andernfalls
-  erzeugt er keinen ungelösten Layoutverweis. Der Generierungsbericht hält die
-  Entscheidung fest. Der Test prüft außerdem, dass die gerenderte Erfolgsseite
-  innerhalb der erzeugten Shell liegt. Es wird keine E-Mail versendet und weder
-  Datenbank noch Scaffold bleiben zurück. Das ist ein HTTP-Integrationstest,
-  kein Browser-Automationstest.
+  wiederholbarer MariaDB-/HTTP-E2E prüft den Ablauf am ausdrücklich
+  unmandantenfähigen Beispiel `examples/csv_mailer_unsubscribe.zyl`. Für das
+  echte Laravel-Projekt `/opt/siedelmann-laravel/app` wird dieser Ablauf
+  derzeit nicht generiert: `csv_mailer_suppressions` ist mandantengebunden, die
+  öffentliche Tokenroute besitzt aber keinen authentifizierten
+  Mandantenkontext. `tests/laravel_import_unsubscribe_e2e.py` prüft hier nun,
+  dass die Tabelle als `scoped by` erzeugt, die unsichere Route ausgelassen und
+  die Einschränkung im Scaffold genannt wird. Es findet dabei kein
+  Datenbankzugriff statt; das bleibt ein offener Importablauf und ist kein
+  Laufzeittest der Abmeldung.
+  `table ... scoped by`-Spalten können nun zusätzlich ein skalares nominales
+  ID-Feld mit `references <table>` als SQL-Fremdschlüssel deklarieren. Der
+  Projektlinker erhält dabei den modul-lokalen Tenant-ID-Alias. Der Importer
+  erkennt `foreignId('tenant_id')->constrained('tenants')` nur anhand des
+  statischen Migrationsbelegs, erzeugt `TenantId`, die Tabellenscopes und den
+  realen FK. Für zwei mandantengebundene Tabellen werden die vorhandenen
+  zusammengesetzten FK-Ziele samt `UNIQUE (tenant_id, id)` genutzt. Ein
+  tatsächlicher MariaDB-11.8-Lauf bestätigte, dass eine eigene Referenz gelingt
+  und eine mandantenfremde Referenz mit FK-Fehler abgewiesen wird; der
+  wiederholbare Test `tests/mariadb-tenant-relations-e2e.sh` prüft nun sowohl
+  Record-Relationen als auch skalare nominale Referenzen. Laravels
+  `SET NULL` auf einer solchen zusammengesetzten Relation kann Zelyra nicht
+  sicher abbilden; der prüfpflichtige Scaffold ersetzt dies sichtbar durch
+  `RESTRICT` und schreibt den Unterschied als Reviewhinweis aus. Kein
+  Datenbank- oder Quelldateiinhalt des Laravel-Projekts wurde verändert.
   Jedes generierte Gerüst enthält jetzt `IMPORT_COVERAGE.json`, das
   Quellinventar, Befundklassifizierungen, erzeugte Artefakte, Compilerstatus
   und Laufzeitteststatus trennt. Der Source-Only-Integrationstest gleicht den
