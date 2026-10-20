@@ -468,6 +468,16 @@ abgeschlossen.
   teilweise. Laravel,
   Composer-Pakete, PHP-Controller, Blade-Laufzeitdateien und Zugangsdaten werden
   nicht kopiert.
+  Der jüngste ausdrückliche Live-Schemacheck vergleicht zusätzlich bekannte
+  MariaDB-Speichertypen einschließlich Decimal-Präzision und -Skalierung sowie
+  Fremdschlüssel-Zielspalten. Unbekannte Abbildungen werden getrennt
+  ausgewiesen; Standardwerte, Engine, Charset, Collation und Trigger bleiben
+  ungeprüft. Die echte Datenbank wurde schreibgeschützt verbunden, ohne
+  Anwendungszeilen zu lesen: 80 Tabellen und 1.215 Spalten wurden untersucht,
+  alle 78 generierten Migrationskandidaten verglichen und 293 konkrete
+  Typabweichungen gemeldet. Das ersetzt den früheren Befund „keine
+  Schemadifferenzen“, der nur den damals dokumentierten Metadatenausschnitt
+  verglich.
 - [ ] **1.3.0 — kanonische Struktur und Bytecode-Standard:** Das optionale,
   versionierte Projektlayout (`routes/`, `domain/`, `schema/`, `public/`,
   `assets/`, `plugins/`), Architekturprüfungen und eine sichere

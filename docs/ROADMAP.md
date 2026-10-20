@@ -424,6 +424,15 @@ security and compatibility gates stated for that milestone.
   2,186 findings, including 1,343 manual/unresolved and 843 partial.
   Laravel, Composer packages, PHP controllers, Blade runtime files, and source
   credentials are not copied.
+  The latest explicit live-schema run now compares known MariaDB storage types
+  (including Decimal precision/scale) and foreign-key target columns as well as
+  presence, nullability, and indexes. Unknown mappings remain listed
+  separately; default values, engine, charset, collation, and triggers are not
+  compared. Against the real database it connected read-only, read no
+  application rows, inspected 80 tables/1,215 columns, compared all 78
+  generated migration candidates, and reported 293 concrete type differences.
+  This supersedes the earlier “zero schema differences” result, which covered
+  only the previously documented metadata subset.
 - [ ] **1.3.0 — canonical structure and Bytecode default:** Complete the
   opt-in versioned project layout (`routes/`, `domain/`, `schema/`, `public/`,
   `assets/`, and `plugins/`), architecture checks, and safe layout migration

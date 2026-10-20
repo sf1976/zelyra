@@ -97,8 +97,10 @@ pub(super) fn inspect(project: &Path) -> Result<Value, String> {
                 })).collect::<Vec<_>>(),
                 "foreign_keys": table.foreign_keys.iter().map(|key| json!({
                     "column": key.column,
+                    "columns": key.columns,
                     "referenced_table": key.referenced_table,
                     "referenced_column": key.referenced_column,
+                    "referenced_columns": key.referenced_columns,
                     "on_delete": format!("{:?}", key.on_delete)
                 })).collect::<Vec<_>>()
             })
@@ -249,6 +251,7 @@ pub(super) fn compare_candidates(live: &Value, generation: &Value) -> Value {
         .unwrap_or_default();
     let mut compared_tables = Vec::new();
     let mut differences = Vec::new();
+    let mut unclassified_types = Vec::new();
     let mut candidate_names = BTreeSet::new();
 
     for candidate in &candidates {
@@ -307,6 +310,28 @@ pub(super) fn compare_candidates(live: &Value, generation: &Value) -> Value {
                 Some(!expected["default"].is_null()),
                 actual["default_present"].as_bool(),
             );
+            match expected_mariadb_type(expected) {
+                Some(expected_type) => {
+                    if let Some(actual_type) = actual["sql_type"].as_str() {
+                        if normalize_schema_type(actual_type)
+                            != normalize_schema_type(&expected_type)
+                        {
+                            differences.push(json!({
+                                "table": table_name,
+                                "column": physical_name,
+                                "kind": "sql_type_mismatch",
+                                "expected_type": expected_type,
+                                "actual_type": actual_type
+                            }));
+                        }
+                    }
+                }
+                None => unclassified_types.push(json!({
+                    "table": table_name,
+                    "column": physical_name,
+                    "zelyra_type": expected["zelyra_type"]
+                })),
+            }
         }
 
         for column_name in actual_columns.keys() {
@@ -358,10 +383,12 @@ pub(super) fn compare_candidates(live: &Value, generation: &Value) -> Value {
             let physical_name = physical_column_name(expected)
                 .unwrap_or_else(|| expected["name"].as_str().unwrap_or_default());
             let relation_table = expected["relation_table"].as_str().unwrap_or_default();
+            let relation_column = expected["relation_target_column"].as_str().unwrap_or("id");
             let delete_action = expected["on_delete"].as_str();
             let found = actual_foreign_keys.iter().any(|actual| {
                 actual["column"].as_str() == Some(physical_name)
                     && actual["referenced_table"].as_str() == Some(relation_table)
+                    && actual["referenced_column"].as_str() == Some(relation_column)
                     && delete_action.is_none_or(|expected_action| {
                         delete_action_matches(
                             expected_action,
@@ -375,6 +402,7 @@ pub(super) fn compare_candidates(live: &Value, generation: &Value) -> Value {
                     "column": physical_name,
                     "kind": "missing_or_different_live_foreign_key",
                     "expected_table": relation_table,
+                    "expected_column": relation_column,
                     "expected_on_delete": delete_action
                 }));
             }
@@ -395,9 +423,11 @@ pub(super) fn compare_candidates(live: &Value, generation: &Value) -> Value {
         "status": "completed",
         "comparison_scope": [
             "table_presence", "column_presence", "nullability", "primary_key",
-            "default_presence", "indexes", "uniques", "foreign_key_source_column_target_table_delete_action"
+            "default_presence", "known_sql_type_equivalence", "indexes", "uniques",
+            "foreign_key_source_column_target_table_target_column_delete_action"
         ],
-        "not_compared": ["sql_type_equivalence", "default_value_equivalence", "foreign_key_target_column", "engine", "charset", "collation", "triggers"],
+        "not_compared": ["default_value_equivalence", "engine", "charset", "collation", "triggers"],
+        "unclassified_types": unclassified_types,
         "candidate_table_count": candidates.len(),
         "compared_table_count": compared_count,
         "missing_live_table_count": compared_tables.len().saturating_sub(compared_count),
@@ -406,6 +436,52 @@ pub(super) fn compare_candidates(live: &Value, generation: &Value) -> Value {
         "differences": differences,
         "unmodeled_live_tables": unmodeled_live_tables
     })
+}
+
+fn expected_mariadb_type(column: &Value) -> Option<String> {
+    let type_name = column["zelyra_type"].as_str()?;
+    if column["relation_status"] == "resolved" {
+        return Some("BIGINT".into());
+    }
+    let length = column["length"].as_u64();
+    let decimal = &column["decimal_precision"];
+    Some(match type_name {
+        "Id" | "Int" => "BIGINT".into(),
+        "UInt" => "DECIMAL(20,0)".into(),
+        "Float" => "DOUBLE".into(),
+        "Decimal" => match (decimal["precision"].as_u64(), decimal["scale"].as_u64()) {
+            (Some(precision), Some(scale)) => format!("DECIMAL({precision},{scale})"),
+            _ if decimal.is_null() => "DECIMAL(39,9)".into(),
+            _ => return None,
+        },
+        "Bool" => "BOOLEAN".into(),
+        "String" => length.map_or_else(|| "TEXT".into(), |length| format!("VARCHAR({length})")),
+        "Json" => "JSON".into(),
+        "Char" => "CHAR(1)".into(),
+        "Bytes" => "BLOB".into(),
+        "Timestamp" => "DATETIME(3)".into(),
+        "Date" => "DATE".into(),
+        "Time" => "TIME".into(),
+        "Duration" => "BIGINT".into(),
+        "Email" => "VARCHAR(255)".into(),
+        "Url" => "VARCHAR(2048)".into(),
+        "Uuid" => "CHAR(36)".into(),
+        _ => return None,
+    })
+}
+
+fn normalize_schema_type(value: &str) -> String {
+    let normalized = value
+        .chars()
+        .filter(|character| !character.is_ascii_whitespace() && *character != '`')
+        .flat_map(char::to_uppercase)
+        .collect::<String>();
+    match normalized.as_str() {
+        "NUMERIC(20,0)" => "DECIMAL(20,0)".into(),
+        "NUMERIC(39,9)" => "DECIMAL(39,9)".into(),
+        "NUMERIC" => "DECIMAL".into(),
+        other => other.to_owned(),
+    }
 }
 
 fn physical_column_name(column: &Value) -> Option<&str> {
@@ -836,7 +912,7 @@ mod tests {
                 ],
                 "indexes": [{"columns":["customer_id"],"unique":false}],
                 "uniques": [{"columns":["email"]}],
-                "foreign_keys": [{"column":"customer_id","referenced_table":"customers","on_delete":"Restrict"}]
+                "foreign_keys": [{"column":"customer_id","referenced_table":"customers","referenced_column":"id","on_delete":"Restrict"}]
             }, {"name":"laravel_sessions","columns":[],"indexes":[],"uniques":[],"foreign_keys":[]}]
         });
 
@@ -901,7 +977,72 @@ mod tests {
             .as_array()
             .unwrap()
             .iter()
-            .any(|item| item == "sql_type_equivalence"));
+            .any(|item| item == "default_value_equivalence"));
+    }
+
+    #[test]
+    fn compares_known_mariadb_types_and_foreign_key_target_columns() {
+        let generation = json!({"candidates":[{
+            "table":"orders",
+            "columns":[
+                {"name":"id","source_column_name":"id","zelyra_type":"Id","nullable":false,"primary_key":true,"default":null,"relation_status":"not_a_foreign_key"},
+                {"name":"amount","source_column_name":"amount","zelyra_type":"Decimal","decimal_precision":{"precision":12,"scale":2},"nullable":false,"primary_key":false,"default":null,"relation_status":"not_a_foreign_key"},
+                {"name":"customer","source_column_name":"customer_id","zelyra_type":"Customer","nullable":false,"primary_key":false,"default":null,"relation_status":"resolved","relation_table":"customers","relation_target_column":"customer_key","on_delete":"Restrict"},
+                {"name":"legacy","source_column_name":"legacy_id","zelyra_type":"LegacyIdentifier","nullable":true,"primary_key":false,"default":null,"relation_status":"not_a_foreign_key"}
+            ],
+            "indexes":[],"uniques":[]
+        }]});
+        let live = json!({"tables":[{
+            "name":"orders",
+            "columns":[
+                {"name":"id","sql_type":"BIGINT","nullable":false,"primary_key":true,"default_present":false},
+                {"name":"amount","sql_type":"DECIMAL(12,2)","nullable":false,"primary_key":false,"default_present":false},
+                {"name":"customer_id","sql_type":"BIGINT","nullable":false,"primary_key":false,"default_present":false},
+                {"name":"legacy_id","sql_type":"VARCHAR(40)","nullable":true,"primary_key":false,"default_present":false}
+            ],
+            "indexes":[],"uniques":[],
+            "foreign_keys":[{"column":"customer_id","referenced_table":"customers","referenced_column":"id","on_delete":"Restrict"}]
+        }]});
+
+        let comparison = compare_candidates(&live, &generation);
+        let differences = comparison["differences"].as_array().unwrap();
+        assert!(differences.iter().any(|difference| {
+            difference["kind"] == "missing_or_different_live_foreign_key"
+                && difference["expected_column"] == "customer_key"
+        }));
+        assert!(!differences.iter().any(|difference| {
+            difference["kind"] == "sql_type_mismatch" && difference["column"] == "amount"
+        }));
+        assert_eq!(comparison["unclassified_types"][0]["column"], "legacy_id");
+        assert!(comparison["comparison_scope"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|item| item == "known_sql_type_equivalence"));
+    }
+
+    #[test]
+    fn reports_known_sql_type_mismatches_without_normalizing_precision_away() {
+        let generation = json!({"candidates":[{"table":"orders","columns":[{
+            "name":"amount","source_column_name":"amount","zelyra_type":"Decimal",
+            "decimal_precision":{"precision":12,"scale":2},"nullable":false,
+            "primary_key":false,"default":null,"relation_status":"not_a_foreign_key"
+        }],"indexes":[],"uniques":[]}]});
+        let live = json!({"tables":[{"name":"orders","columns":[{
+            "name":"amount","sql_type":"DECIMAL(12,4)","nullable":false,
+            "primary_key":false,"default_present":false
+        }],"indexes":[],"uniques":[],"foreign_keys":[]}]});
+
+        let comparison = compare_candidates(&live, &generation);
+        assert!(comparison["differences"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|difference| {
+                difference["kind"] == "sql_type_mismatch"
+                    && difference["expected_type"] == "DECIMAL(12,2)"
+                    && difference["actual_type"] == "DECIMAL(12,4)"
+            }));
     }
 
     #[test]
