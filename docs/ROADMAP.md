@@ -674,10 +674,11 @@ computed fields and generated uploads remain open:
   Existing upload staging, edit retention/replacement, cleanup after failed
   actions, tenant/permission checks, and delete-time reference-aware cleanup
   are reused. Parser/form/route/render tests pass. A disposable MariaDB/HTTP
-  test passed for the underlying upload form route: persistence, edit
-  preservation/replacement, rollback cleanup, and authorized downloads. It
-  does not yet exercise the full CLI-generated CRUD path or cross-tenant
-  denial; those release checks remain open.
+  test passed through the real CLI-generated CRUD path: `.env` database
+  resolution, `/new`, multipart persistence, list links without raw references,
+  and authenticated download. Existing upload-route integration tests cover
+  edit preservation/replacement and rollback cleanup. Explicit cross-tenant
+  denial and browser checks remain release gates.
 
 See the [business CRUD completion plan](release-plans/1.2.31-1.2.33-business-crud.en.md).
 

@@ -729,10 +729,11 @@ geprüft; berechnete Felder und generierte Uploads sind weiterhin offen:
   Upload-Staging-, Edit-Erhalt-/Ersetzungs- und Fehlerbereinigung, Mandanten-/
   Rechteprüfung sowie referenzbewusste Bereinigung beim Löschen werden genutzt.
   Parser-, Formular-, Routengenerator- und Render-Tests bestehen. Ein echter
-  Wegwerf-MariaDB-/HTTP-Test bestand für die zugrunde liegende Upload-Formroute:
-  Speichern, Erhalt/Ersetzung beim Edit, Rollback-Bereinigung und autorisierte
-  Downloads. Der vollständige CLI-generierte CRUD-Pfad und die explizite
-  Ablehnung mandantenfremder Downloads sind noch Release-Prüfungen.
+  Wegwerf-MariaDB-/HTTP-Test bestand über den CLI-generierten CRUD-Pfad:
+  `.env`-Datenbankauflösung, `/new`, Multipart-Speicherung, Listenlink ohne
+  rohe Referenz und authentifizierter Download. Ein vorhandener Upload-
+  Integrationstest deckt Edit-Erhalt/Ersetzung sowie Rollback-Bereinigung ab.
+  Explizite mandantenfremde Ablehnung und Browserprüfungen bleiben Release-Gates.
 
 Siehe den [Plan zum Abschluss des Geschäfts-CRUD](release-plans/1.2.31-1.2.33-business-crud.de.md).
 

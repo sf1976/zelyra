@@ -635,8 +635,11 @@ These steps consistently use the directory `address-book`, source file
    zelyra check src/main.zyl
    ~~~
 
-6. Load `DATABASE_URL` into the process and test readiness. `.env` is not
-   automatically loaded by Zelyra:
+6. Test readiness. `zelyra serve`, `doctor`, and project-aware database
+   commands resolve the project `.env` themselves. The process environment
+   takes precedence; otherwise `ZELYRA_DATABASE_MAIN_URL` is preferred over
+   `DATABASE_URL`. For commands that execute Zelyra code directly, load the
+   URL into the process explicitly:
 
    ~~~bash
    set -a
@@ -1890,8 +1893,8 @@ password in diagnostics.
 | wrong port | confused host `3307` with container `3306` | host uses `3307`; a Compose service uses `3306` |
 | MariaDB container not started | Compose error, occupied port, or unhealthy volume | inspect `docker compose ps` and `docker compose logs mariadb` |
 | user granted only for another host | `'zelyra'@'localhost'` is not always `'zelyra'@'127.0.0.1'` | grant the exact host and inspect grants |
-| missing environment variable | `DATABASE_URL` was not exported | load `.env` or set the process variable; Zelyra does not load it itself |
-| `.env` not found | wrong working directory or assumed automatic loader | use `pwd`, `ls -la`, and export the variable explicitly |
+| missing environment variable | the command needs a process-level URL, or no project URL is configured | project-aware `serve`, `doctor`, and database commands read the project `.env`; for direct code execution, load `.env` or set the process variable |
+| `.env` not found | wrong working directory or no project-local environment file | use `pwd`, `ls -la`, then set the required process variable or create the project `.env` |
 | invalid numeric port | URI port is not numeric | use digits such as `3307`; otherwise URL parsing fails |
 | wrong charset | database uses another charset/collation | inspect the database; `db setup` uses `utf8mb4`/`utf8mb4_unicode_ci` |
 | TLS error | unsupported TLS parameters were appended to the URL | use the current URL form; TLS configuration is planned |

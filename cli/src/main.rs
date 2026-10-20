@@ -10361,6 +10361,23 @@ fn serve_command(mut args: impl Iterator<Item = String>) -> ExitCode {
         Ok(project) => project.program,
         Err(()) => return ExitCode::from(1),
     };
+    let project_root = Path::new(&path)
+        .parent()
+        .filter(|parent| !parent.as_os_str().is_empty())
+        .unwrap_or_else(|| Path::new("."));
+    let database_url = match database_url_for_project(
+        project_root,
+        program
+            .databases
+            .first()
+            .map(|database| database.name.as_str()),
+    ) {
+        Ok(database_url) => database_url,
+        Err(error) => {
+            diagnostic(&path, "E-ENV-001", &error, 1, 1);
+            return ExitCode::from(1);
+        }
+    };
     if let Some(reserved_path) = project_uses_reserved_ui_asset_route(&program) {
         diagnostic(
             &path,
@@ -10591,7 +10608,6 @@ fn serve_command(mut args: impl Iterator<Item = String>) -> ExitCode {
         .is_some_and(|auth| auth.reset_tokens_table.is_some())
     {
         let auth = auth_route.as_ref().expect("reset route was detected");
-        let database_url = database_url_from_program(&program);
         let reset_table = auth
             .reset_tokens_table
             .as_deref()
@@ -10930,8 +10946,8 @@ fn serve_command(mut args: impl Iterator<Item = String>) -> ExitCode {
     let database_capability_granted =
         database_runtime_capability_granted(capability_grants.as_ref());
     if database_capability_granted {
-        if let Some(url) = database_url_from_program(&program) {
-            if let Err(error) = zelyra_database::validate_decimal_storage(&url, &schema) {
+        if let Some(url) = database_url.as_deref() {
+            if let Err(error) = zelyra_database::validate_decimal_storage(url, &schema) {
                 let span = decimal_storage_error_span(&program, &error.to_string());
                 diagnostic_with_span(&path, "E-DB-PRECISION", &error.to_string(), span);
                 return ExitCode::from(1);
@@ -10939,8 +10955,8 @@ fn serve_command(mut args: impl Iterator<Item = String>) -> ExitCode {
         }
     }
     if database_capability_granted {
-        if let Some(url) = database_url_from_program(&program) {
-            if let Err(error) = zelyra_database::validate_temporal_storage(&url, &schema) {
+        if let Some(url) = database_url.as_deref() {
+            if let Err(error) = zelyra_database::validate_temporal_storage(url, &schema) {
                 let span = decimal_storage_error_span(&program, &error.to_string());
                 diagnostic_with_span(&path, "E-DB-TEMPORAL", &error.to_string(), span);
                 return ExitCode::from(1);
@@ -11072,10 +11088,6 @@ fn serve_command(mut args: impl Iterator<Item = String>) -> ExitCode {
     if used_fallback {
         println!("note: {address} is already in use; using free port {actual_address}");
     }
-    let project_root = std::path::Path::new(&path)
-        .parent()
-        .filter(|parent| !parent.as_os_str().is_empty())
-        .unwrap_or_else(|| std::path::Path::new("."));
     let module_settings_store = match packages::PackageGraph::load(project_root) {
         Ok(Some(graph))
             if graph
@@ -11095,7 +11107,7 @@ fn serve_command(mut args: impl Iterator<Item = String>) -> ExitCode {
         }
     };
     println!("Zelyra server listening on http://{actual_address}");
-    let app = WebApp::with_database_url(routes, form_routes, database_url_from_program(&program))
+    let app = WebApp::with_database_url(routes, form_routes, database_url)
         .with_validation_program(program)
         .with_runtime_security(capability_grants, runtime_policy)
         .with_ui_settings(ui_language, ui_level)

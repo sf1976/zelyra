@@ -692,8 +692,11 @@ Die folgenden Schritte verwenden überall dieselben Werte: das Verzeichnis
    zelyra check src/main.zyl
    ~~~
 
-6. Die URL in die Prozessumgebung laden und die Verbindung testen. `.env` wird
-   von Zelyra nicht automatisch geladen:
+6. Die Verbindung testen. `zelyra serve`, `doctor` und projektbezogene
+   Datenbankbefehle lesen die Projekt-`.env` selbst. Prozessvariablen haben
+   Vorrang; andernfalls wird `ZELYRA_DATABASE_MAIN_URL` vor `DATABASE_URL`
+   verwendet. Für Befehle, die Zelyra-Code direkt ausführen, die URL weiterhin
+   ausdrücklich in die Prozessumgebung laden:
 
    ~~~bash
    set -a
@@ -2020,8 +2023,8 @@ Gib niemals `DATABASE_URL` oder ein Passwort in eine Diagnoseausgabe aus.
 | falscher Port | außen `3307` mit innen `3306` verwechselt | Host nutzt `3307`, ein Compose-Service nutzt `3306` |
 | MariaDB-Container nicht gestartet | Compose-Fehler, belegter Port oder ungesundes Volume | `docker compose ps` und `docker compose logs mariadb` prüfen |
 | Benutzer nur für anderen Host freigegeben | `'zelyra'@'localhost'` ist nicht immer `'zelyra'@'127.0.0.1'` | Benutzer exakt für den verwendeten Host anlegen und Grants kontrollieren |
-| fehlende Umgebungsvariable | `DATABASE_URL` wurde nicht exportiert | `.env` laden oder Variable für den Prozess setzen; Zelyra lädt sie nicht selbst |
-| `.env` wird nicht gefunden | falsches Arbeitsverzeichnis oder Annahme eines automatischen Loaders | `pwd`, `ls -la`; im Projektstamm arbeiten und Variable explizit exportieren |
+| fehlende Umgebungsvariable | der Befehl braucht eine Prozessvariable oder es ist keine Projekt-URL gesetzt | projektbezogenes `serve`, `doctor` und Datenbankbefehle lesen die Projekt-`.env`; für direkte Codeausführung `.env` laden oder Prozessvariable setzen |
+| `.env` wird nicht gefunden | falsches Arbeitsverzeichnis oder keine Projekt-Umgebungsdatei | `pwd`, `ls -la`; benötigte Prozessvariable setzen oder Projekt-`.env` anlegen |
 | ungültiger Zahlenwert beim Port | Portteil der URI ist kein gültiger MariaDB-Port | Ziffern verwenden, zum Beispiel `3307`; die URL wird ansonsten abgelehnt |
 | falscher Zeichensatz | Datenbank mit anderem Charset/Kollation angelegt | Datenbankdefinition prüfen; `db setup` nutzt `utf8mb4`/`utf8mb4_unicode_ci` |
 | TLS-Fehler | TLS-Parameter wurden an die URL angehängt, werden aber nicht unterstützt | aktuelle CLI-URL ohne TLS-Query-Option nutzen; TLS-Konfiguration ist geplant |
