@@ -2663,31 +2663,44 @@ pub fn apply_postgres(database_url: &str, sql: &str) -> Result<(), DatabaseError
 }
 
 pub fn inspect_mariadb(database_url: &str) -> Result<Schema, DatabaseError> {
-    let output = run_mariadb(
+    // Laravel commonly selects its `mysql` driver while running against a
+    // MariaDB server. Select the server-specific, bounded statement timeout
+    // from the server version, not from the URL scheme.
+    let server_version = run_mariadb_command(database_url, "SELECT VERSION()", None, None)?;
+    let mysql_server = mysql_server_from_version(&server_version);
+    let output = run_mariadb_command(
         database_url,
         "SELECT TABLE_NAME, COLUMN_NAME, DATA_TYPE, IS_NULLABLE, COLUMN_KEY, EXTRA, COALESCE(CHARACTER_MAXIMUM_LENGTH, DATETIME_PRECISION, ''), COALESCE(NUMERIC_PRECISION, ''), COALESCE(NUMERIC_SCALE, ''), CASE WHEN COLUMN_DEFAULT IS NULL THEN 'N' ELSE CONCAT('V', HEX(CAST(COLUMN_DEFAULT AS CHAR CHARACTER SET utf8mb4))) END FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME NOT IN ('_zelyra_schema_history', '_zelyra_outbox') ORDER BY TABLE_NAME, ORDINAL_POSITION",
         None,
+        Some(mysql_server),
     )?;
     let mut schema = parse_mariadb_columns(&output)?;
-    let json_checks = run_mariadb(
+    let json_checks = run_mariadb_command(
         database_url,
         "SELECT tc.TABLE_NAME, HEX(cc.CHECK_CLAUSE) FROM information_schema.TABLE_CONSTRAINTS tc JOIN information_schema.CHECK_CONSTRAINTS cc ON cc.CONSTRAINT_SCHEMA = tc.CONSTRAINT_SCHEMA AND cc.CONSTRAINT_NAME = tc.CONSTRAINT_NAME WHERE tc.CONSTRAINT_SCHEMA = DATABASE() AND tc.TABLE_NAME NOT IN ('_zelyra_schema_history', '_zelyra_outbox') AND tc.CONSTRAINT_TYPE = 'CHECK' ORDER BY tc.TABLE_NAME, tc.CONSTRAINT_NAME",
         None,
+        Some(mysql_server),
     )?;
     parse_mariadb_json_checks(&mut schema, &json_checks)?;
-    let indexes = run_mariadb(
+    let indexes = run_mariadb_command(
         database_url,
         "SELECT TABLE_NAME, INDEX_NAME, NON_UNIQUE, SEQ_IN_INDEX, COLUMN_NAME FROM information_schema.STATISTICS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME NOT IN ('_zelyra_schema_history', '_zelyra_outbox') AND INDEX_NAME <> 'PRIMARY' ORDER BY TABLE_NAME, INDEX_NAME, SEQ_IN_INDEX",
         None,
+        Some(mysql_server),
     )?;
     parse_mariadb_indexes(&mut schema, &indexes)?;
-    let foreign_keys = run_mariadb(
+    let foreign_keys = run_mariadb_command(
         database_url,
         "SELECT kcu.TABLE_NAME, kcu.COLUMN_NAME, kcu.REFERENCED_TABLE_NAME, kcu.REFERENCED_COLUMN_NAME, kcu.CONSTRAINT_NAME, rules.DELETE_RULE FROM information_schema.KEY_COLUMN_USAGE kcu JOIN information_schema.REFERENTIAL_CONSTRAINTS rules ON rules.CONSTRAINT_SCHEMA = kcu.CONSTRAINT_SCHEMA AND rules.CONSTRAINT_NAME = kcu.CONSTRAINT_NAME AND rules.TABLE_NAME = kcu.TABLE_NAME WHERE kcu.TABLE_SCHEMA = DATABASE() AND kcu.TABLE_NAME NOT IN ('_zelyra_schema_history', '_zelyra_outbox') AND kcu.REFERENCED_TABLE_NAME IS NOT NULL ORDER BY kcu.TABLE_NAME, kcu.CONSTRAINT_NAME, kcu.ORDINAL_POSITION",
         None,
+        Some(mysql_server),
     )?;
     parse_foreign_key_output(&mut schema, &foreign_keys)?;
     Ok(schema)
+}
+
+fn mysql_server_from_version(version: &str) -> bool {
+    !version.to_ascii_lowercase().contains("mariadb")
 }
 
 pub fn apply_mariadb(database_url: &str, sql: &str) -> Result<(), DatabaseError> {
@@ -4998,6 +5011,20 @@ fn run_mariadb(
     query: &str,
     database_override: Option<&str>,
 ) -> Result<String, DatabaseError> {
+    run_mariadb_command(
+        database_url,
+        query,
+        database_override,
+        Some(database_url.starts_with("mysql://")),
+    )
+}
+
+fn run_mariadb_command(
+    database_url: &str,
+    query: &str,
+    database_override: Option<&str>,
+    mysql_server: Option<bool>,
+) -> Result<String, DatabaseError> {
     let connection = parse_mariadb_url(database_url)?;
     let timeouts = MariaDbTimeouts::from_env()?;
     let tls = MariaDbTlsSettings::from_env()?;
@@ -5025,15 +5052,14 @@ fn run_mariadb(
             query,
         ])
         .args(timeouts.connect_args())
-        .args(if database_url.starts_with("mysql://") {
-            let lock_wait_seconds = timeouts.query_seconds.max(1);
-            [format!(
+        .args(match mysql_server {
+            Some(true) => vec![format!(
                 "--init-command=SET SESSION max_execution_time={}, innodb_lock_wait_timeout={}",
                 timeouts.query_seconds * 1000,
-                lock_wait_seconds
-            )]
-        } else {
-            timeouts.query_args()
+                timeouts.query_seconds.max(1)
+            )],
+            Some(false) => timeouts.query_args().to_vec(),
+            None => Vec::new(),
         })
         .args(tls.client_args_for_host(&connection.host)?)
         .env("MYSQL_PWD", &connection.password);
@@ -6900,6 +6926,14 @@ mod tests {
         assert!(started.elapsed() < Duration::from_secs(1));
         assert!(second_checkout.is_err());
         drop(held);
+    }
+
+    #[test]
+    fn live_inspector_selects_statement_timeout_from_server_family_not_url_scheme() {
+        assert!(mysql_server_from_version("8.4.1"));
+        assert!(mysql_server_from_version("5.7.44-log"));
+        assert!(!mysql_server_from_version("10.11.8-MariaDB"));
+        assert!(!mysql_server_from_version("11.4.2-MariaDB-ubu2404"));
     }
 
     #[test]

@@ -297,7 +297,13 @@ abgeschlossen.
   ausgewählte Schemas, eng begrenzte reine Model-/Servicehelfer, View-/Layout-
   und Assetkandidaten sowie `ROUTE_CANDIDATES.json` mit aufgelösten
   Ressourcenrouten und Modelverbrauchern; Routenhandler und Verhalten werden
-  noch nicht generiert. Ungelöste Abläufe und genaue Quellpositionen in einem
+  noch nicht generiert. Die ausdrücklich angeforderte Live-Schema-Prüfung löst
+  nicht auflösbare MariaDB-Compose-Aliase innerhalb des Compose-Arbeitsordners
+  der Quelle auf, fragt keine Container-Umgebungsvariablen ab, erkennt den
+  Serveranbieter für begrenzte Katalogabfragen und meldet beim ersten
+  Abnahmeprojekt 80 Tabellen/1.215 Spalten. Die lokale Docker-Datenbank dieses
+  Hosts erforderte einen ausdrücklich TLS-deaktivierten Einzelaufruf; TLS wird
+  nie automatisch deaktiviert. Ungelöste Abläufe und genaue Quellpositionen in einem
   versionierten Bericht erhalten. Abnahmeprojekt ist
   `/opt/siedelmann-laravel/app`; weitere Abdeckung folgt in 1.2.30. Siehe den
   [Arbeitsplan 1.2.27](release-plans/1.2.27-laravel-website-importer.de.md).

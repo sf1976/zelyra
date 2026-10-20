@@ -6,7 +6,9 @@
 use serde_json::{json, Value};
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
-use std::path::Path;
+use std::net::IpAddr;
+use std::path::{Path, PathBuf};
+use std::process::Command;
 use url::Url;
 
 const MAX_DOTENV_BYTES: u64 = 64 * 1024;
@@ -37,17 +39,34 @@ pub(super) fn inspect(project: &Path) -> Result<Value, String> {
         .scheme()
         .to_ascii_lowercase();
 
-    let schema = match scheme.as_str() {
-        "mysql" | "mariadb" => zelyra_database::inspect_mariadb(&connection_url),
+    let (schema, connection_resolution) = match scheme.as_str() {
+        "mysql" | "mariadb" => match zelyra_database::inspect_mariadb(&connection_url) {
+            Ok(schema) => (schema, "configured_host"),
+            Err(error) if is_host_resolution_error(&error.to_string()) => {
+                let resolved_url = docker_compose_database_url(&connection_url, &root)
+                    .ok_or_else(|| classify_connection_error(&error.to_string()))?;
+                let schema = zelyra_database::inspect_mariadb(&resolved_url)
+                    .map_err(|error| classify_connection_error(&error.to_string()))?;
+                (schema, "docker_compose_service_alias")
+            }
+            Err(error) => return Err(classify_connection_error(&error.to_string())),
+        },
         // The current PostgreSQL inspector passes its connection URL to `psql`
         // as a process argument. Do not expose a Laravel password in argv.
         "postgres" | "postgresql" => {
             return Err("PostgreSQL live inspection is not enabled because the current client interface can expose credentials in process arguments".into());
         }
-        "sqlite" => zelyra_database::inspect_sqlite(&connection_url),
-        _ => return Err(format!("Laravel database driver `{scheme}` is not supported for live schema inspection")),
-    }
-    .map_err(|error| classify_connection_error(&error.to_string()))?;
+        "sqlite" => (
+            zelyra_database::inspect_sqlite(&connection_url)
+                .map_err(|error| classify_connection_error(&error.to_string()))?,
+            "configured_host",
+        ),
+        _ => {
+            return Err(format!(
+                "Laravel database driver `{scheme}` is not supported for live schema inspection"
+            ))
+        }
+    };
 
     let table_count = schema.tables.len();
     let column_count: usize = schema.tables.iter().map(|table| table.columns.len()).sum();
@@ -88,6 +107,7 @@ pub(super) fn inspect(project: &Path) -> Result<Value, String> {
     Ok(json!({
         "status": "connected_read_only",
         "driver": scheme,
+        "connection_resolution": connection_resolution,
         "source": "Laravel .env connection settings; information_schema/SQLite metadata only",
         "application_rows_read": false,
         "credentials_recorded": false,
@@ -95,6 +115,102 @@ pub(super) fn inspect(project: &Path) -> Result<Value, String> {
         "column_count": column_count,
         "tables": tables
     }))
+}
+
+fn docker_compose_database_url(connection_url: &str, project_root: &Path) -> Option<String> {
+    let url = Url::parse(connection_url).ok()?;
+    let configured_host = url.host_str()?.to_owned();
+    if configured_host.parse::<IpAddr>().is_ok() {
+        return None;
+    }
+    let working_directory = compose_working_directory(project_root)?;
+    let filter = format!(
+        "label=com.docker.compose.project.working_dir={}",
+        working_directory.display()
+    );
+    let containers = Command::new("docker")
+        .args(["ps", "--quiet", "--filter", &filter])
+        .output()
+        .ok()?;
+    if !containers.status.success() {
+        return None;
+    }
+    let ids = String::from_utf8(containers.stdout).ok()?;
+    let ids = ids
+        .lines()
+        .filter(|id| {
+            (12..=64).contains(&id.len()) && id.bytes().all(|byte| byte.is_ascii_hexdigit())
+        })
+        .collect::<Vec<_>>();
+    if ids.is_empty() {
+        return None;
+    }
+
+    // Limit inspected fields to Compose's working directory, network aliases,
+    // and assigned IPs. Container environment variables (which may contain
+    // secrets) are never requested from Docker or copied to this process.
+    const INSPECT_TEMPLATE: &str = "{{ $wd := index .Config.Labels \"com.docker.compose.project.working_dir\" }}{{range $networkName,$network := .NetworkSettings.Networks}}{{range $alias := $network.Aliases}}{{printf \"%s\\t%s\\t%s\\n\" $wd $alias $network.IPAddress}}{{end}}{{end}}";
+    let mut inspect = Command::new("docker");
+    inspect.args(["inspect", "--format", INSPECT_TEMPLATE]);
+    inspect.args(ids);
+    let inspected = inspect.output().ok()?;
+    if !inspected.status.success() {
+        return None;
+    }
+    let inspected = String::from_utf8(inspected.stdout).ok()?;
+    let ip = compose_alias_ip(&inspected, &working_directory, &configured_host)?;
+    replace_database_host(connection_url, ip)
+}
+
+fn compose_working_directory(project_root: &Path) -> Option<PathBuf> {
+    const COMPOSE_FILES: &[&str] = &[
+        "compose.yaml",
+        "compose.yml",
+        "docker-compose.yaml",
+        "docker-compose.yml",
+    ];
+    project_root.ancestors().find_map(|directory| {
+        let contains_compose_file = COMPOSE_FILES.iter().any(|name| {
+            fs::symlink_metadata(directory.join(name))
+                .is_ok_and(|metadata| metadata.is_file() && !metadata.file_type().is_symlink())
+        });
+        contains_compose_file
+            .then(|| fs::canonicalize(directory).ok())
+            .flatten()
+    })
+}
+
+fn compose_alias_ip(output: &str, working_directory: &Path, alias: &str) -> Option<IpAddr> {
+    let expected_working_directory = working_directory.to_str()?;
+    let mut addresses = BTreeSet::new();
+    for line in output.lines() {
+        let mut fields = line.split('\t');
+        let (Some(directory), Some(candidate_alias), Some(address)) =
+            (fields.next(), fields.next(), fields.next())
+        else {
+            continue;
+        };
+        if directory != expected_working_directory || !candidate_alias.eq_ignore_ascii_case(alias) {
+            continue;
+        }
+        if let Ok(address) = address.parse::<IpAddr>() {
+            if !address.is_unspecified() && !address.is_loopback() {
+                addresses.insert(address);
+            }
+        }
+    }
+    (addresses.len() == 1).then(|| *addresses.iter().next().expect("one address"))
+}
+
+fn is_host_resolution_error(error: &str) -> bool {
+    let lower = error.to_ascii_lowercase();
+    lower.contains("unknown server host") || lower.contains("name or service not known")
+}
+
+fn replace_database_host(connection_url: &str, host: IpAddr) -> Option<String> {
+    let mut url = Url::parse(connection_url).ok()?;
+    url.set_host(Some(&host.to_string())).ok()?;
+    Some(url.to_string())
 }
 
 /// Compare only metadata that both the migration projection and the live
@@ -536,6 +652,21 @@ fn classify_connection_error(error: &str) -> String {
             .into()
     } else if lower.contains("access denied") || lower.contains("password authentication failed") {
         "Laravel database rejected the configured credentials or metadata grants; raw client output was suppressed".into()
+    } else if lower.contains("unknown database") || lower.contains("database does not exist") {
+        "the configured Laravel database name was not found; credentials and raw client output were suppressed".into()
+    } else if lower.contains("unknown system variable") || lower.contains("unknown variable") {
+        "the database rejected a vendor-specific inspection setting; importer timeout selection may need an update".into()
+    } else if lower.contains("certificate") || lower.contains("tls") || lower.contains("ssl") {
+        "Laravel database TLS negotiation failed; check the database certificate and explicit Zelyra TLS settings".into()
+    } else if lower.contains("unexpected mariadb")
+        || lower.contains("invalid encoded schema metadata")
+        || lower.contains("encoded schema metadata is not valid utf-8")
+        || lower.contains("unexpected foreign-key inspection row")
+        || lower.contains("unsupported maria")
+    {
+        "the database answered, but its schema metadata contains a shape not supported by the importer".into()
+    } else if lower.contains("connection refused") || lower.contains("timed out") {
+        "could not connect to the Laravel database host and port; credentials and raw client output were suppressed".into()
     } else if lower.contains("could not start") || lower.contains("no such file") {
         "required database inspection client is unavailable; install the matching database client"
             .into()
@@ -572,6 +703,77 @@ mod tests {
     fn rejects_duplicate_or_expanded_database_settings() {
         assert!(parse_connection_values("DB_HOST=a\nDB_HOST=b\n").is_err());
         assert!(parse_connection_values("DB_PASSWORD=${PASSWORD}\n").is_err());
+    }
+
+    #[test]
+    fn compose_alias_resolution_requires_one_matching_ip_from_the_same_project() {
+        let output = concat!(
+            "/opt/project\tmariadb\t172.18.0.2\n",
+            "/opt/other\tmariadb\t172.18.0.3\n",
+            "/opt/project\tweb\t172.18.0.4\n",
+            "/opt/project\tmariadb\tinvalid\n"
+        );
+        assert_eq!(
+            compose_alias_ip(output, Path::new("/opt/project"), "mariadb"),
+            Some("172.18.0.2".parse().unwrap())
+        );
+        assert_eq!(
+            compose_alias_ip(output, Path::new("/opt/project"), "missing"),
+            None
+        );
+    }
+
+    #[test]
+    fn compose_alias_resolution_rejects_ambiguous_addresses() {
+        let output = "/opt/project\tmariadb\t172.18.0.2\n/opt/project\tmariadb\t172.18.0.3\n";
+        assert_eq!(
+            compose_alias_ip(output, Path::new("/opt/project"), "mariadb"),
+            None
+        );
+    }
+
+    #[test]
+    fn docker_host_resolution_fallback_is_limited_to_name_resolution_errors() {
+        assert!(is_host_resolution_error(
+            "ERROR 2005 (HY000): Unknown server host 'mariadb'"
+        ));
+        assert!(!is_host_resolution_error("Access denied for user"));
+        assert!(!is_host_resolution_error("connection timed out"));
+    }
+
+    #[test]
+    fn live_schema_errors_are_classified_without_echoing_raw_database_details() {
+        assert!(classify_connection_error("Unknown database 'client-db'").contains("database name"));
+        assert!(classify_connection_error("TLS certificate verification failed").contains("TLS"));
+        assert!(
+            classify_connection_error("unexpected MariaDB column metadata with 11 fields")
+                .contains("schema metadata")
+        );
+        let rejected =
+            classify_connection_error("Access denied for user importer with password p@ss");
+        assert!(rejected.contains("credentials or metadata grants"));
+        assert!(!rejected.contains("importer"));
+        assert!(!rejected.contains("p@ss"));
+        assert!(
+            classify_connection_error("Unknown system variable max_execution_time")
+                .contains("vendor-specific inspection setting")
+        );
+    }
+
+    #[test]
+    fn database_url_host_override_keeps_credentials_private_and_connection_settings() {
+        let url = replace_database_host(
+            "mariadb://importer:encoded%40password@mariadb:3307/siedelmann?ssl-mode=required",
+            "172.18.0.2".parse().unwrap(),
+        )
+        .unwrap();
+        let parsed = Url::parse(&url).unwrap();
+        assert_eq!(parsed.host_str(), Some("172.18.0.2"));
+        assert_eq!(parsed.port(), Some(3307));
+        assert_eq!(parsed.path(), "/siedelmann");
+        assert_eq!(parsed.query(), Some("ssl-mode=required"));
+        assert_eq!(parsed.username(), "importer");
+        assert_eq!(parsed.password(), Some("encoded%40password"));
     }
 
     #[test]

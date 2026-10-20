@@ -271,7 +271,12 @@ security and compatibility gates stated for that milestone.
   Current generation emits selected schemas, narrow pure model/service helpers,
   view/layout and asset candidates, plus `ROUTE_CANDIDATES.json` with resolved
   resource routes and model consumers; route handlers and behavior are still
-  not generated. Keep unresolved behavior and exact source locations visible
+  not generated. Explicit read-only database inspection resolves an unresolved
+  MariaDB Compose alias within the source project's Compose working directory,
+  requests no container environment values, detects the server vendor for
+  bounded metadata queries, and reports 80 tables/1,215 columns on the first
+  fixture. This host's local Docker DB required an explicit TLS-disabled
+  invocation; TLS is never disabled automatically. Keep unresolved behavior and exact source locations visible
   in a versioned report. The `/opt/siedelmann-laravel/app` project is the
   acceptance fixture; broader route/workflow coverage continues in 1.2.30. See the
   [1.2.27 importer plan](release-plans/1.2.27-laravel-website-importer.en.md).

@@ -3564,7 +3564,7 @@ mod tests {
         let selection: Value =
             serde_json::from_slice(&fs::read(output.join("GENERATION_SELECTION.json")).unwrap())
                 .unwrap();
-        assert!(selection["validation_forms"].as_array().unwrap().len() > 0);
+        assert!(!selection["validation_forms"].as_array().unwrap().is_empty());
         assert_eq!(selection["validation_module_imported_by_default"], false);
         let main = fs::read_to_string(output.join("main.zyl")).unwrap();
         assert!(!main.contains("src/imported_forms.zyl"));
