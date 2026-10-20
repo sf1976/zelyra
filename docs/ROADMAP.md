@@ -396,7 +396,10 @@ security and compatibility gates stated for that milestone.
   lock, rechecks references under it, and prevents another Zelyra server from
   starting during deletion. This coordinates processes on one local host, not
   unrelated programs or arbitrary network filesystems. A disposable MariaDB
-  E2E proves preview, referenced-file preservation, and explicit orphan removal.
+  E2E proves preview, referenced-file preservation, and explicit orphan removal;
+  it also starts a real upload-enabled `zelyra serve`, verifies cleanup is
+  refused while that process holds the lock, then verifies cleanup succeeds
+  after the server exits.
   Replacing a file on an authorized edit now removes the previous blob only
   after the database action commits; cleanup failure leaves a managed orphan
   for the explicit reference-aware cleanup command. Permanent CRUD deletion removes an upload after commit only when no declared
@@ -425,7 +428,7 @@ security and compatibility gates stated for that milestone.
   flows in invoices,
   contracts, settings, postal letters, and inbound mail; the importer does not
   generate them. Remaining release gates include backup/restore and additional cleanup E2E
-  coverage for concurrent service shutdown, crash remnants, and failure recovery. See the
+  coverage for crash remnants and failure recovery. See the
   [1.2.29 secure upload plan](release-plans/1.2.29-secure-uploads.en.md).
 - [~] **1.2.30 — Laravel import workflow coverage:** Standalone forms now
   support checked local routes with captured path parameters, a compiler-checked

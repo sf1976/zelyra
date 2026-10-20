@@ -9,6 +9,7 @@ database_name="zelyra_upload_cleanup_e2e"
 database_password="zelyra_upload_cleanup_${$}_${RANDOM}"
 project_dir="$(mktemp -d "${TMPDIR:-/tmp}/zelyra-upload-cleanup.XXXXXX")"
 export MYSQL_PWD="${database_password}"
+server_pid=""
 
 if [[ ! -x "${zelyra_bin}" ]]; then
     echo "error: Zelyra binary not found at ${zelyra_bin}; build zelyra-cli first" >&2
@@ -19,6 +20,10 @@ if ! command -v docker >/dev/null 2>&1; then
     exit 1
 fi
 cleanup() {
+    if [[ -n "${server_pid}" ]]; then
+        kill -TERM "${server_pid}" >/dev/null 2>&1 || true
+        wait "${server_pid}" >/dev/null 2>&1 || true
+    fi
     docker stop "${container_name}" >/dev/null 2>&1 || true
     rm -rf -- "${project_dir}"
 }
@@ -45,9 +50,16 @@ if ! docker exec --env MYSQL_PWD "${container_name}" mariadb \
 fi
 
 cat >"${project_dir}/main.zyl" <<'ZELYRA'
+database main { engine: mariadb }
 table upload_record {
     id: Id primary auto
     file: FileRef?
+}
+form Upload -> upload_record {
+    field file: File { max_size: "1KB" allowed_types: ["application/pdf"] }
+    action save {
+        sql { INSERT INTO upload_record (file) VALUES (:file) }
+    }
 }
 fn main() {}
 ZELYRA
@@ -83,4 +95,51 @@ fi
 [[ -f "${tenant_dir}/${referenced_ref}.meta" ]]
 [[ ! -e "${tenant_dir}/${orphan_ref}" ]]
 [[ ! -e "${tenant_dir}/${orphan_ref}.meta" ]]
-echo "upload cleanup MariaDB E2E passed (preview, reference preservation, explicit apply)"
+
+# Exercise the actual process-lifetime lock acquired by an upload-enabled
+# `zelyra serve`, not only the in-process lock primitive. Keep one old orphan
+# around so the cleanup command must reach the destructive maintenance gate.
+locked_ref="123e4567-e89b-42d3-a456-426614174002"
+printf 'test bytes\n' >"${tenant_dir}/${locked_ref}"
+printf 'test manifest\n' >"${tenant_dir}/${locked_ref}.meta"
+chmod 600 "${tenant_dir}/${locked_ref}" "${tenant_dir}/${locked_ref}.meta"
+touch -d '2 days ago' "${tenant_dir}/${locked_ref}" "${tenant_dir}/${locked_ref}.meta"
+"${zelyra_bin}" serve "${project_dir}/main.zyl" 127.0.0.1:0 >"${project_dir}/server.log" 2>&1 &
+server_pid=$!
+server_port=""
+for _ in $(seq 1 60); do
+    server_port="$(sed -n 's#^Zelyra server listening on http://127\.0\.0\.1:\([0-9][0-9]*\)$#\1#p' "${project_dir}/server.log" | head -n 1)"
+    if [[ -n "${server_port}" ]] && kill -0 "${server_pid}" >/dev/null 2>&1; then
+        if (echo >"/dev/tcp/127.0.0.1/${server_port}") >/dev/null 2>&1; then
+            break
+        fi
+    fi
+    if ! kill -0 "${server_pid}" >/dev/null 2>&1; then
+        cat "${project_dir}/server.log" >&2
+        echo "error: upload-enabled Zelyra server exited before becoming ready" >&2
+        exit 1
+    fi
+    sleep 0.25
+done
+if [[ -z "${server_port}" ]] || ! kill -0 "${server_pid}" >/dev/null 2>&1; then
+    cat "${project_dir}/server.log" >&2
+    echo "error: upload-enabled Zelyra server did not become ready" >&2
+    exit 1
+fi
+if locked_cleanup="$("${zelyra_bin}" files cleanup "${project_dir}/main.zyl" \
+    --min-age-days 1 --apply --maintenance-window 2>&1)"; then
+    echo "error: cleanup unexpectedly succeeded while the upload server was running" >&2
+    exit 1
+fi
+grep -F 'error[E-FILE-005]: cannot begin upload maintenance' <<<"${locked_cleanup}" >/dev/null
+[[ -f "${tenant_dir}/${locked_ref}" ]]
+[[ -f "${tenant_dir}/${locked_ref}.meta" ]]
+
+kill -TERM "${server_pid}"
+wait "${server_pid}" >/dev/null 2>&1 || true
+server_pid=""
+"${zelyra_bin}" files cleanup "${project_dir}/main.zyl" \
+    --min-age-days 1 --apply --maintenance-window >/dev/null
+[[ ! -e "${tenant_dir}/${locked_ref}" ]]
+[[ ! -e "${tenant_dir}/${locked_ref}.meta" ]]
+echo "upload cleanup MariaDB E2E passed (preview, reference preservation, explicit apply, live-server lock)"

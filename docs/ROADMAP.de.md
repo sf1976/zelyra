@@ -430,7 +430,10 @@ abgeschlossen.
   nur an, prüft deklarierte FileRef-Spalten erneut, begrenzt Datei- und
   Datenbankreferenz-Scans auf je 100.000 Einträge und bricht bei Symlinks oder
   inkonsistenten Pfaden ab. Ein Wegwerf-MariaDB-E2E bestätigt Vorschau,
-  Erhalt referenzierter Dateien und ausdrückliches Löschen des Waisen. Das
+  Erhalt referenzierter Dateien und ausdrückliches Löschen des Waisen. Es
+  startet außerdem ein echtes Upload-`zelyra serve`, weist die Bereinigung bei
+  gehaltener Prozesssperre nach und bestätigt ihre erfolgreiche Ausführung nach
+  dem Beenden des Servers. Das
   Mindestalter beträgt standardmäßig 30 Tage; zum Löschen sind `--apply` und
   `--maintenance-window` erforderlich. Upload-fähige Zelyra-Server halten eine
   gemeinsame lokale Dateisperre; die Bereinigung benötigt eine exklusive Sperre,
@@ -466,8 +469,8 @@ abgeschlossen.
   konnte. Der Code wird zusätzlich mit lokalem Rust 1.98 geprüft. Eine statische Analyse von
   `/opt/siedelmann-laravel/app` fand Uploadabläufe bei Rechnungen, Verträgen,
   Einstellungen, Postbriefen und eingehender Mail; der Importer erzeugt sie
-  nicht. Offen sind Backup/Restore und zusätzliche Cleanup-E2E-Prüfungen für laufende
-  Dienste, Absturzreste und Fehlerwiederherstellung.
+  nicht. Offen sind Backup/Restore und zusätzliche Cleanup-E2E-Prüfungen für
+  Absturzreste und Fehlerwiederherstellung.
   Siehe den [Plan für sichere Uploads 1.2.29](release-plans/1.2.29-secure-uploads.de.md).
 - [~] **1.2.30 — Abdeckung echter Laravel-Migrationsabläufe:** Standalone-Forms
   unterstützen geprüfte lokale Routen mit erfassten Pfadparametern, ein
