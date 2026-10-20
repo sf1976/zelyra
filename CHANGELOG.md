@@ -23,6 +23,10 @@
   automatisch vergebener Rechnungsnummern auf den aktiven Mandanten
   beschränken und Locale-Marker beim Escaping generierter Master-Detail-
   Legenden erhalten, damit sie korrekt übersetzt werden.
+- Update locked TLS certificate-validation and root-store dependencies to
+  patched RustSec-advisory versions. / Die gesperrten Abhängigkeiten zur
+  TLS-Zertifikatsprüfung und zum Zertifikatsspeicher auf gegen die
+  RustSec-Advisories behobene Versionen aktualisieren.
 
 
 ## 1.2.29 — 2026-10-20
