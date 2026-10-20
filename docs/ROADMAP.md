@@ -25,7 +25,7 @@ telemetry, explicit effects, portable data, resource discipline, and honest
 proof claims guide every phase. The [manifesto](MANIFESTO.md) states the
 principles; the roadmap below tracks what is actually implemented.
 
-The current stable release is 1.2.23, published at https://github.com/sf1976/zelyra/releases/tag/v1.2.23. **Current milestones** is the source of
+The current stable release is 1.2.26, published at https://github.com/sf1976/zelyra/releases/tag/v1.2.26. **Current milestones** is the source of
 near-term commitments. Older numbered release sections below are retained as
 historical planning and evidence; they do not by themselves define current
 release targets. Longer-term ideas remain in the post-1.0 evolution section.
@@ -259,7 +259,20 @@ security and compatibility gates stated for that milestone.
   each explicit operation. PostgreSQL sandbox and bytecode REPL remain
   unsupported. Preserve compiler, capability, contract, step-budget, and stack
   depth checks.
-- [ ] **1.2.27 — typed CRUD domain actions:** Add a checked execution context
+- [ ] **1.2.27 — Laravel website import foundation:** Reintroduce a new,
+  read-only-first importer for migrating selected website behavior into native
+  Zelyra modules; this is not Laravel framework compatibility or PHP runtime
+  support. Analyze routes, controller actions, services, models, migrations,
+  Blade layouts/views/assets, and optional live database schema metadata as a
+  source-evidenced graph. Read `.env` only for an explicitly requested
+  read-only schema connection; never print credentials, read application rows,
+  mutate the source, or run imported PHP. Generate only explicitly selected,
+  supported modules into a new destination, then run Zelyra compiler checks.
+  Keep unresolved behavior and exact source locations visible in a versioned
+  report. The `/opt/siedelmann-laravel/app` project is the acceptance fixture;
+  broader route/workflow coverage continues in 1.2.30. See the
+  [1.2.27 importer plan](release-plans/1.2.27-laravel-website-importer.en.md).
+- [ ] **1.2.28 — typed CRUD domain actions:** Add a checked execution context
   for action statements with explicit row, authenticated user, and verified
   tenant values. Reuse the language type/effect checker, require explicit
   permissions, support transaction-safe SQL plus allowlisted typed calls, and
@@ -268,14 +281,22 @@ security and compatibility gates stated for that milestone.
   `hash_sha256` and `now()` spellings and their capability rules; PDF rendering
   and mail outbox calls must follow their existing transaction and attachment
   restrictions. No implicit `crypto::` namespace or raw SQL interpolation.
-- [ ] **1.2.28 — bounded secure file upload foundation (subject to design
+- [ ] **1.2.29 — bounded secure file upload foundation (subject to design
   gate):** Specify and test multipart size limits, file metadata types,
   content validation, tenant ownership, private storage outside `public/`,
   authorized downloads, rollback cleanup, and backup/delete behavior before
   exposing a `File` field. Reject the release if uploads can bypass request
   limits, path containment, authorization, or cleanup guarantees. If those
   guarantees cannot be completed by this milestone, defer uploads explicitly
-  past 1.3.0 rather than shipping a partial file API.
+    past 1.3.0 rather than shipping a partial file API.
+- [ ] **1.2.30 — Laravel import workflow coverage:** Expand only from
+  compiler-checked, reusable feature/domain/UI modules backed by route-to-
+  controller-to-view evidence. Validate the selected generated modules against
+  the Laravel application using an isolated Zelyra database and browser tests.
+  Report supported, assisted, and manual coverage separately; do not call the
+  whole website imported unless every in-scope route and behavior has a tested
+  Zelyra implementation. This does not copy Laravel, Composer packages, PHP
+  controllers, or Blade runtime files into the output.
 - [ ] **1.3.0 — canonical structure and Bytecode default:** Complete the
   opt-in versioned project layout (`routes/`, `domain/`, `schema/`, `public/`,
   `assets/`, and `plugins/`), architecture checks, and safe layout migration
@@ -289,20 +310,20 @@ security and compatibility gates stated for that milestone.
   verified Bytecode, not native machine-code generation.
 
 **Post-1.3.0 or explicitly reprioritized:** a native AOT backend is optional
-and depends on benchmark evidence. The Laravel website migration remains
-deferred. No open task is silently dropped: work that cannot meet its release
+and depends on benchmark evidence. No open task is silently dropped: work that cannot meet its release
 gate stays open and blocks the relevant milestone instead of being represented
 as complete.
 
-## Deferred idea — Laravel website migration
+## Reprioritized work — Laravel website importer
 
-At the owner's request on 2026-10-17, the Laravel migration tool has been
-removed from the active Zelyra project. Its source, guides, tests, and prior
-analysis reports are preserved outside the repository in
-a private archive outside the repository for possible
-future review. No Laravel migration command is currently shipped. Reassess
-this idea only after the active architecture milestones or if explicitly
-reprioritized.
+The earlier experimental migrator was removed in v1.1.2 at the owner's request
+and its source, tests, reports, and generated scaffold are retained in a local
+archive. On 2026-10-20 the owner reprioritized importing Laravel-built websites
+for Zelyra migration testing. The archived analyzer is reference material, not
+an accepted implementation. The new work must generate idiomatic reusable
+Zelyra modules from selected source-backed website behavior and state exactly
+what remains unmigrated. It must not recreate Laravel or claim complete PHP
+translation. The bounded plan is in the linked 1.2.27 work plan.
 
 ## Active architecture milestones (1.1.5 through 1.3.0)
 
@@ -560,7 +581,7 @@ compatibility behavior before changing syntax. See the detailed
   operations fail closed and the current default stays in place. This targets
   portable Bytecode, not native machine-code generation. See the detailed
   1.3.0 section above.
-- [⛔] **Laravel website migration — removed/deferred:** The migration tool is no longer part of the project. Its source and historical findings are archived outside the repository. Reconsider only after the current architecture milestones or by explicit reprioritization.
+- [ ] **Laravel website import — reprioritized for 1.2.27–1.2.30:** Replace the removed framework-oriented migrator with a new, source-evidenced website importer that emits compiler-checked reusable Zelyra modules. Analyze first, require explicit selections, preserve unsupported behavior as findings, and keep the Laravel source read-only. Use `/opt/siedelmann-laravel/app` as the first integration fixture. It must compose with the 1.1.5 package/module system and 1.2.0 operations foundation rather than introducing a parallel plugin/runtime model.
 
 - [ ] **1.2.0 — Compose check in the installer:** Installers detect
   Docker Compose v2 or newer and distinguish it from obsolete Python Compose

@@ -27,7 +27,7 @@ Ressourcendisziplin und ehrliche Beweisaussagen leiten jede Phase. Das
 [Manifest](MANIFESTO.de.md) beschreibt die Prinzipien; die Roadmap kennzeichnet
 den tatsächlich implementierten Stand.
 
-Das aktuelle stabile Release ist 1.2.23 und wurde unter https://github.com/sf1976/zelyra/releases/tag/v1.2.23 veröffentlicht. **Aktuelle Meilensteine** ist die
+Das aktuelle stabile Release ist 1.2.26 und wurde unter https://github.com/sf1976/zelyra/releases/tag/v1.2.26 veröffentlicht. **Aktuelle Meilensteine** ist die
 verbindliche Übersicht der nächsten Vorhaben. Ältere, nummerierte Release-
 Abschnitte bleiben als historische Planung und Nachweise erhalten; sie legen
 für sich keine aktuellen Releaseziele fest. Langfristige Ideen stehen im
@@ -49,7 +49,8 @@ abgeschlossen.
   Erweiterungs-, Modulkonfigurations- und Integrationslücken schließen. CSV
   ist das erste Austauschmodul; ODBC, Excel-kompatibler Export, PDF-Abläufe und
   weitere Backends werden nur aufgenommen, wenn ihre begrenzten Integrationen
-  jeweils getestet sind. Keine Laravel-spezifische Umsetzung.
+  jeweils getestet sind. Der Importer wird als getrenntes Anwendungsmigrations-
+  werkzeug an 1.2.27–1.2.30 angeschlossen und nutzt dieses Modulsystem.
 - [~] **1.2.0 — Betriebs- und Deployment-Grundlage:** Deklarative Commands,
   Scheduler und Jobabläufe samt Verwaltungsansichten schrittweise ergänzen;
   typisierte Request-/Form- und begrenzte Query-Grundlagen sowie den statischen
@@ -282,7 +283,21 @@ abgeschlossen.
   Zeilenfilterung. Compiler-, Capability-, Contract-, Schrittbudget- und
   Stacktiefenprüfungen bleiben aktiv. Siehe [Sprachkonsolen-Anleitung](language-console.de.md) und den
   [Arbeitsplan 1.2.26](release-plans/1.2.26-interactive-language-console.en.md).
-- [ ] **1.2.27 — typisierte CRUD-Domain-Actions:** Einen typgeprüften
+- [ ] **1.2.27 — Grundlage für den Import von Laravel-Webseiten:** Einen neu
+  entwickelten, zuerst schreibgeschützten Importer für ausgewählte
+  Webseitenfunktionen in native Zelyra-Module bereitstellen; keine Laravel-
+  Frameworkkompatibilität und keine PHP-Laufzeitunterstützung. Routen,
+  Controlleraktionen, Services, Models, Migrationen, Blade-Layouts/-Views,
+  Assets und auf Wunsch das Live-Datenbankschema als quellbelegten Graphen
+  analysieren. `.env` nur für ausdrücklich angeforderte Schema-Lesezugriffe
+  verwenden; Zugangsdaten nie ausgeben, keine Anwendungszeilen lesen, keine
+  PHP-Dateien ausführen und die Quelle nicht verändern. Nur ausdrücklich
+  ausgewählte, unterstützte Module in ein neues Ziel generieren und den
+  Zelyra-Compiler darüber laufen lassen. Ungelöste Abläufe und genaue
+  Quellpositionen in einem versionierten Bericht erhalten. Abnahmeprojekt ist
+  `/opt/siedelmann-laravel/app`; weitere Abdeckung folgt in 1.2.30. Siehe den
+  [Arbeitsplan 1.2.27](release-plans/1.2.27-laravel-website-importer.de.md).
+- [ ] **1.2.28 — typisierte CRUD-Domain-Actions:** Einen typgeprüften
   Ausführungskontext mit expliziten Datensatz-, Benutzer- und verifizierten
   Mandantenwerten ergänzen. Den Sprach-Typ- und Effektprüfer wiederverwenden,
   explizite Berechtigungen verlangen, transaktionssicheres SQL und erlaubte
@@ -292,7 +307,7 @@ abgeschlossen.
   `hash_sha256`, `now()`, PDF-Rendering und Outbox-Mail mit deren bestehenden
   Einschränkungen. Kein impliziter Namespace `crypto::` und keine ungeprüfte
   SQL-Interpolation.
-- [ ] **1.2.28 — begrenzte sichere Datei-Uploads (Design-Gate):** Vor einem
+- [ ] **1.2.29 — begrenzte sichere Datei-Uploads (Design-Gate):** Vor einem
   `File`-Formularfeld Multipart-Größenlimits, Metadatentypen, Inhaltsprüfung,
   Mandantenzuordnung, private Ablage außerhalb von `public/`, autorisierte
   Downloads, Rollback-Aufräumen sowie Backup- und Löschverhalten festlegen und
@@ -300,6 +315,15 @@ abgeschlossen.
   Berechtigungen oder Aufräumregeln umgehen können. Falls diese Garantien bis
   dahin nicht vollständig erreichbar sind, werden Uploads ausdrücklich über
   1.3.0 hinaus verschoben statt teilweise ausgeliefert.
+- [ ] **1.2.30 — Abdeckung echter Laravel-Migrationsabläufe:** Den getesteten
+  Routen-/Controller-/View-zu-Modul-Umfang am Laravel-Projekt erweitern, aber
+  nur für compilergeprüfte, wiederverwendbare Feature-/Domain-/UI-Module mit
+  belegter Herkunft. Ausgewählte Module gegen eine separate wegwerfbare
+  Zelyra-Datenbank und im Browser prüfen. Abdeckung als analysiert, generiert,
+  compilergeprüft, verhaltensgeprüft, unterstützt oder manuell ausweisen.
+  Keine Gesamtmigration behaupten, wenn nicht jedes einbezogene Verhalten in
+  Zelyra getestet wurde. Laravel, Composer-Pakete, PHP-Controller oder Blade-
+  Laufzeitdateien werden nicht in die Ausgabe kopiert.
 - [ ] **1.3.0 — kanonische Struktur und Bytecode-Standard:** Das optionale,
   versionierte Projektlayout (`routes/`, `domain/`, `schema/`, `public/`,
   `assets/`, `plugins/`), Architekturprüfungen und eine sichere
@@ -313,19 +337,21 @@ abgeschlossen.
   native Maschinencodegenerierung.
 
 **Nach 1.3.0 oder bei ausdrücklicher Neubewertung:** Ein natives AOT-Backend
-bleibt optional und hängt von Benchmarks ab. Die Laravel-Website-Migration ist
-zurückgestellt. Kein offener Punkt entfällt stillschweigend: Arbeit, deren
+bleibt optional und hängt von Benchmarks ab. Kein offener Punkt entfällt stillschweigend: Arbeit, deren
 Freigabekriterien nicht erfüllt sind, bleibt offen und blockiert das betreffende
 Release, statt als fertig dargestellt zu werden.
 
-## Zurückgestellte Idee — Laravel-Website-Migration
+## Neu priorisiert — Import von Laravel-Webseiten
 
-Auf Wunsch des Projekteigentümers vom 17.10.2026 wurde das Laravel-
-Migrationstool aus dem aktiven Zelyra-Projekt entfernt. Quellcode, Anleitungen,
-Tests und bisherige Analyseberichte sind außerhalb des Repositorys archiviert:
-a private archive outside the repository. Derzeit wird
-kein Laravel-Migrationsbefehl ausgeliefert. Eine Neubewertung erfolgt erst nach
-den aktiven Architektur-Meilensteinen oder bei ausdrücklicher Priorisierung.
+Der frühere experimentelle Migrator wurde auf Wunsch des Eigentümers mit
+v1.1.2 entfernt; Quellcode, Tests, Berichte und Gerüst sind in einem lokalen
+Archiv gesichert. Am 20.10.2026 hat der Eigentümer den Import von mit Laravel
+erstellten Webseiten für Migrationstests mit Zelyra neu priorisiert. Das
+Archiv ist Referenzmaterial und keine akzeptierte Implementierung. Neu
+entwickelt werden quellbelegte, idiomatische und wiederverwendbare
+Zelyra-Module; nicht migrierte Anwendungsbereiche müssen ausdrücklich sichtbar
+bleiben. Laravel oder eine allgemeine PHP-Übersetzung werden nicht
+nachgebaut. Der begrenzte Plan steht im verlinkten 1.2.27-Arbeitsplan.
 
 ## Aktive Architektur-Meilensteine (1.1.5 bis 1.3.0)
 
@@ -608,7 +634,7 @@ werden. Details stehen im [Projektlayout-Arbeitsplan](release-plans/1.3.0-projec
   Semantikparität, breitere Differential-/Sicherheitstests und reproduzierbare
   Performancemessungen sind noch offen; siehe den ausführlichen Abschnitt zu
   1.3.0.
-- [⛔] **Laravel-Website-Migration — entfernt/zurückgestellt:** Das Migrationstool gehört nicht mehr zum Projekt. Quellcode und frühere Befunde liegen außerhalb des Repositorys im Archiv. Eine Neubewertung erfolgt erst nach den aktiven Architektur-Meilensteinen oder bei ausdrücklicher Priorisierung.
+- [ ] **Import von Laravel-Webseiten — neu priorisiert für 1.2.27–1.2.30:** Den entfernten Framework-Migrator durch einen neuen quellbelegten Website-Importer ersetzen, der compilergeprüfte, wiederverwendbare Zelyra-Module erzeugt. Zuerst analysieren, vor Generierung eine Auswahl verlangen, nicht unterstützte Abläufe sichtbar erhalten und die Laravel-Quelle unverändert lassen. Erstes Integrationsprojekt ist `/opt/siedelmann-laravel/app`. Der Importer baut auf dem Modul-/Paketsystem von 1.1.5 und der Betriebsgrundlage von 1.2.0 auf; er führt kein paralleles Plugin-/Laufzeitmodell ein.
 
 - [ ] **1.2.0 — Compose-Prüfung im Installer:** Die Installer
   erkennen Docker Compose v2 oder neuer und unterscheiden es von der veralteten
