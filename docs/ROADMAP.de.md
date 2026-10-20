@@ -441,6 +441,13 @@ abgeschlossen.
   bleiben unübersetzt. Die Ausgabe bestand `zelyra check`; ein Lauf mit
   Wegwerf-MariaDB und HTTP-Server bestätigte GET 200, 404 für ungültige Tokens,
   CSRF-geschützten POST-Redirect und den gespeicherten Zeitpunkt. Die
+  wiederholbare Prüfung `python3 tests/laravel_import_unsubscribe_e2e.py
+  /opt/siedelmann-laravel/app` erzeugt das Scaffold erneut, richtet dessen
+  Schema in einem frischen Wegwerf-MariaDB-Container ein und prüft gültige und
+  ungültige GET-/POST-Tokens, CSRF, den stabilen Zeitstempel nach Wiederholung
+  sowie die Erfolgsseite über HTTP. Sie versendet keine E-Mail und hinterlässt
+  weder Datenbank noch Scaffold. Das ist ein HTTP-Integrationstest, kein
+  Browser-Automationstest.
   PHP-Methodenerkennung nutzt jetzt die vorhandene lexikalische Quellpositionskarte
   und ausbalancierte Codeklammern; Regressionstests weisen
   methodenähnliche Kommentare zurück und decken verschachtelte Blöcke sowie

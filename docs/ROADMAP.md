@@ -398,6 +398,12 @@ security and compatibility gates stated for that milestone.
   text; unsupported variants remain ungenerated. Generated output passed
   `zelyra check`, and a disposable MariaDB/HTTP run verified GET 200, invalid
   token 404, CSRF-protected POST redirect, and the persisted timestamp. The
+  repeatable `python3 tests/laravel_import_unsubscribe_e2e.py
+  /opt/siedelmann-laravel/app` test now regenerates the source-derived scaffold,
+  applies its schema to a fresh disposable MariaDB container, and exercises
+  valid/invalid GET and POST, CSRF, repeated-submit timestamp stability, and
+  the success page over HTTP. It sends no mail and leaves no database or
+  scaffold behind. This is an HTTP integration test, not browser automation.
   PHP method recognizer uses the existing lexical source map and balanced code
   braces; regression tests reject method-shaped comments and cover nested
   blocks, typed return declarations, and lookup/update/view patterns that occur
