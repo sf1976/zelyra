@@ -6854,6 +6854,63 @@ fn main() {
 }
 
 #[test]
+fn source_step_budget_boundaries_match_across_parallel_await() {
+    let source = r#"
+fn increment(value: Int) -> Int { return value + 1 }
+fn main() -> Int {
+    parallel {
+        left = await increment(2)
+        right = await increment(3)
+    }
+    return left + right
+}
+"#;
+    let ast = parse(&lex(source).expect("source lexes")).expect("source parses");
+    let mir = crate::lower(&ast).expect("source type-checks and lowers");
+    let bytecode =
+        decode(&encode(&compile(&mir, "main").expect("main compiles")).expect("bytecode encodes"))
+            .expect("bytecode verifies after decoding");
+
+    for max_steps in 0..32 {
+        let policy = RuntimePolicy {
+            step_budget: Some(max_steps),
+            ..RuntimePolicy::default()
+        };
+        let ast_result = zelyra_runtime::execute_function_with_capabilities_and_policies(
+            &ast,
+            "main",
+            Vec::new(),
+            None,
+            None,
+            Some(&policy),
+        );
+        let limits = ExecutionLimits {
+            max_steps,
+            ..ExecutionLimits::default()
+        };
+        let mir_result = execution::execute_function(&mir, "main", Vec::new(), limits);
+        let bytecode_result = execute(&bytecode, Vec::new(), limits);
+        match (ast_result, mir_result, bytecode_result) {
+            (Ok(ast_value), Ok(mir_value), Ok(bytecode_value)) => {
+                assert_eq!(mir_value.value, ast_value, "MIR result at budget {max_steps}");
+                assert_eq!(bytecode_value.value, ast_value, "bytecode result at budget {max_steps}");
+                assert_eq!(ast_value, Value::Int(7));
+            }
+            (Err(ast_error), Err(mir_error), Err(bytecode_error)) => {
+                assert!(ast_error.message.contains("step budget exceeded"));
+                assert!(mir_error.message.contains("step budget exceeded"));
+                assert!(bytecode_error.message.contains("step budget exceeded"));
+                assert_eq!(mir_error.span, ast_error.span, "MIR span at budget {max_steps}");
+                assert_eq!(bytecode_error.span, ast_error.span, "bytecode span at budget {max_steps}");
+            }
+            (ast, mir, bytecode) => panic!(
+                "parallel backends disagree at budget {max_steps}: AST={ast:?}, MIR={mir:?}, bytecode={bytecode:?}"
+            ),
+        }
+    }
+}
+
+#[test]
 fn bytecode_parallel_discards_branch_output_when_a_branch_fails() {
     let source = r#"
 fn succeeds() -> Int { print("branch output"); return 1 }

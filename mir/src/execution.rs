@@ -578,15 +578,28 @@ impl Machine<'_> {
                 .map(|binding| {
                     let mut child = self.parallel_child();
                     let mut child_locals = locals.clone();
+                    let body =
+                        self.program
+                            .expressions
+                            .get(binding.value.0)
+                            .and_then(|expression| match &expression.kind {
+                                MirExpressionKind::Await(body) => Some(*body),
+                                _ => None,
+                            });
                     std::thread::Builder::new()
                         .name("zelyra-mir-parallel".into())
                         .stack_size(stack_size)
                         .spawn_scoped(scope, move || {
-                            let result = child.expression(
-                                binding.value,
-                                &mut child_locals,
-                                depth,
-                                binding.span,
+                            let result = body.map_or_else(
+                                || {
+                                    Err(runtime_error(
+                                        binding.span,
+                                        "MIR parallel binding lost its checked await expression",
+                                    ))
+                                },
+                                |body| {
+                                    child.expression(body, &mut child_locals, depth, binding.span)
+                                },
                             );
                             result
                                 .map(|value| (binding.local, value))
