@@ -389,9 +389,10 @@ abgeschlossen.
   Konflikt und einen Audit-Eintrag. Die REPL-Sandbox weist MariaDB-/MySQL-DDL
   sowie Transaktions- und Sitzungsbefehle ab, die den Rollback umgehen könnten;
   Tests prüfen verweigerte Grants, Rollback und ausdrücklichen Commit. `:schema`
-  zeigt Meldungen und Quellpositionen der Invarianten. SQL in der REPL benötigt
-  weiterhin den aggregierten `Database`-Grant; eine Bytecode-REPL ist nicht
-  implementiert. Veröffentlicht als
+  zeigt Meldungen und Quellpositionen der Invarianten. Zum Releasezeitpunkt
+  benötigte SQL in der REPL den aggregierten `Database`-Grant; die Bytecode-
+  REPL kam danach als experimentelle 1.2.26-Ergänzung hinzu und prüft dieselben
+  Grants. Veröffentlicht als
   [`v1.2.28`](https://github.com/sf1976/zelyra/releases/tag/v1.2.28); die
   Release-Gates bestanden. Die umfassendere Berechtigungs-/Sicherheitsmatrix
   bleibt ein offener Folgepunkt. Siehe den

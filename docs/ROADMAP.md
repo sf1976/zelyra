@@ -355,8 +355,9 @@ security and compatibility gates stated for that milestone.
   MariaDB/MySQL DDL, transaction-control, and session-control statements that
   could bypass rollback; tests cover denied grants, rollback, and explicit
   commit. `:schema` prints invariant messages and source positions. The REPL
-  still requires the aggregate `Database` grant for SQL, and bytecode REPL
-  execution is not implemented. Released as [`v1.2.28`](https://github.com/sf1976/zelyra/releases/tag/v1.2.28); release gates passed. The broader security/permission matrix remains an open follow-up. See the
+  required the aggregate `Database` grant at release time; the bytecode REPL
+  was added later as an experimental 1.2.26 follow-up and uses the same grant
+  checks. Released as [`v1.2.28`](https://github.com/sf1976/zelyra/releases/tag/v1.2.28); release gates passed. The broader security/permission matrix remains an open follow-up. See the
   [1.2.28 work plan](release-plans/1.2.28-typed-crud-actions.en.md).
 - [~] **1.2.29 — bounded secure file upload foundation:** Architecture inventory
   is complete. The HTTP server now reads bounded byte requests and sends valid
