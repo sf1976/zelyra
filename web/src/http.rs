@@ -164,6 +164,11 @@ pub(super) fn declared_content_length(header_text: &str) -> Result<Option<usize>
             }
             continue;
         };
+        if name.trim().eq_ignore_ascii_case("transfer-encoding") {
+            return Err(HttpError {
+                message: "transfer-encoding is not supported".into(),
+            });
+        }
         if name.trim().eq_ignore_ascii_case("content-length") {
             let parsed = value.trim().parse::<usize>().map_err(|_| HttpError {
                 message: "content-length must be a non-negative integer".into(),
@@ -306,5 +311,15 @@ mod tests {
             parse_request("POST /save HTTP/1.1\r\nHost: localhost\r\nContent-Length: 3\r\n\r\nabc")
                 .unwrap();
         assert_eq!(parsed.body, "abc");
+    }
+
+    #[test]
+    fn byte_reader_rejects_transfer_encoding_instead_of_truncating_chunked_bodies() {
+        let request = b"POST /upload HTTP/1.1\r\nHost: localhost\r\nTransfer-Encoding: chunked\r\n\r\n0\r\n\r\n";
+        let error = read_http_request_bytes_from(&mut Cursor::new(request))
+            .expect_err("chunked requests are unsupported");
+        assert!(
+            matches!(error, RequestReadError::Http(HttpError { message }) if message.contains("transfer-encoding is not supported"))
+        );
     }
 }
