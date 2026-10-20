@@ -392,15 +392,18 @@ abgeschlossen.
   leitet gültige Multipart-Bodies durch den Decoder; die öffentliche Text-
   `Request`-API und das globale Limit von 1 MiB bleiben unverändert. Gültiges
   Multipart erhält bis zur Deklaration und Autorisierung von Datei-Feldern
-  HTTP 415; fehlerhaftes Multipart erhält HTTP 400. Parser- und Live-HTTP-Tests
+  HTTP 415; fehlerhaftes Multipart erhält HTTP 400. POST-Multipart-Requests an
+  deklarierte File-Formulare erhalten ein daraus abgeleitetes Requestlimit;
+  alle anderen Routen bleiben bei 1 MiB. Ein globales Budget von 256 MiB
+  begrenzt gleichzeitig gepufferte Request-Bodies. Parser- und Live-HTTP-Tests
   prüfen Binärdaten, fehlerhafte Grenzen, doppelte Header und Limitfehler. Ein
   Coverage-guided-Fuzz-Ziel absolvierte lokal sechs Sekunden und 647.431
   Eingaben ohne Absturz. Compilergeprüfte `File`-Formmetadaten prüfen jetzt
   Größenlimits und die PDF-/PNG-/JPEG-Allowlist, weisen tabellengebundene
   Formulare sowie Speicher- und Action-Kontexte ab und rendern ein
   Multipart-Dateifeld ohne Dateinamen-Ausgabe.
-  Übermittlungen erhalten weiterhin HTTP 415; Inhaltserkennung, Routenlimits
-  und Speicherung fehlen. Eine statische Analyse von
+  Übermittlungen erhalten weiterhin HTTP 415; Inhaltserkennung, autorisierte
+  Uploadverarbeitung und Speicherung fehlen. Eine statische Analyse von
   `/opt/siedelmann-laravel/app` fand Uploadabläufe bei Rechnungen, Verträgen,
   Einstellungen, Postbriefen und eingehender Mail; der Importer erzeugt sie
   nicht. Offen sind Inhaltsprüfung, private mandantengebundene Speicherung,

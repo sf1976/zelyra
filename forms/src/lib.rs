@@ -131,6 +131,22 @@ pub fn check_program(program: &zelyra_ast::Program, schema: &Schema) -> Result<(
                 .map(|column| &column.ty);
             validate_constraints(field, declared_type, &mut errors);
         }
+        let declared_upload_bytes = form
+            .fields
+            .iter()
+            .filter_map(|field| field.file_upload.as_ref())
+            .fold(0_u64, |total, options| {
+                total.saturating_add(options.max_size_bytes)
+            });
+        if declared_upload_bytes > 255 * 1024 * 1024 {
+            errors.push(FormError {
+                message: format!(
+                    "aggregate file size in form `{}` exceeds the 255 MiB request budget",
+                    form.name
+                ),
+                span: form.span,
+            });
+        }
         let mut actions = HashSet::new();
         for action in &form.actions {
             if !actions.insert(action.name.clone()) {
@@ -1109,6 +1125,62 @@ mod tests {
                 .message
                 .contains("not supported in a table-backed form")
         }));
+    }
+
+    #[test]
+    fn rejects_aggregate_file_size_beyond_http_hard_limit() {
+        let files = (0..3)
+            .map(|index| FormField {
+                name: format!("document_{index}"),
+                ty: Some(Type::Named("File".into())),
+                label: None,
+                placeholder: None,
+                required: false,
+                min_length: None,
+                max: None,
+                min_value: None,
+                max_value: None,
+                choices: Vec::new(),
+                widget: None,
+                appearance: None,
+                file_upload: Some(zelyra_ast::FileUploadOptions {
+                    max_size_bytes: 100 * 1024 * 1024,
+                    allowed_types: vec!["application/pdf".into()],
+                }),
+                readonly: false,
+                span: Span::default(),
+            })
+            .collect();
+        let program = zelyra_ast::Program {
+            imports: Vec::new(),
+            databases: Vec::new(),
+            tables: Vec::new(),
+            types: Vec::new(),
+            records: Vec::new(),
+            enums: Vec::new(),
+            views: Vec::new(),
+            components: Vec::new(),
+            pages: Vec::new(),
+            tableviews: Vec::new(),
+            forms: vec![FormDef {
+                name: "BulkUpload".into(),
+                table: None,
+                fields: files,
+                actions: Vec::new(),
+                span: Span::default(),
+            }],
+            cruds: Vec::new(),
+            auth: Vec::new(),
+            apis: Vec::new(),
+            commands: Vec::new(),
+            schedules: Vec::new(),
+            functions: Vec::new(),
+        };
+        let errors = check_program(&program, &build_schema(&program).unwrap())
+            .expect_err("aggregate uploads larger than the request ceiling must fail");
+        assert!(errors
+            .iter()
+            .any(|error| error.message.contains("aggregate file size")));
     }
 
     #[test]

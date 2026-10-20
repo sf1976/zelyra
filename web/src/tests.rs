@@ -2977,6 +2977,65 @@ fn multipart_binary_request_is_parsed_and_explicitly_rejected_until_route_suppor
 }
 
 #[test]
+fn multipart_reader_uses_declared_form_limit_without_raising_other_routes() {
+    let mut route = form_route();
+    route.path = "/upload".into();
+    route.form.fields[0].ty = Some(Type::Named("File".into()));
+    route.form.fields[0].file_upload = Some(zelyra_ast::FileUploadOptions {
+        max_size_bytes: 2 * 1024 * 1024,
+        allowed_types: vec!["application/pdf".into()],
+    });
+    let app = Arc::new(WebApp::new(Vec::new(), vec![route]));
+    let upload_head = "POST /upload HTTP/1.1\r\nHost: localhost\r\nContent-Type: multipart/form-data; boundary=b\r\n";
+    let ordinary_head = "POST /other HTTP/1.1\r\nHost: localhost\r\nContent-Type: multipart/form-data; boundary=b\r\n";
+    assert_eq!(
+        app.request_body_limit_from_headers(upload_head),
+        3 * 1024 * 1024
+    );
+    assert_eq!(
+        app.request_body_limit_from_headers(ordinary_head),
+        MAX_REQUEST_BODY_BYTES
+    );
+    assert_eq!(
+        app.request_body_limit_from_headers(&upload_head.replace(
+            "Content-Type:",
+            "Content-Type: multipart/form-data; boundary=b\r\nContent-Type:",
+        )),
+        MAX_REQUEST_BODY_BYTES
+    );
+
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let address = listener.local_addr().unwrap();
+    let active_connections = Arc::new(AtomicUsize::new(0));
+    let mut client = TcpStream::connect(address).unwrap();
+    client
+        .set_read_timeout(Some(Duration::from_secs(5)))
+        .unwrap();
+    let (stream, _) = listener.accept().unwrap();
+    let worker = spawn_connection(stream, app, active_connections)
+        .unwrap()
+        .unwrap();
+    let payload = vec![b'x'; MAX_REQUEST_BODY_BYTES + 128];
+    let mut body = b"--b\r\nContent-Disposition: form-data; name=\"document\"; filename=\"invoice.pdf\"\r\nContent-Type: application/pdf\r\n\r\n".to_vec();
+    body.extend_from_slice(&payload);
+    body.extend_from_slice(b"\r\n--b--\r\n");
+    let head = format!(
+        "POST /upload HTTP/1.1\r\nHost: localhost\r\nContent-Type: multipart/form-data; boundary=b\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+        body.len()
+    );
+    client.write_all(head.as_bytes()).unwrap();
+    client.write_all(&body).unwrap();
+    let mut response = Vec::new();
+    client.read_to_end(&mut response).unwrap();
+    worker.join().unwrap();
+    let response = String::from_utf8(response).unwrap();
+    assert!(
+        response.starts_with("HTTP/1.1 415 Unsupported Media Type"),
+        "{response}"
+    );
+}
+
+#[test]
 fn rejects_oversized_requests_before_reading_the_body() {
     let raw = format!(
         "POST /echo HTTP/1.1\r\nContent-Length: {}\r\n\r\n",

@@ -37,6 +37,13 @@ pub(super) struct ParsedRequestBytes<'a> {
 }
 
 pub(super) fn parse_request_bytes(raw: &[u8]) -> Result<ParsedRequestBytes<'_>, HttpError> {
+    parse_request_bytes_with_limit(raw, MAX_REQUEST_BODY_BYTES)
+}
+
+pub(super) fn parse_request_bytes_with_limit(
+    raw: &[u8],
+    max_body_bytes: usize,
+) -> Result<ParsedRequestBytes<'_>, HttpError> {
     let header_end = find_header_end(raw).unwrap_or(raw.len());
     let header_text = std::str::from_utf8(&raw[..header_end]).map_err(|error| HttpError {
         message: error.to_string(),
@@ -103,12 +110,9 @@ pub(super) fn parse_request_bytes(raw: &[u8]) -> Result<ParsedRequestBytes<'_>, 
         let content_length = content_length.parse::<usize>().map_err(|_| HttpError {
             message: "content-length must be a non-negative integer".into(),
         })?;
-        if content_length > MAX_REQUEST_BODY_BYTES {
+        if content_length > max_body_bytes {
             return Err(HttpError {
-                message: format!(
-                    "request body exceeds the {} byte limit",
-                    MAX_REQUEST_BODY_BYTES
-                ),
+                message: format!("request body exceeds the {} byte limit", max_body_bytes),
             });
         }
         if content_length != body.len() {
@@ -120,12 +124,9 @@ pub(super) fn parse_request_bytes(raw: &[u8]) -> Result<ParsedRequestBytes<'_>, 
             });
         }
     }
-    if body.len() > MAX_REQUEST_BODY_BYTES {
+    if body.len() > max_body_bytes {
         return Err(HttpError {
-            message: format!(
-                "request body exceeds the {} byte limit",
-                MAX_REQUEST_BODY_BYTES
-            ),
+            message: format!("request body exceeds the {} byte limit", max_body_bytes),
         });
     }
     let path = target.split_once('?').map_or(target, |(path, _)| path);
@@ -139,14 +140,64 @@ pub(super) fn parse_request_bytes(raw: &[u8]) -> Result<ParsedRequestBytes<'_>, 
 }
 
 pub const MAX_REQUEST_BODY_BYTES: usize = 1_048_576;
+pub(super) const MAX_UPLOAD_REQUEST_BODY_BYTES: usize = 256 * 1024 * 1024;
+const MAX_IN_FLIGHT_REQUEST_BODY_BYTES: usize = 256 * 1024 * 1024;
+pub(super) const MULTIPART_FRAMING_BUDGET_BYTES: usize = 1024 * 1024;
 pub(super) const MAX_REQUEST_HEADER_BYTES: usize = 64 * 1024;
 pub(super) const HTTP_EXCHANGE_TIMEOUT: Duration = Duration::from_secs(30);
+static IN_FLIGHT_REQUEST_BODY_BYTES: std::sync::atomic::AtomicUsize =
+    std::sync::atomic::AtomicUsize::new(0);
+
+pub(super) struct ReadRequestBytes<'a> {
+    pub bytes: Vec<u8>,
+    pub max_body_bytes: usize,
+    _budget: Option<RequestBodyBudget<'a>>,
+}
+
+struct RequestBodyBudget<'a> {
+    bytes: usize,
+    counter: &'a std::sync::atomic::AtomicUsize,
+}
+
+impl<'a> RequestBodyBudget<'a> {
+    fn reserve(
+        counter: &'a std::sync::atomic::AtomicUsize,
+        bytes: usize,
+        limit: usize,
+    ) -> Option<Self> {
+        use std::sync::atomic::Ordering;
+        reserve_request_body_bytes(counter, bytes, limit, Ordering::AcqRel, Ordering::Acquire)
+            .then_some(Self { bytes, counter })
+    }
+}
+
+fn reserve_request_body_bytes(
+    counter: &std::sync::atomic::AtomicUsize,
+    bytes: usize,
+    limit: usize,
+    success_order: std::sync::atomic::Ordering,
+    failure_order: std::sync::atomic::Ordering,
+) -> bool {
+    counter
+        .fetch_update(success_order, failure_order, |used| {
+            used.checked_add(bytes).filter(|total| *total <= limit)
+        })
+        .is_ok()
+}
+
+impl Drop for RequestBodyBudget<'_> {
+    fn drop(&mut self) {
+        self.counter
+            .fetch_sub(self.bytes, std::sync::atomic::Ordering::Release);
+    }
+}
 
 #[derive(Debug)]
 pub(super) enum RequestReadError {
     Io(io::Error),
     Http(HttpError),
     PayloadTooLarge,
+    InFlightLimit,
 }
 
 pub(super) fn find_header_end(buffer: &[u8]) -> Option<usize> {
@@ -186,10 +237,22 @@ pub(super) fn declared_content_length(header_text: &str) -> Result<Option<usize>
     Ok(content_length)
 }
 
+#[cfg(test)]
 pub(super) fn read_http_request_bytes_from<R: Read>(
     reader: &mut R,
 ) -> Result<Vec<u8>, RequestReadError> {
+    read_http_request_bytes_from_with_limit(reader, |_| MAX_REQUEST_BODY_BYTES)
+        .map(|request| request.bytes)
+}
+
+pub(super) fn read_http_request_bytes_from_with_limit<R: Read>(
+    reader: &mut R,
+    body_limit_for_headers: impl FnOnce(&str) -> usize,
+) -> Result<ReadRequestBytes<'static>, RequestReadError> {
     let mut buffer = Vec::new();
+    let mut body_limit_for_headers = Some(body_limit_for_headers);
+    let mut max_body_bytes = MAX_REQUEST_BODY_BYTES;
+    let mut body_budget = None;
     let total_length = loop {
         let mut chunk = [0_u8; 8192];
         let size = reader.read(&mut chunk).map_err(RequestReadError::Io)?;
@@ -218,8 +281,21 @@ pub(super) fn read_http_request_bytes_from<R: Read>(
         let content_length = declared_content_length(header_text)
             .map_err(RequestReadError::Http)?
             .unwrap_or(0);
-        if content_length > MAX_REQUEST_BODY_BYTES {
+        max_body_bytes = body_limit_for_headers
+            .take()
+            .map(|resolve| resolve(header_text))
+            .unwrap_or(MAX_REQUEST_BODY_BYTES)
+            .clamp(MAX_REQUEST_BODY_BYTES, MAX_UPLOAD_REQUEST_BODY_BYTES);
+        if content_length > max_body_bytes {
             return Err(RequestReadError::PayloadTooLarge);
+        }
+        body_budget = RequestBodyBudget::reserve(
+            &IN_FLIGHT_REQUEST_BODY_BYTES,
+            content_length,
+            MAX_IN_FLIGHT_REQUEST_BODY_BYTES,
+        );
+        if content_length > 0 && body_budget.is_none() {
+            return Err(RequestReadError::InFlightLimit);
         }
         let total_length = header_end + 4 + content_length;
         if buffer.len() >= total_length {
@@ -237,7 +313,11 @@ pub(super) fn read_http_request_bytes_from<R: Read>(
     if let Some(total_length) = total_length {
         buffer.truncate(total_length);
     }
-    Ok(buffer)
+    Ok(ReadRequestBytes {
+        bytes: buffer,
+        max_body_bytes,
+        _budget: body_budget,
+    })
 }
 
 #[cfg(test)]
@@ -271,14 +351,60 @@ impl Read for DeadlineReader<'_> {
 pub(super) fn read_http_request_bytes(
     stream: &mut TcpStream,
     deadline: Instant,
-) -> Result<Vec<u8>, RequestReadError> {
-    read_http_request_bytes_from(&mut DeadlineReader { stream, deadline })
+    body_limit_for_headers: impl FnOnce(&str) -> usize,
+) -> Result<ReadRequestBytes<'static>, RequestReadError> {
+    read_http_request_bytes_from_with_limit(
+        &mut DeadlineReader { stream, deadline },
+        body_limit_for_headers,
+    )
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use std::io::Cursor;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+
+    #[test]
+    fn request_body_budget_is_bounded_and_released_by_guard() {
+        let counter = AtomicUsize::new(0);
+        let guard = RequestBodyBudget::reserve(&counter, 6, 10).unwrap();
+        assert!(!reserve_request_body_bytes(
+            &counter,
+            5,
+            10,
+            Ordering::AcqRel,
+            Ordering::Acquire
+        ));
+        drop(guard);
+        assert_eq!(counter.load(Ordering::Acquire), 0);
+        let guard = RequestBodyBudget::reserve(&counter, 5, 10).unwrap();
+        assert_eq!(counter.load(Ordering::Acquire), 5);
+        drop(guard);
+        assert_eq!(counter.load(Ordering::Acquire), 0);
+    }
+
+    #[test]
+    fn route_limit_reader_accepts_declared_large_body_but_default_remains_capped() {
+        let body = vec![b'x'; MAX_REQUEST_BODY_BYTES + 1];
+        let request = format!(
+            "POST /upload HTTP/1.1\r\nHost: localhost\r\nContent-Type: multipart/form-data; boundary=b\r\nContent-Length: {}\r\n\r\n",
+            body.len()
+        )
+        .into_bytes();
+        let mut bytes = request.clone();
+        bytes.extend_from_slice(&body);
+        let accepted =
+            read_http_request_bytes_from_with_limit(&mut Cursor::new(bytes.clone()), |_| {
+                MAX_REQUEST_BODY_BYTES + 1
+            })
+            .expect("route-specific body limit should accept its declared size");
+        assert_eq!(accepted.bytes.len(), request.len() + body.len());
+        assert!(matches!(
+            read_http_request_bytes_from(&mut Cursor::new(bytes)),
+            Err(RequestReadError::PayloadTooLarge)
+        ));
+    }
 
     #[test]
     fn byte_reader_preserves_non_utf8_multipart_payloads() {

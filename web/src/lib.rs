@@ -1261,6 +1261,68 @@ impl WebApp {
         }
     }
 
+    fn request_body_limit_from_headers(&self, header_text: &str) -> usize {
+        let mut lines = header_text.split("\r\n");
+        let Some(request_line) = lines.next() else {
+            return MAX_REQUEST_BODY_BYTES;
+        };
+        let mut request_parts = request_line.split_whitespace();
+        let Some(method) = request_parts.next() else {
+            return MAX_REQUEST_BODY_BYTES;
+        };
+        let Some(target) = request_parts.next() else {
+            return MAX_REQUEST_BODY_BYTES;
+        };
+        if method != "POST" {
+            return MAX_REQUEST_BODY_BYTES;
+        }
+        let mut content_type = None;
+        for line in lines {
+            if line.is_empty() {
+                break;
+            }
+            if let Some((name, value)) = line.split_once(':') {
+                if name.trim().eq_ignore_ascii_case("content-type")
+                    && content_type.replace(value.trim()).is_some()
+                {
+                    return MAX_REQUEST_BODY_BYTES;
+                }
+            }
+        }
+        if !content_type.is_some_and(|value| {
+            value.split(';').next().is_some_and(|media_type| {
+                media_type
+                    .trim()
+                    .eq_ignore_ascii_case("multipart/form-data")
+            })
+        }) {
+            return MAX_REQUEST_BODY_BYTES;
+        }
+        let path = target.split_once('?').map_or(target, |(path, _)| path);
+        let Some(route) = self
+            .forms
+            .iter()
+            .find(|route| match_path(&route.path, path).is_some())
+        else {
+            return MAX_REQUEST_BODY_BYTES;
+        };
+        let upload_bytes = route
+            .form
+            .fields
+            .iter()
+            .filter_map(|field| field.file_upload.as_ref())
+            .fold(0_usize, |total, field| {
+                total.saturating_add(usize::try_from(field.max_size_bytes).unwrap_or(usize::MAX))
+            });
+        if upload_bytes == 0 {
+            MAX_REQUEST_BODY_BYTES
+        } else {
+            upload_bytes
+                .saturating_add(MULTIPART_FRAMING_BUDGET_BYTES)
+                .min(MAX_UPLOAD_REQUEST_BODY_BYTES)
+        }
+    }
+
     pub fn with_database_url(
         routes: Vec<Route>,
         forms: Vec<FormRoute>,
@@ -13792,8 +13854,10 @@ fn handle_connection_until(
     app: &WebApp,
     deadline: Instant,
 ) -> io::Result<()> {
-    let response = match read_http_request_bytes(stream, deadline) {
-        Ok(raw) => match parse_request_bytes(&raw) {
+    let response = match read_http_request_bytes(stream, deadline, |headers| {
+        app.request_body_limit_from_headers(headers)
+    }) {
+        Ok(read) => match parse_request_bytes_with_limit(&read.bytes, read.max_body_bytes) {
             Ok(parsed) => {
                 if let Some(content_type) = parsed.headers.get("content-type") {
                     if content_type
@@ -13804,7 +13868,7 @@ fn handle_connection_until(
                         match multipart::decode(
                             content_type,
                             parsed.body,
-                            multipart::MultipartLimits::default(),
+                            multipart::MultipartLimits::new(read.max_body_bytes),
                         ) {
                             Ok(_) => Response::json(
                                 415,
@@ -13828,6 +13892,10 @@ fn handle_connection_until(
         Err(RequestReadError::PayloadTooLarge) => Response::json(
             413,
             "{\"error\":{\"code\":\"PayloadTooLarge\",\"message\":\"request body is too large\"}}",
+        ),
+        Err(RequestReadError::InFlightLimit) => Response::json(
+            503,
+            "{\"error\":{\"code\":\"RequestCapacityExceeded\",\"message\":\"request body capacity is temporarily unavailable\"}}",
         ),
         Err(RequestReadError::Http(error)) => {
             drop(error);
