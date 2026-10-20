@@ -10620,8 +10620,14 @@ fn serve_command(mut args: impl Iterator<Item = String>) -> ExitCode {
                 .cloned()
         });
         form_routes.push(FormRoute {
-            path: format!("/forms/{}", form.name),
-            action: format!("/forms/{}", form.name),
+            path: form
+                .path
+                .clone()
+                .unwrap_or_else(|| format!("/forms/{}", form.name)),
+            action: form
+                .path
+                .clone()
+                .unwrap_or_else(|| format!("/forms/{}", form.name)),
             form: form.clone(),
             table,
             schema: Some(schema.clone()),
@@ -11392,6 +11398,7 @@ fn generated_crud_form(
         form: zelyra_ast::FormDef {
             name: format!("{}{}", crud.name, if edit { "Edit" } else { "Create" }),
             table: Some(table.name.clone()),
+            path: None,
             fields,
             actions: vec![zelyra_ast::FormAction {
                 name: "save".into(),
@@ -11511,6 +11518,7 @@ fn generated_crud_action(
             form: zelyra_ast::FormDef {
                 name: format!("{}{}", crud.name, action.name),
                 table: Some(table.name.clone()),
+                path: None,
                 fields: action.fields.clone(),
                 actions: vec![action.clone()],
                 span: action.span,

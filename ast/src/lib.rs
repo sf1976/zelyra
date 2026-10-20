@@ -407,6 +407,9 @@ pub struct TableViewRowActionsDef {
 pub struct FormDef {
     pub name: String,
     pub table: Option<String>,
+    /// Optional explicit browser route for a standalone or table-backed form.
+    /// When absent, the CLI keeps the conventional `/forms/<name>` route.
+    pub path: Option<String>,
     pub fields: Vec<FormField>,
     pub actions: Vec<FormAction>,
     pub span: Span,

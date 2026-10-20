@@ -381,7 +381,12 @@ security and compatibility gates stated for that milestone.
   tenant-owned storage, authorized downloads, transactional cleanup, and
   backup/delete semantics. See the
   [1.2.29 secure upload plan](release-plans/1.2.29-secure-uploads.en.md).
-- [ ] **1.2.30 — Laravel import workflow coverage:** Expand only from
+- [~] **1.2.30 — Laravel import workflow coverage:** A checked `route:` override
+  for standalone forms now supports absolute local paths and unique captured
+  segments; captured numeric values bind as integers and opaque values as SQL
+  strings. GET-time token verification and a typed read-before-write POST
+  action are still missing, so this is groundwork and not an imported feature.
+  Continue to expand only from
   compiler-checked, reusable feature/domain/UI modules backed by route-to-
   controller-to-view evidence. Validate the selected generated modules against
   the Laravel application using an isolated Zelyra database and browser tests.

@@ -891,6 +891,7 @@ mod tests {
         FormDef {
             name: "CustomerCreate".into(),
             table: None,
+            path: None,
             fields: vec![
                 field("name", Type::String, true, Some(5)),
                 field("email", Type::Named("Email".into()), true, None),
@@ -1156,6 +1157,7 @@ mod tests {
             forms: vec![FormDef {
                 name: "DocumentCreate".into(),
                 table: Some("documents".into()),
+                path: None,
                 fields: vec![document],
                 actions: Vec::new(),
                 span: Span::default(),
@@ -1260,6 +1262,7 @@ mod tests {
             forms: vec![FormDef {
                 name: "BulkUpload".into(),
                 table: None,
+                path: None,
                 fields: files,
                 actions: Vec::new(),
                 span: Span::default(),
@@ -1368,6 +1371,7 @@ mod tests {
         let bounded = FormDef {
             name: "Bounded".into(),
             table: None,
+            path: None,
             fields: vec![name, amount],
             actions: Vec::new(),
             span: Span::default(),
@@ -1408,6 +1412,7 @@ mod tests {
             forms: vec![FormDef {
                 name: "Invalid".into(),
                 table: None,
+                path: None,
                 fields: vec![invalid, inverted],
                 actions: Vec::new(),
                 span: Span::default(),
@@ -1435,6 +1440,7 @@ mod tests {
         let form = FormDef {
             name: "Invoice".into(),
             table: None,
+            path: None,
             fields: vec![status],
             actions: Vec::new(),
             span: Span::default(),
@@ -1461,6 +1467,7 @@ mod tests {
             forms: vec![FormDef {
                 name: "InvalidChoice".into(),
                 table: None,
+                path: None,
                 fields: vec![invalid],
                 actions: Vec::new(),
                 span: Span::default(),
@@ -1496,6 +1503,7 @@ mod tests {
         let form = FormDef {
             name: "CustomerCreate".into(),
             table: Some("customers".into()),
+            path: None,
             fields: vec![FormField {
                 name: "name".into(),
                 ty: None,

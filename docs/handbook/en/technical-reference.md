@@ -879,6 +879,14 @@ zelyra form validate examples/customer_form.zyl CustomerCreate \
 
 With `zelyra serve`, Zelyra exposes a form at `/forms/FormName`. GET renders a
 CSRF token; POST checks the token and validates the submitted values.
+Standalone forms may override that URL with `route: "/contact"`. A route may
+also capture one segment, for example `route: "/unsubscribe/{token}"`;
+captured values are available to SQL actions as same-named bound parameters
+(integer-shaped values bind as integers, other values as strings). The route
+must be an absolute local path. Query strings, fragments, encoded paths,
+duplicate parameters, malformed segments, and collisions with other routes
+are rejected. GET still renders the form normally, and POST retains the
+standard CSRF and validation checks.
 
 Database-backed action:
 

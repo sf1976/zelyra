@@ -2132,11 +2132,22 @@ impl<'a> Parser<'a> {
             None
         };
         self.expect(TokenKind::LBrace, "`{` after form name")?;
+        let mut path = None;
         let mut fields = Vec::new();
         let mut actions = Vec::new();
         self.skip_newlines();
         while !self.at(&TokenKind::RBrace) && !self.at(&TokenKind::Eof) {
-            if self.at(&TokenKind::Field) {
+            if self.at_word("route") {
+                let route = self.advance();
+                self.expect(TokenKind::Colon, "`:` after `route`")?;
+                if path.is_some() {
+                    return Err(ParseError {
+                        message: "duplicate `route` property in form".into(),
+                        span: route.span,
+                    });
+                }
+                path = Some(self.string_value("form route")?);
+            } else if self.at(&TokenKind::Field) {
                 fields.push(self.form_field()?);
             } else if self.at(&TokenKind::Fields) {
                 self.advance();
@@ -2171,7 +2182,8 @@ impl<'a> Parser<'a> {
             } else if self.at(&TokenKind::Action) {
                 actions.push(self.form_action()?);
             } else {
-                return self.error("expected `field`, `fields`, or `action` in form definition");
+                return self
+                    .error("expected `route`, `field`, `fields`, or `action` in form definition");
             }
             self.skip_newlines();
         }
@@ -2179,6 +2191,7 @@ impl<'a> Parser<'a> {
         Ok(FormDef {
             name,
             table,
+            path,
             fields,
             actions,
             span: start.join(end),
@@ -5767,6 +5780,7 @@ mod tests {
                 }
             }
             form CustomerCreate -> customers {
+                route: "/customers/new"
                 fields {
                     name
                     active
@@ -5791,6 +5805,7 @@ mod tests {
             })
         ));
         assert_eq!(program.forms[1].table.as_deref(), Some("customers"));
+        assert_eq!(program.forms[1].path.as_deref(), Some("/customers/new"));
         assert_eq!(program.forms[1].fields.len(), 2);
     }
 

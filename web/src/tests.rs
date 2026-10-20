@@ -16,6 +16,18 @@ fn database_timestamps_convert_to_zelyra_utc_milliseconds() {
 }
 
 #[test]
+fn form_route_parameters_bind_numeric_ids_and_opaque_tokens_safely() {
+    assert!(matches!(
+        path_parameter_query_value("42"),
+        QueryValue::Int(42)
+    ));
+    assert!(matches!(
+        path_parameter_query_value("tok_abc-123"),
+        QueryValue::String(value) if value == "tok_abc-123"
+    ));
+}
+
+#[test]
 fn table_validation_predicate_runs_before_form_writes_and_returns_declared_message() {
     let source = r#"
         table invoices {
@@ -288,6 +300,7 @@ fn form_route() -> FormRoute {
         form: FormDef {
             name: "CustomerCreate".into(),
             table: None,
+            path: None,
             fields: vec![zelyra_ast::FormField {
                 name: "name".into(),
                 ty: Some(Type::String),

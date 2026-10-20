@@ -7033,6 +7033,7 @@ fn crud_child_route(parent: &FormRoute, child: &CrudChildFormRoute) -> FormRoute
     route.form = zelyra_ast::FormDef {
         name: format!("{}Child", child.definition.name),
         table: Some(child.table.name.clone()),
+        path: None,
         fields: child.fields.clone(),
         actions: Vec::new(),
         span: child.definition.span,
@@ -11709,10 +11710,10 @@ fn execute_form_action_with_children(
         }
     }
     for (name, value) in path_params {
-        let parsed = value
-            .parse::<i64>()
-            .map(zelyra_database::QueryValue::Int)
-            .map_err(|_| format!("path parameter `{name}` is not an integer"))?;
+        // Numeric route values preserve the existing integer binding behavior;
+        // opaque route tokens (such as unsubscribe tokens) remain strings and
+        // are still passed only through prepared SQL parameters.
+        let parsed = path_parameter_query_value(value);
         parameters.push((name.clone(), parsed));
     }
     let mut queries = Vec::new();
@@ -12247,6 +12248,13 @@ fn execute_form_action_with_children(
         Ok(())
     })
     .map_err(|error| error.to_string())
+}
+
+fn path_parameter_query_value(value: &str) -> zelyra_database::QueryValue {
+    value.parse::<i64>().map_or_else(
+        |_| zelyra_database::QueryValue::String(value.to_owned()),
+        zelyra_database::QueryValue::Int,
+    )
 }
 
 #[allow(clippy::too_many_arguments)]

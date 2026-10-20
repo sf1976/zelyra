@@ -422,7 +422,12 @@ abgeschlossen.
   nicht. Offen sind Inhaltsprüfung, private mandantengebundene Speicherung,
   autorisierte Downloads, transaktionales Aufräumen und Backup-/Löschsemantik.
   Siehe den [Plan für sichere Uploads 1.2.29](release-plans/1.2.29-secure-uploads.de.md).
-- [ ] **1.2.30 — Abdeckung echter Laravel-Migrationsabläufe:** Den getesteten
+- [~] **1.2.30 — Abdeckung echter Laravel-Migrationsabläufe:** Ein geprüftes
+  `route:`-Override für Standalone-Forms unterstützt jetzt absolute lokale
+  Pfade und eindeutige erfasste Segmente; numerische Werte werden als Integer,
+  opake Werte als SQL-Strings gebunden. GET-seitige Tokenprüfung und eine
+  typisierte Lesen-vor-Schreiben-POST-Aktion fehlen noch; dies ist eine
+  Grundlage, kein importierter Ablauf. Den getesteten
   Routen-/Controller-/View-zu-Modul-Umfang am Laravel-Projekt erweitern, aber
   nur für compilergeprüfte, wiederverwendbare Feature-/Domain-/UI-Module mit
   belegter Herkunft. Ausgewählte Module gegen eine separate wegwerfbare
