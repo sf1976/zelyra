@@ -12,10 +12,13 @@ suffix="$(date +%s%N)"
 email="zelyra-tenant-${suffix}@example.test"
 permissionless_email="zelyra-tenant-no-permission-${suffix}@example.test"
 membershipless_email="zelyra-tenant-no-membership-${suffix}@example.test"
+owner_email="zelyra-tenant-owner-only-${suffix}@example.test"
+owner_tenant_name="Owner-only tenant ${suffix}"
 password="ZelyraTenant-${suffix}-Password"
 tenant_a_title="Tenant A invoice ${suffix}"
 tenant_b_title="Tenant B invoice ${suffix}"
 created_title="Created invoice ${suffix}"
+owner_created_title="Owner-created invoice ${suffix}"
 edited_title="Edited invoice ${suffix}"
 rollback_title="Rollback blocked ${suffix}"
 rollback_trigger="zelyra_tenant_fail_${suffix}"
@@ -57,12 +60,13 @@ cleanup() {
     fi
 client --batch --skip-column-names <<SQL >/dev/null 2>&1 || true
 DROP TRIGGER IF EXISTS ${rollback_trigger};
-DELETE FROM invoices WHERE title IN ('${tenant_a_title}', '${tenant_b_title}', '${created_title}', '${edited_title}', '${rollback_title}');
-DELETE FROM auth_audit_log WHERE actor_user_id IN (SELECT id FROM users WHERE email IN ('${email}', '${permissionless_email}', '${membershipless_email}'));
-DELETE FROM user_permissions WHERE user_id IN (SELECT id FROM users WHERE email IN ('${email}', '${permissionless_email}', '${membershipless_email}'));
-DELETE FROM auth_sessions WHERE user_id IN (SELECT id FROM users WHERE email IN ('${email}', '${permissionless_email}', '${membershipless_email}'));
-DELETE FROM tenant_memberships WHERE user_id IN (SELECT id FROM users WHERE email IN ('${email}', '${permissionless_email}', '${membershipless_email}'));
-DELETE FROM users WHERE email IN ('${email}', '${permissionless_email}', '${membershipless_email}');
+DELETE FROM invoices WHERE title IN ('${tenant_a_title}', '${tenant_b_title}', '${created_title}', '${owner_created_title}', '${edited_title}', '${rollback_title}');
+DELETE FROM auth_audit_log WHERE actor_user_id IN (SELECT id FROM users WHERE email IN ('${email}', '${permissionless_email}', '${membershipless_email}', '${owner_email}'));
+DELETE FROM user_permissions WHERE user_id IN (SELECT id FROM users WHERE email IN ('${email}', '${permissionless_email}', '${membershipless_email}', '${owner_email}'));
+DELETE FROM auth_sessions WHERE user_id IN (SELECT id FROM users WHERE email IN ('${email}', '${permissionless_email}', '${membershipless_email}', '${owner_email}'));
+DELETE FROM tenant_user WHERE user_id IN (SELECT id FROM users WHERE email IN ('${email}', '${permissionless_email}', '${membershipless_email}', '${owner_email}'));
+DELETE FROM tenants WHERE user_id IN (SELECT id FROM users WHERE email = '${owner_email}');
+DELETE FROM users WHERE email IN ('${email}', '${permissionless_email}', '${membershipless_email}', '${owner_email}');
 SQL
     rm -rf "${temp_dir}"
     return "${status}"
@@ -84,22 +88,27 @@ echo "[1/12] setting up tenant CRUD schema"
 DATABASE_URL="${database_url}" "${zelyra_bin}" db setup "${project_file}"
 password_hash="$(printf '%s\n' "${password}" | "${zelyra_bin}" auth hash-password --stdin)"
 permissionless_hash="$(printf '%s\n' "${password}" | "${zelyra_bin}" auth hash-password --stdin)"
+owner_hash="$(printf '%s\n' "${password}" | "${zelyra_bin}" auth hash-password --stdin)"
 membershipless_hash="$(printf '%s\n' "${password}" | "${zelyra_bin}" auth hash-password --stdin)"
 client <<SQL
 INSERT INTO users (email, password_hash)
 VALUES ('${email}', '${password_hash}'),
        ('${permissionless_email}', '${permissionless_hash}'),
-       ('${membershipless_email}', '${membershipless_hash}');
+       ('${membershipless_email}', '${membershipless_hash}'),
+       ('${owner_email}', '${owner_hash}');
 SET @user_id = (SELECT id FROM users WHERE email = '${email}');
 SET @permissionless_user_id = (SELECT id FROM users WHERE email = '${permissionless_email}');
 SET @membershipless_user_id = (SELECT id FROM users WHERE email = '${membershipless_email}');
-INSERT INTO tenant_memberships (user_id, tenant_id, active)
-VALUES (@user_id, 10, TRUE), (@user_id, 20, TRUE), (@permissionless_user_id, 10, TRUE);
+SET @owner_user_id = (SELECT id FROM users WHERE email = '${owner_email}');
+INSERT INTO tenant_user (user_id, tenant_id, role)
+VALUES (@user_id, 10, 'owner'), (@user_id, 20, 'employee'), (@permissionless_user_id, 10, 'employee');
+INSERT INTO tenants (user_id, name) VALUES (@owner_user_id, '${owner_tenant_name}');
 INSERT INTO user_permissions (user_id, permission)
-VALUES (@user_id, 'invoices.view'), (@membershipless_user_id, 'invoices.view');
+VALUES (@user_id, 'invoices.view'), (@membershipless_user_id, 'invoices.view'), (@owner_user_id, 'invoices.view');
 INSERT INTO invoices (tenant_id, title)
 VALUES (10, '${tenant_a_title}'), (20, '${tenant_b_title}');
 SQL
+owner_tenant_id="$(client --batch --skip-column-names -e "SELECT id FROM tenants WHERE name = '${owner_tenant_name}'")"
 tenant_b_id="$(client --batch --skip-column-names -e "SELECT id FROM invoices WHERE title = '${tenant_b_title}'")"
 tenant_a_id="$(client --batch --skip-column-names -e "SELECT id FROM invoices WHERE title = '${tenant_a_title}'")"
 [[ -n "${tenant_b_id}" ]]
@@ -129,7 +138,7 @@ ambiguous_status="$(curl --silent --show-error --output "${temp_dir}/ambiguous.h
     --write-out '%{http_code}' --cookie "${cookie}" "${base_url}/invoices")"
 [[ "${ambiguous_status}" == "403" ]]
 
-echo "[4/12] enforcing permission and membership independently"
+echo "[4/12] enforcing permission, membership, and direct ownership independently"
 permissionless_cookie="${temp_dir}/permissionless.cookies"
 permissionless_login_status="$(curl --silent --show-error --output "${temp_dir}/permissionless-login.html" \
     --write-out '%{http_code}' --header "Origin: ${base_url}" --cookie-jar "${permissionless_cookie}" \
@@ -151,6 +160,17 @@ membershipless_status="$(curl --silent --show-error --output "${temp_dir}/member
     --write-out '%{http_code}' --cookie "${membershipless_cookie}" \
     "${base_url}/invoices?tenant_id=10")"
 [[ "${membershipless_status}" == "403" ]]
+
+owner_cookie="${temp_dir}/owner.cookies"
+owner_login_status="$(curl --silent --show-error --output "${temp_dir}/owner-login.html" \
+    --write-out '%{http_code}' --header "Origin: ${base_url}" --cookie-jar "${owner_cookie}" \
+    --data-urlencode "_zelyra_csrf=${csrf}" --data-urlencode "email=${owner_email}" \
+    --data-urlencode "password=${password}" "${base_url}/login")"
+[[ "${owner_login_status}" == "303" ]]
+owner_access_status="$(curl --silent --show-error --output "${temp_dir}/owner-only.html" \
+    --write-out '%{http_code}' --cookie "${owner_cookie}" \
+    "${base_url}/invoices?tenant_id=${owner_tenant_id}")"
+[[ "${owner_access_status}" == "200" ]]
 
 echo "[5/12] isolating tenant list and detail reads"
 list_status="$(curl --silent --show-error --output "${temp_dir}/tenant-a.html" \
@@ -178,7 +198,7 @@ conflict_status="$(curl --silent --show-error --output "${temp_dir}/conflict.htm
 [[ "${conflict_status}" == "400" ]]
 forged_status="$(curl --silent --show-error --output "${temp_dir}/forged.html" \
     --write-out '%{http_code}' --cookie "${cookie}" \
-    "${base_url}/invoices?tenant_id=30")"
+    "${base_url}/invoices?tenant_id=${owner_tenant_id}")"
 [[ "${forged_status}" == "403" ]]
 
 echo "[7/12] creating with a client-supplied tenant key"
@@ -205,6 +225,19 @@ grep -Fq 'Location: /invoices?' "${temp_dir}/create-headers.txt"
 grep -Fq 'tenant_id=10' "${temp_dir}/create-headers.txt"
 created_tenant="$(client --batch --skip-column-names -e "SELECT tenant_id FROM invoices WHERE title = '${created_title}'")"
 [[ "${created_tenant}" == "10" ]]
+
+owner_form_status="$(curl --silent --show-error --output "${temp_dir}/owner-create-form.html" \
+    --write-out '%{http_code}' --cookie "${owner_cookie}" \
+    "${base_url}/invoices/new?tenant_id=${owner_tenant_id}")"
+[[ "${owner_form_status}" == "200" ]]
+owner_form_csrf="$(sed -n 's/.*name="_zelyra_csrf" value="\([^"]*\)".*/\1/p' "${temp_dir}/owner-create-form.html")"
+[[ -n "${owner_form_csrf}" ]]
+owner_create_status="$(curl --silent --show-error --output "${temp_dir}/owner-create-response.html" \
+    --write-out '%{http_code}' --header "Origin: ${base_url}" --cookie "${owner_cookie}" \
+    --data-urlencode "_zelyra_csrf=${owner_form_csrf}" --data-urlencode "title=${owner_created_title}" \
+    "${base_url}/invoices/new?tenant_id=${owner_tenant_id}")"
+[[ "${owner_create_status}" == "303" ]]
+[[ "$(client --batch --skip-column-names -e "SELECT COUNT(*) FROM invoices WHERE title = '${owner_created_title}' AND tenant_id = ${owner_tenant_id}")" == "1" ]]
 
 echo "[8/12] editing an owned record and rejecting a cross-tenant edit"
 edit_status="$(curl --silent --show-error --output "${temp_dir}/edit-a.html" \
@@ -299,25 +332,25 @@ restore_status="$(curl --silent --show-error --output "${temp_dir}/restore-a.htm
 [[ "$(client --batch --skip-column-names -e "SELECT COUNT(*) FROM invoices WHERE id = ${tenant_a_id} AND deleted_at IS NULL")" == "1" ]]
 
 echo "[10/12] failing closed when membership lookup fails"
-client -e "RENAME TABLE tenant_memberships TO tenant_memberships_unavailable"
+client -e "RENAME TABLE tenant_user TO tenant_user_unavailable"
 membership_failure_status="$(curl --silent --show-error --output "${temp_dir}/membership-failure.html" \
     --write-out '%{http_code}' --cookie "${cookie}" \
     "${base_url}/invoices?tenant_id=10")"
 [[ "${membership_failure_status}" == "503" ]]
 ! grep -Eiq 'tenant_memberships|unknown table|database error' "${temp_dir}/membership-failure.html"
-client -e "RENAME TABLE tenant_memberships_unavailable TO tenant_memberships"
+client -e "RENAME TABLE tenant_user_unavailable TO tenant_user"
 
 echo "[11/12] serializing concurrent membership revocation and delete"
 membership_lock_name="zelyra-tenant-${suffix}"
 client --batch --skip-column-names >"${temp_dir}/membership-lock.txt" <<SQL &
 START TRANSACTION;
-SELECT id FROM tenant_memberships
+SELECT id FROM tenant_user
 WHERE user_id = (SELECT id FROM users WHERE email = '${email}')
-  AND tenant_id = 10 AND active = TRUE
+  AND tenant_id = 10
 FOR UPDATE;
 SELECT GET_LOCK('${membership_lock_name}', 0);
 DO SLEEP(3);
-UPDATE tenant_memberships SET active = FALSE
+DELETE FROM tenant_user
 WHERE user_id = (SELECT id FROM users WHERE email = '${email}') AND tenant_id = 10;
 COMMIT;
 SELECT RELEASE_LOCK('${membership_lock_name}');

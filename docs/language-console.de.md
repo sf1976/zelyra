@@ -19,13 +19,13 @@ Eingaben werden einzeln geparst, typgeprüft und ausgeführt. Erfolgreiche Bindu
 => 30
 ```
 
-Im interaktiven Terminal bietet Rustyline ANSI-Farben für Schlüsselwörter, Zeichenketten und Zahlen, Verlauf in `~/.zelyra_history`, Tab-Vervollständigung für Projektfunktionen, Tabellen, Records, Felder und häufige Standardfunktionen sowie `>>`/`...`-Prompts. `NO_COLOR` und `ZELYRA_COLOR=never` schalten Farben ab. Bei Pipe-Eingabe werden die Prompts ausgelassen. Eingaben mit Anführungszeichen, SQL oder erkennbaren Geheimnisbegriffen werden nicht in der Historie gespeichert. Syntax-, Typ- und Laufzeitfehler melden eine Diagnose; die nächste Eingabe kann danach fortgesetzt werden.
+Im interaktiven Terminal bietet Reedline ANSI-Farben für Schlüsselwörter, Zeichenketten und Zahlen, Verlauf in `~/.zelyra_history`, Tab-Vervollständigung für Projektfunktionen, Tabellen, Records, Felder und häufige Standardfunktionen sowie `>>`/`...`-Prompts. `NO_COLOR` und `ZELYRA_COLOR=never` schalten Farben ab. Bei Pipe-Eingabe werden die Prompts ausgelassen. Eingaben mit Anführungszeichen, SQL oder erkennbaren Geheimnisbegriffen werden nicht in der Historie gespeichert. Syntax-, Typ- und Laufzeitfehler melden eine zweizeilige Diagnose mit Code sowie Quellposition und Meldung; die nächste Eingabe kann danach fortgesetzt werden.
 
 ## Befehle
 
 - `:help` zeigt die Befehle.
 - `:tables` und `:schema <tabelle>` zeigen deklarierte Tabellen und Spalten.
-- `:tenant <id>` setzt die REPL-Bindung `tenant_id`; dies erzeugt keine zusätzliche Autorisierung oder automatische Filterung.
+- `:tenant <id>` setzt `tenant_id` und `session.tenant_id`. Das typisierte Feld `session.tenant_id` hat den Typ `Option<Int>` (`None`, solange keine Mandanten-ID gesetzt ist); dies erzeugt keine zusätzliche Autorisierung oder automatische Filterung.
 - `:commit` bestätigt die laufende Sandbox-Transaktion und öffnet eine neue.
 - `:rollback` verwirft die laufende Sandbox-Transaktion und öffnet eine neue.
 - `:clear`, `:quit` und `:exit` leeren beziehungsweise beenden die Sitzung.

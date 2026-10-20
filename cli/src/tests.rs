@@ -3634,8 +3634,12 @@ fn tenant_crud_forms_hide_and_server_bind_tenant_key() {
     };
     assert!(create_sql.contains("`title`, `tenant_id`"), "{create_sql}");
     assert!(create_sql.contains(":zelyra_tenant_id"), "{create_sql}");
-    assert!(create_sql.contains("`memberships`"), "{create_sql}");
-    assert!(create_sql.contains(":zelyra_user_id"), "{create_sql}");
+    assert!(!create_sql.contains("memberships"), "{create_sql}");
+    assert!(!create_sql.contains("active = true"), "{create_sql}");
+    assert!(!create_sql.contains(":zelyra_user_id"), "{create_sql}");
+    // Tenant membership/ownership is revalidated in the same write
+    // transaction, using the project's actual auth schema. Do not bake an
+    // optional membership `active` column into generated mutation SQL.
 
     let edit = make_form(true);
     let edit_sql = match &edit.form.actions[0].statements[0] {
@@ -3646,7 +3650,8 @@ fn tenant_crud_forms_hide_and_server_bind_tenant_key() {
         _ => panic!("generated edit form must use SQL"),
     };
     assert!(edit_sql.contains("WHERE `id` = :id AND `tenant_id` = :zelyra_tenant_id"));
-    assert!(edit_sql.contains("`memberships`"), "{edit_sql}");
+    assert!(!edit_sql.contains("memberships"), "{edit_sql}");
+    assert!(!edit_sql.contains("active = true"), "{edit_sql}");
 }
 
 #[test]

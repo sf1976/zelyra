@@ -1906,9 +1906,6 @@ fn module_bundle_command(mut arguments: impl Iterator<Item = String>) -> ExitCod
             let dockerfile = format!(
                 r#"FROM rust:1-bookworm AS build
 ARG ZELYRA_REF={compiler_ref}
-RUN apt-get update \
-    && apt-get install -y --no-install-recommends ca-certificates git \
-    && rm -rf /var/lib/apt/lists/*
 RUN git init /zelyra \
     && git -C /zelyra remote add origin https://github.com/sf1976/zelyra.git \
     && git -C /zelyra fetch --depth=1 origin "$ZELYRA_REF" \

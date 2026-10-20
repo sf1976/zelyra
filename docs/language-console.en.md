@@ -19,13 +19,13 @@ Each input is parsed, typechecked, and executed independently. Successful bindin
 => 30
 ```
 
-In a terminal, Rustyline provides ANSI colors for keywords, strings, and numbers; history at `~/.zelyra_history`; tab completion for project functions, tables, records, fields, and common standard functions; and `>>`/`...` prompts. `NO_COLOR` and `ZELYRA_COLOR=never` disable color. Pipe input omits prompts. Inputs containing quotes, SQL, or recognizable secret keywords are excluded from saved history. Syntax, type, and runtime failures report a diagnostic and leave the next input available.
+In a terminal, Reedline provides ANSI colors for keywords, strings, and numbers; history at `~/.zelyra_history`; tab completion for project functions, tables, records, fields, and common standard functions; and `>>`/`...` prompts. `NO_COLOR` and `ZELYRA_COLOR=never` disable color. Pipe input omits prompts. Inputs containing quotes, SQL, or recognizable secret keywords are excluded from saved history. Syntax, type, and runtime failures report a two-line diagnostic with a code, source location, and message, and leave the next input available.
 
 ## Commands
 
 - `:help` lists commands.
 - `:tables` and `:schema <table>` show declared tables and columns.
-- `:tenant <id>` sets the REPL binding `tenant_id`; it does not grant authorization or add automatic filters.
+- `:tenant <id>` sets both `tenant_id` and `session.tenant_id`. The typed `session.tenant_id` field is `Option<Int>` (`None` until a tenant id is set); this does not grant authorization or add automatic filters.
 - `:commit` commits the current sandbox transaction and starts another.
 - `:rollback` rolls back the current sandbox transaction and starts another.
 - `:clear`, `:quit`, and `:exit` clear or exit the session.

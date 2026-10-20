@@ -193,6 +193,9 @@ pub(super) fn run() -> ExitCode {
     if command == "console" {
         return console::command(args);
     }
+    if command == "import" {
+        return laravel_migrator::command(args);
+    }
     if command == "setup" {
         let mut path = ".".to_owned();
         let mut path_given = false;

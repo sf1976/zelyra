@@ -1412,6 +1412,202 @@ fn run_reads_console_input_and_handles_eof_and_capability_denial() {
 }
 
 #[test]
+fn laravel_generation_requires_an_explicit_supported_selection() {
+    let directory = temporary_directory("laravel-selection-required");
+    fs::create_dir_all(&directory).unwrap();
+    let source = directory.join("source-is-not-read-before-selection");
+    let output_directory = directory.join("generated");
+    let output = Command::new(binary())
+        .args([
+            "import",
+            "laravel",
+            "generate",
+            source.to_str().unwrap(),
+            "--output",
+            output_directory.to_str().unwrap(),
+        ])
+        .output()
+        .expect("Laravel importer should report the missing selection");
+    assert_eq!(output.status.code(), Some(2));
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("requires an explicit selection") && stderr.contains("--all-supported"),
+        "unexpected stderr: {stderr}"
+    );
+    assert!(!output_directory.exists());
+    fs::remove_dir_all(directory).unwrap();
+}
+
+#[test]
+fn generated_laravel_identity_package_is_reusable_from_a_separate_project() {
+    let directory = temporary_directory("laravel-identity-package-reuse");
+    let source = directory.join("laravel-source");
+    let generated = directory.join("generated");
+    let consumer = directory.join("consumer");
+    fs::create_dir_all(source.join("routes")).unwrap();
+    fs::create_dir_all(source.join("app/Http/Controllers")).unwrap();
+    fs::create_dir_all(source.join("database/migrations")).unwrap();
+    fs::create_dir_all(source.join("resources/views/auth")).unwrap();
+    fs::write(
+        source.join("routes/web.php"),
+        "<?php\nRoute::get('/login', [AuthController::class, 'showLogin']);\nRoute::post('/login', [AuthController::class, 'login']);\n",
+    )
+    .unwrap();
+    fs::write(
+        source.join("app/Http/Controllers/AuthController.php"),
+        "<?php\nclass AuthController { public function showLogin() { return view('auth.login'); } public function login() { return null; } }\n",
+    )
+    .unwrap();
+    fs::write(
+        source.join("resources/views/auth/login.blade.php"),
+        "<form method=\"post\"><input name=\"email\"><input name=\"password\"></form>",
+    )
+    .unwrap();
+    fs::write(
+        source.join("database/migrations/2026_01_01_000000_create_users_table.php"),
+        "<?php\nSchema::create('users', function (Blueprint $table) { $table->id(); $table->string('name'); $table->string('email')->unique(); $table->string('password'); $table->rememberToken(); $table->timestamps(); });\n",
+    )
+    .unwrap();
+
+    let generated = Command::new(binary())
+        .args([
+            "import",
+            "laravel",
+            "generate",
+            source.to_str().unwrap(),
+            "--output",
+            generated.to_str().unwrap(),
+            "--all-supported",
+        ])
+        .output()
+        .expect("Laravel import should generate a native project scaffold");
+    assert!(
+        generated.status.success(),
+        "stdout: {}\nstderr: {}",
+        String::from_utf8_lossy(&generated.stdout),
+        String::from_utf8_lossy(&generated.stderr)
+    );
+    assert!(directory
+        .join("generated/packages/imported_identity/zelyra.toml")
+        .is_file());
+
+    fs::create_dir_all(consumer.join("packages")).unwrap();
+    copy_directory(
+        &directory.join("generated/packages/imported_identity"),
+        &consumer.join("packages/imported_identity"),
+    );
+    fs::write(
+        consumer.join("main.zyl"),
+        "import \"pkg:identity\" as identity\n\nfn main() {}\n",
+    )
+    .unwrap();
+    fs::write(
+        consumer.join("zelyra.toml"),
+        "[project]\nname = \"identity_consumer\"\nlanguage = \"0.1\"\n\n[package]\nname = \"identity_consumer\"\nversion = \"0.1.0\"\nentry = \"main.zyl\"\n\n[dependencies.identity]\npath = \"packages/imported_identity\"\nversion = \"^0.1.0\"\n",
+    )
+    .unwrap();
+
+    for (arguments, label) in [
+        (
+            vec!["package", "lock", "main.zyl", "--update"],
+            "package lock",
+        ),
+        (vec!["check", "main.zyl"], "consumer compiler check"),
+    ] {
+        let result = Command::new(binary())
+            .current_dir(&consumer)
+            .args(arguments)
+            .output()
+            .unwrap_or_else(|_| panic!("{label} should execute"));
+        assert!(
+            result.status.success(),
+            "{label} failed: {}",
+            String::from_utf8_lossy(&result.stderr)
+        );
+    }
+    let routes = Command::new(binary())
+        .current_dir(&consumer)
+        .args(["routes", "main.zyl", "--format=json"])
+        .output()
+        .expect("consumer routes should be listed");
+    assert!(
+        routes.status.success(),
+        "{}",
+        String::from_utf8_lossy(&routes.stderr)
+    );
+    let routes: serde_json::Value = serde_json::from_slice(&routes.stdout).unwrap();
+    let routes = routes["routes"].as_array().unwrap();
+    assert_eq!(routes.len(), 5);
+    assert!(routes.iter().any(|route| route["path"] == "/login"));
+    assert!(routes
+        .iter()
+        .any(|route| route["path"] == "/account/sessions"));
+
+    fs::remove_dir_all(directory).unwrap();
+}
+
+fn copy_directory(source: &Path, destination: &Path) {
+    fs::create_dir_all(destination).unwrap();
+    for entry in fs::read_dir(source).unwrap() {
+        let entry = entry.unwrap();
+        let target = destination.join(entry.file_name());
+        if entry.file_type().unwrap().is_dir() {
+            copy_directory(&entry.path(), &target);
+        } else {
+            fs::copy(entry.path(), target).unwrap();
+        }
+    }
+}
+
+#[test]
+fn language_console_keeps_bindings_and_recovers_after_runtime_errors_in_piped_input() {
+    let (directory, source) = temporary_project_source("language-console-repl", "fn main() {}\n");
+    let mut child = Command::new(binary())
+        .args(["console", source.to_str().unwrap(), "--sandbox"])
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .expect("language console should start");
+    child
+        .stdin
+        .take()
+        .unwrap()
+        .write_all(b"x = 10\ny = 20\nx + y\n1 / 0\n\"weiter\"\n")
+        .expect("REPL inputs should be written");
+    let output = child.wait_with_output().unwrap();
+    assert!(
+        output.status.success(),
+        "stdout: {}\nstderr: {}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert_eq!(
+        String::from_utf8_lossy(&output.stdout),
+        "=> 30\n=> \"weiter\"\n"
+    );
+    assert!(String::from_utf8_lossy(&output.stderr).contains("division by zero"));
+    fs::remove_dir_all(directory).unwrap();
+}
+
+#[test]
+fn language_console_rejects_unimplemented_bytecode_backend_instead_of_falling_back_to_ast() {
+    let (directory, source) =
+        temporary_project_source("language-console-backend", "fn main() {}\n");
+    let output = Command::new(binary())
+        .args(["console", source.to_str().unwrap(), "--backend", "bytecode"])
+        .output()
+        .expect("language console should report the backend limitation");
+    assert!(!output.status.success());
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("currently supports only --backend ast"),
+        "unexpected stderr: {stderr}"
+    );
+    fs::remove_dir_all(directory).unwrap();
+}
+
+#[test]
 fn standard_layout_namespaces_resolve_and_remain_opt_in() {
     let directory = temporary_directory("standard-layout-namespaces");
     for path in ["schema", "domain/sales", "routes", "public", "assets"] {

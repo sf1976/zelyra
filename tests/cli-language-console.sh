@@ -16,8 +16,9 @@ recovery="$(printf '1 / 0\n"weiter"\n' | "${zelyra_bin}" console "${project}/mai
 [[ "${recovery}" == *'division by zero'* ]]
 [[ "${recovery}" == *'=> "weiter"'* ]]
 
-meta="$(printf ':tenant 42\ntenant_id\n:help\n' | "${zelyra_bin}" console "${project}/main.zyl" --sandbox 2>&1)"
+meta="$(printf ':tenant 42\ntenant_id\nsession.tenant_id\n:help\n' | "${zelyra_bin}" console "${project}/main.zyl" --sandbox 2>&1)"
 [[ "${meta}" == *'=> 42'* ]]
+[[ "${meta}" == *'=> Some(42)'* ]]
 [[ "${meta}" == *':commit'* ]]
 [[ "${meta}" != *'E-PARSE-001'* ]]
 

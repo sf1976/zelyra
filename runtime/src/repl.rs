@@ -6,6 +6,7 @@ use zelyra_lexer::lex;
 use zelyra_parser::parse;
 
 const REPL_FUNCTION: &str = "__zelyra_repl_entry";
+const REPL_SESSION_TYPE: &str = "__ZelyraReplSessionContext";
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum ReplError {
@@ -20,17 +21,17 @@ impl std::fmt::Display for ReplError {
         match self {
             Self::Parse { message, span } => write!(
                 formatter,
-                "error[E-PARSE-001] at {}:{}: {message}",
+                "error[E-PARSE-001]\n  --> {}:{}: {message}",
                 span.line, span.column
             ),
             Self::Type(error) => write!(
                 formatter,
-                "error[{}] at {}:{}: {}",
+                "error[{}]\n  --> {}:{}: {}",
                 error.code, error.span.line, error.span.column, error.message
             ),
             Self::Runtime(error) => write!(
                 formatter,
-                "error[E-RUNTIME-001] at {}:{}: {}",
+                "error[E-RUNTIME-001]\n  --> {}:{}: {}",
                 error.span.line, error.span.column, error.message
             ),
             Self::Session(message) => write!(formatter, "error[E-REPL-001]: {message}"),
@@ -65,6 +66,7 @@ pub struct ReplSession {
     policy: Option<RuntimePolicy>,
     transaction: Option<Arc<Mutex<zelyra_database::MariaDbInteractiveTransaction>>>,
     sandbox: bool,
+    session_type_name: String,
     function_sequence: u64,
 }
 
@@ -76,6 +78,20 @@ impl ReplSession {
         policy: Option<RuntimePolicy>,
         sandbox: bool,
     ) -> Result<Self, ReplError> {
+        let session_type_name = unique_session_type_name(&program);
+        let mut program = program;
+        program.records.push(RecordDef {
+            name: session_type_name.clone(),
+            is_public: false,
+            is_class: false,
+            type_params: Vec::new(),
+            fields: vec![RecordField {
+                name: "tenant_id".into(),
+                ty: Type::Option(Box::new(Type::Int)),
+                span: Span::default(),
+            }],
+            span: Span::default(),
+        });
         let transaction = if sandbox {
             match database_url.as_deref() {
                 Some(url) if zelyra_database::is_postgres_url(url) => {
@@ -97,12 +113,28 @@ impl ReplSession {
         };
         Ok(Self {
             program,
-            bindings: BTreeMap::new(),
+            bindings: [(
+                "session".into(),
+                Binding {
+                    value: Value::Object {
+                        type_name: session_type_name.clone(),
+                        type_args: Vec::new(),
+                        fields: [("tenant_id".into(), Value::Option(None))]
+                            .into_iter()
+                            .collect(),
+                    },
+                    ty: Type::Named(session_type_name.clone()),
+                    mutable: false,
+                },
+            )]
+            .into_iter()
+            .collect(),
             database_url,
             grants,
             policy,
             transaction,
             sandbox,
+            session_type_name,
             function_sequence: 0,
         })
     }
@@ -368,6 +400,12 @@ impl ReplSession {
                 .map(|function| function.name.clone()),
         );
         names.extend(self.program.tables.iter().map(|table| table.name.clone()));
+        names.extend(
+            self.program
+                .tables
+                .iter()
+                .flat_map(|table| table.columns.iter().map(|column| column.name.clone())),
+        );
         names.extend(self.program.records.iter().flat_map(|structure| {
             std::iter::once(structure.name.clone())
                 .chain(structure.fields.iter().map(|field| field.name.clone()))
@@ -458,6 +496,23 @@ impl ReplSession {
     /// Set the session tenant id exposed to expressions and SQL parameters as `tenant_id`.
     pub fn set_tenant_id(&mut self, tenant_id: i64) {
         self.bindings.insert(
+            "session".into(),
+            Binding {
+                value: Value::Object {
+                    type_name: self.session_type_name.clone(),
+                    type_args: Vec::new(),
+                    fields: [(
+                        "tenant_id".into(),
+                        Value::Option(Some(Box::new(Value::Int(tenant_id)))),
+                    )]
+                    .into_iter()
+                    .collect(),
+                },
+                ty: Type::Named(self.session_type_name.clone()),
+                mutable: false,
+            },
+        );
+        self.bindings.insert(
             "tenant_id".into(),
             Binding {
                 value: Value::Int(tenant_id),
@@ -466,6 +521,21 @@ impl ReplSession {
             },
         );
     }
+}
+
+fn unique_session_type_name(program: &Program) -> String {
+    let existing = program
+        .records
+        .iter()
+        .map(|record| record.name.as_str())
+        .collect::<HashSet<_>>();
+    let mut candidate = REPL_SESSION_TYPE.to_owned();
+    let mut suffix = 0_u64;
+    while existing.contains(candidate.as_str()) {
+        suffix = suffix.saturating_add(1);
+        candidate = format!("{REPL_SESSION_TYPE}_{suffix}");
+    }
+    candidate
 }
 
 fn parse_input(input: &str) -> Result<Program, ReplError> {
@@ -516,6 +586,7 @@ fn collect_top_level_bindings(
             _ => {}
         }
     }
+
     bindings.into_iter().collect()
 }
 
@@ -576,12 +647,79 @@ mod tests {
     }
 
     #[test]
+    fn diagnostics_put_source_location_and_message_on_a_second_line() {
+        let error = ReplError::Parse {
+            message: "unexpected token".into(),
+            span: Span {
+                line: 3,
+                column: 5,
+                start: 0,
+                end: 0,
+                source_id: 0,
+            },
+        };
+        assert_eq!(
+            error.to_string(),
+            "error[E-PARSE-001]\n  --> 3:5: unexpected token"
+        );
+    }
+
+    #[test]
     fn bindings_and_expressions_persist_across_inputs() {
         let mut session = session();
         session.eval_line("x = 10").expect("bind x");
         session.eval_line("y = 20").expect("bind y");
         let result = session.eval_line("x + y").expect("evaluate sum");
         assert_eq!(result.value, Some(Value::Int(30)));
+    }
+
+    #[test]
+    fn tenant_is_available_through_typed_session_context_and_legacy_binding() {
+        let mut session = session();
+        session.set_tenant_id(42);
+        assert_eq!(
+            session.eval_line("session.tenant_id").unwrap().value,
+            Some(Value::Option(Some(Box::new(Value::Int(42)))))
+        );
+        assert_eq!(
+            session.eval_line("tenant_id").unwrap().value,
+            Some(Value::Int(42))
+        );
+    }
+
+    #[test]
+    fn session_context_type_avoids_project_record_name_collisions() {
+        let mut program = parse(&lex("fn main() {}\n").unwrap()).unwrap();
+        program.records.push(RecordDef {
+            name: REPL_SESSION_TYPE.into(),
+            is_public: false,
+            is_class: false,
+            type_params: Vec::new(),
+            fields: Vec::new(),
+            span: Span::default(),
+        });
+        assert_eq!(
+            unique_session_type_name(&program),
+            format!("{REPL_SESSION_TYPE}_1")
+        );
+    }
+
+    #[test]
+    fn completion_includes_declared_table_columns_and_library_functions() {
+        let program = parse(
+            &lex(
+                "table Customer { id: Id primary auto name: String(80) required }\nfn main() {}\n",
+            )
+            .expect("lex project"),
+        )
+        .expect("parse project");
+        let session = ReplSession::new(program, None, None, None, true).expect("start REPL");
+        let candidates = session.completion_candidates();
+        assert!(candidates.contains(&"Customer".to_owned()));
+        assert!(candidates.contains(&"id".to_owned()));
+        assert!(candidates.contains(&"name".to_owned()));
+        assert!(candidates.contains(&"hash_sha256".to_owned()));
+        assert!(candidates.contains(&"now".to_owned()));
     }
 
     #[test]

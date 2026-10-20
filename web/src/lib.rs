@@ -671,6 +671,8 @@ pub struct TableViewFilter {
 pub struct AuthRoute {
     pub table: String,
     pub membership_table: Option<String>,
+    pub tenant_owner_table: Option<String>,
+    pub tenant_owner_column: Option<String>,
     pub session_table: Option<String>,
     pub permissions_table: Option<String>,
     pub roles_table: Option<String>,
@@ -704,7 +706,10 @@ struct Session {
 struct TenantContext {
     user_id: i64,
     tenant_id: i64,
-    membership_table: String,
+    membership_table: Option<String>,
+    membership_has_active: bool,
+    tenant_owner_table: Option<String>,
+    tenant_owner_column: Option<String>,
 }
 
 struct CrudRequestContext<'a> {
@@ -824,9 +829,9 @@ fn resolve_tenant_context(
     let Some(auth) = app.auth_route.as_ref() else {
         return Err(403);
     };
-    let Some(membership_table) = auth.membership_table.as_deref() else {
+    if auth.membership_table.is_none() && auth.tenant_owner_table.is_none() {
         return Err(403);
-    };
+    }
     let Some(database_url) = database_url else {
         return Err(503);
     };
@@ -844,38 +849,43 @@ fn resolve_tenant_context(
         None => None,
     };
     let is_postgres = zelyra_database::is_postgres_url(database_url);
-    let mut query = format!(
-        "SELECT tenant_id FROM {} WHERE user_id = :zelyra_user_id AND active = true",
-        quote_ident(membership_table, is_postgres),
-    );
-    let mut params = vec![("zelyra_user_id".into(), QueryValue::Int(user_id))];
-    if let Some(tenant_id) = selected_tenant_id {
-        query.push_str(" AND tenant_id = :zelyra_selected_tenant_id");
-        params.push((
-            "zelyra_selected_tenant_id".into(),
-            QueryValue::Int(tenant_id),
-        ));
+    let membership_has_active = auth.membership_table.as_deref().is_some_and(|name| {
+        auth.schema.tables.iter().any(|table| {
+            table.name == name && table.columns.iter().any(|column| column.name == "active")
+        })
+    });
+    let context = TenantContext {
+        user_id,
+        tenant_id: selected_tenant_id.unwrap_or_default(),
+        membership_table: auth.membership_table.clone(),
+        membership_has_active,
+        tenant_owner_table: auth.tenant_owner_table.clone(),
+        tenant_owner_column: auth.tenant_owner_column.clone(),
+    };
+    let mut tenant_ids = std::collections::BTreeSet::new();
+    for query in tenant_access_queries(&context, is_postgres, selected_tenant_id, false) {
+        let result = zelyra_database::execute_query(database_url, &query.sql, query.params)
+            .map_err(|error| {
+                eprintln!("zelyra web: tenant access lookup failed: {error}");
+                503u16
+            })?;
+        for tenant_id in result
+            .rows
+            .iter()
+            .filter_map(|row| row.first()?.parse::<i64>().ok())
+            .filter(|tenant_id| *tenant_id > 0)
+        {
+            tenant_ids.insert(tenant_id);
+        }
     }
-    query.push_str(" ORDER BY tenant_id LIMIT 2");
-    let result = zelyra_database::execute_query(database_url, &query, params).map_err(|error| {
-        eprintln!("zelyra web: tenant membership lookup failed: {error}");
-        503u16
-    })?;
-    let tenant_ids = result
-        .rows
-        .iter()
-        .filter_map(|row| row.first()?.parse::<i64>().ok())
-        .filter(|tenant_id| *tenant_id > 0)
-        .collect::<Vec<_>>();
-    let tenant_id = match (selected_tenant_id, tenant_ids.as_slice()) {
-        (Some(selected), [matched]) if selected == *matched => selected,
-        (None, [only]) => *only,
+    let tenant_id = match (selected_tenant_id, tenant_ids.len()) {
+        (Some(selected), 1) if tenant_ids.contains(&selected) => selected,
+        (None, 1) => *tenant_ids.first().expect("one tenant id exists"),
         _ => return Err(403),
     };
     Ok(Some(TenantContext {
-        user_id,
         tenant_id,
-        membership_table: membership_table.to_owned(),
+        ..context
     }))
 }
 
@@ -888,11 +898,87 @@ fn tenant_resolution_error(status: u16) -> Response {
     Response::html(status, format!("<h1>{title}</h1>"))
 }
 
-fn tenant_membership_predicate(context: &TenantContext, is_postgres: bool) -> String {
-    format!(
-        "EXISTS (SELECT 1 FROM {} AS zelyra_membership WHERE zelyra_membership.user_id = :zelyra_user_id AND zelyra_membership.tenant_id = :zelyra_tenant_id AND zelyra_membership.active = true)",
-        quote_ident(&context.membership_table, is_postgres)
-    )
+fn tenant_access_predicate(context: &TenantContext, is_postgres: bool) -> String {
+    let mut predicates = Vec::new();
+    if let Some(membership_table) = &context.membership_table {
+        let active = if context.membership_has_active {
+            " AND zelyra_membership.active = true"
+        } else {
+            ""
+        };
+        predicates.push(format!(
+            "EXISTS (SELECT 1 FROM {} AS zelyra_membership WHERE zelyra_membership.user_id = :zelyra_user_id AND zelyra_membership.tenant_id = :zelyra_tenant_id{active})",
+            quote_ident(membership_table, is_postgres)
+        ));
+    }
+    if let (Some(owner_table), Some(owner_column)) = (
+        context.tenant_owner_table.as_deref(),
+        context.tenant_owner_column.as_deref(),
+    ) {
+        predicates.push(format!(
+            "EXISTS (SELECT 1 FROM {} AS zelyra_owner WHERE zelyra_owner.id = :zelyra_tenant_id AND zelyra_owner.{} = :zelyra_user_id)",
+            quote_ident(owner_table, is_postgres),
+            quote_ident(owner_column, is_postgres)
+        ));
+    }
+    format!("({})", predicates.join(" OR "))
+}
+
+fn tenant_access_queries(
+    context: &TenantContext,
+    is_postgres: bool,
+    selected_tenant_id: Option<i64>,
+    for_update: bool,
+) -> Vec<zelyra_database::Query> {
+    let mut queries = Vec::new();
+    if let Some(membership_table) = &context.membership_table {
+        let active = if context.membership_has_active {
+            " AND active = true"
+        } else {
+            ""
+        };
+        let mut sql = format!(
+            "SELECT tenant_id FROM {} WHERE user_id = :zelyra_user_id{active}",
+            quote_ident(membership_table, is_postgres)
+        );
+        let mut params = vec![("zelyra_user_id".into(), QueryValue::Int(context.user_id))];
+        if let Some(tenant_id) = selected_tenant_id {
+            sql.push_str(" AND tenant_id = :zelyra_selected_tenant_id");
+            params.push((
+                "zelyra_selected_tenant_id".into(),
+                QueryValue::Int(tenant_id),
+            ));
+        }
+        sql.push_str(" ORDER BY tenant_id LIMIT 2");
+        if for_update {
+            sql.push_str(" FOR UPDATE");
+        }
+        queries.push(zelyra_database::Query { sql, params });
+    }
+    if let (Some(owner_table), Some(owner_column)) = (
+        context.tenant_owner_table.as_deref(),
+        context.tenant_owner_column.as_deref(),
+    ) {
+        let mut sql = format!(
+            "SELECT id FROM {} WHERE {} = :zelyra_user_id",
+            quote_ident(owner_table, is_postgres),
+            quote_ident(owner_column, is_postgres)
+        );
+        let mut params = vec![("zelyra_user_id".into(), QueryValue::Int(context.user_id))];
+        if let Some(tenant_id) = selected_tenant_id {
+            sql.push_str(" AND id = :zelyra_selected_tenant_id");
+            params.push((
+                "zelyra_selected_tenant_id".into(),
+                QueryValue::Int(tenant_id),
+            ));
+        }
+        sql.push_str(" ORDER BY id LIMIT 2");
+        if for_update {
+            sql.push_str(" FOR UPDATE");
+        }
+        queries.push(zelyra_database::Query { sql, params });
+    }
+    queries
 }
 
 fn tenant_query_params(context: &TenantContext) -> Vec<(String, QueryValue)> {
@@ -988,16 +1074,22 @@ fn execute_crud_mutation(
         });
     };
     zelyra_database::with_decision_transaction(database_url, |transaction| {
-        let membership_check = zelyra_database::Query {
-            sql: format!(
-                "SELECT tenant_id FROM {} WHERE user_id = :zelyra_user_id AND tenant_id = :zelyra_tenant_id AND active = true FOR UPDATE",
-                quote_ident(&tenant_context.membership_table, is_postgres)
-            ),
-            params: tenant_query_params(tenant_context),
-        };
-        if transaction.execute(&membership_check)?.rows.is_empty() {
+        let mut access_confirmed = false;
+        for access_check in tenant_access_queries(
+            tenant_context,
+            is_postgres,
+            Some(tenant_context.tenant_id),
+            true,
+        ) {
+            if !transaction.execute(&access_check)?.rows.is_empty() {
+                access_confirmed = true;
+                break;
+            }
+        }
+        if !access_confirmed {
             return Err(zelyra_database::DatabaseError {
-                message: "ZELYRA_TENANT_DENIED: membership is no longer active".into(),
+                message: "ZELYRA_TENANT_DENIED: tenant ownership or membership is no longer valid"
+                    .into(),
             });
         }
         let Some(scoped_record_check) = scoped_record_check else {
@@ -5710,6 +5802,8 @@ fn account_sessions_test_auth() -> AuthRoute {
     AuthRoute {
         table: "users".into(),
         membership_table: None,
+        tenant_owner_table: None,
+        tenant_owner_column: None,
         session_table: None,
         permissions_table: None,
         roles_table: None,
@@ -7029,7 +7123,7 @@ fn load_existing_form_values(
         (Some(column), Some(context)) => format!(
             " AND {} = :zelyra_tenant_id AND {}",
             quote_ident(column, is_postgres),
-            tenant_membership_predicate(context, is_postgres)
+            tenant_access_predicate(context, is_postgres)
         ),
         (Some(_), None) => return Err("tenant context is required for this form".into()),
         _ => String::new(),
@@ -7895,7 +7989,7 @@ fn dispatch_crud(
             "{}.{} = :zelyra_tenant_id AND {}",
             quote_ident("base", is_postgres),
             quote_ident(tenant_column, is_postgres),
-            tenant_membership_predicate(tenant_context, is_postgres)
+            tenant_access_predicate(tenant_context, is_postgres)
         ));
     } else if crud.tenant_column.is_some() {
         return Response::html(403, "<h1>403 Forbidden</h1>");
@@ -7995,7 +8089,7 @@ fn dispatch_crud(
             count_conditions.push(format!(
                 "{} = :zelyra_tenant_id AND {}",
                 quote_ident(tenant_column, is_postgres),
-                tenant_membership_predicate(tenant_context, is_postgres)
+                tenant_access_predicate(tenant_context, is_postgres)
             ));
         } else if crud.tenant_column.is_some() {
             return Response::html(403, "<h1>403 Forbidden</h1>");
@@ -8785,7 +8879,7 @@ fn dispatch_crud_detail(
             " AND {}.{} = :zelyra_tenant_id AND {}",
             quote_ident("base", is_postgres),
             quote_ident(tenant_column, is_postgres),
-            tenant_membership_predicate(context, is_postgres)
+            tenant_access_predicate(context, is_postgres)
         ),
         (Some(_), None) => return Response::html(403, "<h1>403 Forbidden</h1>"),
         (None, _) => String::new(),
@@ -9023,7 +9117,7 @@ fn dispatch_crud_mark_read(
         conditions.push(format!(
             "{} = :zelyra_tenant_id AND {}",
             quote_ident(tenant_column, is_postgres),
-            tenant_membership_predicate(tenant_context, is_postgres)
+            tenant_access_predicate(tenant_context, is_postgres)
         ));
     }
     if let Some(recipient_column) = crud.recipient_column.as_deref() {
@@ -9186,7 +9280,7 @@ fn dispatch_crud_delete(
         scope_conditions.push(format!(
             "{} = :zelyra_tenant_id AND {}",
             quote_ident(column, is_postgres),
-            tenant_membership_predicate(context, is_postgres)
+            tenant_access_predicate(context, is_postgres)
         ));
         scope_params.extend(tenant_query_params(context));
     } else if crud.tenant_column.is_some() {
@@ -9447,7 +9541,7 @@ fn dispatch_crud_restore(
         scope_conditions.push(format!(
             "{} = :zelyra_tenant_id AND {}",
             quote_ident(column, is_postgres),
-            tenant_membership_predicate(context, is_postgres)
+            tenant_access_predicate(context, is_postgres)
         ));
         scope_params.extend(tenant_query_params(context));
     } else if crud.tenant_column.is_some() {
@@ -10684,7 +10778,7 @@ fn load_relation_options(
             format!(
                 " WHERE {} = :zelyra_tenant_id AND {}",
                 quote_ident(tenant_col, is_postgres),
-                tenant_membership_predicate(tenant_context, is_postgres)
+                tenant_access_predicate(tenant_context, is_postgres)
             )
         } else {
             String::new()
@@ -11022,7 +11116,7 @@ fn crud_policy_record_query(
         conditions.push(format!(
             "{} = :zelyra_tenant_id AND {}",
             quote_ident(tenant_column, is_postgres),
-            tenant_membership_predicate(context, is_postgres)
+            tenant_access_predicate(context, is_postgres)
         ));
         params.extend(tenant_query_params(context));
     }
@@ -11087,7 +11181,7 @@ fn crud_route_policy_record_query(
         conditions.push(format!(
             "{} = :zelyra_tenant_id AND {}",
             quote_ident(column, is_postgres),
-            tenant_membership_predicate(context, is_postgres)
+            tenant_access_predicate(context, is_postgres)
         ));
         params.extend(tenant_query_params(context));
     }
@@ -11499,16 +11593,21 @@ fn execute_form_action_with_children(
             });
         }
         if let Some(tenant_context) = tenant_context {
-            let membership_check = zelyra_database::Query {
-                sql: format!(
-                    "SELECT tenant_id FROM {} WHERE user_id = :zelyra_user_id AND tenant_id = :zelyra_tenant_id AND active = true FOR UPDATE",
-                    quote_ident(&tenant_context.membership_table, is_postgres)
-                ),
-                params: tenant_query_params(tenant_context),
-            };
-            if transaction.execute(&membership_check)?.rows.is_empty() {
+            let mut access_confirmed = false;
+            for access_check in tenant_access_queries(
+                tenant_context,
+                is_postgres,
+                Some(tenant_context.tenant_id),
+                true,
+            ) {
+                if !transaction.execute(&access_check)?.rows.is_empty() {
+                    access_confirmed = true;
+                    break;
+                }
+            }
+            if !access_confirmed {
                 return Err(zelyra_database::DatabaseError {
-                    message: "ZELYRA_TENANT_DENIED: membership is no longer active".into(),
+                    message: "ZELYRA_TENANT_DENIED: tenant ownership or membership is no longer valid".into(),
                 });
             }
         }
@@ -11523,7 +11622,7 @@ fn execute_form_action_with_children(
                     (Some(column), Some(context)) => format!(
                         " AND {} = :zelyra_tenant_id AND {}",
                         quote_ident(column, is_postgres),
-                        tenant_membership_predicate(context, is_postgres)
+                        tenant_access_predicate(context, is_postgres)
                     ),
                     (Some(_), None) => {
                         return Err(zelyra_database::DatabaseError {
@@ -11588,7 +11687,7 @@ fn execute_form_action_with_children(
                 (Some(column), Some(context)) => format!(
                     " AND {} = :zelyra_tenant_id AND {}",
                     quote_ident(column, is_postgres),
-                    tenant_membership_predicate(context, is_postgres)
+                    tenant_access_predicate(context, is_postgres)
                 ),
                 (Some(_), None) => {
                     return Err(zelyra_database::DatabaseError {
