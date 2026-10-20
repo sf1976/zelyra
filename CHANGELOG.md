@@ -8,6 +8,9 @@
   Sitzungsbefehle abweisen, die den Rollback durch implizite Commits umgehen
   könnten. Die Sandbox auf `SELECT`, `INSERT`, `UPDATE` und `DELETE`
   beschränken.
+- Show declared table invariant messages and source positions in the console's
+  `:schema` command. / `:schema` zeigt deklarierte Tabelleninvarianten mit
+  Fehlermeldung und Quellposition an.
 
 ## 1.2.27 — 2026-10-20
 

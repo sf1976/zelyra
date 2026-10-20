@@ -24,7 +24,7 @@ In a terminal, Reedline provides ANSI colors for keywords, strings, and numbers;
 ## Commands
 
 - `:help` lists commands.
-- `:tables` and `:schema <table>` show declared tables and columns.
+- `:tables` lists declared tables. `:schema <table>` shows columns, types, key/required markers, and declared invariants with their source location and failure message.
 - `:tenant <id>` sets both `tenant_id` and `session.tenant_id`. The typed `session.tenant_id` field is `Option<Int>` (`None` until a tenant id is set); this does not grant authorization or add automatic filters.
 - `:commit` commits the current sandbox transaction and starts another.
 - `:rollback` rolls back the current sandbox transaction and starts another.

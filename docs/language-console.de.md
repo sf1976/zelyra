@@ -24,7 +24,7 @@ Im interaktiven Terminal bietet Reedline ANSI-Farben für Schlüsselwörter, Zei
 ## Befehle
 
 - `:help` zeigt die Befehle.
-- `:tables` und `:schema <tabelle>` zeigen deklarierte Tabellen und Spalten.
+- `:tables` listet deklarierte Tabellen auf. `:schema <tabelle>` zeigt Spalten, Typen, Schlüssel-/Pflichtangaben und deklarierte Invarianten mit Quellposition und Fehlermeldung.
 - `:tenant <id>` setzt `tenant_id` und `session.tenant_id`. Das typisierte Feld `session.tenant_id` hat den Typ `Option<Int>` (`None`, solange keine Mandanten-ID gesetzt ist); dies erzeugt keine zusätzliche Autorisierung oder automatische Filterung.
 - `:commit` bestätigt die laufende Sandbox-Transaktion und öffnet eine neue.
 - `:rollback` verwirft die laufende Sandbox-Transaktion und öffnet eine neue.

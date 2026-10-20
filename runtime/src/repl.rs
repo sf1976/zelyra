@@ -451,10 +451,10 @@ impl ReplSession {
                         }
                     ));
                 }
-                if !table.validations.is_empty() {
+                for invariant in &table.validations {
                     lines.push(format!(
-                        "  invariants: {} declared",
-                        table.validations.len()
+                        "  invariant at {}:{}: {}",
+                        invariant.span.line, invariant.span.column, invariant.message
                     ));
                 }
                 lines.join("\n")
@@ -720,6 +720,25 @@ mod tests {
         assert!(candidates.contains(&"name".to_owned()));
         assert!(candidates.contains(&"hash_sha256".to_owned()));
         assert!(candidates.contains(&"now".to_owned()));
+    }
+
+    #[test]
+    fn schema_description_includes_declared_invariant_messages() {
+        let program = parse(
+            &lex(
+                "table Invoice { id: Id primary amount: Decimal required validate { amount >= 0: \"Amount must not be negative.\" } }\nfn main() {}\n",
+            )
+            .expect("lex project"),
+        )
+        .expect("parse project");
+        let session = ReplSession::new(program, None, None, None, true).expect("start REPL");
+        let schema = session
+            .schema_description("Invoice")
+            .expect("invoice schema");
+        assert!(schema.contains("amount: Decimal (required)"));
+        assert!(
+            schema.contains("invariant at 1:") && schema.contains("Amount must not be negative.")
+        );
     }
 
     #[test]
