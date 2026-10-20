@@ -332,8 +332,9 @@ abgeschlossen.
   Paket-Lock und Compilerprüfung bestanden; die fünf nativen Auth- und
   Sitzungsrouten wurden angezeigt. Das Bundle meldet weiterhin unvollständiges
   Deployment, da Laufzeiteffekte, Projektkonfiguration und Deployment-Artefakte
-  noch nicht vollständig modelliert sind. Ungelöste Abläufe und genaue
-  Quellpositionen
+  noch nicht vollständig modelliert sind. Ein CLI-Regressionstest wiederholt
+  den Paketverbrauch mit einer minimalen Laravel-Fixture. Ungelöste Abläufe und
+  genaue Quellpositionen
   in einem versionierten Bericht erhalten. Abnahmeprojekt ist
   `/opt/siedelmann-laravel/app`; weitere Abdeckung folgt in 1.2.30. Siehe den
   [Arbeitsplan 1.2.27](release-plans/1.2.27-laravel-website-importer.de.md).

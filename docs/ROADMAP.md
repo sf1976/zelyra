@@ -303,7 +303,8 @@ security and compatibility gates stated for that milestone.
   The consumer lock and compiler check passed and it exposed the five native
   auth/session routes. The bundle still reports incomplete deployment because
   runtime effects, project configuration, and deployment artifacts are not
-  fully modeled.
+  fully modeled. A CLI regression test repeats the package-consumer path with a
+  minimal Laravel fixture.
   Keep unresolved behavior and exact source locations visible in a versioned
   report. The `/opt/siedelmann-laravel/app` project is the acceptance fixture;
   broader route/workflow coverage continues in 1.2.30. See the
