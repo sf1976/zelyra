@@ -25,7 +25,7 @@ Im interaktiven Terminal bietet Reedline ANSI-Farben für Schlüsselwörter, Zei
 
 - `:help` zeigt die Befehle.
 - `:tables` und `:schema <tabelle>` zeigen deklarierte Tabellen und Spalten.
-- `:tenant <id>` setzt die REPL-Bindung `tenant_id`; dies erzeugt keine zusätzliche Autorisierung oder automatische Filterung.
+- `:tenant <id>` setzt `tenant_id` und `session.tenant_id`. Das typisierte Feld `session.tenant_id` hat den Typ `Option<Int>` (`None`, solange keine Mandanten-ID gesetzt ist); dies erzeugt keine zusätzliche Autorisierung oder automatische Filterung.
 - `:commit` bestätigt die laufende Sandbox-Transaktion und öffnet eine neue.
 - `:rollback` verwirft die laufende Sandbox-Transaktion und öffnet eine neue.
 - `:clear`, `:quit` und `:exit` leeren beziehungsweise beenden die Sitzung.

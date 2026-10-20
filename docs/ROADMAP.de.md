@@ -280,7 +280,8 @@ abgeschlossen.
   werden; `--persist` ist die bewusste Ausnahme. `:commit` und `:rollback`
   nutzen eine festgehaltene MariaDB-/MySQL-Transaktion und eröffnen danach eine
   neue. PostgreSQL-Sandbox und Bytecode-REPL bleiben nicht unterstützt;
-  `--tenant` stellt `tenant_id` bereit, aktiviert aber keine automatische
+  `--tenant` und `:tenant` stellen `tenant_id` sowie das typisierte
+  `session.tenant_id: Option<Int>` bereit, aktivieren aber keine automatische
   Zeilenfilterung. Compiler-, Capability-, Contract-, Schrittbudget- und
   Stacktiefenprüfungen bleiben aktiv. Siehe [Sprachkonsolen-Anleitung](language-console.de.md) und den
   [Arbeitsplan 1.2.26](release-plans/1.2.26-interactive-language-console.en.md).

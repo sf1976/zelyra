@@ -256,7 +256,9 @@ security and compatibility gates stated for that milestone.
   only where equivalent semantics are implemented. Sandbox writes inside a
   pinned MariaDB/MySQL transaction and roll them back on exit unless `--persist`
   is explicit. `:commit` and `:rollback` rotate the pinned transaction after
-  each explicit operation. PostgreSQL sandbox and bytecode REPL remain
+  each explicit operation. `--tenant` and `:tenant` expose both the legacy
+  `tenant_id` binding and typed `session.tenant_id: Option<Int>` context,
+  without adding authorization or row filtering. PostgreSQL sandbox and bytecode REPL remain
   unsupported. Preserve compiler, capability, contract, step-budget, and stack
   depth checks.
 - [~] **1.2.27 — Laravel website import foundation:** Reintroduce a new,

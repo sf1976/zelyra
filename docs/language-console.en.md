@@ -25,7 +25,7 @@ In a terminal, Reedline provides ANSI colors for keywords, strings, and numbers;
 
 - `:help` lists commands.
 - `:tables` and `:schema <table>` show declared tables and columns.
-- `:tenant <id>` sets the REPL binding `tenant_id`; it does not grant authorization or add automatic filters.
+- `:tenant <id>` sets both `tenant_id` and `session.tenant_id`. The typed `session.tenant_id` field is `Option<Int>` (`None` until a tenant id is set); this does not grant authorization or add automatic filters.
 - `:commit` commits the current sandbox transaction and starts another.
 - `:rollback` rolls back the current sandbox transaction and starts another.
 - `:clear`, `:quit`, and `:exit` clear or exit the session.

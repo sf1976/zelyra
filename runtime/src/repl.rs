@@ -6,6 +6,7 @@ use zelyra_lexer::lex;
 use zelyra_parser::parse;
 
 const REPL_FUNCTION: &str = "__zelyra_repl_entry";
+const REPL_SESSION_TYPE: &str = "__ZelyraReplSessionContext";
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum ReplError {
@@ -76,6 +77,28 @@ impl ReplSession {
         policy: Option<RuntimePolicy>,
         sandbox: bool,
     ) -> Result<Self, ReplError> {
+        if program
+            .records
+            .iter()
+            .any(|record| record.name == REPL_SESSION_TYPE)
+        {
+            return Err(ReplError::Session(format!(
+                "project record name `{REPL_SESSION_TYPE}` is reserved by the language console"
+            )));
+        }
+        let mut program = program;
+        program.records.push(RecordDef {
+            name: REPL_SESSION_TYPE.into(),
+            is_public: false,
+            is_class: false,
+            type_params: Vec::new(),
+            fields: vec![RecordField {
+                name: "tenant_id".into(),
+                ty: Type::Option(Box::new(Type::Int)),
+                span: Span::default(),
+            }],
+            span: Span::default(),
+        });
         let transaction = if sandbox {
             match database_url.as_deref() {
                 Some(url) if zelyra_database::is_postgres_url(url) => {
@@ -97,7 +120,22 @@ impl ReplSession {
         };
         Ok(Self {
             program,
-            bindings: BTreeMap::new(),
+            bindings: [(
+                "session".into(),
+                Binding {
+                    value: Value::Object {
+                        type_name: REPL_SESSION_TYPE.into(),
+                        type_args: Vec::new(),
+                        fields: [("tenant_id".into(), Value::Option(None))]
+                            .into_iter()
+                            .collect(),
+                    },
+                    ty: Type::Named(REPL_SESSION_TYPE.into()),
+                    mutable: false,
+                },
+            )]
+            .into_iter()
+            .collect(),
             database_url,
             grants,
             policy,
@@ -458,6 +496,23 @@ impl ReplSession {
     /// Set the session tenant id exposed to expressions and SQL parameters as `tenant_id`.
     pub fn set_tenant_id(&mut self, tenant_id: i64) {
         self.bindings.insert(
+            "session".into(),
+            Binding {
+                value: Value::Object {
+                    type_name: REPL_SESSION_TYPE.into(),
+                    type_args: Vec::new(),
+                    fields: [(
+                        "tenant_id".into(),
+                        Value::Option(Some(Box::new(Value::Int(tenant_id)))),
+                    )]
+                    .into_iter()
+                    .collect(),
+                },
+                ty: Type::Named(REPL_SESSION_TYPE.into()),
+                mutable: false,
+            },
+        );
+        self.bindings.insert(
             "tenant_id".into(),
             Binding {
                 value: Value::Int(tenant_id),
@@ -601,6 +656,20 @@ mod tests {
         session.eval_line("y = 20").expect("bind y");
         let result = session.eval_line("x + y").expect("evaluate sum");
         assert_eq!(result.value, Some(Value::Int(30)));
+    }
+
+    #[test]
+    fn tenant_is_available_through_typed_session_context_and_legacy_binding() {
+        let mut session = session();
+        session.set_tenant_id(42);
+        assert_eq!(
+            session.eval_line("session.tenant_id").unwrap().value,
+            Some(Value::Option(Some(Box::new(Value::Int(42)))))
+        );
+        assert_eq!(
+            session.eval_line("tenant_id").unwrap().value,
+            Some(Value::Int(42))
+        );
     }
 
     #[test]
