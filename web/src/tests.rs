@@ -3394,6 +3394,67 @@ fn multipart_upload_commits_reference_and_removes_file_after_sql_rollback() {
     assert_eq!(edited.rows[0][1], "Updated");
     assert!(storage.read_verified(0, file_ref, 1024).is_ok());
 
+    let replacement_get = edit_app.dispatch(&Request {
+        method: "GET".into(),
+        target: format!("/upload/{id}"),
+        path: format!("/upload/{id}"),
+        headers: HashMap::from([("host".into(), "localhost".into())]),
+        body: String::new(),
+        remote_addr: None,
+    });
+    assert_eq!(replacement_get.status, 200, "{}", replacement_get.body);
+    let replacement_snapshot = replacement_get
+        .body
+        .split("name=\"_zelyra_snapshot\" value=\"")
+        .nth(1)
+        .and_then(|value| value.split('\"').next())
+        .expect("replacement edit GET includes a signed row snapshot");
+    let replacement_bytes = b"%PDF-1.7\nreplacement document";
+    let replacement = edit_app.dispatch_with_multipart(
+        &Request {
+            method: "POST".into(),
+            target: format!("/upload/{id}"),
+            path: format!("/upload/{id}"),
+            headers: HashMap::from([
+                ("host".into(), "localhost".into()),
+                ("origin".into(), "http://localhost".into()),
+            ]),
+            body: format!(
+                "_zelyra_csrf=csrf-token&_zelyra_snapshot={replacement_snapshot}&title=Replaced"
+            ),
+            remote_addr: None,
+        },
+        &[multipart::MultipartPart {
+            name: "document".into(),
+            filename: Some("replacement.pdf".into()),
+            content_type: Some("application/pdf".into()),
+            data: replacement_bytes,
+        }],
+    );
+    assert_eq!(replacement.status, 303, "{}", replacement.body);
+    let replaced = zelyra_database::execute_read_only_query(
+        &database_url,
+        "SELECT document FROM zelyra_upload_e2e WHERE id = :id",
+        vec![(
+            "id".into(),
+            zelyra_database::QueryValue::Int(id.parse().unwrap()),
+        )],
+    )
+    .expect("read replacement file reference");
+    let replacement_ref = &replaced.rows[0][0];
+    assert_ne!(replacement_ref, file_ref);
+    assert!(
+        storage.read_verified(0, file_ref, 1024).is_err(),
+        "replaced upload should be removed after the database action commits"
+    );
+    assert_eq!(
+        storage
+            .read_verified(0, replacement_ref, 1024)
+            .expect("replacement upload remains readable")
+            .1,
+        replacement_bytes
+    );
+
     let program = zelyra_parser::parse(
         &zelyra_lexer::lex(
             r#"
@@ -3442,7 +3503,10 @@ fn multipart_upload_commits_reference_and_removes_file_after_sql_rollback() {
     );
     assert_eq!(download.status, 200);
     assert_eq!(download.content_type, "application/pdf");
-    assert_eq!(download.body_bytes.as_deref(), Some(bytes.as_slice()));
+    assert_eq!(
+        download.body_bytes.as_deref(),
+        Some(replacement_bytes.as_slice())
+    );
     assert_eq!(
         download
             .headers
@@ -3544,7 +3608,7 @@ fn multipart_upload_commits_reference_and_removes_file_after_sql_rollback() {
     )
     .expect("read rows after transaction rollback");
     assert_eq!(rows.rows.len(), 1, "failed SQL action must roll back");
-    assert!(storage.read_verified(0, file_ref, 1024).is_ok());
+    assert!(storage.read_verified(0, replacement_ref, 1024).is_ok());
     let tenant_dir = storage_root.join("tenants/0");
     assert_eq!(
         std::fs::read_dir(&tenant_dir).unwrap().count(),

@@ -6757,12 +6757,13 @@ fn dispatch_form_with_language(
     // transaction still locks the row and validates the signed snapshot before
     // any write, so a concurrent edit fails with the existing conflict path.
     let mut preserved_file_refs = HashMap::new();
+    let mut previous_file_refs = HashMap::new();
     if is_edit_form(form)
         && rendered_form
             .form
             .fields
             .iter()
-            .any(|field| field.file_upload.is_some() && !uploaded_fields.contains(&field.name))
+            .any(|field| field.file_upload.is_some())
     {
         let existing = match load_existing_form_values(
             &rendered_form,
@@ -6782,14 +6783,19 @@ fn dispatch_form_with_language(
             }
         };
         for field in &rendered_form.form.fields {
-            if field.file_upload.is_none() || uploaded_fields.contains(&field.name) {
+            if field.file_upload.is_none() {
                 continue;
             }
             if existing.nulls.contains(&field.name) {
-                values.remove(&field.name);
+                if !uploaded_fields.contains(&field.name) {
+                    values.remove(&field.name);
+                }
             } else if let Some(file_ref) = existing.values.get(&field.name) {
-                values.insert(field.name.clone(), file_ref.clone());
-                preserved_file_refs.insert(field.name.clone(), file_ref.clone());
+                previous_file_refs.insert(field.name.clone(), file_ref.clone());
+                if !uploaded_fields.contains(&field.name) {
+                    values.insert(field.name.clone(), file_ref.clone());
+                    preserved_file_refs.insert(field.name.clone(), file_ref.clone());
+                }
             }
         }
     }
@@ -7192,6 +7198,22 @@ fn dispatch_form_with_language(
             .and_then(|page| page.title.as_deref())
         {
             redirect = append_query_parameter(&redirect, "zelyra_success_title", title);
+        }
+        if let Some(storage) = &storage {
+            for (field, previous_ref) in &previous_file_refs {
+                if validation
+                    .values
+                    .get(field)
+                    .is_some_and(|current_ref| current_ref != previous_ref)
+                {
+                    if let Err(error) = storage.remove(upload_tenant_id, previous_ref) {
+                        // The database transaction already committed. Leave a
+                        // failed cleanup as an unreferenced managed blob for
+                        // the explicit, reference-aware cleanup command.
+                        eprintln!("zelyra web: replaced upload cleanup failed: {error}");
+                    }
+                }
+            }
         }
         return Response::redirect(redirect);
     }

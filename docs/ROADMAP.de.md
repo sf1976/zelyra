@@ -436,9 +436,13 @@ abgeschlossen.
   gemeinsame lokale Dateisperre; die Bereinigung benötigt eine exklusive Sperre,
   lädt darunter die Referenzen erneut und verhindert den Start eines weiteren
   Zelyra-Servers. Das koordiniert Prozesse desselben lokalen Hosts, nicht fremde
-  Programme oder beliebige Netzwerkdateisysteme. Ersetzen/Löschen und
-  Backup/Restore bleiben offen. Nicht-Unix-
-  Anlegen schlägt bis zur ACL-Unterstützung geschlossen fehl. `FileRef` wird je
+  Programme oder beliebige Netzwerkdateisysteme. Beim Dateiersatz in einem
+  autorisierten Edit-Formular wird die alte Datei erst nach erfolgreichem
+  Datenbankcommit entfernt. Scheitert die Bereinigung, bleibt ein verwaltetes
+  Waisenobjekt für den ausdrücklichen referenzgeprüften Cleanup-Befehl zurück.
+  Beim Löschen eines Datensatzes werden Dateien noch nicht unmittelbar
+  entfernt; Backup/Restore bleiben offen. Nicht-Unix-Anlegen schlägt bis zur
+  ACL-Unterstützung geschlossen fehl. `FileRef` wird je
   Backend als `CHAR(36)`/`UUID`/`TEXT` abgebildet. Geprüfte
   Datei-Formulare müssen auf eine gleichnamige Referenzspalte zeigen;
   automatisches CRUD darf `FileRef` nicht als Textfeld rendern und JSON-API-
@@ -460,8 +464,9 @@ abgeschlossen.
   konnte. Der Code wird zusätzlich mit lokalem Rust 1.98 geprüft. Eine statische Analyse von
   `/opt/siedelmann-laravel/app` fand Uploadabläufe bei Rechnungen, Verträgen,
   Einstellungen, Postbriefen und eingehender Mail; der Importer erzeugt sie
-  nicht. Offen sind Ersetzen/Löschen, Backup/Restore und zusätzliche Cleanup-
-  E2E-Prüfungen für laufende Dienste, Absturzreste und Fehlerwiederherstellung.
+  nicht. Offen sind die unmittelbare Dateientfernung nach Datensatzlöschung,
+  Backup/Restore und zusätzliche Cleanup-E2E-Prüfungen für laufende Dienste,
+  Absturzreste und Fehlerwiederherstellung.
   Siehe den [Plan für sichere Uploads 1.2.29](release-plans/1.2.29-secure-uploads.de.md).
 - [~] **1.2.30 — Abdeckung echter Laravel-Migrationsabläufe:** Standalone-Forms
   unterstützen geprüfte lokale Routen mit erfassten Pfadparametern, ein
