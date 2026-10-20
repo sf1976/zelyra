@@ -443,14 +443,13 @@ fn render_child_collection(
         .unwrap_or(1)
         .clamp(1, MAX_CRUD_CHILD_ROWS);
     html.push_str("<fieldset class=\"z-fieldset z-crud-child-collection\"><legend>");
-    html.push_str(&html_escape(&localized_identifier_reference(
-        language,
-        &child.definition.name,
-    )));
+    html.push_str(&html_escape_preserving_locale_references(
+        &localized_identifier_reference(language, &child.definition.name),
+    ));
     html.push_str("</legend>");
     for row in 0..count {
         html.push_str("<fieldset class=\"z-crud-child-row\"><legend>");
-        html.push_str(&html_escape(&format!(
+        html.push_str(&html_escape_preserving_locale_references(&format!(
             "{} {}",
             localized_identifier_reference(language, &child.definition.name),
             row + 1

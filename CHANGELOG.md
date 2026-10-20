@@ -1,5 +1,33 @@
 ## Unreleased
 
+## 1.2.30 — 2026-10-20
+
+- Add typed scalar ID references with `references <table>`, preserving nominal
+  tenant IDs while generating database-enforced foreign keys. Tenant-scoped
+  references use composite tenant keys and reject cross-tenant links. / Typisierte
+  skalare ID-Referenzen mit `references <table>` ergänzen; nominale
+  Mandanten-IDs bleiben erhalten und Fremdschlüssel werden in der Datenbank
+  erzwungen. Mandantenbezogene Referenzen nutzen zusammengesetzte Schlüssel
+  und weisen mandantenübergreifende Verknüpfungen zurück.
+- Extend the Laravel website importer with checked token routes, explicit
+  tenant-aware schema references, source-file coverage reporting, and
+  compiler-checked reusable package output. This remains a partial migration;
+  unsupported source behavior is reported for review. / Den Laravel-Webseiten-
+  Importer um geprüfte Token-Routen, ausdrückliche mandantenbewusste
+  Schema-Referenzen, Quellcodedatei-Abdeckungsberichte und compilergeprüfte
+  wiederverwendbare Paketausgabe erweitern. Die Migration bleibt unvollständig;
+  nicht unterstütztes Quellverhalten wird zur Prüfung ausgewiesen.
+- Scope generated invoice-number collision checks and updates to the active
+  tenant, and preserve locale markers while escaping generated master-detail
+  legends so they translate correctly. / Kollisionstests und Aktualisierung
+  automatisch vergebener Rechnungsnummern auf den aktiven Mandanten
+  beschränken und Locale-Marker beim Escaping generierter Master-Detail-
+  Legenden erhalten, damit sie korrekt übersetzt werden.
+- Update locked TLS certificate-validation and root-store dependencies to
+  patched RustSec-advisory versions. / Die gesperrten Abhängigkeiten zur
+  TLS-Zertifikatsprüfung und zum Zertifikatsspeicher auf gegen die
+  RustSec-Advisories behobene Versionen aktualisieren.
+
 
 ## 1.2.29 — 2026-10-20
 

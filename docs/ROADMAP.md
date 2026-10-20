@@ -449,7 +449,10 @@ security and compatibility gates stated for that milestone.
   [`v1.2.29`](https://github.com/sf1976/zelyra/releases/tag/v1.2.29); all
   release gates passed, and Linux/Windows artifacts and checksums were
   published.
-- [~] **1.2.30 — Laravel import workflow coverage:** Standalone forms now
+- [~] **1.2.30 — Laravel import workflow coverage:** The release candidate adds
+  tenant-safe scalar references and the checked token-form foundation below.
+  This advances, but does not complete, import of the acceptance website.
+  Standalone forms now
   support checked local routes with captured path parameters, a compiler-checked
   read-only `verify sql<T>` gate before GET rendering, and `require_match` for
   direct SQL actions. The required first `SELECT` and all later SQL run on the
@@ -463,6 +466,12 @@ security and compatibility gates stated for that milestone.
   verifies that the table remains tenant-scoped, the unsafe route is omitted,
   and the scaffold documents this limitation. It does not connect to a
   database; the actual project workflow remains an open migration item.
+  Tenant-scoped invoice-number collision checks and updates now include the
+  authenticated tenant key, and generated master-detail legend locale markers
+  survive HTML escaping. Generic number-series definitions, per-tenant
+  counters, computed table fields, and FileRef-aware CRUD controls remain
+  unsupported; standalone checked file forms and private FileRef storage do
+  exist.
   Scalar nominal ID columns may now add `references <table>` while preserving
   their Zelyra type and emitting a real SQL FK. The project linker now rewrites
   module-local tenant aliases on both columns and scope declarations. Based on
@@ -593,6 +602,47 @@ These milestones are in progress and unreleased. Items with `[~]` are partially 
 - [ ] Prove extensibility with a reference database-driver adapter and a read-only banking integration design (FinTS/HBCI and EBICS), including explicit authorization, secret isolation, audit, and mock-based tests. Do not claim universal banking support without provider-specific interoperability tests.
 - [ ] Document package publishing/trust policy, dependency and supply-chain security, compatibility rules, CLI/Studio integration, diagnostics, positive and negative tests, and runnable examples.
 - [ ] Release gate: no 1.1.5 completion claim without passing compatibility, capability-denial, dependency, offline/reproducibility, and integration tests.
+
+### 🗺️ [ ] Business CRUD completion before 1.3.0
+
+The five invoice/business hurdles reported during the 1.2.30 review are now
+tracked as release work. Tenant scoping for the existing invoice-number
+collision lookup and localization of generated master-detail legends are fixed
+in the 1.2.30 candidate. The remaining capabilities are assigned below and
+must be compiler-checked, documented, and tested across relevant database and
+execution paths before 1.3.0:
+
+- [ ] **1.2.31 — tenant-aware document number series:** Add explicit,
+  transactional sequence declarations usable by customer, quote, order,
+  delivery, and invoice fields. Support deterministic literal/year/padded
+  counter formats and independent per-tenant counters where the table is
+  scoped. Uniqueness must match the declared tenant scope and survive
+  concurrent requests. Never imply mathematically gapless numbers: rolled-back
+  reservations and legally voided documents need an explicit audit policy;
+  consumed numbers are not silently reused. Keep legacy `invoice_number`
+  generation backward compatible. Test concurrent allocation, rollback,
+  tenant isolation, uniqueness, format validation, and MariaDB/PostgreSQL
+  support (or reject unsupported backends explicitly).
+- [ ] **1.2.32 — typed computed business fields:** Add pure, typed,
+  deterministic derived-field expressions for supported scalar/Decimal
+  operations. Check dependency graphs and reject cycles, unknown fields,
+  effects, and client-supplied writes to derived values. Recompute on the
+  server before persistence for CRUD and supported API writes; any live form
+  preview is advisory and must use the same checked expression semantics.
+  Define Decimal scale/rounding, null propagation, edit behavior, and backend
+  support. Test forged values, dependency ordering, errors, exact monetary
+  arithmetic, and create/edit/API parity.
+- [ ] **1.2.33 — FileRef-aware generated CRUD:** Add bounded declarative
+  attachment constraints to schema/CRUD metadata and render safe upload fields
+  on create/edit plus authorized download links on details. Reuse existing
+  multipart validation, private FileRef storage, checksum validation, tenant
+  isolation, transaction cleanup, CSRF, and permissions. Never expose raw
+  FileRef values or treat a client-supplied reference as trusted. Test upload,
+  replacement, omitted-file preservation, rollback cleanup, cross-tenant
+  download denial, MIME/size limits, and generated route behavior. This fills
+  the current gap between existing checked standalone File forms and CRUD.
+
+See the [business CRUD completion plan](release-plans/1.2.31-1.2.33-business-crud.en.md).
 
 ### 🗺️ [ ] Zelyra 1.3.0 — typed MIR and Rust bytecode VM
 

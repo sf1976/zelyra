@@ -495,7 +495,10 @@ abgeschlossen.
   Veröffentlicht als [`v1.2.29`](https://github.com/sf1976/zelyra/releases/tag/v1.2.29);
   alle Release-Gates bestanden, Linux-/Windows-Artefakte und Prüfsummen
   veröffentlicht.
-- [~] **1.2.30 — Abdeckung echter Laravel-Migrationsabläufe:** Standalone-Forms
+- [~] **1.2.30 — Abdeckung echter Laravel-Migrationsabläufe:** Der
+  Releasekandidat ergänzt mandantensichere skalare Referenzen und die unten
+  beschriebene Grundlage für geprüfte Token-Forms. Das verbessert den Import
+  der Akzeptanzwebseite, schließt ihn aber nicht ab. Standalone-Forms
   unterstützen geprüfte lokale Routen mit erfassten Pfadparametern, ein
   compilergeprüftes schreibgeschütztes `verify sql<T>` vor dem GET-Rendern und
   `require_match` für direkte SQL-Aktionen. Das erforderliche erste `SELECT`
@@ -512,6 +515,12 @@ abgeschlossen.
   die Einschränkung im Scaffold genannt wird. Es findet dabei kein
   Datenbankzugriff statt; das bleibt ein offener Importablauf und ist kein
   Laufzeittest der Abmeldung.
+  Mandantengebundene Kollisionsprüfungen und Updates automatisch vergebener
+  Rechnungsnummern enthalten nun den authentifizierten Mandantenschlüssel;
+  Locale-Marker generierter Master-Detail-Legenden überstehen das HTML-Escaping.
+  Generische Nummernkreise, mandantenbezogene Zähler, berechnete Tabellenfelder
+  und CRUD-Steuerelemente für FileRef bleiben nicht unterstützt. Geprüfte
+  Datei-Forms und privater FileRef-Speicher sind bereits vorhanden.
   `table ... scoped by`-Spalten können nun zusätzlich ein skalares nominales
   ID-Feld mit `references <table>` als SQL-Fremdschlüssel deklarieren. Der
   Projektlinker erhält dabei den modul-lokalen Tenant-ID-Alias. Der Importer
@@ -647,6 +656,51 @@ Diese Meilensteine sind in Arbeit und noch nicht veröffentlicht. Bereits teilwe
 - [ ] Erweiterbarkeit mit einem Referenz-Datenbankadapter und dem Entwurf einer ausschließlich lesenden Banking-Anbindung (FinTS/HBCI und EBICS) demonstrieren: explizite Autorisierung, Geheimnisschutz, Audit und Mock-Tests. Keine pauschale Bankkompatibilität ohne institutsspezifische Tests behaupten.
 - [ ] Paketvertrauen, Veröffentlichung, Supply-Chain-Sicherheit, Kompatibilität, CLI-/Studio-Anbindung, Diagnostik, positive/negative Tests und ausführbare Beispiele dokumentieren.
 - [ ] Freigabekriterium: 1.1.5 erst nach bestandenen Kompatibilitäts-, Berechtigungsverweigerungs-, Abhängigkeits-, Offline-/Reproduzierbarkeits- und Integrationstests als fertig kennzeichnen.
+
+### 🗺️ [ ] Geschäfts-CRUD vor 1.3.0 abschließen
+
+Die fünf im 1.2.30-Review gemeldeten Hürden für Geschäftsbelege sind jetzt
+Release-Arbeit. Die Mandantenfilterung der bestehenden Rechnungsnummern-
+Kollisionssuche und die Lokalisierung generierter Master-Detail-Legenden sind
+im 1.2.30-Kandidaten korrigiert. Die übrigen Funktionen sind den Releases
+unten zugeordnet und müssen vor 1.3.0 compilergeprüft, dokumentiert und auf den
+betroffenen Datenbank- und Ausführungspfaden getestet werden:
+
+- [ ] **1.2.31 — mandantenbezogene Belegnummernkreise:** Explizite,
+  transaktionale Nummernkreisdeklarationen für Kunden-, Angebots-, Auftrags-,
+  Lieferschein- und Rechnungsnummern ergänzen. Deterministische Formate mit
+  Literalen, Jahr und aufgefülltem Zähler sowie unabhängige Zähler je Mandant
+  für scoped Tabellen unterstützen. Eindeutigkeit muss dem deklarierten
+  Mandantenscope entsprechen und konkurrierende Requests überstehen. Keine
+  mathematisch lückenlosen Nummern versprechen: zurückgerollte Reservierungen
+  und rechtlich stornierte Belege brauchen eine ausdrückliche Auditregel;
+  verbrauchte Nummern werden nicht still wiederverwendet. Die bestehende
+  `invoice_number`-Automatik bleibt rückwärtskompatibel. Tests decken
+  parallele Zuweisung, Rollback, Mandantentrennung, Eindeutigkeit,
+  Formatprüfung und MariaDB/PostgreSQL ab; nicht unterstützte Backends müssen
+  die Funktion ausdrücklich ablehnen.
+- [ ] **1.2.32 — typisierte berechnete Geschäftsfelder:** Reine, typisierte
+  und deterministische Ausdrücke für abgeleitete Felder ergänzen, einschließlich
+  unterstützter skalarer und Decimal-Operationen. Abhängigkeitsgraphen prüfen;
+  Zyklen, unbekannte Felder, Effects und Schreibversuche auf berechnete Werte
+  abweisen. CRUD und unterstützte API-Schreibvorgänge berechnen Werte
+  serverseitig vor dem Speichern neu. Eine Live-Formularvorschau ist nur
+  unverbindlich und muss dieselbe geprüfte Ausdruckssemantik verwenden.
+  Decimal-Skala/Rundung, Nullfortpflanzung, Edit-Verhalten und Backendumfang
+  festlegen. Tests prüfen manipulierte Eingaben, Reihenfolge, Fehler, exakte
+  Geldrechnung sowie Create/Edit/API-Parität.
+- [ ] **1.2.33 — FileRef-Unterstützung im generierten CRUD:** Begrenzte,
+  deklarative Anhangsregeln für Schema und CRUD ergänzen und sichere
+  Uploadfelder auf Create/Edit sowie geschützte Download-Links auf Details
+  erzeugen. Bestehende Multipart-Prüfung, privaten FileRef-Speicher,
+  Prüfsummen, Mandantentrennung, Transaktionsbereinigung, CSRF und Rechte
+  wiederverwenden. Rohe FileRef-Werte nie ausgeben und clientseitige Referenzen
+  nicht als vertrauenswürdig behandeln. Tests prüfen Upload, Ersetzung,
+  Erhalt bei fehlender neuer Datei, Rollback-Bereinigung, verweigerte fremde
+  Downloads, MIME-/Größenlimits und generierte Routen. Damit wird die aktuelle
+  Lücke zwischen geprüften eigenständigen File-Forms und CRUD geschlossen.
+
+Siehe den [Plan zum Abschluss des Geschäfts-CRUD](release-plans/1.2.31-1.2.33-business-crud.de.md).
 
 ### 🗺️ [ ] Zelyra 1.3.0 — typisierte MIR und Rust-Bytecode-VM
 
