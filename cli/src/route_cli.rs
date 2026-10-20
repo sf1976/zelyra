@@ -27,10 +27,19 @@ pub(super) fn route_entries(program: &zelyra_ast::Program) -> Vec<RouteEntry> {
         });
     }
     for form in &program.forms {
-        for method in ["GET", "POST"] {
+        let path = form
+            .path
+            .clone()
+            .unwrap_or_else(|| format!("/forms/{}", form.name));
+        let methods: &[&str] = if form.post_only {
+            &["POST"]
+        } else {
+            &["GET", "POST"]
+        };
+        for method in methods {
             entries.push(RouteEntry {
-                method: method.into(),
-                path: format!("/forms/{}", form.name),
+                method: (*method).into(),
+                path: path.clone(),
                 kind: "form".into(),
                 span: form.span,
             });
@@ -188,6 +197,20 @@ fn route_collision_pairs(entries: &[RouteEntry]) -> Vec<(usize, usize)> {
 }
 
 pub(super) fn validate_no_collisions(path: &str, program: &zelyra_ast::Program) -> bool {
+    let mut valid = true;
+    for form in &program.forms {
+        if let Some(route) = form.path.as_deref() {
+            if !valid_form_route(route) {
+                diagnostic_with_span(
+                    path,
+                    "E-FORM-007",
+                    "form route must be an absolute local path with unique `{identifier}` segments; query strings, fragments, empty segments, and encoded paths are not allowed",
+                    form.span,
+                );
+                valid = false;
+            }
+        }
+    }
     let entries = route_entries(program);
     let collisions = route_collision_pairs(&entries);
     for (previous_index, current_index) in &collisions {
@@ -208,7 +231,47 @@ pub(super) fn validate_no_collisions(path: &str, program: &zelyra_ast::Program) 
             current.span,
         );
     }
-    collisions.is_empty()
+    valid && collisions.is_empty()
+}
+
+fn valid_form_route(route: &str) -> bool {
+    if !route.starts_with('/')
+        || route.starts_with("//")
+        || route.contains(['?', '#', '\\', '%'])
+        || route.chars().any(char::is_control)
+        || route.contains("//")
+    {
+        return false;
+    }
+    let mut parameters = std::collections::HashSet::new();
+    for segment in route.trim_matches('/').split('/') {
+        if segment.is_empty() {
+            return false;
+        }
+        if let Some(name) = segment
+            .strip_prefix('{')
+            .and_then(|segment| segment.strip_suffix('}'))
+        {
+            let mut chars = name.chars();
+            let Some(first) = chars.next() else {
+                return false;
+            };
+            if !(first == '_' || first.is_ascii_alphabetic())
+                || !chars.all(|character| character == '_' || character.is_ascii_alphanumeric())
+                || !parameters.insert(name)
+            {
+                return false;
+            }
+        } else if !segment.chars().all(|character| {
+            character == '-'
+                || character == '_'
+                || character == '.'
+                || character.is_ascii_alphanumeric()
+        }) {
+            return false;
+        }
+    }
+    true
 }
 
 pub(super) fn command(mut args: impl Iterator<Item = String>) -> ExitCode {
@@ -279,7 +342,9 @@ pub(super) fn command(mut args: impl Iterator<Item = String>) -> ExitCode {
 
 #[cfg(test)]
 mod tests {
-    use super::{route_collision_pairs, route_entries, routes_overlap, RouteEntry};
+    use super::{
+        route_collision_pairs, route_entries, routes_overlap, valid_form_route, RouteEntry,
+    };
     use zelyra_ast::Program;
 
     #[test]
@@ -287,6 +352,49 @@ mod tests {
         assert!(routes_overlap("/customers/{id}", "/customers/{slug}"));
         assert!(!routes_overlap("/customers/{id}", "/customers/new"));
         assert!(!routes_overlap("/customers/{id}", "/customers/{id}/edit"));
+    }
+
+    #[test]
+    fn explicit_form_routes_accept_local_patterns_and_reject_ambiguous_paths() {
+        assert!(valid_form_route("/csv-mailer/unsubscribe/{token}"));
+        assert!(valid_form_route("/forms/invoice"));
+        for route in [
+            "csv-mailer/unsubscribe/{token}",
+            "//external/path",
+            "/items//{id}",
+            "/items/{id}/{id}",
+            "/items/{bad-name}",
+            "/items/{id}?next=/",
+            "/items/%2e%2e",
+        ] {
+            assert!(!valid_form_route(route), "unexpectedly accepted {route}");
+        }
+    }
+
+    #[test]
+    fn post_only_form_leaves_get_route_available_for_confirmation_page() {
+        let program = zelyra_parser::parse(
+            &zelyra_lexer::lex(
+                r#"
+                page "/csv-mailer/abmelden/{token}" { html { <p>Confirm</p> } }
+                form Unsubscribe {
+                    route: "/csv-mailer/abmelden/{token}"
+                    post_only
+                }
+                fn main() {}
+                "#,
+            )
+            .unwrap(),
+        )
+        .unwrap();
+        let entries = route_entries(&program);
+        assert!(entries.iter().any(|entry| {
+            entry.method == "GET" && entry.path == "/csv-mailer/abmelden/{token}"
+        }));
+        assert!(entries.iter().any(|entry| {
+            entry.method == "POST" && entry.path == "/csv-mailer/abmelden/{token}"
+        }));
+        assert!(route_collision_pairs(&entries).is_empty());
     }
 
     #[test]

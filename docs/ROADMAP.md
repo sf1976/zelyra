@@ -25,7 +25,7 @@ telemetry, explicit effects, portable data, resource discipline, and honest
 proof claims guide every phase. The [manifesto](MANIFESTO.md) states the
 principles; the roadmap below tracks what is actually implemented.
 
-The current stable release is 1.2.26, published at https://github.com/sf1976/zelyra/releases/tag/v1.2.26. **Current milestones** is the source of
+The current stable release is 1.2.28, published at https://github.com/sf1976/zelyra/releases/tag/v1.2.28. **Current milestones** is the source of
 near-term commitments. Older numbered release sections below are retained as
 historical planning and evidence; they do not by themselves define current
 release targets. Longer-term ideas remain in the post-1.0 evolution section.
@@ -254,14 +254,26 @@ security and compatibility gates stated for that milestone.
   interpreter session with persistent typed bindings, table and field-name
   tab completion, line continuation,
   recoverable two-line source-located diagnostics, safe project context, and explicit backend selection
-  only where equivalent semantics are implemented. Sandbox writes inside a
+  only where equivalent semantics are implemented. `--backend bytecode` now
+  runs the supported MIR/VM subset through the shared REPL frontend; it remains
+  experimental and unsupported operations fail closed. Sandbox writes inside a
   pinned MariaDB/MySQL transaction and roll them back on exit unless `--persist`
   is explicit. `:commit` and `:rollback` rotate the pinned transaction after
   each explicit operation. `--tenant` and `:tenant` expose both the legacy
   `tenant_id` binding and typed `session.tenant_id: Option<Int>` context,
-  without adding authorization or row filtering. PostgreSQL sandbox and bytecode REPL remain
-  unsupported. Preserve compiler, capability, contract, step-budget, and stack
-  depth checks.
+  without adding authorization or row filtering. AST and bytecode SQL share
+  the same pinned MariaDB transaction and per-input savepoints. PostgreSQL
+  sandbox remains unsupported. Preserve compiler, capability, contract,
+  step-budget, and stack
+  depth checks. If an input savepoint cannot be safely created, released, or
+  rolled back, the session fails closed and refuses later expressions until
+  exit triggers the outer rollback.
+  `tests/language-console-mariadb-e2e.sh` verifies exit rollback, explicit
+  `:rollback`, batch commit, and `--persist` against an isolated disposable
+  MariaDB; the same E2E verifies bytecode SQL rollback. Pipe tests cover
+  persistent bindings and error recovery on both backends. PostgreSQL sandbox
+  transactions remain open. The record pretty-printer marks Decimal values
+  with `[Decimal]`; it does not invent scale absent from the runtime value.
 - [x] **1.2.27 — Laravel website import foundation:** Reintroduce a new,
   read-only-first importer for migrating selected website behavior into native
   Zelyra modules; this is not Laravel framework compatibility or PHP runtime
@@ -344,25 +356,179 @@ security and compatibility gates stated for that milestone.
   MariaDB/MySQL DDL, transaction-control, and session-control statements that
   could bypass rollback; tests cover denied grants, rollback, and explicit
   commit. `:schema` prints invariant messages and source positions. The REPL
-  still requires the aggregate `Database` grant for SQL, and bytecode REPL
-  execution is not implemented. Released as [`v1.2.28`](https://github.com/sf1976/zelyra/releases/tag/v1.2.28); release gates passed. The broader security/permission matrix remains an open follow-up. See the
+  required the aggregate `Database` grant at release time; the bytecode REPL
+  was added later as an experimental 1.2.26 follow-up and uses the same grant
+  checks. Released as [`v1.2.28`](https://github.com/sf1976/zelyra/releases/tag/v1.2.28); release gates passed. The broader security/permission matrix remains an open follow-up. See the
   [1.2.28 work plan](release-plans/1.2.28-typed-crud-actions.en.md).
-- [ ] **1.2.29 — bounded secure file upload foundation (subject to design
-  gate):** Specify and test multipart size limits, file metadata types,
-  content validation, tenant ownership, private storage outside `public/`,
-  authorized downloads, rollback cleanup, and backup/delete behavior before
-  exposing a `File` field. Reject the release if uploads can bypass request
-  limits, path containment, authorization, or cleanup guarantees. If those
-  guarantees cannot be completed by this milestone, defer uploads explicitly
-    past 1.3.0 rather than shipping a partial file API.
-- [ ] **1.2.30 — Laravel import workflow coverage:** Expand only from
-  compiler-checked, reusable feature/domain/UI modules backed by route-to-
-  controller-to-view evidence. Validate the selected generated modules against
-  the Laravel application using an isolated Zelyra database and browser tests.
-  Report supported, assisted, and manual coverage separately; do not call the
-  whole website imported unless every in-scope route and behavior has a tested
-  Zelyra implementation. This does not copy Laravel, Composer packages, PHP
-  controllers, or Blade runtime files into the output.
+- [~] **1.2.29 — bounded secure file upload foundation:** Architecture inventory
+  is complete. The HTTP server now reads bounded byte requests and sends valid
+  multipart bodies through the decoder; the existing public text `Request` API
+  and 1 MiB global limit remain unchanged. Multipart receives HTTP 415 on
+  routes without declared file fields; malformed multipart
+  receives HTTP 400. POST multipart requests matching a declared File form get
+  a route-derived body ceiling; all other routes remain at 1 MiB. A global
+  256 MiB in-flight body budget bounds aggregate buffering. Parser and live HTTP tests cover binary payloads,
+  malformed boundaries, duplicate headers, and limit failures. A
+  coverage-guided fuzz target completed a local six-second run with 647,431
+  inputs and no crash. Compiler-checked `File` form metadata now accepts bounded
+  sizes and the PDF/PNG/JPEG allowlist, rejects table-backed forms and
+  storage/action contexts, and renders a multipart file input without echoing
+  client filenames. Matching POST form routes now validate and stage uploads
+  after authorization and CSRF; successful actions publish before SQL, failed
+  actions remove them. A Unix-only private storage primitive now
+  provides staged publication, opaque tenant-scoped references, private
+  sidecar manifests, verified reads, file modes, no-follow opens,
+  signature-based PDF/PNG/JPEG selection, and size/SHA-256 checks. Partial
+  publication failures remove both final entries. Removal checks both entry
+  types before mutation and removes the manifest first, preventing an invalid
+  manifest from causing partial deletion. The generated
+  `/crud/{id}/files/{field}` download route requires authentication, uses the
+  CRUD read permission, verifies the owning row and tenant/recipient scope, and
+  returns only checksum-verified bytes with private attachment headers. CRUD
+  detail pages show a localized download link and never display the opaque
+  FileRef. The HTTP/storage path is not crash-atomic across filesystem and
+  database commits; a crash can leave an orphan. `zelyra files cleanup`
+  previews old unreferenced blobs and abandoned staging pairs, rechecks declared
+  FileRef columns, caps filesystem entries and fetched reference rows at 100,000
+  each, and refuses symlinks or inconsistent paths. It defaults to 30 days and
+  requires both `--apply` and `--maintenance-window` to delete. Upload-enabled
+  Zelyra servers hold a shared local file lock; cleanup requires the exclusive
+  lock, rechecks references under it, and prevents another Zelyra server from
+  starting during deletion. This coordinates processes on one local host, not
+  unrelated programs or arbitrary network filesystems. A disposable MariaDB
+  E2E proves preview, referenced-file preservation, and explicit orphan removal;
+  it also starts a real upload-enabled `zelyra serve`, verifies cleanup is
+  refused while that process holds the lock, then verifies cleanup succeeds
+  after the server exits. `zelyra files backup --output <new-directory>` now
+  creates a versioned, private directory snapshot of verified blobs and
+  manifests under the exclusive lock; it refuses missing database references
+  and never overwrites an existing destination. `zelyra files restore --from
+  <directory> --apply` stages and checks every size, media type, manifest and
+  SHA-256 before atomically publishing the tenant tree, and refuses missing
+  database references or existing uploads. A disposable MariaDB E2E verifies
+  byte/manifest restoration and that corrupted input publishes nothing. These
+  commands cover only the private file-storage component: database contents,
+  app configuration and secrets are excluded and must be backed up separately.
+  Replacing a file on an authorized edit now removes the previous blob only
+  after the database action commits; cleanup failure leaves a managed orphan
+  for the explicit reference-aware cleanup command. Permanent CRUD deletion removes an upload after commit only when no declared
+  FileRef still uses it; soft-delete retains the recoverable file. Coordinated
+  whole-application database-plus-file backup and crash/failure recovery remain
+  open. Non-Unix
+  creation fails closed pending ACL support.
+  `FileRef` maps to `CHAR(36)`/`UUID`/`TEXT` by backend, checked file forms must
+  match a same-named reference column, automatic CRUD cannot render it as text,
+  and JSON API inputs reject the opaque reference. A MariaDB E2E verifies that
+  the reference and private bytes persist after a successful POST, while a later
+  SQL failure rolls back the row and removes only the failed upload. Unscoped
+  projects use a project-local storage tenant id of 0; scoped forms require the
+  authenticated tenant. Edit forms retain an authorized existing FileRef when
+  no replacement is selected, even for required file fields; request-supplied
+  references cannot override it. A MariaDB E2E verifies the previous file
+  remains readable after changing another field. GitHub CI's rolling toolchain
+  advanced to Rust 1.99.1, where Clippy rejects the deprecated atomic
+  `fetch_update` API.
+  Request-budget reservation now uses a bounded `compare_exchange_weak` loop.
+  A concurrent regression test exposed eager `then_some` guard construction,
+  which could release bytes after a failed reservation and admit
+  more than the configured in-flight budget. The code also checks with local
+  Rust 1.98.
+  A static analysis of
+  `/opt/siedelmann-laravel/app` identified upload
+  flows in invoices,
+  contracts, settings, postal letters, and inbound mail; the importer does not
+  generate them. `tests/mariadb-upload-cleanup-e2e.sh` now simulates a crashed
+  upload leaving a staged blob/manifest pair and verifies preview and explicit
+  cleanup. The upload POST E2E sends a successful multipart request over a
+  local HTTP connection and verifies the stored reference/bytes, then separately
+  checks rollback cleanup. File-storage backup intentionally excludes the
+  database, configuration, and secrets;
+  coordinated whole-application backup remains a separate follow-up, with the
+  database backed up/restored separately while Zelyra is stopped. See the
+  [1.2.29 secure upload plan](release-plans/1.2.29-secure-uploads.en.md).
+- [~] **1.2.30 — Laravel import workflow coverage:** Standalone forms now
+  support checked local routes with captured path parameters, a compiler-checked
+  read-only `verify sql<T>` gate before GET rendering, and `require_match` for
+  direct SQL actions. The required first `SELECT` and all later SQL run on the
+  same transaction; no match returns 404 before writes, CSRF remains required,
+  and verified-token pages are marked `Cache-Control: no-store`. A repeatable
+  MariaDB/browser E2E verifies token validation, invalid-token GET and POST
+  behavior, successful unsubscribe, idempotent repeat submission, and stable
+  first-unsubscribe time. The executable native example is
+  `examples/csv_mailer_unsubscribe.zyl`. The importer now recognizes the
+  source-evidenced `PublicCsvMailerUnsubscribeController` pattern and emits a
+  reusable `src/imported_public_unsubscribe.zyl` module, a shared schema module,
+  and a scoped table access grant. It translates only a literal SHA-256 token
+  lookup, read-before-write, idempotent unsubscribe update, and static notice
+  text; unsupported variants remain ungenerated. Generated output passed
+  `zelyra check`, and a disposable MariaDB/HTTP run verified GET 200, invalid
+  token 404, CSRF-protected POST redirect, and the persisted timestamp. The
+  repeatable `python3 tests/laravel_import_unsubscribe_e2e.py
+  /opt/siedelmann-laravel/app` test now regenerates the source-derived scaffold,
+  applies its schema to a fresh disposable MariaDB container, and exercises
+  valid/invalid GET and POST, CSRF, repeated-submit timestamp stability, and
+  the success page over HTTP. When the importer discovers a shared app layout,
+  the generated success page now binds that shell; otherwise it emits no
+  unresolved layout reference. The source report records this decision. The
+  test also verifies the rendered success page is inside the generated shell.
+  It sends no mail and leaves no database or scaffold behind. This is an HTTP
+  integration test, not browser automation.
+  Every generated scaffold now includes `IMPORT_COVERAGE.json`, which
+  separates source inventory, finding classifications, generated artifacts,
+  compiler status, and behavior-test status. The source-only integration test
+  checks it against the source-file plan and generation manifest and confirms
+  generation did not claim workflow runtime coverage. Its latest run against
+  `/opt/siedelmann-laravel/app` accounted for 565 PHP files and 2,229 findings
+  (1,367 manual/unresolved and 862 partial).
+  The source-only full-project check also asserts the generated native
+  login/logout and unsubscribe routes, validates the package lock offline, and
+  runs module plan for pkg:imported_identity to verify its package identity
+  and declaration closure, then creates an offline source bundle and checks
+  its entry and package lock. This verifies module/package distribution
+  wiring, not authentication runtime behavior or deployment readiness.
+  `tests/laravel-import-auth-e2e.sh` adds the separate runtime proof: against
+  both a compact CI fixture and `/opt/siedelmann-laravel/app`, it provisions a
+  new destination-only test account and verifies invalid login, successful
+  login, persisted session creation, logout, and session revocation through
+  local HTTP and disposable MariaDB. It copies no Laravel credentials or user
+  rows and does not migrate custom registration, tenant-selection, or 2FA
+  flows. The local MariaDB client reports that TLS certificate verification
+  is disabled for this password-authenticated disposable test connection.
+  PHP method recognizer uses the existing lexical source map and balanced code
+  braces; regression tests reject method-shaped comments and cover nested
+  blocks, typed return declarations, and lookup/update/view patterns that occur
+  only in comments or string literals. The real Laravel source was regenerated
+  after this change and its main scaffold passed `zelyra check`. Repeat the
+  source-only generation and check with
+  `python3 tests/laravel_import_project_check.py /opt/siedelmann-laravel/app`;
+  the script strips ambient database URLs and removes its temporary scaffold.
+  This check does not run the generated HTTP workflow or connect to a database.
+  The scaffold
+  remains an incomplete migration: the latest source-only rerun reports 2,229
+  findings (1,367 manual/unresolved and 862 partial across 565 source files).
+  These are analysis findings, not a migrated-feature count.
+  Laravel, Composer packages, PHP controllers, Blade runtime files, and source
+  credentials are not copied. The source-only integration check compares an
+  independently traversed PHP source tree with `SOURCE_FILE_PLAN.json` and
+  `MIGRATION_FILES.md`, rejects duplicate or missing entries, and requires a
+  category, translation status, and proposed action for each file. This proves
+  coverage of the detected PHP file set, not completeness of the behavior
+  graph or that source behavior has been translated.
+  The latest explicit live-schema run now compares known MariaDB storage types
+  (including Decimal precision/scale) and foreign-key target columns as well as
+  presence, nullability, and indexes. Unknown mappings remain listed
+  separately; default values, engine, charset, collation, and triggers are not
+  compared. Against the real database it connected read-only, read no
+  application rows, inspected 80 tables/1,215 columns, compared all 78
+  generated migration candidates, and reported 293 concrete type differences.
+  This supersedes the earlier “zero schema differences” result, which covered
+  only the previously documented metadata subset. Static integer, boolean,
+  text, Decimal, Time, and `now` defaults are now compared where Zelyra can
+  interpret them safely; reports omit the actual default text, and unsupported
+  expressions are listed as unclassified. The latest live comparison found
+  117 default and 297 SQL type differences across 80 candidates (414 total).
+  This rerun inspected 1,250 columns; engine, charset, collation, and triggers
+  remain unchecked.
 - [ ] **1.3.0 — canonical structure and Bytecode default:** Complete the
   opt-in versioned project layout (`routes/`, `domain/`, `schema/`, `public/`,
   `assets/`, and `plugins/`), architecture checks, and safe layout migration
@@ -433,6 +599,13 @@ semantic parity.
 - [ ] Keep the AST interpreter selectable until the VM reaches complete supported-language compatibility. Add differential, property-based, fuzz, security, and regression tests.
 - [~] Opt-in CLI execution is available for AST, MIR, and the supported bytecode subset. MIR/bytecode inspection, safe versioned caching, stable machine-readable diagnostics, and Studio integration remain open without breaking existing CLI behavior.
 - [~] A reproducible CPU benchmark compares mutable array updates across AST, MIR, and Bytecode; its method and three release runs are recorded in the [benchmark report](benchmarks/mutable-array-backends.en.md). I/O workloads, startup, memory, throughput, and compilation cost remain open.
+- [~] A deterministic, bounded scalar differential corpus now generates 96 integer expressions and checks each result against an independent host-language oracle, AST, MIR, encoded/decoded Bytecode, and VM execution. This increases arithmetic regression coverage only; it does not establish full operator, error, resource, or language parity.
+- [~] Checked `Int` arithmetic failures are compared across AST, MIR, and decoded Bytecode: add/subtract/multiply overflow, negation of `Int::MIN`, division/remainder by zero, and `Int::MIN / -1` or `% -1` preserve diagnostic messages and exact source spans. This covers these eight cases only; backend-specific step accounting and broader diagnostics remain open.
+- [~] A deterministic boundary corpus checks add/subtract/multiply/divide/remainder across seven values around `i64::MIN`, zero, and `i64::MAX` against Rust checked-arithmetic results. Successful values and rejected-operation messages/spans are compared across AST, MIR, and decoded Bytecode; this is a bounded integer-operator slice, not general numeric or runtime parity.
+- [~] A second boundary corpus checks UInt add/subtract/multiply/divide/remainder across zero, small values, and `u64::MAX` boundaries against Rust checked arithmetic. AST, MIR, and decoded Bytecode must agree on successful values, error messages, and exact spans. UInt underflow is kept distinct from overflow; this adds bounded unsigned-integer evidence only.
+- [~] A Decimal boundary corpus compares add/subtract/multiply/divide/remainder across AST, MIR, and encoded-then-decoded Bytecode. It checks ordinary fixed-point values, `i128` addition/subtraction/multiplication overflow, division by zero, and exact error messages/source spans. This is targeted Decimal operator evidence only; it does not establish scale/formatting or general numeric parity.
+- [~] Configured recursion-depth limits are compared across AST, MIR, and decoded Bytecode: the same recursive function succeeds at depth 24 with limit 40 and fails at limit 20 with the same call-site source span. This verifies the tested depth boundary, not complete stack-resource parity.
+- [~] Bytecode now maps the first emitted VM operation of each lowered MIR instruction to that source instruction span, while later operations retain expression-level spans. The zero-step differential regression now confirms the exact AST/MIR/decoded-Bytecode span for a first assignment statement. This closes that tested location mismatch; broader step-accounting and source-span parity remain open.
 - [ ] Release gate: no default-VM switch or production-readiness claim before feature parity, safety checks, differential tests, documented limitations, and reproducible builds.
 
 ### Cross-cutting business-platform extensions added to the 1.2.0–1.3.0 goal

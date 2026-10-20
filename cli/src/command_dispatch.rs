@@ -159,6 +159,9 @@ pub(super) fn run() -> ExitCode {
     if command == "db" {
         return database_command(args);
     }
+    if command == "files" {
+        return upload_cli::files_command(args);
+    }
     if command == "form" {
         return form_command(args);
     }

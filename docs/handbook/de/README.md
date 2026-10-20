@@ -1306,6 +1306,12 @@ zelyra form validate examples/customer_form.zyl CustomerCreate \
 
 Mit `zelyra serve` stellt Zelyra das Formular unter `/forms/FormName` bereit.
 GET rendert das Formular samt CSRF-Token; POST prüft Token und Werte.
+Ein Standalone-Formular wählt mit `route: "/kontakt"` einen anderen lokalen
+Pfad. Routen können ein Segment erfassen, etwa
+`route: "/abmelden/{token}"`; der erfasste Wert steht SQL-Aktionen als
+gleichnamiger gebundener Parameter zur Verfügung. Ganzzahlig wirkende Werte
+werden als Integer, andere als Strings gebunden. Die Route wird geprüft und
+CSRF-Schutz bleibt aktiviert.
 
 Eine Aktion:
 

@@ -130,7 +130,7 @@ fn check_program(
     }
     // Schema scalar domains also work in function/decoder annotations. Keep
     // existing explicit definitions authoritative rather than reserving names.
-    known_types.extend(["Money", "Email", "Url", "Uuid"].map(String::from));
+    known_types.extend(["Money", "Email", "Url", "Uuid", "FileRef"].map(String::from));
     let generic_arities = program
         .records
         .iter()

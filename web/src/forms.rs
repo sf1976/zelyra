@@ -43,7 +43,9 @@ pub(super) fn render_form_with_language(
             .iter()
             .find(|field| field.name == *name)
             .is_some_and(|field| {
-                !audit_sensitive_field(name) && input_type(route, field) != "password"
+                !audit_sensitive_field(name)
+                    && input_type(route, field) != "password"
+                    && input_type(route, field) != "file"
             });
         if safe && route.form_context_fields.iter().any(|field| field == name) {
             template_values.insert(format!("values.{name}"), value.clone());
@@ -129,7 +131,16 @@ pub(super) fn render_form_with_language(
     if cards {
         html.push_str("<section class=\"zelyra-crud-form-card\">");
     }
-    html.push_str("<form method=\"post\" action=\"");
+    html.push_str("<form method=\"post\"");
+    if route
+        .form
+        .fields
+        .iter()
+        .any(|field| field.file_upload.is_some())
+    {
+        html.push_str(" enctype=\"multipart/form-data\"");
+    }
+    html.push_str(" action=\"");
     html.push_str(&html_escape(&route.action));
     html.push_str("\">");
     html.push_str("<input type=\"hidden\" name=\"_zelyra_csrf\" value=\"");
@@ -150,7 +161,12 @@ pub(super) fn render_form_with_language(
             .unwrap_or_else(|| localized_identifier_reference(language, &field.name));
         // Sensitive values must never be reflected into HTML, including after
         // a validation error or on an edit form with a stored password hash.
-        let value = if input_type(route, field) == "password" || audit_sensitive_field(&field.name)
+        let existing_file_value = field.file_upload.is_some()
+            && values
+                .get(&field.name)
+                .is_some_and(|value| !value.is_empty());
+        let value = if matches!(input_type(route, field), "password" | "file")
+            || audit_sensitive_field(&field.name)
         {
             ""
         } else {
@@ -160,7 +176,10 @@ pub(super) fn render_form_with_language(
             .iter()
             .filter(|error| error.field == field.name)
             .collect::<Vec<_>>();
-        let required = is_required(route, field);
+        // An existing server-loaded file satisfies required on edit. Browsers
+        // cannot populate a file input from a stored reference, and requiring
+        // a new selection would make every unrelated edit replace the file.
+        let required = is_required(route, field) && !existing_file_value;
         let max = field_max(route, field);
         let field_input_type = input_type(route, field);
         let is_checkbox =
@@ -262,6 +281,10 @@ pub(super) fn render_form_with_language(
             html.push_str(&html_escape(&field.name));
             html.push_str("\" type=\"");
             html.push_str(input_type);
+            if let Some(upload) = &field.file_upload {
+                html.push_str("\" accept=\"");
+                html.push_str(&html_escape(&upload.allowed_types.join(",")));
+            }
             html.push('"');
             let ty = zelyra_forms::field_value_type(
                 &route.form,
@@ -286,7 +309,7 @@ pub(super) fn render_form_with_language(
                 if matches!(value, "true" | "1") {
                     html.push_str(" checked");
                 }
-            } else {
+            } else if input_type != "file" {
                 html.push_str(" value=\"");
                 html.push_str(&html_escape(value));
                 html.push('"');
@@ -617,6 +640,7 @@ pub(super) fn localized_validation_message(language: UiLanguage, message: &str) 
         "value is below the minimum" => "validation.min_value",
         "value exceeds the maximum" => "validation.max_value",
         "value is not an allowed choice" => "validation.choice",
+        "file inputs require an HTTP multipart upload route" => "validation.file_upload_unavailable",
         "must be an integer" => "validation.integer",
         "must be an unsigned integer" => "validation.unsigned_integer",
         "must be a number" => "validation.number",
@@ -647,6 +671,9 @@ pub(super) fn localized_validation_message(language: UiLanguage, message: &str) 
 }
 
 pub(super) fn input_type(route: &FormRoute, field: &zelyra_ast::FormField) -> &'static str {
+    if field.file_upload.is_some() {
+        return "file";
+    }
     if let Some(widget) = field.widget.as_deref() {
         return match widget {
             "email" => "email",

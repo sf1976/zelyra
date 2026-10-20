@@ -16,6 +16,18 @@ fn database_timestamps_convert_to_zelyra_utc_milliseconds() {
 }
 
 #[test]
+fn form_route_parameters_bind_numeric_ids_and_opaque_tokens_safely() {
+    assert!(matches!(
+        path_parameter_query_value("42"),
+        QueryValue::Int(42)
+    ));
+    assert!(matches!(
+        path_parameter_query_value("tok_abc-123"),
+        QueryValue::String(value) if value == "tok_abc-123"
+    ));
+}
+
+#[test]
 fn table_validation_predicate_runs_before_form_writes_and_returns_declared_message() {
     let source = r#"
         table invoices {
@@ -288,6 +300,9 @@ fn form_route() -> FormRoute {
         form: FormDef {
             name: "CustomerCreate".into(),
             table: None,
+            path: None,
+            post_only: false,
+            verify: None,
             fields: vec![zelyra_ast::FormField {
                 name: "name".into(),
                 ty: Some(Type::String),
@@ -301,6 +316,7 @@ fn form_route() -> FormRoute {
                 choices: Vec::new(),
                 widget: None,
                 appearance: None,
+                file_upload: None,
                 readonly: false,
                 span: zelyra_ast::Span::default(),
             }],
@@ -346,6 +362,7 @@ fn child_collection_form_route() -> FormRoute {
             choices: Vec::new(),
             widget: None,
             appearance: None,
+            file_upload: None,
             readonly: false,
             span: zelyra_ast::Span::default(),
         },
@@ -362,6 +379,7 @@ fn child_collection_form_route() -> FormRoute {
             choices: Vec::new(),
             widget: None,
             appearance: None,
+            file_upload: None,
             readonly: false,
             span: zelyra_ast::Span::default(),
         },
@@ -598,6 +616,7 @@ fn table_validation_rejects_invalid_form_before_action_execution() {
             choices: Vec::new(),
             widget: None,
             appearance: None,
+            file_upload: None,
             readonly: false,
             span: zelyra_ast::Span::default(),
         },
@@ -614,6 +633,7 @@ fn table_validation_rejects_invalid_form_before_action_execution() {
             choices: Vec::new(),
             widget: None,
             appearance: None,
+            file_upload: None,
             readonly: false,
             span: zelyra_ast::Span::default(),
         },
@@ -630,6 +650,7 @@ fn table_validation_rejects_invalid_form_before_action_execution() {
         requires_auth: false,
         permissions: Vec::new(),
         capabilities: Vec::new(),
+        require_match: false,
         statements: vec![zelyra_ast::Stmt::Expr(zelyra_ast::Expr {
             kind: zelyra_ast::ExprKind::Sql {
                 result_type: Type::Unit,
@@ -662,6 +683,8 @@ fn table_validation_rejects_invalid_form_before_action_execution() {
             capability_grants: None,
             runtime_policy: None,
             granted_permissions: Vec::new(),
+            multipart_parts: &[],
+            upload_storage_root: None,
         },
     );
     assert_eq!(response.status, 422);
@@ -686,6 +709,8 @@ fn table_validation_rejects_invalid_form_before_action_execution() {
             capability_grants: None,
             runtime_policy: None,
             granted_permissions: Vec::new(),
+            multipart_parts: &[],
+            upload_storage_root: None,
         },
     );
     assert_eq!(
@@ -1286,6 +1311,7 @@ fn relation_form_route() -> FormRoute {
         choices: Vec::new(),
         widget: None,
         appearance: None,
+        file_upload: None,
         readonly: false,
         span: zelyra_ast::Span::default(),
     });
@@ -1372,6 +1398,7 @@ fn formats_crud_audit_changes_without_exposing_sensitive_values() {
         choices: Vec::new(),
         widget: None,
         appearance: None,
+        file_upload: None,
         readonly: false,
         span: zelyra_ast::Span::default(),
     });
@@ -2937,6 +2964,804 @@ fn server_drops_connections_after_reaching_its_worker_limit() {
 }
 
 #[test]
+fn multipart_binary_request_is_rejected_when_route_declares_no_upload_field() {
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let address = listener.local_addr().unwrap();
+    let app = Arc::new(WebApp::new(Vec::new(), Vec::new()));
+    let active_connections = Arc::new(AtomicUsize::new(0));
+    let mut client = TcpStream::connect(address).unwrap();
+    client
+        .set_read_timeout(Some(Duration::from_secs(2)))
+        .unwrap();
+    let (stream, _) = listener.accept().unwrap();
+    let worker = spawn_connection(stream, app, active_connections)
+        .unwrap()
+        .unwrap();
+
+    let body = b"--upload-boundary\r\nContent-Disposition: form-data; name=\"document\"; filename=\"invoice.pdf\"\r\nContent-Type: application/pdf\r\n\r\n%PDF\0\xff\r\n--upload-boundary--\r\n";
+    let head = format!(
+        "POST /upload HTTP/1.1\r\nHost: localhost\r\nContent-Type: multipart/form-data; boundary=upload-boundary\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+        body.len()
+    );
+    client.write_all(head.as_bytes()).unwrap();
+    client.write_all(body).unwrap();
+    let mut response = Vec::new();
+    client.read_to_end(&mut response).unwrap();
+    worker.join().unwrap();
+    let response = String::from_utf8(response).unwrap();
+    assert!(
+        response.starts_with("HTTP/1.1 415 Unsupported Media Type"),
+        "{response}"
+    );
+    assert!(response.contains("this route does not accept multipart form data"));
+}
+
+#[test]
+fn multipart_reader_uses_declared_form_limit_without_raising_other_routes() {
+    let mut route = form_route();
+    route.path = "/upload".into();
+    route.form.fields[0].ty = Some(Type::Named("File".into()));
+    route.form.fields[0].file_upload = Some(zelyra_ast::FileUploadOptions {
+        max_size_bytes: 2 * 1024 * 1024,
+        allowed_types: vec!["application/pdf".into()],
+    });
+    let app = Arc::new(WebApp::new(Vec::new(), vec![route]));
+    let upload_head = "POST /upload HTTP/1.1\r\nHost: localhost\r\nContent-Type: multipart/form-data; boundary=b\r\n";
+    let ordinary_head = "POST /other HTTP/1.1\r\nHost: localhost\r\nContent-Type: multipart/form-data; boundary=b\r\n";
+    assert_eq!(
+        app.request_body_limit_from_headers(upload_head),
+        3 * 1024 * 1024
+    );
+    assert_eq!(
+        app.request_body_limit_from_headers(ordinary_head),
+        MAX_REQUEST_BODY_BYTES
+    );
+    assert_eq!(
+        app.request_body_limit_from_headers(&upload_head.replace(
+            "Content-Type:",
+            "Content-Type: multipart/form-data; boundary=b\r\nContent-Type:",
+        )),
+        MAX_REQUEST_BODY_BYTES
+    );
+
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let address = listener.local_addr().unwrap();
+    let active_connections = Arc::new(AtomicUsize::new(0));
+    let mut client = TcpStream::connect(address).unwrap();
+    client
+        .set_read_timeout(Some(Duration::from_secs(5)))
+        .unwrap();
+    let (stream, _) = listener.accept().unwrap();
+    let worker = spawn_connection(stream, app, active_connections)
+        .unwrap()
+        .unwrap();
+    let payload = vec![b'x'; MAX_REQUEST_BODY_BYTES + 128];
+    let mut body = b"--b\r\nContent-Disposition: form-data; name=\"document\"; filename=\"invoice.pdf\"\r\nContent-Type: application/pdf\r\n\r\n".to_vec();
+    body.extend_from_slice(&payload);
+    body.extend_from_slice(b"\r\n--b--\r\n");
+    let head = format!(
+        "POST /upload HTTP/1.1\r\nHost: localhost\r\nContent-Type: multipart/form-data; boundary=b\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+        body.len()
+    );
+    client.write_all(head.as_bytes()).unwrap();
+    client.write_all(&body).unwrap();
+    let mut response = Vec::new();
+    client.read_to_end(&mut response).unwrap();
+    worker.join().unwrap();
+    let response = String::from_utf8(response).unwrap();
+    assert!(response.starts_with("HTTP/1.1 403 Forbidden"), "{response}");
+    assert!(response.contains("Invalid CSRF token."));
+}
+
+#[test]
+fn multipart_upload_stages_only_after_csrf_and_cleans_up_when_database_is_unavailable() {
+    let root = std::env::temp_dir().join(format!(
+        "zelyra-multipart-form-{}-{}",
+        std::process::id(),
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos()
+    ));
+    let mut route = form_route();
+    route.path = "/upload".into();
+    route.form.fields = vec![zelyra_ast::FormField {
+        name: "document".into(),
+        ty: Some(Type::Named("File".into())),
+        label: Some("Document".into()),
+        placeholder: None,
+        required: true,
+        min_length: None,
+        max: None,
+        min_value: None,
+        max_value: None,
+        choices: Vec::new(),
+        widget: None,
+        appearance: None,
+        file_upload: Some(zelyra_ast::FileUploadOptions {
+            max_size_bytes: 1024,
+            allowed_types: vec!["application/pdf".into()],
+        }),
+        readonly: false,
+        span: zelyra_ast::Span::default(),
+    }];
+    route.form.actions = vec![zelyra_ast::FormAction {
+        name: "save".into(),
+        label: None,
+        icon: None,
+        confirm: None,
+        confirm_page: None,
+        success_page: None,
+        error_page: None,
+        fields: Vec::new(),
+        requires_auth: false,
+        permissions: Vec::new(),
+        capabilities: Vec::new(),
+        require_match: false,
+        statements: vec![zelyra_ast::Stmt::Expr(zelyra_ast::Expr {
+            kind: zelyra_ast::ExprKind::Sql {
+                result_type: Type::Unit,
+                query: "INSERT INTO uploads (document) VALUES (:document)".into(),
+            },
+            span: zelyra_ast::Span::default(),
+        })],
+        execute_body: None,
+        guard: None,
+        success: None,
+        redirect: None,
+        span: zelyra_ast::Span::default(),
+    }];
+    let app = WebApp::new(Vec::new(), vec![route]).with_upload_storage(&root);
+    let data = b"%PDF-1.7\nminimal test document";
+    let parts = [multipart::MultipartPart {
+        name: "document".into(),
+        filename: Some("invoice.pdf".into()),
+        content_type: Some("application/pdf".into()),
+        data,
+    }];
+    let request = Request {
+        method: "POST".into(),
+        target: "/upload".into(),
+        path: "/upload".into(),
+        headers: HashMap::from([
+            ("host".into(), "localhost".into()),
+            ("origin".into(), "http://localhost".into()),
+        ]),
+        body: "_zelyra_csrf=csrf-token".into(),
+        remote_addr: None,
+    };
+
+    let invalid_csrf = Request {
+        body: "_zelyra_csrf=wrong".into(),
+        ..request.clone()
+    };
+    assert_eq!(
+        app.dispatch_with_multipart(&invalid_csrf, &parts).status,
+        403
+    );
+    assert!(!root.exists(), "CSRF failure must precede storage creation");
+
+    assert_eq!(app.dispatch_with_multipart(&request, &parts).status, 503);
+    let tenant_dir = root.join("tenants/0");
+    assert!(tenant_dir.is_dir());
+    assert_eq!(
+        std::fs::read_dir(&tenant_dir).unwrap().count(),
+        0,
+        "a failed database action must remove published bytes and manifests"
+    );
+    std::fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
+#[ignore = "requires a disposable MariaDB URL in ZELYRA_UPLOAD_TEST_URL"]
+fn multipart_upload_commits_reference_and_removes_file_after_sql_rollback() {
+    let database_url = std::env::var("ZELYRA_UPLOAD_TEST_URL")
+        .expect("the upload E2E script provides a disposable MariaDB URL");
+    zelyra_database::execute_query(
+        &database_url,
+        "DROP TABLE IF EXISTS zelyra_upload_shared_e2e",
+        Vec::new(),
+    )
+    .expect("drop test-only shared upload reference table");
+    zelyra_database::execute_query(
+        &database_url,
+        "DROP TABLE IF EXISTS zelyra_upload_e2e",
+        Vec::new(),
+    )
+    .expect("drop test-only upload table");
+    zelyra_database::execute_query(
+        &database_url,
+        "CREATE TABLE zelyra_upload_e2e (id BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY, document CHAR(36) NULL, title VARCHAR(80) NULL, owner_id BIGINT NOT NULL DEFAULT 7)",
+        Vec::new(),
+    )
+    .expect("create test-only upload table");
+    zelyra_database::execute_query(
+        &database_url,
+        "CREATE TABLE zelyra_upload_shared_e2e (id BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY, document CHAR(36) NULL, owner_id BIGINT NOT NULL DEFAULT 7)",
+        Vec::new(),
+    )
+    .expect("create test-only shared upload reference table");
+    let storage_root = std::env::temp_dir().join(format!(
+        "zelyra-upload-e2e-{}-{}",
+        std::process::id(),
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos()
+    ));
+    let mut route = form_route();
+    route.path = "/upload".into();
+    route.form.fields = vec![zelyra_ast::FormField {
+        name: "document".into(),
+        ty: Some(Type::Named("File".into())),
+        label: Some("Document".into()),
+        placeholder: None,
+        required: true,
+        min_length: None,
+        max: None,
+        min_value: None,
+        max_value: None,
+        choices: Vec::new(),
+        widget: None,
+        appearance: None,
+        file_upload: Some(zelyra_ast::FileUploadOptions {
+            max_size_bytes: 1024,
+            allowed_types: vec!["application/pdf".into()],
+        }),
+        readonly: false,
+        span: zelyra_ast::Span::default(),
+    }];
+    let sql_action = |statements: Vec<&str>| zelyra_ast::FormAction {
+        name: "save".into(),
+        label: None,
+        icon: None,
+        confirm: None,
+        confirm_page: None,
+        success_page: None,
+        error_page: None,
+        fields: Vec::new(),
+        requires_auth: false,
+        permissions: Vec::new(),
+        capabilities: Vec::new(),
+        require_match: false,
+        statements: statements
+            .into_iter()
+            .map(|query| {
+                zelyra_ast::Stmt::Expr(zelyra_ast::Expr {
+                    kind: zelyra_ast::ExprKind::Sql {
+                        result_type: Type::Unit,
+                        query: query.into(),
+                    },
+                    span: zelyra_ast::Span::default(),
+                })
+            })
+            .collect(),
+        execute_body: None,
+        guard: None,
+        success: None,
+        redirect: None,
+        span: zelyra_ast::Span::default(),
+    };
+    route.form.actions = vec![sql_action(vec![
+        "INSERT INTO zelyra_upload_e2e (document, owner_id) VALUES (:document, 7)",
+    ])];
+    let app =
+        WebApp::with_database_url(Vec::new(), vec![route.clone()], Some(database_url.clone()))
+            .with_upload_storage(&storage_root);
+    let bytes = b"%PDF-1.7\ntransactional upload";
+    let boundary = "zelyra-upload-e2e-boundary";
+    let mut body = format!(
+        "--{boundary}\r\nContent-Disposition: form-data; name=\"_zelyra_csrf\"\r\n\r\ncsrf-token\r\n--{boundary}\r\nContent-Disposition: form-data; name=\"document\"; filename=\"document.pdf\"\r\nContent-Type: application/pdf\r\n\r\n"
+    )
+    .into_bytes();
+    body.extend_from_slice(bytes);
+    body.extend_from_slice(format!("\r\n--{boundary}--\r\n").as_bytes());
+    let listener = TcpListener::bind("127.0.0.1:0").expect("bind HTTP upload test listener");
+    let address = listener
+        .local_addr()
+        .expect("read HTTP upload test address");
+    let server = std::thread::spawn(move || {
+        let (mut stream, _) = listener.accept().expect("accept HTTP upload test request");
+        handle_connection(&mut stream, &app).expect("handle HTTP upload test request");
+    });
+    let mut client = TcpStream::connect(address).expect("connect to HTTP upload test server");
+    client
+        .set_read_timeout(Some(Duration::from_secs(5)))
+        .expect("set HTTP upload test timeout");
+    write!(
+        client,
+        "POST /upload HTTP/1.1\r\nHost: localhost\r\nOrigin: http://localhost\r\nContent-Type: multipart/form-data; boundary={boundary}\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+        body.len()
+    )
+    .expect("write HTTP upload test headers");
+    client
+        .write_all(&body)
+        .expect("write HTTP upload test body");
+    let mut response = Vec::new();
+    client
+        .read_to_end(&mut response)
+        .expect("read HTTP upload test response");
+    server.join().expect("join HTTP upload test server");
+    let response_head = String::from_utf8_lossy(&response);
+    assert!(
+        response_head.starts_with("HTTP/1.1 303 See Other\r\n"),
+        "{response_head}"
+    );
+    let rows = zelyra_database::execute_read_only_query(
+        &database_url,
+        "SELECT id, document FROM zelyra_upload_e2e",
+        Vec::new(),
+    )
+    .expect("read saved file reference");
+    assert_eq!(rows.rows.len(), 1);
+    let id = rows.rows[0][0].clone();
+    let file_ref = &rows.rows[0][1];
+    let storage = file_storage::FileStorage::new(&storage_root).expect("open managed storage");
+    let (metadata, saved_bytes) = storage
+        .read_verified(0, file_ref, 1024)
+        .expect("verify stored upload referenced by committed row");
+    assert_eq!(metadata.media_type, "application/pdf");
+    assert_eq!(saved_bytes, bytes);
+
+    let edit_program = zelyra_parser::parse(
+        &zelyra_lexer::lex(
+            r#"
+            database main { engine: mariadb }
+            table zelyra_upload_e2e {
+                id: Id primary auto
+                document: FileRef?
+                title: String(80)?
+                owner_id: Int required default 7
+            }
+            table zelyra_upload_shared_e2e {
+                id: Id primary auto
+                document: FileRef?
+                owner_id: Int required default 7
+            }
+            fn main() {}
+            "#,
+        )
+        .expect("lex upload edit metadata"),
+    )
+    .expect("parse upload edit metadata");
+    let schema = zelyra_database::build_schema(&edit_program).expect("build edit schema");
+    let mut edit_route = route.clone();
+    edit_route.path = "/upload/{id}".into();
+    edit_route.action = edit_route.path.clone();
+    edit_route.form.name = "DocumentEdit".into();
+    edit_route.form.table = Some("zelyra_upload_e2e".into());
+    edit_route.table = edit_program.tables.first().cloned();
+    edit_route.schema = Some(schema);
+    edit_route.form.fields = vec![
+        zelyra_ast::FormField {
+            name: "document".into(),
+            ty: Some(Type::Named("File".into())),
+            label: Some("Document".into()),
+            placeholder: None,
+            required: true,
+            min_length: None,
+            max: None,
+            min_value: None,
+            max_value: None,
+            choices: Vec::new(),
+            widget: None,
+            appearance: None,
+            file_upload: Some(zelyra_ast::FileUploadOptions {
+                max_size_bytes: 1024,
+                allowed_types: vec!["application/pdf".into()],
+            }),
+            readonly: false,
+            span: zelyra_ast::Span::default(),
+        },
+        zelyra_ast::FormField {
+            name: "title".into(),
+            ty: Some(Type::String),
+            label: Some("Title".into()),
+            placeholder: None,
+            required: true,
+            min_length: None,
+            max: Some(80),
+            min_value: None,
+            max_value: None,
+            choices: Vec::new(),
+            widget: None,
+            appearance: None,
+            file_upload: None,
+            readonly: false,
+            span: zelyra_ast::Span::default(),
+        },
+    ];
+    edit_route.form.actions = vec![sql_action(vec![
+        "UPDATE zelyra_upload_e2e SET document = :document, title = :title WHERE id = :id",
+    ])];
+    let edit_app =
+        WebApp::with_database_url(Vec::new(), vec![edit_route], Some(database_url.clone()))
+            .with_upload_storage(&storage_root);
+    let edit_get = edit_app.dispatch(&Request {
+        method: "GET".into(),
+        target: format!("/upload/{id}"),
+        path: format!("/upload/{id}"),
+        headers: HashMap::from([("host".into(), "localhost".into())]),
+        body: String::new(),
+        remote_addr: None,
+    });
+    assert_eq!(edit_get.status, 200, "{}", edit_get.body);
+    assert!(edit_get.body.contains("type=\"file\""));
+    assert!(!edit_get
+        .body
+        .contains("type=\"file\" accept=\"application/pdf\" required"));
+    assert!(
+        !edit_get.body.contains(file_ref),
+        "the file input must not echo the stored FileRef"
+    );
+    let snapshot = edit_get
+        .body
+        .split("name=\"_zelyra_snapshot\" value=\"")
+        .nth(1)
+        .and_then(|value| value.split('\"').next())
+        .expect("edit GET includes a signed row snapshot");
+    let edit_post = edit_app.dispatch(&Request {
+        method: "POST".into(),
+        target: format!("/upload/{id}"),
+        path: format!("/upload/{id}"),
+        headers: HashMap::from([
+            ("host".into(), "localhost".into()),
+            ("origin".into(), "http://localhost".into()),
+        ]),
+        body: format!(
+            "_zelyra_csrf=csrf-token&_zelyra_snapshot={snapshot}&document=123e4567-e89b-42d3-a456-426614174099&title=Updated"
+        ),
+        remote_addr: None,
+    });
+    assert_eq!(edit_post.status, 303, "{}", edit_post.body);
+    let edited = zelyra_database::execute_read_only_query(
+        &database_url,
+        "SELECT document, title FROM zelyra_upload_e2e WHERE id = :id",
+        vec![(
+            "id".into(),
+            zelyra_database::QueryValue::Int(id.parse().unwrap()),
+        )],
+    )
+    .expect("read edit result");
+    assert_eq!(
+        edited.rows[0][0], *file_ref,
+        "an edit without a new upload preserves the stored reference"
+    );
+    assert_eq!(edited.rows[0][1], "Updated");
+    assert!(storage.read_verified(0, file_ref, 1024).is_ok());
+
+    let replacement_get = edit_app.dispatch(&Request {
+        method: "GET".into(),
+        target: format!("/upload/{id}"),
+        path: format!("/upload/{id}"),
+        headers: HashMap::from([("host".into(), "localhost".into())]),
+        body: String::new(),
+        remote_addr: None,
+    });
+    assert_eq!(replacement_get.status, 200, "{}", replacement_get.body);
+    let replacement_snapshot = replacement_get
+        .body
+        .split("name=\"_zelyra_snapshot\" value=\"")
+        .nth(1)
+        .and_then(|value| value.split('\"').next())
+        .expect("replacement edit GET includes a signed row snapshot");
+    let replacement_bytes = b"%PDF-1.7\nreplacement document";
+    let replacement = edit_app.dispatch_with_multipart(
+        &Request {
+            method: "POST".into(),
+            target: format!("/upload/{id}"),
+            path: format!("/upload/{id}"),
+            headers: HashMap::from([
+                ("host".into(), "localhost".into()),
+                ("origin".into(), "http://localhost".into()),
+            ]),
+            body: format!(
+                "_zelyra_csrf=csrf-token&_zelyra_snapshot={replacement_snapshot}&title=Replaced"
+            ),
+            remote_addr: None,
+        },
+        &[multipart::MultipartPart {
+            name: "document".into(),
+            filename: Some("replacement.pdf".into()),
+            content_type: Some("application/pdf".into()),
+            data: replacement_bytes,
+        }],
+    );
+    assert_eq!(replacement.status, 303, "{}", replacement.body);
+    let replaced = zelyra_database::execute_read_only_query(
+        &database_url,
+        "SELECT document FROM zelyra_upload_e2e WHERE id = :id",
+        vec![(
+            "id".into(),
+            zelyra_database::QueryValue::Int(id.parse().unwrap()),
+        )],
+    )
+    .expect("read replacement file reference");
+    let replacement_ref = &replaced.rows[0][0];
+    assert_ne!(replacement_ref, file_ref);
+    assert!(
+        storage.read_verified(0, file_ref, 1024).is_err(),
+        "replaced upload should be removed after the database action commits"
+    );
+    assert_eq!(
+        storage
+            .read_verified(0, replacement_ref, 1024)
+            .expect("replacement upload remains readable")
+            .1,
+        replacement_bytes
+    );
+
+    let program = zelyra_parser::parse(
+        &zelyra_lexer::lex(
+            r#"
+            database main { engine: mariadb }
+            table zelyra_upload_e2e {
+                id: Id primary auto
+                document: FileRef?
+                owner_id: Int required
+            }
+            form Upload -> zelyra_upload_e2e {
+                field document: File { max_size: "1KB" allowed_types: ["application/pdf"] }
+            }
+            fn main() {}
+            "#,
+        )
+        .expect("lex upload download route metadata"),
+    )
+    .expect("parse upload download route metadata");
+    let mut crud = default_shell_crud(None);
+    crud.path = "/uploads".into();
+    crud.table = "zelyra_upload_e2e".into();
+    crud.recipient_column = Some("owner_id".into());
+    crud.schema = zelyra_database::build_schema(&program).expect("build upload table schema");
+    let path_params = HashMap::from([
+        ("id".into(), id.clone()),
+        ("field".into(), "document".into()),
+    ]);
+    let download = dispatch_crud_file_download(
+        &crud,
+        &Request {
+            method: "GET".into(),
+            target: format!("/uploads/{id}/files/document"),
+            path: format!("/uploads/{id}/files/document"),
+            headers: HashMap::new(),
+            body: String::new(),
+            remote_addr: None,
+        },
+        &path_params,
+        CrudFileDownloadContext {
+            database_url: Some(&database_url),
+            storage_root: Some(&storage_root),
+            validation_program: Some(&program),
+            actor_user_id: Some(7),
+            tenant_context: None,
+        },
+    );
+    assert_eq!(download.status, 200);
+    assert_eq!(download.content_type, "application/pdf");
+    assert_eq!(
+        download.body_bytes.as_deref(),
+        Some(replacement_bytes.as_slice())
+    );
+    assert_eq!(
+        download
+            .headers
+            .iter()
+            .find(|(name, _)| name == "Content-Disposition")
+            .map(|(_, value)| value.as_str()),
+        Some("attachment; filename=\"download.pdf\"")
+    );
+    assert!(download
+        .headers
+        .iter()
+        .any(|(name, value)| name == "Cache-Control" && value == "private, no-store"));
+    let unauthenticated_app =
+        WebApp::with_database_url(Vec::new(), Vec::new(), Some(database_url.clone()))
+            .with_cruds(vec![crud.clone()])
+            .with_validation_program(program.clone())
+            .with_upload_storage(&storage_root);
+    assert_ne!(
+        unauthenticated_app
+            .dispatch(&Request {
+                method: "GET".into(),
+                target: format!("/uploads/{id}/files/document"),
+                path: format!("/uploads/{id}/files/document"),
+                headers: HashMap::new(),
+                body: String::new(),
+                remote_addr: None,
+            })
+            .status,
+        200,
+        "the generated file route requires an authenticated session"
+    );
+    assert_eq!(
+        dispatch_crud_file_download(
+            &crud,
+            &Request {
+                method: "GET".into(),
+                target: format!("/uploads/{id}/files/document"),
+                path: format!("/uploads/{id}/files/document"),
+                headers: HashMap::new(),
+                body: String::new(),
+                remote_addr: None,
+            },
+            &path_params,
+            CrudFileDownloadContext {
+                database_url: Some(&database_url),
+                storage_root: Some(&storage_root),
+                validation_program: Some(&program),
+                actor_user_id: Some(8),
+                tenant_context: None,
+            },
+        )
+        .status,
+        404,
+        "file download must not cross the CRUD recipient boundary"
+    );
+    let file_columns = crud_file_fields(Some(&program), &crud.table)
+        .into_keys()
+        .collect::<Vec<_>>();
+    assert_eq!(file_columns, vec!["document"]);
+    let detail_html = localize_html(
+        &render_crud_detail_with_actions(
+            &crud,
+            &["document"],
+            std::slice::from_ref(file_ref),
+            &id,
+            CrudUiActions {
+                create: false,
+                edit: false,
+                delete: false,
+                restore: false,
+                custom: Vec::new(),
+            },
+            UiLanguage::English,
+            &file_columns,
+        ),
+        UiLanguage::English,
+    );
+    assert!(detail_html.contains(&format!("/uploads/{id}/files/document")));
+    assert!(detail_html.contains("Download file"));
+    assert!(
+        !detail_html.contains(file_ref),
+        "opaque references are not shown"
+    );
+
+    let parts = [multipart::MultipartPart {
+        name: "document".into(),
+        filename: Some("document.pdf".into()),
+        content_type: Some("application/pdf".into()),
+        data: bytes,
+    }];
+    let request = Request {
+        method: "POST".into(),
+        target: "/upload".into(),
+        path: "/upload".into(),
+        headers: HashMap::from([
+            ("host".into(), "localhost".into()),
+            ("origin".into(), "http://localhost".into()),
+        ]),
+        body: "_zelyra_csrf=csrf-token".into(),
+        remote_addr: None,
+    };
+    let mut failing_route = route;
+    failing_route.form.actions = vec![sql_action(vec![
+        "INSERT INTO zelyra_upload_e2e (document, owner_id) VALUES (:document, 7)",
+        "INSERT INTO zelyra_upload_missing_table (document) VALUES (:document)",
+    ])];
+    let failing_app =
+        WebApp::with_database_url(Vec::new(), vec![failing_route], Some(database_url.clone()))
+            .with_upload_storage(&storage_root);
+    let rolled_back = failing_app.dispatch_with_multipart(&request, &parts);
+    assert_eq!(rolled_back.status, 500, "{}", rolled_back.body);
+    let rows = zelyra_database::execute_read_only_query(
+        &database_url,
+        "SELECT id, document FROM zelyra_upload_e2e",
+        Vec::new(),
+    )
+    .expect("read rows after transaction rollback");
+    assert_eq!(rows.rows.len(), 1, "failed SQL action must roll back");
+    assert!(storage.read_verified(0, replacement_ref, 1024).is_ok());
+    let tenant_dir = storage_root.join("tenants/0");
+    assert_eq!(
+        std::fs::read_dir(&tenant_dir).unwrap().count(),
+        2,
+        "failed SQL action must remove only its staged/published file and manifest"
+    );
+
+    let mut delete_crud = crud.clone();
+    delete_crud.csrf = CsrfProtection::new("csrf-token");
+    delete_crud.schema = zelyra_database::build_schema(&edit_program).expect("build delete schema");
+    zelyra_database::execute_query(
+        &database_url,
+        "INSERT INTO zelyra_upload_shared_e2e (document, owner_id) VALUES (:document, 7)",
+        vec![(
+            "document".into(),
+            zelyra_database::QueryValue::String(replacement_ref.clone()),
+        )],
+    )
+    .expect("add a second declared reference to the replacement file");
+    let delete_response = dispatch_crud_delete(
+        &delete_crud,
+        &Request {
+            method: "POST".into(),
+            target: format!("/uploads/{id}/delete"),
+            path: format!("/uploads/{id}/delete"),
+            headers: HashMap::from([
+                ("host".into(), "localhost".into()),
+                ("origin".into(), "http://localhost".into()),
+            ]),
+            body: "_zelyra_csrf=csrf-token".into(),
+            remote_addr: None,
+        },
+        &HashMap::from([("id".into(), id.clone())]),
+        Some(&storage_root),
+        CrudMutationContext {
+            database_url: Some(&database_url),
+            audit_table: None,
+            audit_chain: false,
+            actor_user_id: Some(7),
+            tenant_context: None,
+            validation_program: Some(&edit_program),
+            crud_policy_functions: &[],
+            granted_permissions: Vec::new(),
+        },
+    );
+    assert_eq!(delete_response.status, 303, "{}", delete_response.body);
+    assert!(
+        storage.read_verified(0, replacement_ref, 1024).is_ok(),
+        "deleting one row must retain an upload still referenced by another row"
+    );
+    let mut delete_shared_crud = delete_crud.clone();
+    delete_shared_crud.table = "zelyra_upload_shared_e2e".into();
+    let delete_shared_response = dispatch_crud_delete(
+        &delete_shared_crud,
+        &Request {
+            method: "POST".into(),
+            target: "/shared/1/delete".into(),
+            path: "/shared/1/delete".into(),
+            headers: HashMap::from([
+                ("host".into(), "localhost".into()),
+                ("origin".into(), "http://localhost".into()),
+            ]),
+            body: "_zelyra_csrf=csrf-token".into(),
+            remote_addr: None,
+        },
+        &HashMap::from([("id".into(), "1".into())]),
+        Some(&storage_root),
+        CrudMutationContext {
+            database_url: Some(&database_url),
+            audit_table: None,
+            audit_chain: false,
+            actor_user_id: Some(7),
+            tenant_context: None,
+            validation_program: Some(&edit_program),
+            crud_policy_functions: &[],
+            granted_permissions: Vec::new(),
+        },
+    );
+    assert_eq!(
+        delete_shared_response.status, 303,
+        "{}",
+        delete_shared_response.body
+    );
+    assert!(
+        storage.read_verified(0, replacement_ref, 1024).is_err(),
+        "the final permanent CRUD deletion should remove its unreferenced upload after commit"
+    );
+
+    zelyra_database::execute_query(
+        &database_url,
+        "DROP TABLE zelyra_upload_shared_e2e",
+        Vec::new(),
+    )
+    .expect("drop test-only shared upload reference table");
+    zelyra_database::execute_query(&database_url, "DROP TABLE zelyra_upload_e2e", Vec::new())
+        .expect("drop test-only upload table");
+    std::fs::remove_dir_all(storage_root).unwrap();
+}
+
+#[test]
 fn rejects_oversized_requests_before_reading_the_body() {
     let raw = format!(
         "POST /echo HTTP/1.1\r\nContent-Length: {}\r\n\r\n",
@@ -3317,6 +4142,7 @@ fn renders_form_with_csrf_and_field_attributes() {
         choices: Vec::new(),
         widget: None,
         appearance: None,
+        file_upload: None,
         readonly: false,
         span: zelyra_ast::Span::default(),
     };
@@ -3335,6 +4161,7 @@ fn renders_form_with_csrf_and_field_attributes() {
         choices: Vec::new(),
         widget: None,
         appearance: None,
+        file_upload: None,
         readonly: false,
         span: zelyra_ast::Span::default(),
     };
@@ -3353,6 +4180,7 @@ fn renders_form_with_csrf_and_field_attributes() {
         choices: vec!["draft".into(), "<script>".into()],
         widget: None,
         appearance: None,
+        file_upload: None,
         readonly: false,
         span: zelyra_ast::Span::default(),
     });
@@ -3388,6 +4216,23 @@ fn renders_form_with_csrf_and_field_attributes() {
     let get_request = parse_request("GET /forms/action HTTP/1.1\r\n\r\n").unwrap();
     let response = dispatch_form(&post_only_route, &get_request, &HashMap::new(), None, None);
     assert_eq!(response.status, 405);
+}
+
+#[test]
+fn file_form_renders_multipart_without_echoing_submitted_file_names() {
+    let mut route = form_route();
+    route.form.fields[0].ty = Some(Type::Named("File".into()));
+    route.form.fields[0].required = true;
+    route.form.fields[0].file_upload = Some(zelyra_ast::FileUploadOptions {
+        max_size_bytes: 10 * 1024 * 1024,
+        allowed_types: vec!["application/pdf".into()],
+    });
+    let values = HashMap::from([("name".into(), "../../private.pdf".into())]);
+    let html = render_form(&route, &values, &[], None);
+    assert!(html.contains("<form method=\"post\" enctype=\"multipart/form-data\""));
+    assert!(html.contains("id=\"name\" name=\"name\" type=\"file\""));
+    assert!(!html.contains("value=\"../../private.pdf\""));
+    assert!(!html.contains("type=\"file\" value="));
 }
 
 #[test]
@@ -4831,6 +5676,7 @@ fn renders_crud_delete_confirmation_form() {
                 custom: Vec::new(),
             },
             UiLanguage::English,
+            &[],
         ),
         UiLanguage::English,
     );
@@ -4850,6 +5696,7 @@ fn renders_crud_delete_confirmation_form() {
             custom: Vec::new(),
         },
         UiLanguage::English,
+        &[],
     );
     assert!(!read_html.contains("/machines/1/read"));
 
@@ -4866,6 +5713,7 @@ fn renders_crud_delete_confirmation_form() {
             custom: Vec::new(),
         },
         UiLanguage::English,
+        &[],
     );
     assert!(!restricted_html.contains("/machines/1/edit"));
     assert!(!restricted_html.contains("/machines/new"));
@@ -4914,6 +5762,7 @@ fn renders_crud_delete_confirmation_form() {
             }],
         },
         UiLanguage::English,
+        &[],
     );
     assert!(action_html.contains("action=\"/machines/1/deactivate\""));
     assert!(action_html.contains(">Deactivate</button>"));
@@ -4974,6 +5823,7 @@ fn renders_action_error_without_database_details() {
         requires_auth: false,
         permissions: Vec::new(),
         capabilities: Vec::new(),
+        require_match: false,
         statements: Vec::new(),
         execute_body: None,
         guard: None,
@@ -5033,6 +5883,7 @@ fn invalid_form_post_preserves_safe_input_and_redacts_secrets() {
         choices: Vec::new(),
         widget: Some("email".into()),
         appearance: None,
+        file_upload: None,
         readonly: false,
         span: zelyra_ast::Span::default(),
     });
@@ -5050,6 +5901,7 @@ fn invalid_form_post_preserves_safe_input_and_redacts_secrets() {
             choices: Vec::new(),
             widget: (name == "password").then(|| "password".into()),
             appearance: None,
+            file_upload: None,
             readonly: false,
             span: zelyra_ast::Span::default(),
         });
@@ -5174,6 +6026,7 @@ fn protects_custom_form_actions_with_action_permissions() {
         requires_auth: true,
         permissions: vec!["customers.save".into()],
         capabilities: Vec::new(),
+        require_match: false,
         statements: Vec::new(),
         execute_body: None,
         guard: None,
@@ -5204,6 +6057,7 @@ fn protects_custom_form_actions_with_action_permissions() {
         requires_auth: true,
         permissions: vec!["customers.save".into()],
         capabilities: Vec::new(),
+        require_match: false,
         statements: Vec::new(),
         execute_body: None,
         guard: None,
@@ -5233,6 +6087,7 @@ fn form_action_requires_database_url() {
         requires_auth: false,
         permissions: Vec::new(),
         capabilities: Vec::new(),
+        require_match: false,
         statements: vec![zelyra_ast::Stmt::Expr(zelyra_ast::Expr {
             kind: zelyra_ast::ExprKind::Sql {
                 result_type: Type::Unit,
@@ -5534,6 +6389,7 @@ fn execute_form_action_rejects_postgres_chained_audit() {
         requires_auth: false,
         permissions: Vec::new(),
         capabilities: Vec::new(),
+        require_match: false,
         success: None,
         redirect: None,
         span: zelyra_ast::Span::default(),

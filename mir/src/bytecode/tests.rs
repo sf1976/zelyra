@@ -860,6 +860,405 @@ fn main() { print(compute(3)) }
 }
 
 #[test]
+fn generated_bounded_integer_expressions_match_independent_oracle_and_backends() {
+    let mut state = 0x5eed_cafe_u64;
+    let mut source = String::from("fn main() {}\n");
+    let mut cases = Vec::new();
+    for index in 0..96 {
+        let mut next_operand = || {
+            state = state.wrapping_mul(6364136223846793005).wrapping_add(1);
+            ((state >> 32) % 41) as i64 - 20
+        };
+        let left = next_operand();
+        let middle = next_operand();
+        let right = next_operand();
+        let first_operator = match state.rotate_left(7) % 3 {
+            0 => '+',
+            1 => '-',
+            _ => '*',
+        };
+        state = state.wrapping_mul(6364136223846793005).wrapping_add(1);
+        let second_operator = match state.rotate_left(13) % 3 {
+            0 => '+',
+            1 => '-',
+            _ => '*',
+        };
+        let first = match first_operator {
+            '+' => left + middle,
+            '-' => left - middle,
+            '*' => left * middle,
+            _ => unreachable!(),
+        };
+        let expected = match second_operator {
+            '+' => first + right,
+            '-' => first - right,
+            '*' => first * right,
+            _ => unreachable!(),
+        };
+        let name = format!("generated_{index}");
+        source.push_str(&format!(
+            "fn {name}() -> Int {{ return (({left} {first_operator} {middle}) {second_operator} {right}) }}\n"
+        ));
+        cases.push((name, expected));
+    }
+
+    let ast =
+        parse(&lex(&source).expect("generated source lexes")).expect("generated source parses");
+    let mir = crate::lower(&ast).expect("generated source type-checks and lowers");
+    for (name, expected) in cases {
+        let ast_value = zelyra_runtime::execute_function(&ast, &name, Vec::new(), None)
+            .unwrap_or_else(|error| panic!("AST {name}: {}", error.message));
+        let mir_value =
+            execution::execute_function(&mir, &name, Vec::new(), ExecutionLimits::default())
+                .unwrap_or_else(|error| panic!("MIR {name}: {}", error.message));
+        let bytecode =
+            compile(&mir, &name).unwrap_or_else(|error| panic!("compile {name}: {error:?}"));
+        let decoded = decode(&encode(&bytecode).expect("bytecode encodes"))
+            .expect("encoded bytecode verifies on load");
+        let bytecode_value = execute(&bytecode, Vec::new(), ExecutionLimits::default())
+            .unwrap_or_else(|error| panic!("bytecode {name}: {}", error.message));
+        let decoded_value = execute(&decoded, Vec::new(), ExecutionLimits::default())
+            .unwrap_or_else(|error| panic!("decoded bytecode {name}: {}", error.message));
+        let oracle = Value::Int(expected);
+        assert_eq!(ast_value, oracle, "independent integer oracle for {name}");
+        assert_eq!(mir_value.value, oracle, "MIR for {name}");
+        assert_eq!(bytecode_value.value, oracle, "bytecode for {name}");
+        assert_eq!(decoded_value.value, oracle, "decoded bytecode for {name}");
+    }
+}
+
+#[test]
+fn checked_integer_arithmetic_failures_match_ast_mir_and_bytecode_spans() {
+    let source = r#"
+fn add(left: Int, right: Int) -> Int { return left + right }
+fn subtract(left: Int, right: Int) -> Int { return left - right }
+fn multiply(left: Int, right: Int) -> Int { return left * right }
+fn negate(value: Int) -> Int { return -value }
+fn divide(left: Int, right: Int) -> Int { return left / right }
+fn remainder(left: Int, right: Int) -> Int { return left % right }
+fn main() {}
+"#;
+    let ast = parse(&lex(source).expect("source lexes")).expect("source parses");
+    let mir = crate::lower(&ast).expect("source type-checks and lowers");
+    for (name, arguments) in [
+        ("add", vec![Value::Int(i64::MAX), Value::Int(1)]),
+        ("subtract", vec![Value::Int(i64::MIN), Value::Int(1)]),
+        ("multiply", vec![Value::Int(i64::MAX), Value::Int(2)]),
+        ("negate", vec![Value::Int(i64::MIN)]),
+        ("divide", vec![Value::Int(1), Value::Int(0)]),
+        ("remainder", vec![Value::Int(1), Value::Int(0)]),
+        ("divide", vec![Value::Int(i64::MIN), Value::Int(-1)]),
+        ("remainder", vec![Value::Int(i64::MIN), Value::Int(-1)]),
+    ] {
+        let expected = zelyra_runtime::execute_function(&ast, name, arguments.clone(), None)
+            .expect_err("AST must reject checked integer arithmetic failures");
+        let mir_error =
+            execution::execute_function(&mir, name, arguments.clone(), ExecutionLimits::default())
+                .expect_err("MIR must reject checked integer arithmetic failures");
+        let bytecode = compile(&mir, name).expect("arithmetic error-path function compiles");
+        let decoded = decode(&encode(&bytecode).expect("error-path bytecode encodes"))
+            .expect("error-path bytecode verifies after decoding");
+        let actual = execute(&decoded, arguments, ExecutionLimits::default())
+            .expect_err("bytecode must reject checked integer arithmetic failures");
+        assert_eq!(mir_error.message, expected.message, "MIR {name}");
+        assert_eq!(mir_error.span, expected.span, "MIR source span {name}");
+        assert_eq!(actual.message, expected.message, "bytecode {name}");
+        assert_eq!(actual.span, expected.span, "bytecode source span {name}");
+    }
+}
+
+#[test]
+fn integer_boundary_operator_corpus_matches_checked_host_oracle() {
+    let source = r#"
+fn add(left: Int, right: Int) -> Int { return left + right }
+fn subtract(left: Int, right: Int) -> Int { return left - right }
+fn multiply(left: Int, right: Int) -> Int { return left * right }
+fn divide(left: Int, right: Int) -> Int { return left / right }
+fn remainder(left: Int, right: Int) -> Int { return left % right }
+fn main() {}
+"#;
+    let ast = parse(&lex(source).expect("source lexes")).expect("source parses");
+    let mir = crate::lower(&ast).expect("source type-checks and lowers");
+    let operations = [
+        ("add", i64::checked_add as fn(i64, i64) -> Option<i64>),
+        ("subtract", i64::checked_sub),
+        ("multiply", i64::checked_mul),
+        ("divide", i64::checked_div),
+        ("remainder", i64::checked_rem),
+    ];
+    let bytecode = operations
+        .iter()
+        .map(|(name, _)| {
+            let program = compile(&mir, name).expect("boundary operator compiles");
+            let encoded = encode(&program).expect("boundary operator encodes");
+            (
+                *name,
+                decode(&encoded).expect("boundary operator verifies after decoding"),
+            )
+        })
+        .collect::<std::collections::HashMap<_, _>>();
+    let values = [i64::MIN, i64::MIN + 1, -1, 0, 1, i64::MAX - 1, i64::MAX];
+
+    for (name, oracle) in operations {
+        for left in values {
+            for right in values {
+                let arguments = vec![Value::Int(left), Value::Int(right)];
+                let expected = oracle(left, right).map(Value::Int);
+                let ast_result =
+                    zelyra_runtime::execute_function(&ast, name, arguments.clone(), None);
+                let mir_result = execution::execute_function(
+                    &mir,
+                    name,
+                    arguments.clone(),
+                    ExecutionLimits::default(),
+                );
+                let bytecode_result = execute(
+                    bytecode.get(name).expect("compiled function exists"),
+                    arguments,
+                    ExecutionLimits::default(),
+                );
+
+                match expected {
+                    Some(expected) => {
+                        assert_eq!(
+                            ast_result.expect("host oracle accepted operation"),
+                            expected
+                        );
+                        assert_eq!(mir_result.expect("MIR matches host oracle").value, expected);
+                        assert_eq!(
+                            bytecode_result.expect("bytecode matches host oracle").value,
+                            expected
+                        );
+                    }
+                    None => {
+                        let ast_error = ast_result.expect_err("host oracle rejected operation");
+                        let mir_error = mir_result.expect_err("MIR rejects checked overflow");
+                        let bytecode_error =
+                            bytecode_result.expect_err("bytecode rejects checked overflow");
+                        assert_eq!(
+                            mir_error.message, ast_error.message,
+                            "MIR {name}({left}, {right})"
+                        );
+                        assert_eq!(
+                            mir_error.span, ast_error.span,
+                            "MIR span {name}({left}, {right})"
+                        );
+                        assert_eq!(
+                            bytecode_error.message, ast_error.message,
+                            "bytecode {name}({left}, {right})"
+                        );
+                        assert_eq!(
+                            bytecode_error.span, ast_error.span,
+                            "bytecode span {name}({left}, {right})"
+                        );
+                    }
+                }
+            }
+        }
+    }
+}
+
+#[test]
+fn unsigned_boundary_operator_corpus_matches_checked_host_oracle() {
+    let source = r#"
+fn add(left: UInt, right: UInt) -> UInt { return left + right }
+fn subtract(left: UInt, right: UInt) -> UInt { return left - right }
+fn multiply(left: UInt, right: UInt) -> UInt { return left * right }
+fn divide(left: UInt, right: UInt) -> UInt { return left / right }
+fn remainder(left: UInt, right: UInt) -> UInt { return left % right }
+fn main() {}
+"#;
+    let ast = parse(&lex(source).expect("source lexes")).expect("source parses");
+    let mir = crate::lower(&ast).expect("source type-checks and lowers");
+    let operations = [
+        ("add", u64::checked_add as fn(u64, u64) -> Option<u64>),
+        ("subtract", u64::checked_sub),
+        ("multiply", u64::checked_mul),
+        ("divide", u64::checked_div),
+        ("remainder", u64::checked_rem),
+    ];
+    let bytecode = operations
+        .iter()
+        .map(|(name, _)| {
+            let program = compile(&mir, name).expect("boundary operator compiles");
+            let encoded = encode(&program).expect("boundary operator encodes");
+            (
+                *name,
+                decode(&encoded).expect("boundary operator verifies after decoding"),
+            )
+        })
+        .collect::<std::collections::HashMap<_, _>>();
+    let values = [0, 1, 2, u64::MAX - 1, u64::MAX];
+
+    for (name, oracle) in operations {
+        for left in values {
+            for right in values {
+                let arguments = vec![Value::UInt(left), Value::UInt(right)];
+                let expected = oracle(left, right).map(Value::UInt);
+                let ast_result =
+                    zelyra_runtime::execute_function(&ast, name, arguments.clone(), None);
+                let mir_result = execution::execute_function(
+                    &mir,
+                    name,
+                    arguments.clone(),
+                    ExecutionLimits::default(),
+                );
+                let bytecode_result = execute(
+                    bytecode.get(name).expect("compiled function exists"),
+                    arguments,
+                    ExecutionLimits::default(),
+                );
+
+                match expected {
+                    Some(expected) => {
+                        assert_eq!(
+                            ast_result.expect("host oracle accepted operation"),
+                            expected
+                        );
+                        assert_eq!(mir_result.expect("MIR matches host oracle").value, expected);
+                        assert_eq!(
+                            bytecode_result.expect("bytecode matches host oracle").value,
+                            expected
+                        );
+                    }
+                    None => {
+                        let ast_error = ast_result.expect_err("host oracle rejected operation");
+                        let mir_error = mir_result.expect_err("MIR rejects checked overflow");
+                        let bytecode_error =
+                            bytecode_result.expect_err("bytecode rejects checked overflow");
+                        assert_eq!(
+                            mir_error.message, ast_error.message,
+                            "MIR {name}({left}, {right})"
+                        );
+                        assert_eq!(
+                            mir_error.span, ast_error.span,
+                            "MIR span {name}({left}, {right})"
+                        );
+                        assert_eq!(
+                            bytecode_error.message, ast_error.message,
+                            "bytecode {name}({left}, {right})"
+                        );
+                        assert_eq!(
+                            bytecode_error.span, ast_error.span,
+                            "bytecode span {name}({left}, {right})"
+                        );
+                    }
+                }
+            }
+        }
+    }
+}
+
+#[test]
+fn configured_recursion_depth_matches_ast_mir_and_bytecode() {
+    let source = r#"
+fn descend(depth: Int) -> Int {
+    if depth == 0 { return 0 }
+    return descend(depth - 1) + 1
+}
+fn main() {}
+"#;
+    let ast = parse(&lex(source).expect("source lexes")).expect("source parses");
+    let mir = crate::lower(&ast).expect("source type-checks and lowers");
+    let bytecode = compile(&mir, "descend").expect("recursive function compiles");
+    let bytecode = decode(&encode(&bytecode).expect("recursive bytecode encodes"))
+        .expect("recursive bytecode verifies after decoding");
+    let max_stack_depth = 40;
+    let policy = RuntimePolicy {
+        max_stack_depth: Some(max_stack_depth),
+        ..RuntimePolicy::default()
+    };
+    let arguments = vec![Value::Int(24)];
+    let ast_result = zelyra_runtime::execute_function_with_capabilities_and_policies(
+        &ast,
+        "descend",
+        arguments.clone(),
+        None,
+        None,
+        Some(&policy),
+    )
+    .expect("AST honors the configured depth above the default");
+    let limits = ExecutionLimits {
+        max_steps: 10_000,
+        max_stack_depth,
+    };
+    let mir_result = execution::execute_function(&mir, "descend", arguments.clone(), limits)
+        .expect("MIR honors the same configured depth");
+    let bytecode_result =
+        execute(&bytecode, arguments, limits).expect("bytecode honors the same configured depth");
+    assert_eq!(ast_result, Value::Int(24));
+    assert_eq!(mir_result.value, ast_result);
+    assert_eq!(bytecode_result.value, ast_result);
+
+    let default_policy = RuntimePolicy {
+        max_stack_depth: Some(20),
+        ..RuntimePolicy::default()
+    };
+    let ast_error = zelyra_runtime::execute_function_with_capabilities_and_policies(
+        &ast,
+        "descend",
+        vec![Value::Int(24)],
+        None,
+        None,
+        Some(&default_policy),
+    )
+    .expect_err("AST enforces the configured limit");
+    let limited = ExecutionLimits {
+        max_steps: 10_000,
+        max_stack_depth: 20,
+    };
+    let mir_error = execution::execute_function(&mir, "descend", vec![Value::Int(24)], limited)
+        .expect_err("MIR enforces the same configured limit");
+    let bytecode_error = execute(&bytecode, vec![Value::Int(24)], limited)
+        .expect_err("bytecode enforces the same configured limit");
+    assert!(ast_error.message.contains("depth"), "{}", ast_error.message);
+    assert!(mir_error.message.contains("depth"), "{}", mir_error.message);
+    assert!(
+        bytecode_error.message.contains("depth"),
+        "{}",
+        bytecode_error.message
+    );
+    assert_eq!(mir_error.span, ast_error.span);
+    assert_eq!(bytecode_error.span, ast_error.span);
+}
+
+#[test]
+fn zero_step_budget_failure_keeps_source_location_across_backends() {
+    let source = "fn run() -> Int {\n    answer = 40 + 2\n    return answer\n}\nfn main() {}\n";
+    let ast = parse(&lex(source).expect("source lexes")).expect("source parses");
+    let mir = crate::lower(&ast).expect("source type-checks and lowers");
+    let bytecode = compile(&mir, "run").expect("run function compiles");
+    let bytecode = decode(&encode(&bytecode).expect("bytecode encodes"))
+        .expect("bytecode verifies after decoding");
+    let policy = RuntimePolicy {
+        step_budget: Some(0),
+        ..RuntimePolicy::default()
+    };
+    let ast_error = zelyra_runtime::execute_function_with_capabilities_and_policies(
+        &ast,
+        "run",
+        Vec::new(),
+        None,
+        None,
+        Some(&policy),
+    )
+    .expect_err("AST rejects execution before the first step");
+    let limits = ExecutionLimits {
+        max_steps: 0,
+        ..ExecutionLimits::default()
+    };
+    let mir_error = execution::execute_function(&mir, "run", Vec::new(), limits)
+        .expect_err("MIR rejects execution before the first step");
+    let bytecode_error = execute(&bytecode, Vec::new(), limits)
+        .expect_err("bytecode rejects execution before the first step");
+    assert!(ast_error.message.contains("step budget exceeded"));
+    assert!(mir_error.message.contains("step budget exceeded"));
+    assert!(bytecode_error.message.contains("step budget exceeded"));
+    assert_eq!(mir_error.span, ast_error.span);
+    assert_eq!(bytecode_error.span, ast_error.span);
+}
+
+#[test]
 fn bytecode_to_float_conversion_matches_ast_for_the_laravel_projection_shape() {
     let source = r#"
 fn useful_life(months: UInt) -> Float {
@@ -5937,6 +6336,91 @@ fn main() {}
         assert_eq!(mir_error.span, expected.span);
         assert_eq!(actual.message, expected.message);
         assert_eq!(actual.span, expected.span);
+    }
+}
+
+#[test]
+fn decimal_boundary_corpus_matches_ast_mir_and_serialized_bytecode() {
+    let source = r#"
+fn decimal_add(left: Decimal, right: Decimal) -> Decimal { return left + right }
+fn decimal_subtract(left: Decimal, right: Decimal) -> Decimal { return left - right }
+fn decimal_multiply(left: Decimal, right: Decimal) -> Decimal { return left * right }
+fn decimal_divide(left: Decimal, right: Decimal) -> Decimal { return left / right }
+fn decimal_remainder(left: Decimal, right: Decimal) -> Decimal { return left % right }
+fn main() {}
+"#;
+    let ast = parse(&lex(source).expect("source lexes")).expect("source parses");
+    let mir = crate::lower(&ast).expect("source type-checks and lowers");
+    let cases = [
+        (
+            "decimal_add",
+            Value::Decimal(1_234_567_890),
+            Value::Decimal(2_000_000_000),
+        ),
+        ("decimal_add", Value::Decimal(i128::MAX), Value::Decimal(1)),
+        (
+            "decimal_subtract",
+            Value::Decimal(i128::MIN),
+            Value::Decimal(1),
+        ),
+        (
+            "decimal_multiply",
+            Value::Decimal(1_234_567_890),
+            Value::Decimal(2_000_000_000),
+        ),
+        (
+            "decimal_multiply",
+            Value::Decimal(i128::MAX),
+            Value::Decimal(2_000_000_000),
+        ),
+        (
+            "decimal_divide",
+            Value::Decimal(1_000_000_000),
+            Value::Decimal(3_000_000_000),
+        ),
+        (
+            "decimal_divide",
+            Value::Decimal(1_000_000_000),
+            Value::Decimal(0),
+        ),
+        (
+            "decimal_remainder",
+            Value::Decimal(5_500_000_000),
+            Value::Decimal(2_000_000_000),
+        ),
+    ];
+
+    for (name, left, right) in cases {
+        let arguments = vec![left, right];
+        let compiled = compile(&mir, name).expect("Decimal function compiles");
+        let decoded = decode(&encode(&compiled).expect("Decimal function encodes"))
+            .expect("Decimal function decodes");
+        let ast_result = zelyra_runtime::execute_function(&ast, name, arguments.clone(), None);
+        let mir_result =
+            execution::execute_function(&mir, name, arguments.clone(), ExecutionLimits::default());
+        let bytecode_result = execute(&decoded, arguments, ExecutionLimits::default());
+
+        match ast_result {
+            Ok(expected) => {
+                let mir_value = mir_result
+                    .expect("MIR must accept the same Decimal operation")
+                    .value;
+                let bytecode_value = bytecode_result
+                    .expect("bytecode must accept the same Decimal operation")
+                    .value;
+                assert_eq!(mir_value, expected, "MIR {name}");
+                assert_eq!(bytecode_value, expected, "bytecode {name}");
+            }
+            Err(expected) => {
+                let mir_error = mir_result.expect_err("MIR must reject the same Decimal operation");
+                let bytecode_error =
+                    bytecode_result.expect_err("bytecode must reject the same Decimal operation");
+                assert_eq!(mir_error.message, expected.message, "MIR {name}");
+                assert_eq!(mir_error.span, expected.span, "MIR {name}");
+                assert_eq!(bytecode_error.message, expected.message, "bytecode {name}");
+                assert_eq!(bytecode_error.span, expected.span, "bytecode {name}");
+            }
+        }
     }
 }
 

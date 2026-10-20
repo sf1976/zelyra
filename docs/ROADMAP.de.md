@@ -27,7 +27,7 @@ Ressourcendisziplin und ehrliche Beweisaussagen leiten jede Phase. Das
 [Manifest](MANIFESTO.de.md) beschreibt die Prinzipien; die Roadmap kennzeichnet
 den tatsächlich implementierten Stand.
 
-Das aktuelle stabile Release ist 1.2.26 und wurde unter https://github.com/sf1976/zelyra/releases/tag/v1.2.26 veröffentlicht. **Aktuelle Meilensteine** ist die
+Das aktuelle stabile Release ist 1.2.28 und wurde unter https://github.com/sf1976/zelyra/releases/tag/v1.2.28 veröffentlicht. **Aktuelle Meilensteine** ist die
 verbindliche Übersicht der nächsten Vorhaben. Ältere, nummerierte Release-
 Abschnitte bleiben als historische Planung und Nachweise erhalten; sie legen
 für sich keine aktuellen Releaseziele fest. Langfristige Ideen stehen im
@@ -280,12 +280,23 @@ abgeschlossen.
   Datenbanktransaktion laufen und beim Verlassen standardmäßig zurückgerollt
   werden; `--persist` ist die bewusste Ausnahme. `:commit` und `:rollback`
   nutzen eine festgehaltene MariaDB-/MySQL-Transaktion und eröffnen danach eine
-  neue. PostgreSQL-Sandbox und Bytecode-REPL bleiben nicht unterstützt;
-  `--tenant` und `:tenant` stellen `tenant_id` sowie das typisierte
+  neue. AST- und Bytecode-SQL verwenden dieselbe festgehaltene MariaDB-
+  Transaktion und Eingabe-Savepoints. PostgreSQL-Sandbox bleibt nicht
+  unterstützt. `--tenant` und `:tenant` stellen `tenant_id` sowie das typisierte
   `session.tenant_id: Option<Int>` bereit, aktivieren aber keine automatische
   Zeilenfilterung. Compiler-, Capability-, Contract-, Schrittbudget- und
-  Stacktiefenprüfungen bleiben aktiv. Siehe [Sprachkonsolen-Anleitung](language-console.de.md) und den
+  Stacktiefenprüfungen bleiben aktiv. Kann ein Eingabe-Savepoint nicht sicher
+  angelegt, freigegeben oder zurückgerollt werden, sperrt die Sitzung weitere
+  Ausdrücke bis zum Beenden mit Rollback der äußeren Transaktion. Siehe
+  [Sprachkonsolen-Anleitung](language-console.de.md) und den
   [Arbeitsplan 1.2.26](release-plans/1.2.26-interactive-language-console.en.md).
+  `tests/language-console-mariadb-e2e.sh` prüft Rollback beim Beenden,
+  explizites `:rollback`, Batch-Commit und `--persist` gegen eine isolierte
+  Wegwerf-MariaDB; derselbe E2E-Test prüft Bytecode-SQL-Rollback. Pipe-Tests
+  decken persistente Bindungen und Fehlererholung für beide Backends ab.
+  PostgreSQL-Sandboxtransaktionen bleiben offen. Die Record-Ausgabe markiert
+  Decimal-Werte mit `[Decimal]`; sie erfindet keine im Runtime-Wert fehlende
+  Nachkommastellenskala.
 - [x] **1.2.27 — Grundlage für den Import von Laravel-Webseiten:** Einen neu
   entwickelten, zuerst schreibgeschützten Importer für ausgewählte
   Webseitenfunktionen in native Zelyra-Module bereitstellen; keine Laravel-
@@ -380,30 +391,192 @@ abgeschlossen.
   Konflikt und einen Audit-Eintrag. Die REPL-Sandbox weist MariaDB-/MySQL-DDL
   sowie Transaktions- und Sitzungsbefehle ab, die den Rollback umgehen könnten;
   Tests prüfen verweigerte Grants, Rollback und ausdrücklichen Commit. `:schema`
-  zeigt Meldungen und Quellpositionen der Invarianten. SQL in der REPL benötigt
-  weiterhin den aggregierten `Database`-Grant; eine Bytecode-REPL ist nicht
-  implementiert. Veröffentlicht als
+  zeigt Meldungen und Quellpositionen der Invarianten. Zum Releasezeitpunkt
+  benötigte SQL in der REPL den aggregierten `Database`-Grant; die Bytecode-
+  REPL kam danach als experimentelle 1.2.26-Ergänzung hinzu und prüft dieselben
+  Grants. Veröffentlicht als
   [`v1.2.28`](https://github.com/sf1976/zelyra/releases/tag/v1.2.28); die
   Release-Gates bestanden. Die umfassendere Berechtigungs-/Sicherheitsmatrix
   bleibt ein offener Folgepunkt. Siehe den
   [Arbeitsplan 1.2.28](release-plans/1.2.28-typed-crud-actions.de.md).
-- [ ] **1.2.29 — begrenzte sichere Datei-Uploads (Design-Gate):** Vor einem
-  `File`-Formularfeld Multipart-Größenlimits, Metadatentypen, Inhaltsprüfung,
-  Mandantenzuordnung, private Ablage außerhalb von `public/`, autorisierte
-  Downloads, Rollback-Aufräumen sowie Backup- und Löschverhalten festlegen und
-  testen. Die Freigabe scheitert, wenn Uploads Größenlimits, Pfadgrenzen,
-  Berechtigungen oder Aufräumregeln umgehen können. Falls diese Garantien bis
-  dahin nicht vollständig erreichbar sind, werden Uploads ausdrücklich über
-  1.3.0 hinaus verschoben statt teilweise ausgeliefert.
-- [ ] **1.2.30 — Abdeckung echter Laravel-Migrationsabläufe:** Den getesteten
-  Routen-/Controller-/View-zu-Modul-Umfang am Laravel-Projekt erweitern, aber
-  nur für compilergeprüfte, wiederverwendbare Feature-/Domain-/UI-Module mit
-  belegter Herkunft. Ausgewählte Module gegen eine separate wegwerfbare
-  Zelyra-Datenbank und im Browser prüfen. Abdeckung als analysiert, generiert,
-  compilergeprüft, verhaltensgeprüft, unterstützt oder manuell ausweisen.
-  Keine Gesamtmigration behaupten, wenn nicht jedes einbezogene Verhalten in
-  Zelyra getestet wurde. Laravel, Composer-Pakete, PHP-Controller oder Blade-
-  Laufzeitdateien werden nicht in die Ausgabe kopiert.
+- [~] **1.2.29 — begrenzte sichere Datei-Uploads:** Die Architekturaufnahme ist
+  abgeschlossen. Der HTTP-Server liest Requests jetzt begrenzt als Bytes und
+  leitet gültige Multipart-Bodies durch den Decoder; die öffentliche Text-
+  `Request`-API und das globale Limit von 1 MiB bleiben unverändert. Routen
+  ohne deklarierte Datei-Felder erhalten HTTP 415; fehlerhaftes
+  Multipart erhält HTTP 400. POST-Multipart-Requests an
+  deklarierte File-Formulare erhalten ein daraus abgeleitetes Requestlimit;
+  alle anderen Routen bleiben bei 1 MiB. Ein globales Budget von 256 MiB
+  begrenzt gleichzeitig gepufferte Request-Bodies. Parser- und Live-HTTP-Tests
+  prüfen Binärdaten, fehlerhafte Grenzen, doppelte Header und Limitfehler. Ein
+  Coverage-guided-Fuzz-Ziel absolvierte lokal sechs Sekunden und 647.431
+  Eingaben ohne Absturz. Compilergeprüfte `File`-Formmetadaten prüfen jetzt
+  Größenlimits und die PDF-/PNG-/JPEG-Allowlist, weisen tabellengebundene
+  Formulare sowie Speicher- und Action-Kontexte ab und rendern ein
+  Multipart-Dateifeld ohne Dateinamen-Ausgabe. Tabellengebundene Datei-Felder
+  benötigen jetzt eine gleichnamige `FileRef`-Spalte. Passende POST-Formrouten
+  validieren und stagen Dateien nach Autorisierung und CSRF-Prüfung; erfolgreiche
+  Actions veröffentlichen sie vor SQL, fehlgeschlagene Actions entfernen sie.
+  Ein Unix-Speicherprimitiv
+  unterstützt Staging, opake mandantengebundene Referenzen, private
+  Sidecar-Manifeste, verifizierte Lesezugriffe, private Dateirechte,
+  No-Follow-Öffnen, Signaturauswahl für PDF/PNG/JPEG sowie Größen-/SHA-256-
+  Prüfung. Bei Teilfehlern werden beide endgültigen Einträge entfernt. Das
+  Entfernen prüft Blob und Manifest vor jeder Änderung und entfernt zuerst das
+  Manifest; ein ungültiges Manifest löst daher keine Teillöschung aus. Der
+  HTTP-/Speicherpfad ist über Datei- und Datenbankcommit nicht crash-atomar;
+  ein Absturz kann ein verwaistes Objekt hinterlassen. `zelyra files cleanup`
+  zeigt alte, nicht referenzierte Blobs und verwaiste Staging-Paare zunächst
+  nur an, prüft deklarierte FileRef-Spalten erneut, begrenzt Datei- und
+  Datenbankreferenz-Scans auf je 100.000 Einträge und bricht bei Symlinks oder
+  inkonsistenten Pfaden ab. Ein Wegwerf-MariaDB-E2E bestätigt Vorschau,
+  Erhalt referenzierter Dateien und ausdrückliches Löschen des Waisen. Es
+  startet außerdem ein echtes Upload-`zelyra serve`, weist die Bereinigung bei
+  gehaltener Prozesssperre nach und bestätigt ihre erfolgreiche Ausführung nach
+  dem Beenden des Servers. Das
+  Mindestalter beträgt standardmäßig 30 Tage; zum Löschen sind `--apply` und
+  `--maintenance-window` erforderlich. Upload-fähige Zelyra-Server halten eine
+  gemeinsame lokale Dateisperre; die Bereinigung benötigt eine exklusive Sperre,
+  lädt darunter die Referenzen erneut und verhindert den Start eines weiteren
+  Zelyra-Servers. Das koordiniert Prozesse desselben lokalen Hosts, nicht fremde
+  Programme oder beliebige Netzwerkdateisysteme. Beim Dateiersatz in einem
+  autorisierten Edit-Formular wird die alte Datei erst nach erfolgreichem
+  Datenbankcommit entfernt. Scheitert die Bereinigung, bleibt ein verwaltetes
+  Waisenobjekt für den ausdrücklichen referenzgeprüften Cleanup-Befehl zurück.
+  Beim endgültigen CRUD-Löschen wird eine Datei nach dem Commit nur entfernt,
+  wenn keine deklarierte FileRef-Spalte mehr auf sie verweist; Soft-Delete
+  behält die Datei für eine mögliche Wiederherstellung. `zelyra files backup
+  --output <neues-verzeichnis>` erzeugt unter exklusiver Sperre ein
+  versioniertes privates Verzeichnis mit geprüften Blobs und Manifesten. Es
+  bricht bei fehlenden Datenbankreferenzen ab und überschreibt kein Ziel.
+  `zelyra files restore --from <verzeichnis> --apply` stellt zuerst alle
+  Dateien in einen Stagingbaum, prüft Größe, Medientyp, Manifest und SHA-256
+  und veröffentlicht den Mandantenbaum erst danach. Fehlende Datenbankreferenzen
+  sowie vorhandene Uploads werden abgewiesen. Ein Wegwerf-MariaDB-E2E prüft
+  Wiederherstellung von Bytes/Manifesten und dass korrupte Eingaben nichts
+  veröffentlichen. Diese Befehle sichern nur die private Dateikomponente;
+  Datenbank, Projektkonfiguration und Geheimnisse sind ausgeschlossen und
+  müssen separat gesichert werden. Ein koordiniertes vollständiges
+  Anwendungsbackup aus Datenbank und Dateien sowie Absturz-/Fehlerwiederherstellung
+  bleiben offen. Nicht-Unix-Anlegen schlägt bis zur
+  ACL-Unterstützung geschlossen fehl. `FileRef` wird je
+  Backend als `CHAR(36)`/`UUID`/`TEXT` abgebildet. Geprüfte
+  Datei-Formulare müssen auf eine gleichnamige Referenzspalte zeigen;
+  automatisches CRUD darf `FileRef` nicht als Textfeld rendern und JSON-API-
+  Eingaben dürfen die opake Referenz nicht setzen. Ein MariaDB-E2E bestätigt,
+  dass Referenz und private Bytes nach erfolgreichem POST gespeichert sind und
+  ein späterer SQL-Fehler den Datensatz zurückrollt und nur den fehlgeschlagenen
+  Upload entfernt. Unscoped Projekte verwenden die projektlokale Speicher-
+  Mandanten-ID 0; scoped Forms verlangen den authentifizierten Mandanten.
+  Edit-Formulare behalten einen autorisiert geladenen FileRef, wenn keine neue
+  Datei ausgewählt wird, auch bei Pflichtdateien; Request-Referenzen können ihn
+  nicht überschreiben. Ein MariaDB-E2E prüft, dass die vorhandene Datei nach
+  Änderung eines anderen Felds lesbar bleibt. Die
+  GitHub-Werkzeugkette wechselte auf
+  Rust 1.99.1; Clippy beanstandete dort `fetch_update` als veraltet. Die
+  Requestbudget-Reservierung nutzt jetzt eine begrenzte
+  `compare_exchange_weak`-Schleife. Ein neuer Konkurrenztest deckte auf, dass
+  eager ausgewertetes `then_some` bei fehlgeschlagener Reservierung einen Guard
+  erzeugte, der Bytes fälschlich freigab und so das Gesamtlimit überschreiten
+  konnte. Der Code wird zusätzlich mit lokalem Rust 1.98 geprüft. Eine statische Analyse von
+  `/opt/siedelmann-laravel/app` fand Uploadabläufe bei Rechnungen, Verträgen,
+  Einstellungen, Postbriefen und eingehender Mail; der Importer erzeugt sie
+  nicht. `tests/mariadb-upload-cleanup-e2e.sh` simuliert nun einen Absturz mit
+  zurückgebliebenem Staging-/Manifestpaar und prüft Vorschau und ausdrückliche
+  Bereinigung. Das Upload-POST-E2E sendet den erfolgreichen Multipart-Upload
+  über eine echte lokale HTTP-Verbindung und prüft Verweis und Dateibytes;
+  zusätzlich prüft es die Bereinigung nach Datenbank-Rollback. Das
+  Dateispeicher-Backup schließt Datenbank,
+  Projektkonfiguration und Geheimnisse ausdrücklich aus. Ein koordiniertes
+  vollständiges Anwendungsbackup bleibt ein separates Folgepaket; die
+  Datenbank muss separat und bei gestopptem Zelyra gesichert/wiederhergestellt
+  werden.
+  Siehe den [Plan für sichere Uploads 1.2.29](release-plans/1.2.29-secure-uploads.de.md).
+- [~] **1.2.30 — Abdeckung echter Laravel-Migrationsabläufe:** Standalone-Forms
+  unterstützen geprüfte lokale Routen mit erfassten Pfadparametern, ein
+  compilergeprüftes schreibgeschütztes `verify sql<T>` vor dem GET-Rendern und
+  `require_match` für direkte SQL-Aktionen. Das erforderliche erste `SELECT`
+  und alle folgenden SQL-Anweisungen laufen in derselben Transaktion; ohne
+  Treffer folgt 404 vor jedem Schreibzugriff, CSRF bleibt Pflicht und
+  verifizierte Token-Seiten erhalten `Cache-Control: no-store`. Ein
+  wiederholbarer MariaDB-/Browser-E2E prüft Tokenvalidierung, ungültige GET-
+  und POST-Tokens, erfolgreiche Abmeldung, idempotente Wiederholung und den
+  Erhalt des ersten Abmeldezeitpunkts. Das ausführbare native Beispiel ist
+  `examples/csv_mailer_unsubscribe.zyl`. Der Importer erkennt jetzt das
+  quellbelegte Muster `PublicCsvMailerUnsubscribeController` und erzeugt das
+  wiederverwendbare Modul `src/imported_public_unsubscribe.zyl`, ein gemeinsames
+  Schemapaket und einen auf dieses Modul begrenzten Tabellenzugriff. Übersetzt
+  werden nur der literale SHA-256-Tokenvergleich, die Prüfung vor dem Schreiben,
+  die idempotente Abmeldung und statische Hinweistexte; abweichende Varianten
+  bleiben unübersetzt. Die Ausgabe bestand `zelyra check`; ein Lauf mit
+  Wegwerf-MariaDB und HTTP-Server bestätigte GET 200, 404 für ungültige Tokens,
+  CSRF-geschützten POST-Redirect und den gespeicherten Zeitpunkt. Die
+  wiederholbare Prüfung `python3 tests/laravel_import_unsubscribe_e2e.py
+  /opt/siedelmann-laravel/app` erzeugt das Scaffold erneut, richtet dessen
+  Schema in einem frischen Wegwerf-MariaDB-Container ein und prüft gültige und
+  ungültige GET-/POST-Tokens, CSRF, den stabilen Zeitstempel nach Wiederholung
+  sowie die Erfolgsseite über HTTP. Erkennt der Importer ein gemeinsames
+  Anwendungslayout, bindet die generierte Erfolgsseite diese Shell; andernfalls
+  erzeugt er keinen ungelösten Layoutverweis. Der Generierungsbericht hält die
+  Entscheidung fest. Der Test prüft außerdem, dass die gerenderte Erfolgsseite
+  innerhalb der erzeugten Shell liegt. Es wird keine E-Mail versendet und weder
+  Datenbank noch Scaffold bleiben zurück. Das ist ein HTTP-Integrationstest,
+  kein Browser-Automationstest.
+  Jedes generierte Gerüst enthält jetzt `IMPORT_COVERAGE.json`, das
+  Quellinventar, Befundklassifizierungen, erzeugte Artefakte, Compilerstatus
+  und Laufzeitteststatus trennt. Der Source-Only-Integrationstest gleicht den
+  Bericht mit Dateiplan und Generierungsmanifest ab und bestätigt, dass aus
+  der Generierung keine Laufzeitabdeckung abgeleitet wird. Der letzte Lauf
+  gegen `/opt/siedelmann-laravel/app` erfasste 565 PHP-Dateien und 2.229
+  Befunde (1.367 manuell/ungelöst und 862 teilweise unterstützt).
+  Die Quellprüfung des Gesamtprojekts bestätigt zudem die generierten
+  Login-/Logout- und Abmelderouten, validiert den Paket-Lock offline und
+  führt module plan für pkg:imported_identity aus, einschließlich
+  Paketidentität und Deklarationsabschluss, und erzeugt anschließend ein
+  Offline-Quellpaket, dessen Einstieg und Lockfile geprüft werden. Dies prüft
+  die Modul-/Paketverteilung, nicht das Authentifizierungsverhalten oder die
+  Deployment-Bereitschaft.
+  `tests/laravel-import-auth-e2e.sh` ergänzt den Laufzeitnachweis: Mit einem
+  kleinen CI-Fixture und `/opt/siedelmann-laravel/app` werden ausschließlich
+  neue Testbenutzer in einer Wegwerf-Zieldatenbank angelegt und ungültiger
+  Login, erfolgreicher Login, persistente Sitzung, Logout und Sitzungswiderruf
+  über lokales HTTP und MariaDB geprüft. Laravel-Zugangsdaten oder
+  Benutzerzeilen werden nicht kopiert; eigene Registrierungs-,
+  Mandantenauswahl- oder 2FA-Abläufe werden nicht migriert. Der lokale
+  MariaDB-Client weist darauf hin, dass bei dieser passwortgeschützten
+  Wegwerfverbindung die TLS-Zertifikatsprüfung deaktiviert ist.
+  PHP-Methodenerkennung nutzt jetzt die vorhandene lexikalische Quellpositionskarte
+  und ausbalancierte Codeklammern; Regressionstests weisen
+  methodenähnliche Kommentare zurück und decken verschachtelte Blöcke sowie
+  Rückgabetypen sowie Lookup-/Update-/View-Muster ausschließlich in Kommentaren
+  oder Stringliteralen ab. Der reale Laravel-Import wurde danach erneut
+  erzeugt und `zelyra check` bestand. Diese Quellgenerierung lässt sich mit
+  `python3 tests/laravel_import_project_check.py /opt/siedelmann-laravel/app`
+  wiederholen; das Skript entfernt geerbte Datenbank-URLs aus der Umgebung und
+  löscht das temporäre Gerüst. Es startet weder den HTTP-Ablauf noch eine
+  Datenbankverbindung. Das Gerüst ist weiterhin keine vollständige Migration:
+  der letzte Source-Only-Lauf meldet nun 2.229 Befunde (1.367 manuell/ungelöst,
+  862 teilweise) in 565 Quelldateien. Diese Zahlen beschreiben
+  Analysebefunde und keine Zahl migrierter Funktionen. Laravel,
+  Composer-Pakete, PHP-Controller, Blade-Laufzeitdateien und Zugangsdaten werden
+  nicht kopiert. Der Source-Only-Integrationstest vergleicht den unabhängig
+  durchlaufenen PHP-Dateibaum mit `SOURCE_FILE_PLAN.json` und
+  `MIGRATION_FILES.md`, weist doppelte oder fehlende Einträge zurück und
+  verlangt für jede Datei Kategorie, Übersetzungsstatus und vorgeschlagene
+  Aktion. Dies belegt die Abdeckung des erkannten PHP-Dateibestands, nicht die
+  Vollständigkeit des Verhaltensgraphen oder eine erfolgte Übersetzung.
+  Der jüngste ausdrückliche Live-Schemacheck vergleicht zusätzlich bekannte
+  MariaDB-Speichertypen einschließlich Decimal-Präzision und -Skalierung sowie
+  Fremdschlüssel-Zielspalten. Statische Integer-, Bool-, Text-, Decimal-,
+  Time- und `now`-Defaults werden verglichen, sofern Zelyra sie sicher
+  interpretieren kann; Berichte geben Default-Inhalte nicht aus und listen
+  nicht unterstützte Ausdrücke als ungeprüft. Der erneute Vergleich fand
+  117 Default- und 297 SQL-Typabweichungen (414 insgesamt). Er verglich 80
+  Kandidaten und untersuchte 1.250 Spalten. Engine, Charset, Collation und
+  Trigger bleiben ungeprüft. Die echte Datenbank wurde schreibgeschützt
+  verbunden, ohne Anwendungszeilen zu lesen. Das ersetzt den früheren Befund „keine
+  Schemadifferenzen“, der nur den damals dokumentierten Metadatenausschnitt
+  verglich.
 - [ ] **1.3.0 — kanonische Struktur und Bytecode-Standard:** Das optionale,
   versionierte Projektlayout (`routes/`, `domain/`, `schema/`, `public/`,
   `assets/`, `plugins/`), Architekturprüfungen und eine sichere
@@ -469,6 +642,13 @@ Diese Meilensteine sind in Arbeit und noch nicht veröffentlicht. Bereits teilwe
 - [ ] AST-Interpreter als auswählbare Referenz behalten, bis die VM den gesamten unterstützten Sprachumfang korrekt abdeckt. Differential-, Property-, Fuzz-, Sicherheits- und Regressionstests ergänzen.
 - [~] Opt-in-CLI-Ausführung ist für AST, MIR und die unterstützte Bytecode-Teilmenge vorhanden. MIR-/Bytecode-Inspektion, sicheres versioniertes Caching, stabile maschinenlesbare Diagnosen und Studio-Integration bleiben offen, ohne bestehendes CLI-Verhalten zu brechen.
 - [~] Ein reproduzierbarer CPU-Benchmark vergleicht mutable Arrayupdates über AST, MIR und Bytecode; Messaufbau und drei Release-Läufe sind im [Benchmarkbericht](benchmarks/mutable-array-backends.de.md) dokumentiert. I/O-Last, Startzeit, Speicherverbrauch, Durchsatz und Kompilieraufwand bleiben offen.
+- [~] Ein deterministischer, begrenzter skalarer Differentialkorpus erzeugt 96 Ganzzahlausdrücke und prüft jedes Ergebnis gegen ein unabhängiges Host-Sprachorakel, AST, MIR, kodierten/dekodierten Bytecode und VM-Ausführung. Das erweitert nur die Arithmetik-Regressionstests und belegt keine vollständige Operator-, Fehler-, Ressourcen- oder Sprachparität.
+- [~] Fehler bei geprüfter `Int`-Arithmetik werden zwischen AST, MIR und dekodiertem Bytecode verglichen: Überlauf bei Addition/Subtraktion/Multiplikation, Negation von `Int::MIN`, Division/Rest durch null und `Int::MIN / -1` beziehungsweise `% -1` müssen Diagnosemeldung und exakte Quellspanne erhalten. Dies deckt nur diese acht Fälle ab; backendabhängige Schrittzählung und weitere Diagnoseparität bleiben offen.
+- [~] Ein deterministischer Grenzwertkorpus vergleicht Addition/Subtraktion/Multiplikation/Division/Rest für sieben Werte rund um `i64::MIN`, null und `i64::MAX` mit den geprüften Rust-Arithmetikoperationen. Erfolgswerte sowie Meldungen/Quellspannen abgewiesener Operationen werden zwischen AST, MIR und dekodiertem Bytecode verglichen. Das bleibt ein begrenzter Integer-Operatorausschnitt und belegt keine allgemeine Zahlen- oder Runtime-Parität.
+- [~] Ein zweiter Grenzwertkorpus prüft UInt-Addition/Subtraktion/Multiplikation/Division/Rest an null, kleinen Werten und den Grenzen von `u64::MAX` gegen geprüfte Rust-Arithmetik. AST, MIR und dekodierter Bytecode müssen Erfolgswerte, Fehlermeldungen und exakte Quellspannen angleichen. UInt-Unterlauf bleibt von Überlauf unterschieden; der Nachweis gilt nur für diesen begrenzten vorzeichenlosen Integerausschnitt.
+- [~] Ein Decimal-Grenzwertkorpus vergleicht Addition/Subtraktion/Multiplikation/Division/Rest zwischen AST, MIR und kodiertem sowie dekodiertem Bytecode. Er prüft normale Festkommawerte, `i128`-Überläufe bei Addition/Subtraktion/Multiplikation, Division durch null sowie identische Fehlermeldungen und Quellspannen. Das belegt nur diese gezielten Decimal-Operatoren, keine Skalen-/Formatierungs- oder allgemeine Zahlenparität.
+- [~] Konfigurierte Rekursionstiefen werden zwischen AST, MIR und dekodiertem Bytecode verglichen: Dieselbe rekursive Funktion ist bei Tiefe 24 und Limit 40 erfolgreich und scheitert bei Limit 20 mit derselben Quellposition des Aufrufs. Dies prüft die getestete Tiefengrenze, nicht die vollständige Parität der Stackressourcen.
+- [~] Bytecode ordnet jetzt den ersten erzeugten VM-Befehl jeder abgesenkten MIR-Anweisung deren Quellspan zu; spätere Befehle behalten die präzisen Ausdruckspositionen. Der Differential-Regressionstest für ein erstes Zuweisungsstatement bestätigt beim Schrittlimit null nun den exakten Span in AST, MIR und dekodiertem Bytecode. Dieser getestete Positionsfehler ist behoben; breitere Schrittbudget- und Quellspanparität bleiben offen.
 - [ ] Freigabekriterium: VM erst nach vollständiger Feature-Parität, Sicherheitsnachweisen, Differentialtests, dokumentierten Grenzen und reproduzierbaren Builds zum Standard machen.
 
 ### Querschnittliche Geschäftsplattform-Erweiterungen im Ziel 1.2.0–1.3.0

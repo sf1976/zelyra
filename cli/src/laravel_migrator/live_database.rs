@@ -84,7 +84,8 @@ pub(super) fn inspect(project: &Path) -> Result<Value, String> {
                     "primary_key": column.primary_key,
                     "auto_increment": column.auto,
                     "unique": column.unique,
-                    "default_present": column.default.is_some()
+                    "default_present": column.default.is_some(),
+                    "_comparison_default_value": column.default
                 })).collect::<Vec<_>>(),
                 "indexes": table.indexes.iter().map(|index| json!({
                     "name": index.name,
@@ -97,8 +98,10 @@ pub(super) fn inspect(project: &Path) -> Result<Value, String> {
                 })).collect::<Vec<_>>(),
                 "foreign_keys": table.foreign_keys.iter().map(|key| json!({
                     "column": key.column,
+                    "columns": key.columns,
                     "referenced_table": key.referenced_table,
                     "referenced_column": key.referenced_column,
+                    "referenced_columns": key.referenced_columns,
                     "on_delete": format!("{:?}", key.on_delete)
                 })).collect::<Vec<_>>()
             })
@@ -249,6 +252,9 @@ pub(super) fn compare_candidates(live: &Value, generation: &Value) -> Value {
         .unwrap_or_default();
     let mut compared_tables = Vec::new();
     let mut differences = Vec::new();
+    let mut unclassified_types = Vec::new();
+    let mut unclassified_defaults = Vec::new();
+    let maria_db_type_comparison = matches!(live["driver"].as_str(), Some("mysql" | "mariadb"));
     let mut candidate_names = BTreeSet::new();
 
     for candidate in &candidates {
@@ -307,6 +313,63 @@ pub(super) fn compare_candidates(live: &Value, generation: &Value) -> Value {
                 Some(!expected["default"].is_null()),
                 actual["default_present"].as_bool(),
             );
+            if expected["default"].is_string() && actual["default_present"] == true {
+                match expected_default_value(expected) {
+                    Some(expected_default) => {
+                        if let Some(actual_default) = actual["_comparison_default_value"].as_str() {
+                            if !defaults_equivalent(expected, &expected_default, actual_default) {
+                                differences.push(json!({
+                                    "table": table_name,
+                                    "column": physical_name,
+                                    "kind": "default_value_mismatch"
+                                }));
+                            }
+                        } else {
+                            unclassified_defaults.push(json!({
+                                "table": table_name,
+                                "column": physical_name,
+                                "reason": "live default value metadata is unavailable"
+                            }));
+                        }
+                    }
+                    None => unclassified_defaults.push(json!({
+                        "table": table_name,
+                        "column": physical_name,
+                        "reason": "candidate default is not a supported static literal"
+                    })),
+                }
+            }
+            if !maria_db_type_comparison {
+                unclassified_types.push(json!({
+                    "table": table_name,
+                    "column": physical_name,
+                    "zelyra_type": expected["zelyra_type"],
+                    "reason": "live driver has no matching type-equivalence rules"
+                }));
+                continue;
+            }
+            match expected_mariadb_type(expected) {
+                Some(expected_type) => {
+                    if let Some(actual_type) = actual["sql_type"].as_str() {
+                        if normalize_schema_type(actual_type)
+                            != normalize_schema_type(&expected_type)
+                        {
+                            differences.push(json!({
+                                "table": table_name,
+                                "column": physical_name,
+                                "kind": "sql_type_mismatch",
+                                "expected_type": expected_type,
+                                "actual_type": actual_type
+                            }));
+                        }
+                    }
+                }
+                None => unclassified_types.push(json!({
+                    "table": table_name,
+                    "column": physical_name,
+                    "zelyra_type": expected["zelyra_type"]
+                })),
+            }
         }
 
         for column_name in actual_columns.keys() {
@@ -358,10 +421,12 @@ pub(super) fn compare_candidates(live: &Value, generation: &Value) -> Value {
             let physical_name = physical_column_name(expected)
                 .unwrap_or_else(|| expected["name"].as_str().unwrap_or_default());
             let relation_table = expected["relation_table"].as_str().unwrap_or_default();
+            let relation_column = expected["relation_target_column"].as_str().unwrap_or("id");
             let delete_action = expected["on_delete"].as_str();
             let found = actual_foreign_keys.iter().any(|actual| {
                 actual["column"].as_str() == Some(physical_name)
                     && actual["referenced_table"].as_str() == Some(relation_table)
+                    && actual["referenced_column"].as_str() == Some(relation_column)
                     && delete_action.is_none_or(|expected_action| {
                         delete_action_matches(
                             expected_action,
@@ -375,6 +440,7 @@ pub(super) fn compare_candidates(live: &Value, generation: &Value) -> Value {
                     "column": physical_name,
                     "kind": "missing_or_different_live_foreign_key",
                     "expected_table": relation_table,
+                    "expected_column": relation_column,
                     "expected_on_delete": delete_action
                 }));
             }
@@ -395,9 +461,13 @@ pub(super) fn compare_candidates(live: &Value, generation: &Value) -> Value {
         "status": "completed",
         "comparison_scope": [
             "table_presence", "column_presence", "nullability", "primary_key",
-            "default_presence", "indexes", "uniques", "foreign_key_source_column_target_table_delete_action"
+            "default_presence", "known_static_default_value_equivalence",
+            "known_sql_type_equivalence", "indexes", "uniques",
+            "foreign_key_source_column_target_table_target_column_delete_action"
         ],
-        "not_compared": ["sql_type_equivalence", "default_value_equivalence", "foreign_key_target_column", "engine", "charset", "collation", "triggers"],
+        "not_compared": ["engine", "charset", "collation", "triggers"],
+        "unclassified_defaults": unclassified_defaults,
+        "unclassified_types": unclassified_types,
         "candidate_table_count": candidates.len(),
         "compared_table_count": compared_count,
         "missing_live_table_count": compared_tables.len().saturating_sub(compared_count),
@@ -406,6 +476,188 @@ pub(super) fn compare_candidates(live: &Value, generation: &Value) -> Value {
         "differences": differences,
         "unmodeled_live_tables": unmodeled_live_tables
     })
+}
+
+/// Remove live default literals after comparison so a schema report never
+/// discloses values that may contain credentials or other sensitive constants.
+pub(super) fn remove_private_comparison_values(live: &mut Value) {
+    for table in live["tables"].as_array_mut().into_iter().flatten() {
+        for column in table["columns"].as_array_mut().into_iter().flatten() {
+            if let Some(object) = column.as_object_mut() {
+                object.remove("_comparison_default_value");
+            }
+        }
+    }
+}
+
+fn expected_default_value(column: &Value) -> Option<String> {
+    let default = column["default"].as_str()?.strip_prefix("default ")?;
+    if default == "now" {
+        return Some("CURRENT_TIMESTAMP".into());
+    }
+    if default.starts_with('"') {
+        return serde_json::from_str::<String>(default).ok();
+    }
+    (default == "true" || default == "false" || default.parse::<i64>().is_ok())
+        .then(|| default.to_owned())
+}
+
+fn defaults_equivalent(column: &Value, expected: &str, actual: &str) -> bool {
+    match column["zelyra_type"].as_str() {
+        Some("Decimal") => {
+            if let (Some(expected), Some(actual)) =
+                (canonical_decimal(expected), canonical_decimal(actual))
+            {
+                return expected == actual;
+            }
+        }
+        Some("Time") => {
+            if let (Some(expected), Some(actual)) =
+                (canonical_time(expected), canonical_time(actual))
+            {
+                return expected == actual;
+            }
+        }
+        Some("Timestamp")
+            if matches!(
+                (
+                    expected.to_ascii_uppercase().as_str(),
+                    actual.to_ascii_uppercase().as_str()
+                ),
+                ("CURRENT_TIMESTAMP", "CURRENT_TIMESTAMP(3)")
+                    | ("CURRENT_TIMESTAMP(3)", "CURRENT_TIMESTAMP")
+                    | ("CURRENT_TIMESTAMP()", "CURRENT_TIMESTAMP(3)")
+                    | ("CURRENT_TIMESTAMP(3)", "CURRENT_TIMESTAMP()")
+            ) =>
+        {
+            return true;
+        }
+        _ => {}
+    }
+    let normalize = |value: &str| {
+        let trimmed = value.trim();
+        let upper = trimmed.to_ascii_uppercase();
+        match upper.as_str() {
+            "TRUE" | "FALSE" | "CURRENT_TIMESTAMP" => upper,
+            "CURRENT_TIMESTAMP()" => "CURRENT_TIMESTAMP".into(),
+            _ if upper
+                .strip_prefix("CURRENT_TIMESTAMP(")
+                .and_then(|value| value.strip_suffix(')'))
+                .is_some_and(|value| matches!(value, "0" | "1" | "2" | "3" | "4" | "5" | "6")) =>
+            {
+                upper
+            }
+            _ => trimmed.to_owned(),
+        }
+    };
+    let expected = normalize(expected);
+    let actual = normalize(actual);
+    expected == actual
+        || matches!(
+            (expected.as_str(), actual.as_str()),
+            ("1", "TRUE") | ("TRUE", "1")
+        )
+        || matches!(
+            (expected.as_str(), actual.as_str()),
+            ("0", "FALSE") | ("FALSE", "0")
+        )
+}
+
+fn canonical_decimal(value: &str) -> Option<String> {
+    let (negative, unsigned) = value
+        .strip_prefix('-')
+        .map_or((false, value), |unsigned| (true, unsigned));
+    let (integer, fraction) = unsigned.split_once('.').unwrap_or((unsigned, ""));
+    if integer.is_empty()
+        || !integer.bytes().all(|byte| byte.is_ascii_digit())
+        || !fraction.bytes().all(|byte| byte.is_ascii_digit())
+    {
+        return None;
+    }
+    let integer = integer.trim_start_matches('0');
+    let integer = if integer.is_empty() { "0" } else { integer };
+    let fraction = fraction.trim_end_matches('0');
+    let is_zero = integer == "0" && fraction.is_empty();
+    Some(format!(
+        "{}{}{}",
+        if negative && !is_zero { "-" } else { "" },
+        integer,
+        if fraction.is_empty() {
+            String::new()
+        } else {
+            format!(".{fraction}")
+        }
+    ))
+}
+
+fn canonical_time(value: &str) -> Option<String> {
+    let mut parts = value.split(':');
+    let hour = parts.next()?.parse::<u8>().ok()?;
+    let minute = parts.next()?.parse::<u8>().ok()?;
+    let second = parts.next().unwrap_or("0");
+    if parts.next().is_some() || hour > 23 || minute > 59 {
+        return None;
+    }
+    let (second, fraction) = second.split_once('.').unwrap_or((second, ""));
+    let second = second.parse::<u8>().ok()?;
+    if second > 59 || !fraction.bytes().all(|byte| byte.is_ascii_digit()) {
+        return None;
+    }
+    let fraction = fraction.trim_end_matches('0');
+    Some(format!(
+        "{hour:02}:{minute:02}:{second:02}{}",
+        if fraction.is_empty() {
+            String::new()
+        } else {
+            format!(".{fraction}")
+        }
+    ))
+}
+
+fn expected_mariadb_type(column: &Value) -> Option<String> {
+    let type_name = column["zelyra_type"].as_str()?;
+    if column["relation_status"] == "resolved" {
+        return Some("BIGINT".into());
+    }
+    let length = column["length"].as_u64();
+    let decimal = &column["decimal_precision"];
+    Some(match type_name {
+        "Id" | "Int" => "BIGINT".into(),
+        "UInt" => "DECIMAL(20,0)".into(),
+        "Float" => "DOUBLE".into(),
+        "Decimal" => match (decimal["precision"].as_u64(), decimal["scale"].as_u64()) {
+            (Some(precision), Some(scale)) => format!("DECIMAL({precision},{scale})"),
+            _ if decimal.is_null() => "DECIMAL(39,9)".into(),
+            _ => return None,
+        },
+        "Bool" => "BOOLEAN".into(),
+        "String" => length.map_or_else(|| "TEXT".into(), |length| format!("VARCHAR({length})")),
+        "Json" => "JSON".into(),
+        "Char" => "CHAR(1)".into(),
+        "Bytes" => "BLOB".into(),
+        "Timestamp" => "DATETIME(3)".into(),
+        "Date" => "DATE".into(),
+        "Time" => "TIME".into(),
+        "Duration" => "BIGINT".into(),
+        "Email" => "VARCHAR(255)".into(),
+        "Url" => "VARCHAR(2048)".into(),
+        "Uuid" => "CHAR(36)".into(),
+        _ => return None,
+    })
+}
+
+fn normalize_schema_type(value: &str) -> String {
+    let normalized = value
+        .chars()
+        .filter(|character| !character.is_ascii_whitespace() && *character != '`')
+        .flat_map(char::to_uppercase)
+        .collect::<String>();
+    match normalized.as_str() {
+        "NUMERIC(20,0)" => "DECIMAL(20,0)".into(),
+        "NUMERIC(39,9)" => "DECIMAL(39,9)".into(),
+        "NUMERIC" => "DECIMAL".into(),
+        other => other.to_owned(),
+    }
 }
 
 fn physical_column_name(column: &Value) -> Option<&str> {
@@ -836,7 +1088,7 @@ mod tests {
                 ],
                 "indexes": [{"columns":["customer_id"],"unique":false}],
                 "uniques": [{"columns":["email"]}],
-                "foreign_keys": [{"column":"customer_id","referenced_table":"customers","on_delete":"Restrict"}]
+                "foreign_keys": [{"column":"customer_id","referenced_table":"customers","referenced_column":"id","on_delete":"Restrict"}]
             }, {"name":"laravel_sessions","columns":[],"indexes":[],"uniques":[],"foreign_keys":[]}]
         });
 
@@ -897,11 +1149,166 @@ mod tests {
         assert!(differences
             .iter()
             .any(|difference| { difference["kind"] == "missing_or_different_live_foreign_key" }));
-        assert!(comparison["not_compared"]
+        assert!(comparison["comparison_scope"]
             .as_array()
             .unwrap()
             .iter()
-            .any(|item| item == "sql_type_equivalence"));
+            .any(|item| item == "known_static_default_value_equivalence"));
+    }
+
+    #[test]
+    fn compares_known_mariadb_types_and_foreign_key_target_columns() {
+        let generation = json!({"candidates":[{
+            "table":"orders",
+            "columns":[
+                {"name":"id","source_column_name":"id","zelyra_type":"Id","nullable":false,"primary_key":true,"default":null,"relation_status":"not_a_foreign_key"},
+                {"name":"amount","source_column_name":"amount","zelyra_type":"Decimal","decimal_precision":{"precision":12,"scale":2},"nullable":false,"primary_key":false,"default":null,"relation_status":"not_a_foreign_key"},
+                {"name":"customer","source_column_name":"customer_id","zelyra_type":"Customer","nullable":false,"primary_key":false,"default":null,"relation_status":"resolved","relation_table":"customers","relation_target_column":"customer_key","on_delete":"Restrict"},
+                {"name":"legacy","source_column_name":"legacy_id","zelyra_type":"LegacyIdentifier","nullable":true,"primary_key":false,"default":null,"relation_status":"not_a_foreign_key"}
+            ],
+            "indexes":[],"uniques":[]
+        }]});
+        let live = json!({"driver":"mariadb","tables":[{
+            "name":"orders",
+            "columns":[
+                {"name":"id","sql_type":"BIGINT","nullable":false,"primary_key":true,"default_present":false},
+                {"name":"amount","sql_type":"DECIMAL(12,2)","nullable":false,"primary_key":false,"default_present":false},
+                {"name":"customer_id","sql_type":"BIGINT","nullable":false,"primary_key":false,"default_present":false},
+                {"name":"legacy_id","sql_type":"VARCHAR(40)","nullable":true,"primary_key":false,"default_present":false}
+            ],
+            "indexes":[],"uniques":[],
+            "foreign_keys":[{"column":"customer_id","referenced_table":"customers","referenced_column":"id","on_delete":"Restrict"}]
+        }]});
+
+        let comparison = compare_candidates(&live, &generation);
+        let differences = comparison["differences"].as_array().unwrap();
+        assert!(differences.iter().any(|difference| {
+            difference["kind"] == "missing_or_different_live_foreign_key"
+                && difference["expected_column"] == "customer_key"
+        }));
+        assert!(!differences.iter().any(|difference| {
+            difference["kind"] == "sql_type_mismatch" && difference["column"] == "amount"
+        }));
+        assert_eq!(comparison["unclassified_types"][0]["column"], "legacy_id");
+        assert!(comparison["comparison_scope"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|item| item == "known_sql_type_equivalence"));
+    }
+
+    #[test]
+    fn reports_known_sql_type_mismatches_without_normalizing_precision_away() {
+        let generation = json!({"candidates":[{"table":"orders","columns":[{
+            "name":"amount","source_column_name":"amount","zelyra_type":"Decimal",
+            "decimal_precision":{"precision":12,"scale":2},"nullable":false,
+            "primary_key":false,"default":null,"relation_status":"not_a_foreign_key"
+        }],"indexes":[],"uniques":[]}]});
+        let live = json!({"driver":"mysql","tables":[{"name":"orders","columns":[{
+            "name":"amount","sql_type":"DECIMAL(12,4)","nullable":false,
+            "primary_key":false,"default_present":false
+        }],"indexes":[],"uniques":[],"foreign_keys":[]}]});
+
+        let comparison = compare_candidates(&live, &generation);
+        assert!(comparison["differences"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|difference| {
+                difference["kind"] == "sql_type_mismatch"
+                    && difference["expected_type"] == "DECIMAL(12,2)"
+                    && difference["actual_type"] == "DECIMAL(12,4)"
+            }));
+    }
+
+    #[test]
+    fn does_not_apply_mariadb_type_rules_to_sqlite_schema_metadata() {
+        let generation = json!({"candidates":[{"table":"orders","columns":[{
+            "name":"id","source_column_name":"id","zelyra_type":"Id",
+            "nullable":false,"primary_key":true,"default":null,
+            "relation_status":"not_a_foreign_key"
+        }],"indexes":[],"uniques":[]}]});
+        let live = json!({"driver":"sqlite","tables":[{"name":"orders","columns":[{
+            "name":"id","sql_type":"INTEGER","nullable":false,
+            "primary_key":true,"default_present":false
+        }],"indexes":[],"uniques":[],"foreign_keys":[]}]});
+
+        let comparison = compare_candidates(&live, &generation);
+        assert_eq!(comparison["difference_count"], 0);
+        assert_eq!(comparison["unclassified_types"][0]["column"], "id");
+        assert_eq!(
+            comparison["unclassified_types"][0]["reason"],
+            "live driver has no matching type-equivalence rules"
+        );
+    }
+
+    #[test]
+    fn compares_static_defaults_without_exposing_live_literals() {
+        let generation = json!({"candidates":[{"table":"orders","columns":[
+            {"name":"quantity","source_column_name":"quantity","zelyra_type":"Int","nullable":false,"primary_key":false,"default":"default 0","relation_status":"not_a_foreign_key"},
+            {"name":"active","source_column_name":"active","zelyra_type":"Bool","nullable":false,"primary_key":false,"default":"default true","relation_status":"not_a_foreign_key"},
+            {"name":"status","source_column_name":"status","zelyra_type":"String","nullable":false,"primary_key":false,"default":"default \"draft\"","relation_status":"not_a_foreign_key"},
+            {"name":"issued_at","source_column_name":"issued_at","zelyra_type":"Timestamp","nullable":false,"primary_key":false,"default":"default now","relation_status":"not_a_foreign_key"}
+        ],"indexes":[],"uniques":[]}]});
+        let mut live = json!({"driver":"mariadb","tables":[{"name":"orders","columns":[
+            {"name":"quantity","nullable":false,"primary_key":false,"default_present":true,"_comparison_default_value":"0"},
+            {"name":"active","nullable":false,"primary_key":false,"default_present":true,"_comparison_default_value":"1"},
+            {"name":"status","nullable":false,"primary_key":false,"default_present":true,"_comparison_default_value":"draft"},
+            {"name":"issued_at","nullable":false,"primary_key":false,"default_present":true,"_comparison_default_value":"CURRENT_TIMESTAMP(3)"}
+        ],"indexes":[],"uniques":[],"foreign_keys":[]}]});
+
+        let comparison = compare_candidates(&live, &generation);
+        assert_eq!(comparison["difference_count"], 0);
+        remove_private_comparison_values(&mut live);
+        let serialized = serde_json::to_string(&live).unwrap();
+        assert!(!serialized.contains("draft"));
+        assert!(!serialized.contains("CURRENT_TIMESTAMP"));
+        assert!(!serialized.contains("_comparison_default_value"));
+    }
+
+    #[test]
+    fn reports_static_default_mismatches_and_marks_dynamic_defaults_unclassified() {
+        let generation = json!({"candidates":[{"table":"orders","columns":[
+            {"name":"status","source_column_name":"status","zelyra_type":"String","nullable":false,"primary_key":false,"default":"default \"draft\"","relation_status":"not_a_foreign_key"},
+            {"name":"computed","source_column_name":"computed","zelyra_type":"String","nullable":false,"primary_key":false,"default":"default env(\"VALUE\")","relation_status":"not_a_foreign_key"}
+        ],"indexes":[],"uniques":[]}]});
+        let live = json!({"driver":"mysql","tables":[{"name":"orders","columns":[
+            {"name":"status","nullable":false,"primary_key":false,"default_present":true,"_comparison_default_value":"sent"},
+            {"name":"computed","nullable":false,"primary_key":false,"default_present":true,"_comparison_default_value":"secret-live-value"}
+        ],"indexes":[],"uniques":[],"foreign_keys":[]}]});
+
+        let comparison = compare_candidates(&live, &generation);
+        assert_eq!(comparison["difference_count"], 1);
+        assert_eq!(
+            comparison["differences"][0]["kind"],
+            "default_value_mismatch"
+        );
+        assert_eq!(comparison["unclassified_defaults"][0]["column"], "computed");
+        let report = serde_json::to_string(&comparison).unwrap();
+        assert!(!report.contains("sent"));
+        assert!(!report.contains("secret-live-value"));
+        assert!(!report.contains("draft"));
+    }
+
+    #[test]
+    fn compares_numeric_defaults_using_the_declared_decimal_and_time_types() {
+        let decimal = json!({"zelyra_type":"Decimal"});
+        assert!(defaults_equivalent(&decimal, "0", "0.00"));
+        assert!(defaults_equivalent(&decimal, "0012.9000", "12.9"));
+        assert!(defaults_equivalent(&decimal, "-0.000", "0"));
+        assert!(!defaults_equivalent(&decimal, "12.90", "12.91"));
+
+        let time = json!({"zelyra_type":"Time"});
+        assert!(defaults_equivalent(&time, "09:30", "09:30:00"));
+        assert!(defaults_equivalent(&time, "9:30:00.1200", "09:30:00.12"));
+        assert!(!defaults_equivalent(&time, "09:30", "09:31:00"));
+
+        let timestamp = json!({"zelyra_type":"Timestamp"});
+        assert!(defaults_equivalent(
+            &timestamp,
+            "CURRENT_TIMESTAMP",
+            "CURRENT_TIMESTAMP(3)"
+        ));
     }
 
     #[test]

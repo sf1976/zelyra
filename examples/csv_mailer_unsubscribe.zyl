@@ -1,0 +1,55 @@
+database main {
+    engine: mariadb
+}
+
+table csv_mailer_suppressions {
+    id: Id primary auto
+    email: String(255) required
+    token_hash: String(64) required unique
+    unsubscribed_at: Timestamp?
+}
+
+// A GET verifies the opaque route token with a read-only query before the
+// confirmation form is rendered. The raw token is never stored or interpolated
+// into SQL; :token is bound as a prepared string parameter.
+form CsvMailerUnsubscribe -> csv_mailer_suppressions {
+    route: "/csv-mailer/abmelden/{token}"
+    verify sql<Int[]> {
+        SELECT id
+        FROM csv_mailer_suppressions
+        WHERE token_hash = SHA2(:token, 256)
+    }
+
+    action unsubscribe {
+        require_match
+        label: "Abmelden"
+        confirm_page {
+            title: "E-Mail-Abmeldung bestätigen"
+            message: "Möchtest du den Newsletter wirklich abbestellen?"
+            submit: "Abmelden"
+        }
+        success "Du wurdest vom E-Mail-Versand abgemeldet."
+        redirect "/csv-mailer/abgemeldet"
+        sql<Int[]> {
+            SELECT id
+            FROM csv_mailer_suppressions
+            WHERE token_hash = SHA2(:token, 256)
+        }
+        sql {
+            UPDATE csv_mailer_suppressions
+            SET unsubscribed_at = COALESCE(unsubscribed_at, CURRENT_TIMESTAMP)
+            WHERE token_hash = SHA2(:token, 256)
+        }
+    }
+}
+
+page "/csv-mailer/abgemeldet" {
+    html {
+        <main class="z-container">
+            <h1>Abmeldung gespeichert</h1>
+            <p>Deine Abmeldung wurde verarbeitet.</p>
+        </main>
+    }
+}
+
+fn main() {}

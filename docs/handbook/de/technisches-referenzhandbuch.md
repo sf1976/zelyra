@@ -942,6 +942,62 @@ zelyra form validate examples/customer_form.zyl CustomerCreate \
 
 Mit `zelyra serve` stellt Zelyra das Formular unter `/forms/FormName` bereit.
 GET rendert das Formular samt CSRF-Token; POST prüft Token und Werte.
+Standalone-Formulare können die URL mit `route: "/kontakt"` überschreiben.
+Eine Route kann auch ein Segment erfassen, zum Beispiel
+`route: "/abmelden/{token}"`; der erfasste Wert steht SQL-Aktionen als
+gleichnamiger gebundener Parameter zur Verfügung (ganzzahlig wirkende Werte
+werden als Integer, andere als Strings gebunden). Die Route muss ein absoluter
+lokaler Pfad sein. Query-Strings, Fragmente, kodierte Pfade, doppelte
+Parameter, ungültige Segmente und Kollisionen mit anderen Routen werden
+abgewiesen. GET rendert das Formular weiterhin regulär; POST behält CSRF- und
+Validierungsprüfungen.
+
+Für opake Routentokens kann ein Standalone-Formular den Token beim GET prüfen
+und im POST innerhalb derselben Transaktion nochmals einen Treffer verlangen,
+bevor spätere Anweisungen ausgeführt werden:
+
+~~~zelyra
+form Abmeldung -> suppressions {
+    route: "/abmelden/{token}"
+    verify sql<Int[]> {
+        SELECT id FROM suppressions WHERE token_hash = SHA2(:token, 256)
+    }
+
+    action unsubscribe {
+        require_match
+        confirm_page {
+            title: "Abmeldung bestätigen"
+            message: "Möchtest du diese E-Mails abbestellen?"
+            submit: "Abmelden"
+        }
+        sql<Int[]> {
+            SELECT id FROM suppressions WHERE token_hash = SHA2(:token, 256)
+        }
+        sql {
+            UPDATE suppressions
+            SET unsubscribed_at = COALESCE(unsubscribed_at, CURRENT_TIMESTAMP)
+            WHERE token_hash = SHA2(:token, 256)
+        }
+        redirect "/abgemeldet"
+    }
+}
+~~~
+
+`verify` akzeptiert nur ein compilergeprüftes `SELECT` und führt es vor dem
+Rendern des Formulars in einer schreibgeschützten Transaktion aus. Erfasste
+Routenwerte werden gebunden; ohne Treffer folgt HTTP 404. Verifizierte
+Token-Seiten erhalten `Cache-Control: no-store`. `require_match` gilt nur für
+direkte SQL-Formularaktionen: Die erste Anweisung muss ein `SELECT` sein und
+wird in derselben Transaktion wie die folgenden Anweisungen ausgeführt. Gibt
+die Abfrage keine Zeile zurück, folgt HTTP 404 und kein Schreibzugriff. Damit
+sind idempotente Aktionen möglich, wenn auch das folgende SQL idempotent
+formuliert ist; es entsteht keine allgemeine Workflow-Engine. Ein Formular mit
+`post_only` besitzt keine GET-Formularroute; eine Seite am selben Pfad übernimmt
+GET und muss ihre Daten selbst prüfen. Deshalb darf ein solches Formular kein
+`verify` deklarieren. Ein ausführbares MariaDB-Beispiel liegt in
+[`examples/csv_mailer_unsubscribe.zyl`](../../examples/csv_mailer_unsubscribe.zyl),
+der isolierte Datenbank-/Browserablauf in
+[`tests/mariadb-form-route-e2e.sh`](../../tests/mariadb-form-route-e2e.sh).
 
 Eine Aktion:
 

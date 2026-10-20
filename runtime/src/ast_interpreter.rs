@@ -166,6 +166,7 @@ impl<'program, 'services> AstInterpreter<'program, 'services> {
             ("Email".into(), Type::String),
             ("Url".into(), Type::String),
             ("Uuid".into(), Type::String),
+            ("FileRef".into(), Type::String),
         ]);
         aliases.retain(|name, _| {
             !self.record_definitions.contains_key(name) && !self.enum_definitions.contains_key(name)

@@ -144,7 +144,17 @@ fn compile_function(
             );
         }
         for instruction in &block.instructions {
+            let first_instruction = compiler.code.len();
+            let source_span = mir_instruction_source_span(instruction, program);
             compiler.instruction(instruction)?;
+            if let (Some(span), Some(first)) =
+                (source_span, compiler.code.get_mut(first_instruction))
+            {
+                // Charge the first emitted VM operation to the source-level
+                // MIR instruction. Later operations retain expression spans,
+                // so runtime failures still point at the specific operator.
+                first.span = span;
+            }
         }
         compiler.terminator(block.terminator.as_ref(), block.id, block.span)?;
     }
@@ -651,6 +661,21 @@ struct FunctionCompiler<'a> {
     generated_locals: Vec<LocalId>,
     next_generated_index: &'a mut usize,
     generated_functions: &'a mut Vec<BytecodeFunction>,
+}
+
+fn mir_instruction_source_span(instruction: &MirInstruction, program: &MirProgram) -> Option<Span> {
+    Some(match instruction {
+        MirInstruction::IteratorInit { span, .. }
+        | MirInstruction::MatchInit { span, .. }
+        | MirInstruction::Let { span, .. }
+        | MirInstruction::Assign { span, .. }
+        | MirInstruction::ArrayIndexAssign { span, .. }
+        | MirInstruction::TupleBind { span, .. }
+        | MirInstruction::Transaction { span, .. }
+        | MirInstruction::Parallel { span, .. }
+        | MirInstruction::LoopInvariantCheck { span, .. } => *span,
+        MirInstruction::Evaluate(expression) => program.expressions.get(expression.0)?.span,
+    })
 }
 
 impl FunctionCompiler<'_> {

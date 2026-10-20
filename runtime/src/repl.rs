@@ -10,8 +10,16 @@ const REPL_SESSION_TYPE: &str = "__ZelyraReplSessionContext";
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum ReplError {
-    Parse { message: String, span: Span },
+    Parse {
+        message: String,
+        span: Span,
+    },
     Type(TypeError),
+    Backend {
+        code: String,
+        message: String,
+        span: Span,
+    },
     Runtime(RuntimeError),
     Session(String),
 }
@@ -34,6 +42,15 @@ impl std::fmt::Display for ReplError {
                 "error[E-RUNTIME-001]\n  --> {}:{}: {}",
                 error.span.line, error.span.column, error.message
             ),
+            Self::Backend {
+                code,
+                message,
+                span,
+            } => write!(
+                formatter,
+                "error[{code}]\n  --> {}:{}: {message}",
+                span.line, span.column
+            ),
             Self::Session(message) => write!(formatter, "error[E-REPL-001]: {message}"),
         }
     }
@@ -45,6 +62,20 @@ pub struct ReplEvaluation {
     pub value: Option<Value>,
     /// Output produced by Zelyra print/output builtins during evaluation.
     pub output: Vec<String>,
+}
+
+/// Inputs needed by a REPL execution backend after the shared parser,
+/// typechecker, persistent-scope construction, and savepoint setup have run.
+/// Backends must preserve the supplied grants, policy, and optional
+/// caller-owned transaction.
+pub struct ReplExecutionContext<'a> {
+    pub program: &'a Program,
+    pub function_name: &'a str,
+    pub arguments: Vec<Value>,
+    pub database_url: Option<&'a str>,
+    pub grants: Option<&'a HashSet<String>>,
+    pub policy: Option<&'a RuntimePolicy>,
+    pub transaction: Option<Arc<Mutex<zelyra_database::MariaDbInteractiveTransaction>>>,
 }
 
 #[derive(Clone, Debug)]
@@ -65,6 +96,7 @@ pub struct ReplSession {
     grants: Option<HashSet<String>>,
     policy: Option<RuntimePolicy>,
     transaction: Option<Arc<Mutex<zelyra_database::MariaDbInteractiveTransaction>>>,
+    transaction_poisoned: bool,
     sandbox: bool,
     session_type_name: String,
     function_sequence: u64,
@@ -133,6 +165,7 @@ impl ReplSession {
             grants,
             policy,
             transaction,
+            transaction_poisoned: false,
             sandbox,
             session_type_name,
             function_sequence: 0,
@@ -140,6 +173,49 @@ impl ReplSession {
     }
 
     pub fn eval_line(&mut self, input: &str) -> Result<ReplEvaluation, ReplError> {
+        self.eval_line_with_executor(input, |context| {
+            let outcome = if let (Some(url), Some(transaction)) =
+                (context.database_url, context.transaction)
+            {
+                execute_function_captured_with_mariadb_transaction(
+                    context.program,
+                    context.function_name,
+                    context.arguments,
+                    url,
+                    context.grants,
+                    context.policy,
+                    transaction,
+                )
+            } else {
+                execute_function_captured_with_capabilities_and_policies(
+                    context.program,
+                    context.function_name,
+                    context.arguments,
+                    context.database_url,
+                    context.grants,
+                    context.policy,
+                )
+            };
+            Ok(outcome)
+        })
+    }
+
+    /// Evaluate one input through the shared REPL frontend and a caller-chosen
+    /// backend. Compiler, persistent-scope, savepoint, recovery, and output
+    /// handling remain shared with the AST REPL.
+    pub fn eval_line_with_executor<F>(
+        &mut self,
+        input: &str,
+        execute: F,
+    ) -> Result<ReplEvaluation, ReplError>
+    where
+        F: FnOnce(ReplExecutionContext<'_>) -> Result<FunctionExecutionOutcome, ReplError>,
+    {
+        if self.transaction_poisoned {
+            return Err(ReplError::Session(
+                "sandbox transaction state is uncertain after a savepoint failure; close the console so the transaction can be rolled back".into(),
+            ));
+        }
         let parsed = parse_input(input)?;
         let parsed_function = parsed.functions.first().ok_or_else(|| {
             ReplError::Session("the REPL input did not produce a function body".into())
@@ -167,7 +243,8 @@ impl ReplSession {
         let mut params = Vec::with_capacity(existing.len());
         let mut prefix = Vec::with_capacity(existing.len());
         let mut arguments = Vec::with_capacity(existing.len());
-        let span = Span::default();
+        let mut generated_span_index = 0;
+        let span = next_repl_span(&mut generated_span_index);
         for (index, (name, binding)) in existing.iter().enumerate() {
             let argument = format!("__zelyra_repl_arg_{index}");
             params.push(Param {
@@ -180,7 +257,7 @@ impl ReplSession {
                 ty: Some(binding.ty.clone()),
                 value: Expr {
                     kind: ExprKind::Variable(argument),
-                    span,
+                    span: next_repl_span(&mut generated_span_index),
                 },
                 mutable: binding.mutable,
                 span,
@@ -199,13 +276,18 @@ impl ReplSession {
         output_names.sort();
 
         prefix.append(&mut statements);
-        let mut return_values = output_names
+        let binding_spans = (0..output_names.len())
+            .map(|_| next_repl_span(&mut generated_span_index))
+            .collect::<Vec<_>>();
+        let binding_expressions = output_names
             .iter()
-            .map(|name| Expr {
+            .zip(binding_spans.iter().copied())
+            .map(|(name, span)| Expr {
                 kind: ExprKind::Variable(name.clone()),
                 span,
             })
             .collect::<Vec<_>>();
+        let mut return_values = binding_expressions.clone();
         let has_result = last_expression.is_some();
         if let Some(expression) = last_expression {
             return_values.push(expression);
@@ -263,67 +345,226 @@ impl ReplSession {
             .retain(|existing| existing.name != function_name);
         program.functions.push(function);
 
+        let inferred = match check_with_inferred_types(&program) {
+            Ok(inferred) => inferred,
+            Err(mut errors) => {
+                let error = errors.drain(..).next().expect("non-empty type diagnostics");
+                return Err(ReplError::Type(remap_input_type_error(error)));
+            }
+        };
+        let mut result_record_name = None;
+        let mut result_field_name = None;
+        if !output_names.is_empty() {
+            let fields = output_names
+                .iter()
+                .zip(binding_spans.iter())
+                .map(|(name, binding_span)| {
+                    let ty = inferred
+                        .iter()
+                        .find(|expression| expression.span == *binding_span)
+                        .map(|expression| expression.ty.clone())
+                        .ok_or_else(|| {
+                            ReplError::Session(format!(
+                                "the typechecker did not return the type of REPL binding `{name}`"
+                            ))
+                        })?;
+                    Ok(RecordField {
+                        name: name.clone(),
+                        ty,
+                        span: *binding_span,
+                    })
+                })
+                .collect::<Result<Vec<_>, ReplError>>()?;
+            let mut record_name = "__ZelyraReplBindings".to_owned();
+            let existing_record_names = program
+                .records
+                .iter()
+                .map(|record| record.name.as_str())
+                .collect::<HashSet<_>>();
+            let mut suffix = 0_u64;
+            while existing_record_names.contains(record_name.as_str()) {
+                suffix = suffix.saturating_add(1);
+                record_name = format!("__ZelyraReplBindings_{suffix}");
+            }
+            let result_field = if has_result {
+                let mut candidate = "__zelyra_repl_result".to_owned();
+                while output_names.contains(&candidate) {
+                    candidate.push('_');
+                }
+                let expression = parsed_function
+                    .body
+                    .statements
+                    .last()
+                    .and_then(|statement| match statement {
+                        Stmt::Expr(expression) => Some(expression),
+                        _ => None,
+                    })
+                    .ok_or_else(|| {
+                        ReplError::Session("REPL result expression is missing".into())
+                    })?;
+                let ty = inferred
+                    .iter()
+                    .find(|inferred| inferred.span == expression.span)
+                    .map(|inferred| inferred.ty.clone())
+                    .ok_or_else(|| {
+                        ReplError::Session(
+                            "the typechecker did not return the REPL result type".into(),
+                        )
+                    })?;
+                program.records.push(RecordDef {
+                    name: record_name.clone(),
+                    is_public: false,
+                    is_class: false,
+                    type_params: Vec::new(),
+                    fields: {
+                        let mut fields = fields;
+                        fields.push(RecordField {
+                            name: candidate.clone(),
+                            ty,
+                            span: expression.span,
+                        });
+                        fields
+                    },
+                    span,
+                });
+                result_field_name = Some(candidate);
+                Some(expression.clone())
+            } else {
+                program.records.push(RecordDef {
+                    name: record_name.clone(),
+                    is_public: false,
+                    is_class: false,
+                    type_params: Vec::new(),
+                    fields,
+                    span,
+                });
+                None
+            };
+            let mut fields = output_names
+                .iter()
+                .map(|name| {
+                    (
+                        name.clone(),
+                        Expr {
+                            kind: ExprKind::Variable(name.clone()),
+                            span: next_repl_span(&mut generated_span_index),
+                        },
+                    )
+                })
+                .collect::<Vec<_>>();
+            if let (Some(field_name), Some(expression)) = (&result_field_name, result_field) {
+                fields.push((field_name.clone(), expression));
+            }
+            let record_expression = Expr {
+                kind: ExprKind::Record {
+                    type_name: record_name.clone(),
+                    type_args: Vec::new(),
+                    fields,
+                },
+                span: next_repl_span(&mut generated_span_index),
+            };
+            let return_statement = program
+                .functions
+                .iter_mut()
+                .find(|function| function.name == function_name)
+                .and_then(|function| function.body.statements.last_mut())
+                .ok_or_else(|| ReplError::Session("generated REPL return is missing".into()))?;
+            match return_statement {
+                Stmt::Return { value, .. } => *value = Some(record_expression),
+                _ => {
+                    return Err(ReplError::Session(
+                        "generated REPL return is invalid".into(),
+                    ))
+                }
+            }
+            result_record_name = Some(record_name);
+        }
         if let Err(mut errors) = check(&program) {
             let error = errors.drain(..).next().expect("non-empty type diagnostics");
             return Err(ReplError::Type(remap_input_type_error(error)));
         }
 
         if let Some(transaction) = &self.transaction {
-            transaction
+            if let Err(error) = transaction
                 .lock()
                 .map_err(|_| ReplError::Session("sandbox transaction is unavailable".into()))?
                 .begin_input()
-                .map_err(|error| {
-                    ReplError::Session(format!("cannot begin input transaction: {error}"))
-                })?;
+            {
+                self.transaction_poisoned = true;
+                return Err(ReplError::Session(format!(
+                    "cannot begin input transaction; close the console to roll back the sandbox: {error}"
+                )));
+            }
         }
 
-        let outcome = if let (Some(url), Some(transaction)) =
-            (self.database_url.as_deref(), self.transaction.clone())
-        {
-            execute_function_captured_with_mariadb_transaction(
-                &program,
-                &function_name,
-                arguments,
-                url,
-                self.grants.as_ref(),
-                self.policy.as_ref(),
-                transaction.clone(),
-            )
-        } else {
-            execute_function_captured_with_capabilities_and_policies(
-                &program,
-                &function_name,
-                arguments,
-                self.database_url.as_deref(),
-                self.grants.as_ref(),
-                self.policy.as_ref(),
-            )
-        };
+        let outcome = execute(ReplExecutionContext {
+            program: &program,
+            function_name: &function_name,
+            arguments,
+            database_url: self.database_url.as_deref(),
+            grants: self.grants.as_ref(),
+            policy: self.policy.as_ref(),
+            transaction: self.transaction.clone(),
+        })?;
 
         if let Some(error) = outcome.error {
             if let Some(transaction) = &self.transaction {
-                let _ = transaction
+                let rollback = transaction
                     .lock()
                     .map_err(|_| ReplError::Session("sandbox transaction is unavailable".into()))?
                     .rollback_input();
+                if let Err(rollback_error) = rollback {
+                    self.transaction_poisoned = true;
+                    return Err(ReplError::Session(format!(
+                        "evaluation failed: {}; input rollback also failed: {}; close the console so the outer transaction can be rolled back",
+                        remap_input_runtime_error(error), rollback_error
+                    )));
+                }
             }
             return Err(ReplError::Runtime(remap_input_runtime_error(error)));
         }
         if let Some(transaction) = &self.transaction {
-            transaction
+            if let Err(error) = transaction
                 .lock()
                 .map_err(|_| ReplError::Session("sandbox transaction is unavailable".into()))?
                 .finish_input()
-                .map_err(|error| {
-                    ReplError::Session(format!("cannot finish input transaction: {error}"))
-                })?;
+            {
+                self.transaction_poisoned = true;
+                return Err(ReplError::Session(format!(
+                    "cannot finish input savepoint; close the console to roll back the sandbox: {error}"
+                )));
+            }
         }
 
-        let tuple = match outcome.value.unwrap_or(Value::Unit) {
-            Value::Tuple(values) => values,
-            Value::Unit if output_names.is_empty() && !has_result => Vec::new(),
-            value => vec![value],
+        let tuple = match (
+            result_record_name.as_deref(),
+            outcome.value.unwrap_or(Value::Unit),
+        ) {
+            (
+                Some(expected),
+                Value::Object {
+                    type_name, fields, ..
+                },
+            ) if type_name == expected => {
+                let mut values = output_names
+                    .iter()
+                    .map(|name| {
+                        fields.get(name).cloned().ok_or_else(|| {
+                            ReplError::Session(format!(
+                                "interpreter omitted persistent REPL binding `{name}`"
+                            ))
+                        })
+                    })
+                    .collect::<Result<Vec<_>, _>>()?;
+                if let Some(result_field) = &result_field_name {
+                    values.push(fields.get(result_field).cloned().ok_or_else(|| {
+                        ReplError::Session("interpreter omitted the REPL result value".into())
+                    })?);
+                }
+                values
+            }
+            (_, Value::Unit) if output_names.is_empty() && !has_result => Vec::new(),
+            (_, value) => vec![value],
         };
         if tuple.len() < output_names.len() {
             return Err(ReplError::Session(
@@ -458,31 +699,49 @@ impl ReplSession {
     }
 
     pub fn commit(&mut self) -> Result<(), ReplError> {
+        if self.transaction_poisoned {
+            return Err(ReplError::Session(
+                "sandbox transaction state is uncertain; close the console to roll it back".into(),
+            ));
+        }
         let Some(transaction) = &self.transaction else {
             return Err(ReplError::Session(
                 ":commit is available only in sandbox mode with a configured MariaDB database"
                     .into(),
             ));
         };
-        transaction
+        let result = transaction
             .lock()
             .map_err(|_| ReplError::Session("sandbox transaction is unavailable".into()))?
             .commit()
-            .map_err(|error| ReplError::Session(format!("commit failed: {error}")))
+            .map_err(|error| ReplError::Session(format!("commit failed: {error}")));
+        if result.is_err() {
+            self.transaction_poisoned = true;
+        }
+        result
     }
 
     pub fn rollback(&mut self) -> Result<(), ReplError> {
+        if self.transaction_poisoned {
+            return Err(ReplError::Session(
+                "sandbox transaction state is uncertain; close the console so the connection is discarded".into(),
+            ));
+        }
         let Some(transaction) = &self.transaction else {
             return Err(ReplError::Session(
                 ":rollback is available only in sandbox mode with a configured MariaDB database"
                     .into(),
             ));
         };
-        transaction
+        let result = transaction
             .lock()
             .map_err(|_| ReplError::Session("sandbox transaction is unavailable".into()))?
             .rollback()
-            .map_err(|error| ReplError::Session(format!("rollback failed: {error}")))
+            .map_err(|error| ReplError::Session(format!("rollback failed: {error}")));
+        if result.is_err() {
+            self.transaction_poisoned = true;
+        }
+        result
     }
 
     pub fn is_sandbox(&self) -> bool {
@@ -536,6 +795,17 @@ fn repl_capabilities(grants: Option<&HashSet<String>>) -> Vec<String> {
     {
         capabilities.push("Database".into());
     }
+    // The bytecode verifier checks SQL's read/write effects against the
+    // function's declared capabilities exactly. A project-level `database`
+    // grant is the broad grant, so expose both SQL effects to this generated
+    // REPL wrapper; runtime policy still enforces the configured grants.
+    if grants.is_none_or(|grants| grants.contains("Database")) {
+        for capability in ["Database(read)", "Database(write)"] {
+            if !capabilities.iter().any(|declared| declared == capability) {
+                capabilities.push(capability.into());
+            }
+        }
+    }
     capabilities
 }
 
@@ -564,6 +834,19 @@ fn parse_input(input: &str) -> Result<Program, ReplError> {
         message: error.message,
         span: input_span(error.span),
     })
+}
+
+fn next_repl_span(index: &mut usize) -> Span {
+    let current = *index;
+    *index = index.saturating_add(1);
+    let start = (usize::MAX / 2).saturating_add(current.saturating_mul(2));
+    Span {
+        start,
+        end: start.saturating_add(1),
+        line: 1,
+        column: current.saturating_add(1),
+        source_id: u32::MAX,
+    }
 }
 
 fn input_span(mut span: Span) -> Span {
@@ -763,11 +1046,15 @@ mod tests {
         let read_capabilities = repl_capabilities(Some(&read_only));
         assert!(read_capabilities.contains(&"Database".to_owned()));
         assert!(read_capabilities.contains(&"Database(read)".to_owned()));
+        assert!(!read_capabilities.contains(&"Database(write)".to_owned()));
 
         let unrelated = HashSet::from(["Console".to_owned()]);
         let other_capabilities = repl_capabilities(Some(&unrelated));
         assert!(!other_capabilities.contains(&"Database".to_owned()));
-        assert_eq!(repl_capabilities(None), ["Database"]);
+        let unrestricted = repl_capabilities(None);
+        assert!(unrestricted.contains(&"Database".to_owned()));
+        assert!(unrestricted.contains(&"Database(read)".to_owned()));
+        assert!(unrestricted.contains(&"Database(write)".to_owned()));
     }
 
     #[test]
@@ -775,6 +1062,38 @@ mod tests {
         let mut session = session();
         assert!(session.eval_line("1 / 0").is_err());
         let result = session.eval_line("\"weiter\"").expect("evaluate next line");
+        assert_eq!(result.value, Some(Value::String("weiter".into())));
+    }
+
+    #[test]
+    fn uncertain_sandbox_transaction_fails_closed_for_later_inputs() {
+        let mut session = session();
+        session.transaction_poisoned = true;
+
+        let error = session
+            .eval_line("1 + 1")
+            .expect_err("an uncertain transaction must not execute more input");
+        assert!(error.to_string().contains("transaction state is uncertain"));
+    }
+
+    #[test]
+    fn contract_violation_does_not_poison_the_next_input() {
+        let program = parse(
+            &lex("fn main() {}\nfn invalid_result() -> Int ensures { result > 0 } { return 0 }\n")
+                .expect("lex project"),
+        )
+        .expect("parse project");
+        let mut session = ReplSession::new(program, None, None, None, true)
+            .expect("start REPL with contract-bearing function");
+
+        let error = session
+            .eval_line("invalid_result()")
+            .expect_err("failed postcondition is reported to the current input");
+        assert!(error.to_string().contains("postcondition failed"));
+
+        let result = session
+            .eval_line("\"weiter\"")
+            .expect("evaluate next input after contract violation");
         assert_eq!(result.value, Some(Value::String("weiter".into())));
     }
 

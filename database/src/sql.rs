@@ -268,6 +268,15 @@ pub fn check_program(program: &zelyra_ast::Program, schema: &Schema) -> Result<(
         });
         for action in &form.actions {
             let mut environment = HashMap::new();
+            if let Some(route) = form.path.as_deref() {
+                for name in route.split('/').filter_map(|segment| {
+                    segment
+                        .strip_prefix('{')
+                        .and_then(|name| name.strip_suffix('}'))
+                }) {
+                    environment.insert(name.to_owned(), Type::String);
+                }
+            }
             for field in &form.fields {
                 let field_type = field.ty.clone().or_else(|| {
                     source_table.and_then(|table| {
@@ -1035,7 +1044,7 @@ fn result_types_compatible(expected: &Type, actual: &Type) -> bool {
     match expected {
         Type::Named(name) if actual == &Type::Int => name.to_ascii_lowercase().ends_with("id"),
         Type::Named(name) if actual == &Type::String => {
-            matches!(name.as_str(), "Email" | "Url" | "Uuid")
+            matches!(name.as_str(), "Email" | "Url" | "Uuid" | "FileRef")
         }
         Type::Option(inner) => result_types_compatible(inner, actual),
         _ => false,
@@ -1274,10 +1283,13 @@ fn sql_types_compatible(expected: &Type, actual: &Type) -> bool {
     match actual {
         Type::Named(name) if expected == &Type::Int => {
             name.to_ascii_lowercase().ends_with("id")
-                || !matches!(name.as_str(), "Email" | "Url" | "Uuid" | "Money")
+                || !matches!(
+                    name.as_str(),
+                    "Email" | "Url" | "Uuid" | "Money" | "FileRef"
+                )
         }
         Type::Named(name) if expected == &Type::String => {
-            matches!(name.as_str(), "Email" | "Url" | "Uuid")
+            matches!(name.as_str(), "Email" | "Url" | "Uuid" | "FileRef")
         }
         Type::Option(inner) => sql_types_compatible(expected, inner),
         _ => false,

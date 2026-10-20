@@ -122,6 +122,8 @@ page "/items" {
 | `zelyra check <file.zyl>` | `[--format json]` | Statically checks syntax, types, contracts, and capabilities |
 | `zelyra run <file.zyl>` | | Compiles and executes a Zelyra program |
 | `zelyra console [entry.zyl]` | `[--sandbox|--persist] [--tenant <id>]` | Starts the interactive AST language console; MariaDB/MySQL writes roll back by default |
+| `zelyra files backup [entry.zyl]` | `--output <new-directory>` | Backs up private Zelyra file storage and manifests; excludes database, configuration, and secrets |
+| `zelyra files restore [entry.zyl]` | `--from <directory> --apply` | Verifies checksums before restore; restore the database separately first and stop Zelyra servers |
 | `zelyra db console [file.zyl]` | | Starts the native database client with project credentials |
 | `zelyra db query <file.zyl> <SQL>` | `[--format table|json|csv]` | Runs a checked query read-only by default |
 | `zelyra serve <file.zyl>` | `[host:port]` | Starts the built-in HTTP web server |

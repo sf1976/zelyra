@@ -879,6 +879,60 @@ zelyra form validate examples/customer_form.zyl CustomerCreate \
 
 With `zelyra serve`, Zelyra exposes a form at `/forms/FormName`. GET renders a
 CSRF token; POST checks the token and validates the submitted values.
+Standalone forms may override that URL with `route: "/contact"`. A route may
+also capture one segment, for example `route: "/unsubscribe/{token}"`;
+captured values are available to SQL actions as same-named bound parameters
+(integer-shaped values bind as integers, other values as strings). The route
+must be an absolute local path. Query strings, fragments, encoded paths,
+duplicate parameters, malformed segments, and collisions with other routes
+are rejected. GET still renders the form normally, and POST retains the
+standard CSRF and validation checks.
+
+For an opaque, one-time route token, a standalone form can verify it on GET and
+require a matching row again inside the POST transaction before any later
+statement is executed:
+
+~~~zelyra
+form Unsubscribe -> suppressions {
+    route: "/unsubscribe/{token}"
+    verify sql<Int[]> {
+        SELECT id FROM suppressions WHERE token_hash = SHA2(:token, 256)
+    }
+
+    action unsubscribe {
+        require_match
+        confirm_page {
+            title: "Confirm unsubscribe"
+            message: "Stop these emails?"
+            submit: "Unsubscribe"
+        }
+        sql<Int[]> {
+            SELECT id FROM suppressions WHERE token_hash = SHA2(:token, 256)
+        }
+        sql {
+            UPDATE suppressions
+            SET unsubscribed_at = COALESCE(unsubscribed_at, CURRENT_TIMESTAMP)
+            WHERE token_hash = SHA2(:token, 256)
+        }
+        redirect "/unsubscribed"
+    }
+}
+~~~
+
+`verify` accepts only a compiler-checked `SELECT` and runs it in a
+read-only transaction before rendering the form. Captured route values are
+bound parameters; no matching row produces 404. Verified-token pages use
+`Cache-Control: no-store`. `require_match` is limited to direct SQL actions: its
+first statement must be a `SELECT`, run in the same transaction as later
+statements. If it returns no rows, the request is 404 and all writes are
+skipped. This supports idempotent actions when the subsequent SQL is written
+idempotently; it does not provide a general workflow engine. A form with
+`post_only` has no GET form route and delegates GET handling to a page at the
+same path, so it cannot declare `verify`; validate that page's GET data there.
+An executable MariaDB example is in
+[`examples/csv_mailer_unsubscribe.zyl`](../../examples/csv_mailer_unsubscribe.zyl);
+the isolated database/browser-flow check is
+[`tests/mariadb-form-route-e2e.sh`](../../tests/mariadb-form-route-e2e.sh).
 
 Database-backed action:
 

@@ -532,6 +532,7 @@ Variable leer. Details zu Schlüsselverlust und Sicherung stehen im
 | `CLICOLOR_FORCE` | implementiert | Ein nicht leerer Wert außer `0` erzwingt Farben, sofern `ZELYRA_COLOR` nicht gesetzt ist und `NO_COLOR` fehlt |
 | `ZELYRA_DB_TIMEOUT_TEST_URL` | CI-/Testvariable | MariaDB-URL für Timeout- und Pool-Integrationstests; ausschließlich lokale/isolierte Testdatenbank |
 | `ZELYRA_MODULE_IMPORTS_DATABASE_URL` | CI-/Testvariable | Optionale MariaDB-Basis-URL für Paket-/Modul-Laufzeitintegrationstests; ohne Wert wird der Datenbankfall übersprungen. Nur mit isoliertem Testserver setzen, da der Test eine eindeutig benannte Datenbank anlegt und löscht |
+| `ZELYRA_UPLOAD_TEST_URL` | CI-/Testvariable | Nur für `tests/mariadb-file-upload-e2e.sh`; Verbindung zu einer eigens erstellten, wegwerfbaren MariaDB-Testdatenbank. Der Test legt darin `zelyra_upload_e2e` an und löscht es. Nicht für produktive Datenbanken verwenden; kein Projekt-`.env`-Eintrag |
 | `ZELYRA_MARIADB_ROOT_PASSWORD` | Test-/Entwicklungswerkzeug | Passwort für lokale MariaDB-Testläufe |
 | `ZELYRA_MARIADB_PASSWORD` | Test-/Entwicklungswerkzeug | Benutzerpasswort für lokale MariaDB-Testläufe |
 | `ZELYRA_GENERATED_E2E_ROOT_PASSWORD` | Test-/Entwicklungswerkzeug | Root-Passwort des generierten Docker-E2E-Tests |
@@ -546,6 +547,13 @@ Variable leer. Details zu Schlüsselverlust und Sicherung stehen im
 | `ZELYRA_AUDIT_CHAIN_E2E_PROJECT`, `ZELYRA_AUDIT_CHAIN_E2E_DB_PASSWORD` | Test-/Entwicklungswerkzeug | Audit-Chain-E2E-Projekt und Testpasswort |
 | `ZELYRA_DOCKER_E2E_WEB_PORT`, `ZELYRA_DOCKER_E2E_HOST_PORT`, `ZELYRA_DOCKER_E2E_DB_HOST_PORT`, `ZELYRA_DOCKER_E2E_ADDRESS` | Test-/Entwicklungswerkzeug | erzeugtes Docker-E2E-Projekt und Portwahl |
 | `ZELYRA_DOCKER_E2E_REF` | Test-/Entwicklungswerkzeug; Standard ist der lokale Checkout-Branch (bei detached HEAD der veröffentlichte Zelyra-Tag) | Git-Branch oder Tag für das isolierte Docker-E2E-Anwendungsimage |
+
+`ZELYRA_UPLOAD_TEST_URL` ist standardmäßig nicht gesetzt und wird nur vom
+isolierten `tests/mariadb-file-upload-e2e.sh` aus der Prozessumgebung gelesen;
+die Projekt-`.env` wird dafür nicht geladen. Der Wert kann Zugangsdaten
+enthalten und ist als Geheimnis zu behandeln. Das Skript startet eine eigene
+wegwerfbare MariaDB-Instanz, legt darin `zelyra_upload_e2e` an und entfernt
+danach die Instanz. Produktivbefehle sind nicht betroffen.
 
 `ZELYRA_DOCKER_E2E_REF` betrifft ausschließlich
 `tests/generated-project-docker-e2e.sh`. Ist die Variable nicht gesetzt,

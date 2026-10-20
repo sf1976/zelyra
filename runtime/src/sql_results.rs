@@ -97,7 +97,10 @@ fn scalar_supported(
         | Type::Timestamp
         | Type::Duration => true,
         Type::Named(name) if !records.contains_key(name) && !enums.contains(name) => {
-            matches!(name.as_str(), "Id" | "Money" | "Email" | "Url" | "Uuid")
+            matches!(
+                name.as_str(),
+                "Id" | "Money" | "Email" | "Url" | "Uuid" | "FileRef"
+            )
         }
         _ => false,
     }
@@ -407,7 +410,7 @@ fn column_compatible(target: &Type, kind: Kind) -> bool {
         Type::Named(name) if name == "Id" || name == "Money" => {
             matches!(kind, Kind::Integer | Kind::Decimal)
         }
-        Type::Named(name) if matches!(name.as_str(), "Email" | "Url" | "Uuid") => {
+        Type::Named(name) if matches!(name.as_str(), "Email" | "Url" | "Uuid" | "FileRef") => {
             kind == Kind::Text
         }
         _ => false,
@@ -464,7 +467,7 @@ fn decode_cell(text: &str, null: bool, ty: &Type) -> Option<Value> {
         Type::Duration => integer_text(text)?.parse().ok().map(Value::Duration),
         Type::Named(name) if name == "Id" => integer_text(text)?.parse().ok().map(Value::Int),
         Type::Named(name) if name == "Money" => parse_money(text).map(Value::Decimal),
-        Type::Named(name) if matches!(name.as_str(), "Email" | "Url" | "Uuid") => {
+        Type::Named(name) if matches!(name.as_str(), "Email" | "Url" | "Uuid" | "FileRef") => {
             Some(Value::String(text.into()))
         }
         _ => None,

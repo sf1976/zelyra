@@ -28,6 +28,32 @@ impl ValidationResult {
 
 pub fn check_program(program: &zelyra_ast::Program, schema: &Schema) -> Result<(), Vec<FormError>> {
     let mut errors = Vec::new();
+    for table in &program.tables {
+        for column in &table.columns {
+            if contains_file_type(&column.ty) {
+                errors.push(FormError {
+                    message: format!(
+                        "`File` is a transient form input and cannot be stored as table column `{}.{}`",
+                        table.name, column.name
+                    ),
+                    span: column.span,
+                });
+            }
+        }
+    }
+    for record in &program.records {
+        for field in &record.fields {
+            if contains_file_type(&field.ty) {
+                errors.push(FormError {
+                    message: format!(
+                        "`File` is a transient form input and cannot be used as record field `{}.{}`",
+                        record.name, field.name
+                    ),
+                    span: field.span,
+                });
+            }
+        }
+    }
     let mut form_names = HashSet::new();
     for form in &program.forms {
         if !form_names.insert(form.name.clone()) {
@@ -40,6 +66,10 @@ pub fn check_program(program: &zelyra_ast::Program, schema: &Schema) -> Result<(
             .table
             .as_deref()
             .and_then(|name| schema.tables.iter().find(|table| table.name == name));
+        let table_definition = form
+            .table
+            .as_deref()
+            .and_then(|name| program.tables.iter().find(|table| table.name == name));
         if form.table.is_some() && table.is_none() {
             errors.push(FormError {
                 message: format!(
@@ -48,6 +78,59 @@ pub fn check_program(program: &zelyra_ast::Program, schema: &Schema) -> Result<(
                 ),
                 span: form.span,
             });
+        }
+        if let Some(verify) = &form.verify {
+            if form.post_only {
+                errors.push(FormError {
+                    message: "a form `verify` query requires a GET form route; `post_only` delegates GET handling to a page route".into(),
+                    span: verify.span,
+                });
+            }
+            match &verify.kind {
+                zelyra_ast::ExprKind::Sql { result_type, query } => {
+                    let known_tables = schema
+                        .tables
+                        .iter()
+                        .map(|table| table.name.clone())
+                        .collect::<Vec<_>>();
+                    let (command, _) =
+                        zelyra_database::sql::analyze_table_access(query, &known_tables);
+                    if command != Some("SELECT") {
+                        errors.push(FormError {
+                            message: "form `verify` must be a read-only SELECT query".into(),
+                            span: verify.span,
+                        });
+                    }
+                    let route_parameters = form
+                        .path
+                        .as_deref()
+                        .unwrap_or_default()
+                        .split('/')
+                        .filter_map(|segment| {
+                            segment
+                                .strip_prefix('{')
+                                .and_then(|name| name.strip_suffix('}'))
+                        })
+                        .map(|name| (name.to_owned(), Type::String))
+                        .collect::<HashMap<_, _>>();
+                    if let Err(sql_errors) = zelyra_database::sql::check_sql_query(
+                        query,
+                        result_type,
+                        schema,
+                        &route_parameters,
+                        verify.span,
+                    ) {
+                        errors.extend(sql_errors.into_iter().map(|error| FormError {
+                            message: error.message,
+                            span: error.span,
+                        }));
+                    }
+                }
+                _ => errors.push(FormError {
+                    message: "form `verify` requires a SQL query".into(),
+                    span: verify.span,
+                }),
+            }
         }
         let mut names = HashSet::new();
         for field in &form.fields {
@@ -58,10 +141,40 @@ pub fn check_program(program: &zelyra_ast::Program, schema: &Schema) -> Result<(
                 });
             }
             let schema_column = table.and_then(|table| find_column(table, &field.name));
+            let declared_column = table_definition.and_then(|table| {
+                table
+                    .columns
+                    .iter()
+                    .find(|column| column.name == field.name)
+            });
             if form.table.is_some() && schema_column.is_none() {
                 errors.push(FormError {
                     message: format!(
                         "form field `{}` does not exist in the source table",
+                        field.name
+                    ),
+                    span: field.span,
+                });
+            }
+            if field.file_upload.is_some() {
+                if form.table.is_some()
+                    && !declared_column
+                        .is_some_and(|column| is_file_ref_type(&column.ty, &program.types))
+                {
+                    errors.push(FormError {
+                        message: format!(
+                            "file field `{}` requires a FileRef column with the same name in a table-backed form",
+                            field.name
+                        ),
+                        span: field.span,
+                    });
+                }
+            } else if declared_column
+                .is_some_and(|column| is_file_ref_type(&column.ty, &program.types))
+            {
+                errors.push(FormError {
+                    message: format!(
+                        "FileRef column `{}` must use a checked File form field",
                         field.name
                     ),
                     span: field.span,
@@ -82,18 +195,67 @@ pub fn check_program(program: &zelyra_ast::Program, schema: &Schema) -> Result<(
                     span: field.span,
                 });
             }
-            let declared_type = form
-                .table
-                .as_deref()
-                .and_then(|name| program.tables.iter().find(|table| table.name == name))
-                .and_then(|table| {
-                    table
-                        .columns
-                        .iter()
-                        .find(|column| column.name == field.name)
-                })
-                .map(|column| &column.ty);
+            check_file_field(field, true, &mut errors);
+            let declared_type = declared_column.map(|column| &column.ty);
             validate_constraints(field, declared_type, &mut errors);
+        }
+        let declared_upload_bytes = form
+            .fields
+            .iter()
+            .filter_map(|field| field.file_upload.as_ref())
+            .fold(0_u64, |total, options| {
+                total.saturating_add(options.max_size_bytes)
+            });
+        if declared_upload_bytes > 255 * 1024 * 1024 {
+            errors.push(FormError {
+                message: format!(
+                    "aggregate file size in form `{}` exceeds the 255 MiB request budget",
+                    form.name
+                ),
+                span: form.span,
+            });
+        }
+        let upload_fields = form
+            .fields
+            .iter()
+            .filter(|field| field.file_upload.is_some())
+            .collect::<Vec<_>>();
+        if !upload_fields.is_empty() {
+            if let Some(action) = form.actions.first() {
+                let parameters = action
+                    .statements
+                    .iter()
+                    .filter_map(|statement| match statement {
+                        zelyra_ast::Stmt::Expr(expression) => match &expression.kind {
+                            zelyra_ast::ExprKind::Sql { query, .. } => {
+                                zelyra_database::sql_parameter_names(query).ok()
+                            }
+                            _ => None,
+                        },
+                        _ => None,
+                    })
+                    .flatten()
+                    .collect::<HashSet<_>>();
+                for field in upload_fields {
+                    if !parameters.contains(&field.name) {
+                        errors.push(FormError {
+                            message: format!(
+                                "file field `{}` must be stored by the first form action using its named SQL parameter",
+                                field.name
+                            ),
+                            span: field.span,
+                        });
+                    }
+                }
+            } else {
+                errors.push(FormError {
+                    message: format!(
+                        "form `{}` declares a file field but has no persistence action",
+                        form.name
+                    ),
+                    span: form.span,
+                });
+            }
         }
         let mut actions = HashSet::new();
         for action in &form.actions {
@@ -103,10 +265,71 @@ pub fn check_program(program: &zelyra_ast::Program, schema: &Schema) -> Result<(
                     span: action.span,
                 });
             }
+            for field in &action.fields {
+                check_file_field(field, false, &mut errors);
+            }
+            if action.require_match {
+                let first_query = action
+                    .statements
+                    .first()
+                    .and_then(|statement| match statement {
+                        zelyra_ast::Stmt::Expr(expression) => match &expression.kind {
+                            zelyra_ast::ExprKind::Sql { query, .. } => {
+                                Some((query, expression.span))
+                            }
+                            _ => None,
+                        },
+                        _ => None,
+                    });
+                if action.execute_body.is_some() || action.guard.is_some() {
+                    errors.push(FormError {
+                        message: "`require_match` is supported only for direct SQL form actions"
+                            .into(),
+                        span: action.span,
+                    });
+                }
+                if let Some((query, span)) = first_query {
+                    let known_tables = schema
+                        .tables
+                        .iter()
+                        .map(|table| table.name.clone())
+                        .collect::<Vec<_>>();
+                    let (command, _) =
+                        zelyra_database::sql::analyze_table_access(query, &known_tables);
+                    if command != Some("SELECT") {
+                        errors.push(FormError {
+                            message: "the first statement in a `require_match` action must be a SELECT query".into(),
+                            span,
+                        });
+                    }
+                } else {
+                    errors.push(FormError {
+                        message:
+                            "`require_match` requires a SELECT query as the first action statement"
+                                .into(),
+                        span: action.span,
+                    });
+                }
+            }
         }
     }
     for crud in &program.cruds {
         let table = schema.tables.iter().find(|table| table.name == crud.table);
+        if let Some(definition) = program.tables.iter().find(|table| table.name == crud.table) {
+            for column in definition
+                .columns
+                .iter()
+                .filter(|column| is_file_ref_type(&column.ty, &program.types))
+            {
+                errors.push(FormError {
+                    message: format!(
+                        "CRUD `{}` cannot expose FileRef column `{}` as a text field; file-aware CRUD rendering is not implemented",
+                        crud.name, column.name
+                    ),
+                    span: column.span,
+                });
+            }
+        }
         let mut action_names = HashSet::new();
         for action in &crud.actions {
             if !action_names.insert(action.name.clone()) {
@@ -115,6 +338,12 @@ pub fn check_program(program: &zelyra_ast::Program, schema: &Schema) -> Result<(
                         "duplicate action `{}` in CRUD resource `{}`",
                         action.name, crud.name
                     ),
+                    span: action.span,
+                });
+            }
+            if action.require_match {
+                errors.push(FormError {
+                    message: "`require_match` is supported only for standalone form actions".into(),
                     span: action.span,
                 });
             }
@@ -148,6 +377,7 @@ pub fn check_program(program: &zelyra_ast::Program, schema: &Schema) -> Result<(
                         span: field.span,
                     });
                 }
+                check_file_field(field, false, &mut errors);
                 let declared_type = program
                     .tables
                     .iter()
@@ -167,6 +397,133 @@ pub fn check_program(program: &zelyra_ast::Program, schema: &Schema) -> Result<(
         Ok(())
     } else {
         Err(errors)
+    }
+}
+
+fn check_file_field(field: &FormField, can_receive_file: bool, errors: &mut Vec<FormError>) {
+    let is_file = matches!(field.ty, Some(Type::Named(ref name)) if name == "File");
+    if is_file && !can_receive_file {
+        errors.push(FormError {
+            message: format!(
+                "file field `{}` is not supported in this form action context",
+                field.name
+            ),
+            span: field.span,
+        });
+        return;
+    }
+    match (&field.file_upload, is_file) {
+        (Some(options), true) => {
+            if options.max_size_bytes == 0 || options.max_size_bytes > 100 * 1024 * 1024 {
+                errors.push(FormError {
+                    message: format!(
+                        "maximum file size for `{}` must be between 1 byte and 100 MiB",
+                        field.name
+                    ),
+                    span: field.span,
+                });
+            }
+            if options.allowed_types.is_empty() || options.allowed_types.len() > 8 {
+                errors.push(FormError {
+                    message: format!(
+                        "allowed_types for `{}` must contain between 1 and 8 MIME types",
+                        field.name
+                    ),
+                    span: field.span,
+                });
+            }
+            let mut seen = HashSet::new();
+            for mime in &options.allowed_types {
+                if !matches!(
+                    mime.as_str(),
+                    "application/pdf" | "image/png" | "image/jpeg"
+                ) {
+                    errors.push(FormError {
+                        message: format!(
+                            "MIME type `{mime}` is not supported for file field `{}`",
+                            field.name
+                        ),
+                        span: field.span,
+                    });
+                }
+                if !seen.insert(mime) {
+                    errors.push(FormError {
+                        message: format!(
+                            "allowed_types for `{}` must not contain duplicates",
+                            field.name
+                        ),
+                        span: field.span,
+                    });
+                }
+            }
+            if field.max.is_some()
+                || field.min_length.is_some()
+                || field.min_value.is_some()
+                || field.max_value.is_some()
+                || !field.choices.is_empty()
+            {
+                errors.push(FormError {
+                    message: format!(
+                        "text, numeric, and choice constraints cannot be used on file field `{}`",
+                        field.name
+                    ),
+                    span: field.span,
+                });
+            }
+        }
+        (Some(_), false) => errors.push(FormError {
+            message: format!(
+                "file upload options require `{}` to have type File",
+                field.name
+            ),
+            span: field.span,
+        }),
+        (None, true) => errors.push(FormError {
+            message: format!(
+                "file field `{}` requires max_size and allowed_types",
+                field.name
+            ),
+            span: field.span,
+        }),
+        (None, false) => {}
+    }
+}
+
+fn is_file_ref_type(ty: &Type, definitions: &[zelyra_ast::TypeDef]) -> bool {
+    fn resolve(
+        ty: &Type,
+        definitions: &[zelyra_ast::TypeDef],
+        visited: &mut HashSet<String>,
+    ) -> bool {
+        match ty {
+            Type::Named(name) if name == "FileRef" => true,
+            Type::Option(inner) => resolve(inner, definitions, visited),
+            Type::Named(name) if visited.insert(name.clone()) => definitions
+                .iter()
+                .find(|definition| definition.name == *name)
+                .is_some_and(|definition| resolve(&definition.target, definitions, visited)),
+            _ => false,
+        }
+    }
+    resolve(ty, definitions, &mut HashSet::new())
+}
+
+fn contains_file_type(ty: &Type) -> bool {
+    match ty {
+        Type::Named(name) => name == "File",
+        Type::Option(inner) | Type::Array(inner) | Type::Set(inner) => contains_file_type(inner),
+        Type::Result(ok, error) | Type::Map(ok, error) => {
+            contains_file_type(ok) || contains_file_type(error)
+        }
+        Type::Tuple(items) => items.iter().any(contains_file_type),
+        Type::Applied { name, args } => name == "File" || args.iter().any(contains_file_type),
+        Type::Function {
+            params,
+            return_type,
+            ..
+        } => params.iter().any(contains_file_type) || contains_file_type(return_type),
+        Type::HttpResult(inner) => contains_file_type(inner),
+        _ => false,
     }
 }
 
@@ -261,6 +618,59 @@ pub fn validate(
     schema: Option<&Schema>,
     input: &HashMap<String, String>,
 ) -> ValidationResult {
+    validate_with_uploaded_files(form, table_definition, schema, input, &HashSet::new())
+}
+
+/// Validate a form while allowing only server-issued opaque references for
+/// declared multipart file fields. The caller must provide the exact set of
+/// fields whose bytes have already passed storage validation.
+pub fn validate_with_uploaded_files(
+    form: &FormDef,
+    table_definition: Option<&TableDef>,
+    schema: Option<&Schema>,
+    input: &HashMap<String, String>,
+    uploaded_fields: &HashSet<String>,
+) -> ValidationResult {
+    validate_with_file_values(
+        form,
+        table_definition,
+        schema,
+        input,
+        uploaded_fields,
+        &HashSet::new(),
+    )
+}
+
+/// Validate a form while accepting server-loaded file references on edit
+/// forms. `existing_file_fields` must be derived from the currently authorized
+/// database row, never directly from request input. This lets a required file
+/// remain unchanged when the browser's file control is left empty.
+pub fn validate_with_existing_file_refs(
+    form: &FormDef,
+    table_definition: Option<&TableDef>,
+    schema: Option<&Schema>,
+    input: &HashMap<String, String>,
+    uploaded_fields: &HashSet<String>,
+    existing_file_fields: &HashSet<String>,
+) -> ValidationResult {
+    validate_with_file_values(
+        form,
+        table_definition,
+        schema,
+        input,
+        uploaded_fields,
+        existing_file_fields,
+    )
+}
+
+fn validate_with_file_values(
+    form: &FormDef,
+    table_definition: Option<&TableDef>,
+    schema: Option<&Schema>,
+    input: &HashMap<String, String>,
+    uploaded_fields: &HashSet<String>,
+    existing_file_fields: &HashSet<String>,
+) -> ValidationResult {
     let mut errors = Vec::new();
     let mut values = HashMap::new();
     let known_fields = form
@@ -279,6 +689,45 @@ pub fn validate(
     }
 
     for field in &form.fields {
+        if field.file_upload.is_some() {
+            if uploaded_fields.contains(&field.name) || existing_file_fields.contains(&field.name) {
+                match input.get(&field.name) {
+                    Some(reference) if is_file_reference(reference) => {
+                        values.insert(field.name.clone(), reference.clone());
+                    }
+                    _ => errors.push(FieldError {
+                        field: field.name.clone(),
+                        message: "uploaded file reference is invalid".into(),
+                    }),
+                }
+            } else if field.required
+                || table_definition.is_some_and(|table| {
+                    table.columns.iter().any(|column| {
+                        column.name == field.name && (column.required || column.primary_key)
+                    })
+                })
+                || schema.is_some_and(|schema| {
+                    form.table.as_deref().is_some_and(|table_name| {
+                        schema
+                            .tables
+                            .iter()
+                            .find(|table| table.name == table_name)
+                            .is_some_and(|table| {
+                                table.columns.iter().any(|column| {
+                                    column.name == field.name
+                                        && (!column.nullable || column.primary_key)
+                                })
+                            })
+                    })
+                })
+            {
+                errors.push(FieldError {
+                    field: field.name.clone(),
+                    message: "required file was not uploaded".into(),
+                });
+            }
+            continue;
+        }
         if field.readonly && input.contains_key(&field.name) {
             errors.push(FieldError {
                 field: field.name.clone(),
@@ -373,6 +822,18 @@ pub fn validate(
         values.insert(field.name.clone(), value.into());
     }
     ValidationResult { values, errors }
+}
+
+fn is_file_reference(value: &str) -> bool {
+    let bytes = value.as_bytes();
+    bytes.len() == 36
+        && bytes.iter().enumerate().all(|(index, byte)| {
+            if matches!(index, 8 | 13 | 18 | 23) {
+                *byte == b'-'
+            } else {
+                byte.is_ascii_hexdigit()
+            }
+        })
 }
 
 fn validate_constraints(
@@ -661,6 +1122,7 @@ mod tests {
             choices: Vec::new(),
             widget: None,
             appearance: None,
+            file_upload: None,
             readonly: false,
             span: Span::default(),
         }
@@ -670,6 +1132,9 @@ mod tests {
         FormDef {
             name: "CustomerCreate".into(),
             table: None,
+            path: None,
+            post_only: false,
+            verify: None,
             fields: vec![
                 field("name", Type::String, true, Some(5)),
                 field("email", Type::Named("Email".into()), true, None),
@@ -758,6 +1223,452 @@ mod tests {
     }
 
     #[test]
+    fn form_verify_and_require_match_validate_route_parameters_and_select_order() {
+        let source = r#"
+            table suppressions {
+                id: Id primary auto
+                token_hash: String(64) required
+                unsubscribed_at: Timestamp?
+            }
+            form Unsubscribe {
+                route: "/csv-mailer/abmelden/{token}"
+                verify sql<Int[]> {
+                    SELECT id FROM suppressions WHERE token_hash = :token
+                }
+                action unsubscribe {
+                    require_match
+                    sql<Int[]> { SELECT id FROM suppressions WHERE token_hash = :token }
+                    sql { UPDATE suppressions SET unsubscribed_at = CURRENT_TIMESTAMP WHERE token_hash = :token }
+                }
+            }
+            fn main() {}
+        "#;
+        let program = zelyra_parser::parse(&zelyra_lexer::lex(source).unwrap()).unwrap();
+        let schema = build_schema(&program).unwrap();
+        check_program(&program, &schema).unwrap();
+        zelyra_database::sql::check_program(&program, &schema).unwrap();
+
+        let invalid = source.replace(
+            "sql<Int[]> { SELECT id FROM suppressions WHERE token_hash = :token }",
+            "sql<Int[]> { UPDATE suppressions SET unsubscribed_at = CURRENT_TIMESTAMP WHERE token_hash = :token }",
+        );
+        let program = zelyra_parser::parse(&zelyra_lexer::lex(&invalid).unwrap()).unwrap();
+        let schema = build_schema(&program).unwrap();
+        let errors = check_program(&program, &schema).unwrap_err();
+        assert!(errors.iter().any(|error| {
+            error
+                .message
+                .contains("first statement in a `require_match` action must be a SELECT")
+        }));
+    }
+
+    #[test]
+    fn checks_file_field_size_mime_allowlist_and_form_action_context() {
+        let mut valid = form();
+        valid.fields = vec![FormField {
+            name: "document".into(),
+            ty: Some(Type::Named("File".into())),
+            label: None,
+            placeholder: None,
+            required: true,
+            min_length: None,
+            max: None,
+            min_value: None,
+            max_value: None,
+            choices: Vec::new(),
+            widget: None,
+            appearance: None,
+            file_upload: Some(zelyra_ast::FileUploadOptions {
+                max_size_bytes: 10 * 1024 * 1024,
+                allowed_types: vec!["application/pdf".into()],
+            }),
+            readonly: false,
+            span: Span::default(),
+        }];
+        valid.actions.push(zelyra_ast::FormAction {
+            name: "save".into(),
+            label: None,
+            icon: None,
+            confirm: None,
+            confirm_page: None,
+            success_page: None,
+            error_page: None,
+            fields: Vec::new(),
+            requires_auth: false,
+            permissions: Vec::new(),
+            capabilities: Vec::new(),
+            require_match: false,
+            statements: vec![zelyra_ast::Stmt::Expr(zelyra_ast::Expr {
+                kind: zelyra_ast::ExprKind::Sql {
+                    result_type: Type::Unit,
+                    query: "INSERT INTO uploads (document) VALUES (:document)".into(),
+                },
+                span: Span::default(),
+            })],
+            execute_body: None,
+            guard: None,
+            success: None,
+            redirect: None,
+            span: Span::default(),
+        });
+        let valid_program = zelyra_ast::Program {
+            imports: Vec::new(),
+            databases: Vec::new(),
+            tables: Vec::new(),
+            types: Vec::new(),
+            records: Vec::new(),
+            enums: Vec::new(),
+            views: Vec::new(),
+            components: Vec::new(),
+            pages: Vec::new(),
+            tableviews: Vec::new(),
+            forms: vec![valid.clone()],
+            cruds: Vec::new(),
+            auth: Vec::new(),
+            apis: Vec::new(),
+            commands: Vec::new(),
+            schedules: Vec::new(),
+            functions: Vec::new(),
+        };
+        check_program(&valid_program, &build_schema(&valid_program).unwrap())
+            .expect("declared supported file metadata is accepted in a form");
+
+        let mut no_persistence = valid_program.clone();
+        no_persistence.forms[0].actions.clear();
+        let errors = check_program(&no_persistence, &build_schema(&no_persistence).unwrap())
+            .expect_err("uploaded files must not be published without a persistence action");
+        assert!(errors
+            .iter()
+            .any(|error| error.message.contains("has no persistence action")));
+
+        let mut unreferenced = valid_program.clone();
+        unreferenced.forms[0].actions[0].statements.clear();
+        let errors = check_program(&unreferenced, &build_schema(&unreferenced).unwrap())
+            .expect_err("the persistence action must store the uploaded reference");
+        assert!(errors.iter().any(|error| error
+            .message
+            .contains("must be stored by the first form action")));
+
+        valid.fields[0].file_upload.as_mut().unwrap().allowed_types[0] =
+            "application/x-executable".into();
+        let invalid_mime = zelyra_ast::Program {
+            forms: vec![valid.clone()],
+            ..valid_program.clone()
+        };
+        let errors = check_program(&invalid_mime, &build_schema(&invalid_mime).unwrap())
+            .expect_err("unsupported MIME types must be rejected");
+        assert!(errors
+            .iter()
+            .any(|error| error.message.contains("not supported")));
+
+        valid.fields[0].file_upload.as_mut().unwrap().allowed_types[0] = "application/pdf".into();
+        valid.actions.push(zelyra_ast::FormAction {
+            name: "submit".into(),
+            label: None,
+            icon: None,
+            confirm: None,
+            confirm_page: None,
+            success_page: None,
+            error_page: None,
+            fields: vec![valid.fields[0].clone()],
+            requires_auth: false,
+            permissions: Vec::new(),
+            capabilities: Vec::new(),
+            require_match: false,
+            statements: Vec::new(),
+            execute_body: None,
+            guard: None,
+            success: None,
+            redirect: None,
+            span: Span::default(),
+        });
+        let action_file = zelyra_ast::Program {
+            forms: vec![valid],
+            ..valid_program
+        };
+        let errors = check_program(&action_file, &build_schema(&action_file).unwrap())
+            .expect_err("file uploads are not action parameters");
+        assert!(errors.iter().any(|error| error
+            .message
+            .contains("not supported in this form action context")));
+
+        let mut zero_limit_form = form();
+        zero_limit_form.fields = vec![FormField {
+            name: "document".into(),
+            ty: Some(Type::Named("File".into())),
+            label: None,
+            placeholder: None,
+            required: false,
+            min_length: None,
+            max: None,
+            min_value: None,
+            max_value: None,
+            choices: Vec::new(),
+            widget: None,
+            appearance: None,
+            file_upload: Some(zelyra_ast::FileUploadOptions {
+                max_size_bytes: 0,
+                allowed_types: vec!["application/pdf".into()],
+            }),
+            readonly: false,
+            span: Span::default(),
+        }];
+        let zero_limit = zelyra_ast::Program {
+            imports: Vec::new(),
+            databases: Vec::new(),
+            tables: Vec::new(),
+            types: Vec::new(),
+            records: Vec::new(),
+            enums: Vec::new(),
+            views: Vec::new(),
+            components: Vec::new(),
+            pages: Vec::new(),
+            tableviews: Vec::new(),
+            forms: vec![zero_limit_form],
+            cruds: Vec::new(),
+            auth: Vec::new(),
+            apis: Vec::new(),
+            commands: Vec::new(),
+            schedules: Vec::new(),
+            functions: Vec::new(),
+        };
+        let errors = check_program(&zero_limit, &build_schema(&zero_limit).unwrap())
+            .expect_err("zero-byte file limits must be rejected");
+        assert!(errors
+            .iter()
+            .any(|error| error.message.contains("must be between 1 byte and 100 MiB")));
+    }
+
+    #[test]
+    fn table_backed_file_inputs_require_a_matching_file_ref_column() {
+        let mut document = field("document", Type::Named("File".into()), false, None);
+        document.file_upload = Some(zelyra_ast::FileUploadOptions {
+            max_size_bytes: 10 * 1024 * 1024,
+            allowed_types: vec!["application/pdf".into()],
+        });
+        let program = zelyra_ast::Program {
+            imports: Vec::new(),
+            databases: Vec::new(),
+            tables: vec![TableDef {
+                name: "documents".into(),
+                validations: Vec::new(),
+                indexes: Vec::new(),
+                uniques: Vec::new(),
+                access: zelyra_ast::TableAccessDef::default(),
+                tenant_scope: None,
+                columns: vec![zelyra_ast::ColumnDef {
+                    name: "document".into(),
+                    ty: Type::String,
+                    length: Some(255),
+                    storage_name: None,
+                    decimal_precision: None,
+                    required: false,
+                    primary_key: false,
+                    auto: false,
+                    unique: false,
+                    unique_within_tenant: false,
+                    default: None,
+                    on_delete: None,
+                    span: Span::default(),
+                }],
+                span: Span::default(),
+            }],
+            types: Vec::new(),
+            records: Vec::new(),
+            enums: Vec::new(),
+            views: Vec::new(),
+            components: Vec::new(),
+            pages: Vec::new(),
+            tableviews: Vec::new(),
+            forms: vec![FormDef {
+                name: "DocumentCreate".into(),
+                table: Some("documents".into()),
+                path: None,
+                post_only: false,
+                verify: None,
+                fields: vec![document],
+                actions: vec![zelyra_ast::FormAction {
+                    name: "save".into(),
+                    label: None,
+                    icon: None,
+                    confirm: None,
+                    confirm_page: None,
+                    success_page: None,
+                    error_page: None,
+                    fields: Vec::new(),
+                    requires_auth: false,
+                    permissions: Vec::new(),
+                    capabilities: Vec::new(),
+                    require_match: false,
+                    statements: vec![zelyra_ast::Stmt::Expr(zelyra_ast::Expr {
+                        kind: zelyra_ast::ExprKind::Sql {
+                            result_type: Type::Unit,
+                            query: "INSERT INTO documents (document) VALUES (:document)".into(),
+                        },
+                        span: Span::default(),
+                    })],
+                    execute_body: None,
+                    guard: None,
+                    success: None,
+                    redirect: None,
+                    span: Span::default(),
+                }],
+                span: Span::default(),
+            }],
+            cruds: Vec::new(),
+            auth: Vec::new(),
+            apis: Vec::new(),
+            commands: Vec::new(),
+            schedules: Vec::new(),
+            functions: Vec::new(),
+        };
+        let schema = zelyra_database::build_schema(&program).expect("valid table schema");
+        let errors = check_program(&program, &schema)
+            .expect_err("a text column cannot receive an uploaded file reference");
+        assert!(errors
+            .iter()
+            .any(|error| { error.message.contains("requires a FileRef column") }));
+
+        let mut file_ref_program = program.clone();
+        file_ref_program.tables[0].columns[0].ty =
+            Type::Option(Box::new(Type::Named("FileRef".into())));
+        let schema = zelyra_database::build_schema(&file_ref_program).expect("FileRef schema");
+        check_program(&file_ref_program, &schema)
+            .expect("a bounded File input may target its matching optional FileRef column");
+
+        file_ref_program.types.push(zelyra_ast::TypeDef {
+            name: "DocumentRef".into(),
+            is_public: false,
+            target: Type::Named("FileRef".into()),
+            span: Span::default(),
+        });
+        file_ref_program.tables[0].columns[0].ty =
+            Type::Option(Box::new(Type::Named("DocumentRef".into())));
+        let schema =
+            zelyra_database::build_schema(&file_ref_program).expect("aliased FileRef schema");
+        check_program(&file_ref_program, &schema)
+            .expect("aliases of FileRef retain file-field handling");
+
+        file_ref_program.forms[0].fields[0].file_upload = None;
+        let schema = zelyra_database::build_schema(&file_ref_program).expect("FileRef schema");
+        let errors = check_program(&file_ref_program, &schema)
+            .expect_err("FileRef values cannot be submitted as plain text");
+        assert!(errors
+            .iter()
+            .any(|error| error.message.contains("must use a checked File form field")));
+    }
+
+    #[test]
+    fn generated_crud_does_not_render_file_refs_as_text_controls() {
+        let program = zelyra_parser::parse(
+            &zelyra_lexer::lex(
+                "table documents { id: Id primary auto document: FileRef? } crud Document -> documents {} fn main() {}",
+            )
+            .unwrap(),
+        )
+        .unwrap();
+        let schema = build_schema(&program).unwrap();
+        let errors = check_program(&program, &schema)
+            .expect_err("automatic CRUD cannot expose an opaque FileRef as text yet");
+        assert!(errors.iter().any(|error| {
+            error
+                .message
+                .contains("cannot expose FileRef column `document` as a text field")
+        }));
+    }
+
+    #[test]
+    fn rejects_aggregate_file_size_beyond_http_hard_limit() {
+        let files = (0..3)
+            .map(|index| FormField {
+                name: format!("document_{index}"),
+                ty: Some(Type::Named("File".into())),
+                label: None,
+                placeholder: None,
+                required: false,
+                min_length: None,
+                max: None,
+                min_value: None,
+                max_value: None,
+                choices: Vec::new(),
+                widget: None,
+                appearance: None,
+                file_upload: Some(zelyra_ast::FileUploadOptions {
+                    max_size_bytes: 100 * 1024 * 1024,
+                    allowed_types: vec!["application/pdf".into()],
+                }),
+                readonly: false,
+                span: Span::default(),
+            })
+            .collect();
+        let program = zelyra_ast::Program {
+            imports: Vec::new(),
+            databases: Vec::new(),
+            tables: Vec::new(),
+            types: Vec::new(),
+            records: Vec::new(),
+            enums: Vec::new(),
+            views: Vec::new(),
+            components: Vec::new(),
+            pages: Vec::new(),
+            tableviews: Vec::new(),
+            forms: vec![FormDef {
+                name: "BulkUpload".into(),
+                table: None,
+                path: None,
+                post_only: false,
+                verify: None,
+                fields: files,
+                actions: Vec::new(),
+                span: Span::default(),
+            }],
+            cruds: Vec::new(),
+            auth: Vec::new(),
+            apis: Vec::new(),
+            commands: Vec::new(),
+            schedules: Vec::new(),
+            functions: Vec::new(),
+        };
+        let errors = check_program(&program, &build_schema(&program).unwrap())
+            .expect_err("aggregate uploads larger than the request ceiling must fail");
+        assert!(errors
+            .iter()
+            .any(|error| error.message.contains("aggregate file size")));
+    }
+
+    #[test]
+    fn string_validation_never_accepts_a_path_as_an_uploaded_file_reference() {
+        let mut upload_form = form();
+        upload_form.fields = vec![FormField {
+            name: "document".into(),
+            ty: Some(Type::Named("File".into())),
+            label: None,
+            placeholder: None,
+            required: true,
+            min_length: None,
+            max: None,
+            min_value: None,
+            max_value: None,
+            choices: Vec::new(),
+            widget: None,
+            appearance: None,
+            file_upload: Some(zelyra_ast::FileUploadOptions {
+                max_size_bytes: 1024,
+                allowed_types: vec!["application/pdf".into()],
+            }),
+            readonly: false,
+            span: Span::default(),
+        }];
+        let submitted_path = HashMap::from([("document".into(), "../../invoice.pdf".into())]);
+        let result = validate(&upload_form, None, None, &submitted_path);
+        assert!(!result.is_valid());
+        assert_eq!(result.errors[0].field, "document");
+        assert!(result.errors[0]
+            .message
+            .contains("required file was not uploaded"));
+    }
+
+    #[test]
     fn money_and_decimal_inputs_reject_lossy_or_nonfinite_values() {
         let money = Type::Named("Money".into());
         for value in ["0", "0.01", "-12.34", "999999999999999.9999"] {
@@ -808,6 +1719,67 @@ mod tests {
     }
 
     #[test]
+    fn accepts_only_server_marked_opaque_file_references() {
+        let mut form = form();
+        form.fields = vec![FormField {
+            name: "document".into(),
+            ty: Some(Type::Named("File".into())),
+            label: None,
+            placeholder: None,
+            required: true,
+            min_length: None,
+            max: None,
+            min_value: None,
+            max_value: None,
+            choices: Vec::new(),
+            widget: None,
+            appearance: None,
+            file_upload: Some(zelyra_ast::FileUploadOptions {
+                max_size_bytes: 1024,
+                allowed_types: vec!["application/pdf".into()],
+            }),
+            readonly: false,
+            span: Span::default(),
+        }];
+        let file_ref = "bca8c39e-d920-4e2a-8f45-2fcdcb3b61a2";
+        let input = HashMap::from([("document".to_owned(), file_ref.to_owned())]);
+        let uploaded = HashSet::from(["document".to_owned()]);
+        let result = validate_with_uploaded_files(&form, None, None, &input, &uploaded);
+        assert!(result.is_valid());
+        assert_eq!(result.values.get("document"), Some(&file_ref.to_owned()));
+
+        let forged = validate_with_uploaded_files(&form, None, None, &input, &HashSet::new());
+        assert!(!forged.is_valid());
+        let existing = validate_with_existing_file_refs(
+            &form,
+            None,
+            None,
+            &input,
+            &HashSet::new(),
+            &HashSet::from(["document".to_owned()]),
+        );
+        assert!(existing.is_valid());
+        assert_eq!(existing.values.get("document"), Some(&file_ref.to_owned()));
+        assert!(!validate_with_existing_file_refs(
+            &form,
+            None,
+            None,
+            &HashMap::new(),
+            &HashSet::new(),
+            &HashSet::from(["document".to_owned()]),
+        )
+        .is_valid());
+        assert!(!validate_with_uploaded_files(
+            &form,
+            None,
+            None,
+            &HashMap::from([("document".to_owned(), "../../outside".to_owned())]),
+            &uploaded,
+        )
+        .is_valid());
+    }
+
+    #[test]
     fn enforces_text_lengths_and_exact_numeric_bounds_on_server() {
         let mut name = field("name", Type::String, false, None);
         name.min_length = Some(3);
@@ -817,6 +1789,9 @@ mod tests {
         let bounded = FormDef {
             name: "Bounded".into(),
             table: None,
+            path: None,
+            post_only: false,
+            verify: None,
             fields: vec![name, amount],
             actions: Vec::new(),
             span: Span::default(),
@@ -857,6 +1832,9 @@ mod tests {
             forms: vec![FormDef {
                 name: "Invalid".into(),
                 table: None,
+                path: None,
+                post_only: false,
+                verify: None,
                 fields: vec![invalid, inverted],
                 actions: Vec::new(),
                 span: Span::default(),
@@ -884,6 +1862,9 @@ mod tests {
         let form = FormDef {
             name: "Invoice".into(),
             table: None,
+            path: None,
+            post_only: false,
+            verify: None,
             fields: vec![status],
             actions: Vec::new(),
             span: Span::default(),
@@ -910,6 +1891,9 @@ mod tests {
             forms: vec![FormDef {
                 name: "InvalidChoice".into(),
                 table: None,
+                path: None,
+                post_only: false,
+                verify: None,
                 fields: vec![invalid],
                 actions: Vec::new(),
                 span: Span::default(),
@@ -945,6 +1929,9 @@ mod tests {
         let form = FormDef {
             name: "CustomerCreate".into(),
             table: Some("customers".into()),
+            path: None,
+            post_only: false,
+            verify: None,
             fields: vec![FormField {
                 name: "name".into(),
                 ty: None,
@@ -958,6 +1945,7 @@ mod tests {
                 choices: Vec::new(),
                 widget: None,
                 appearance: None,
+                file_upload: None,
                 readonly: false,
                 span: Span::default(),
             }],

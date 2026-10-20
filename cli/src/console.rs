@@ -41,8 +41,7 @@ pub(super) fn command(mut arguments: impl Iterator<Item = String>) -> ExitCode {
                 backend = if value == "ast" {
                     "ast"
                 } else if value == "bytecode" {
-                    eprintln!("error[E-CLI-001]: the interactive console currently supports only --backend ast");
-                    return ExitCode::from(2);
+                    "bytecode"
                 } else {
                     eprintln!("error[E-CLI-001]: unknown console backend `{value}`; expected ast or bytecode");
                     return ExitCode::from(2);
@@ -106,11 +105,11 @@ pub(super) fn command(mut arguments: impl Iterator<Item = String>) -> ExitCode {
     if let Some(tenant_id) = tenant {
         session.set_tenant_id(tenant_id);
     }
-    let _ = backend;
     let interactive = io::stdin().is_terminal();
     if interactive {
         println!(
-            "Zelyra language console (AST, {} mode). Type :help for commands.",
+            "Zelyra language console ({}, {} mode). Type :help for commands.",
+            backend.to_ascii_uppercase(),
             if sandbox { "sandbox" } else { "persistent" }
         );
     }
@@ -155,7 +154,7 @@ pub(super) fn command(mut arguments: impl Iterator<Item = String>) -> ExitCode {
                         Some(false) => continue,
                         None => {}
                     }
-                    evaluate(&line, &mut session);
+                    evaluate(&line, &mut session, backend);
                 }
                 Ok(Signal::CtrlC) => println!("^C"),
                 Ok(Signal::CtrlD) => break,
@@ -197,7 +196,7 @@ pub(super) fn command(mut arguments: impl Iterator<Item = String>) -> ExitCode {
             continuation.push_str(&line);
             continuation.push('\n');
             if input_complete(&continuation) {
-                evaluate(&continuation, &mut session);
+                evaluate(&continuation, &mut session, backend);
                 continuation.clear();
             }
         }
@@ -208,6 +207,140 @@ pub(super) fn command(mut arguments: impl Iterator<Item = String>) -> ExitCode {
     }
     drop(session); // sandbox transaction rolls back here unless manually committed
     exit_code
+}
+
+/// Bytecode execution normally routes queries through `SystemHostServices`.
+/// The REPL sandbox decorates that provider so query and batch calls share the
+/// session's existing MariaDB connection and cannot escape its rollback.
+struct ReplHostServices {
+    inner: Arc<dyn HostServices>,
+    transaction: Arc<Mutex<zelyra_database::MariaDbInteractiveTransaction>>,
+}
+
+impl HostServices for ReplHostServices {
+    fn unix_time_millis(&self) -> Result<i64, String> {
+        self.inner.unix_time_millis()
+    }
+
+    fn environment_variable(&self, name: &str) -> Result<Option<String>, String> {
+        self.inner.environment_variable(name)
+    }
+
+    fn fill_random(&self, output: &mut [u8]) -> Result<(), String> {
+        self.inner.fill_random(output)
+    }
+
+    fn read_console_line(&self, prompt: &str) -> Result<Option<String>, String> {
+        self.inner.read_console_line(prompt)
+    }
+
+    fn http_request(
+        &self,
+        method: &str,
+        url: &str,
+        headers: &[(String, String)],
+        body: Option<&[u8]>,
+        timeout_ms: u64,
+        max_response_bytes: usize,
+    ) -> Result<HostHttpResponse, String> {
+        self.inner
+            .http_request(method, url, headers, body, timeout_ms, max_response_bytes)
+    }
+
+    fn deliver_outbox_message(
+        &self,
+        event_id: &str,
+        payload_json: &str,
+        mail: &MailPolicy,
+        network: &NetworkPolicy,
+    ) -> Result<(), String> {
+        self.inner
+            .deliver_outbox_message(event_id, payload_json, mail, network)
+    }
+
+    fn run_process(
+        &self,
+        command: &str,
+        arguments: &[String],
+        timeout_ms: u64,
+        max_output_bytes: usize,
+    ) -> Result<String, String> {
+        self.inner
+            .run_process(command, arguments, timeout_ms, max_output_bytes)
+    }
+
+    fn canonicalize_path(&self, path: &Path, allow_missing: bool) -> Result<PathBuf, String> {
+        self.inner.canonicalize_path(path, allow_missing)
+    }
+
+    fn file_metadata(&self, path: &Path) -> Result<HostFileMetadata, String> {
+        self.inner.file_metadata(path)
+    }
+
+    fn read_text(&self, path: &Path) -> Result<String, String> {
+        self.inner.read_text(path)
+    }
+
+    fn write_text(&self, path: &Path, content: &str) -> Result<(), String> {
+        self.inner.write_text(path, content)
+    }
+
+    fn write_text_new(&self, path: &Path, content: &str) -> Result<(), String> {
+        self.inner.write_text_new(path, content)
+    }
+
+    fn atomic_write_text(&self, path: &Path, content: &str) -> Result<(), String> {
+        self.inner.atomic_write_text(path, content)
+    }
+
+    fn append_text(&self, path: &Path, content: &str) -> Result<(), String> {
+        self.inner.append_text(path, content)
+    }
+
+    fn copy_file_new(&self, source: &Path, destination: &Path) -> Result<(), String> {
+        self.inner.copy_file_new(source, destination)
+    }
+
+    fn rename_file_new(&self, source: &Path, destination: &Path) -> Result<(), String> {
+        self.inner.rename_file_new(source, destination)
+    }
+
+    fn remove_file(&self, path: &Path) -> Result<(), String> {
+        self.inner.remove_file(path)
+    }
+
+    fn list_directory(&self, path: &Path) -> Result<Vec<String>, String> {
+        self.inner.list_directory(path)
+    }
+
+    fn execute_database_query(
+        &self,
+        _database_url: &str,
+        query: &Query,
+    ) -> Result<QueryResult, String> {
+        self.transaction
+            .lock()
+            .map_err(|_| "sandbox database transaction is unavailable".to_owned())?
+            .execute(query)
+            .map_err(|error| error.to_string())
+    }
+
+    fn execute_database_batch(
+        &self,
+        _database_url: &str,
+        queries: &[Query],
+        _transaction: bool,
+    ) -> Result<Vec<QueryResult>, String> {
+        self.transaction
+            .lock()
+            .map_err(|_| "sandbox database transaction is unavailable".to_owned())?
+            .execute_batch(queries)
+            .map_err(|error| error.to_string())
+    }
+
+    fn validate_database_storage(&self, database_url: &str, schema: &Schema) -> Result<(), String> {
+        self.inner.validate_database_storage(database_url, schema)
+    }
 }
 
 struct ConsoleCompleter(Arc<Mutex<Vec<String>>>);
@@ -426,8 +559,8 @@ fn report_meta(result: Result<(), zelyra_runtime::ReplError>) {
     }
 }
 
-fn evaluate(input: &str, session: &mut zelyra_runtime::ReplSession) {
-    match session.eval_line(input) {
+fn evaluate(input: &str, session: &mut zelyra_runtime::ReplSession, backend: &str) {
+    match session.eval_line_with_executor(input, |context| execute_repl_backend(context, backend)) {
         Ok(result) => {
             for line in result.output {
                 println!("{line}");
@@ -440,12 +573,114 @@ fn evaluate(input: &str, session: &mut zelyra_runtime::ReplSession) {
     }
 }
 
+fn execute_repl_backend(
+    context: zelyra_runtime::ReplExecutionContext<'_>,
+    backend: &str,
+) -> Result<zelyra_runtime::FunctionExecutionOutcome, zelyra_runtime::ReplError> {
+    if backend == "ast" {
+        let outcome =
+            if let (Some(url), Some(transaction)) = (context.database_url, context.transaction) {
+                zelyra_runtime::execute_function_captured_with_mariadb_transaction(
+                    context.program,
+                    context.function_name,
+                    context.arguments,
+                    url,
+                    context.grants,
+                    context.policy,
+                    transaction,
+                )
+            } else {
+                zelyra_runtime::execute_function_captured_with_capabilities_and_policies(
+                    context.program,
+                    context.function_name,
+                    context.arguments,
+                    context.database_url,
+                    context.grants,
+                    context.policy,
+                )
+            };
+        return Ok(outcome);
+    }
+
+    let mir = zelyra_mir::lower(context.program).map_err(|errors| {
+        let error = errors
+            .into_iter()
+            .next()
+            .expect("lowering returned an error");
+        zelyra_runtime::ReplError::Backend {
+            code: error.code.to_owned(),
+            message: error.message,
+            span: error.span,
+        }
+    })?;
+    let bytecode =
+        zelyra_mir::bytecode::compile(&mir, context.function_name).map_err(|errors| {
+            let error = errors
+                .into_iter()
+                .next()
+                .expect("bytecode compilation returned an error");
+            zelyra_runtime::ReplError::Backend {
+                code: error.code.to_owned(),
+                message: error.message,
+                span: error.span,
+            }
+        })?;
+    let limits = zelyra_mir::execution::ExecutionLimits {
+        max_steps: context
+            .policy
+            .and_then(|policy| policy.step_budget)
+            .unwrap_or(100_000),
+        max_stack_depth: context
+            .policy
+            .and_then(|policy| policy.max_stack_depth)
+            .unwrap_or(20),
+    };
+    let host_services: Arc<dyn HostServices> = match context.transaction.clone() {
+        Some(transaction) => Arc::new(ReplHostServices {
+            inner: Arc::new(SystemHostServices),
+            transaction,
+        }),
+        None => Arc::new(SystemHostServices),
+    };
+    let outcome = if let Some(url) = context.database_url {
+        zelyra_mir::bytecode::execute_with_database_and_host_services_and_policy_captured(
+            &bytecode,
+            context.arguments,
+            limits,
+            context.grants,
+            context.policy,
+            zelyra_mir::bytecode::BytecodeDatabaseExecution {
+                url,
+                schema: &mir.database_schema,
+            },
+            host_services,
+        )
+    } else {
+        zelyra_mir::bytecode::execute_with_host_services_and_policy_captured(
+            &bytecode,
+            context.arguments,
+            limits,
+            context.grants,
+            context.policy,
+            host_services,
+        )
+    };
+    Ok(zelyra_runtime::FunctionExecutionOutcome {
+        output: outcome.output,
+        value: outcome.value,
+        error: outcome.error,
+    })
+}
+
 fn pretty_value(value: &RuntimeValue, depth: usize) -> String {
     if depth >= 32 {
         return "<maximum display depth>".into();
     }
     match value {
         RuntimeValue::String(value) => format!("{:?}", value),
+        RuntimeValue::Decimal(value) => {
+            format!("{} [Decimal]", RuntimeValue::Decimal(*value).output())
+        }
         RuntimeValue::Object {
             type_name, fields, ..
         } => {
@@ -632,6 +867,25 @@ mod tests {
         assert_eq!(
             pretty_value(&value, 0),
             "Customer {\n  id: 7,\n  name: \"A\"\n}"
+        );
+    }
+
+    #[test]
+    fn decimal_values_keep_their_type_visible_in_repl_output() {
+        assert_eq!(
+            pretty_value(&Value::Decimal(1_190_000_000), 0),
+            "1.19 [Decimal]"
+        );
+        let value = Value::Object {
+            type_name: "Invoice".into(),
+            type_args: Vec::new(),
+            fields: [("gross_amount".into(), Value::Decimal(119_000_000_000))]
+                .into_iter()
+                .collect(),
+        };
+        assert_eq!(
+            pretty_value(&value, 0),
+            "Invoice {\n  gross_amount: 119 [Decimal]\n}"
         );
     }
 

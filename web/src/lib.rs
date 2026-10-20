@@ -17,14 +17,18 @@ use zelyra_ast::{
     TableDef, Type,
 };
 use zelyra_database::{QueryValue, Schema};
-use zelyra_forms::{validate, FieldError};
+#[cfg(test)]
+use zelyra_forms::validate;
+use zelyra_forms::FieldError;
 use zelyra_runtime::Value as RuntimeValue;
 mod edit_snapshot;
+pub mod file_storage;
 mod forms;
 mod http;
 mod i18n;
 mod mfa;
 mod module_settings;
+pub mod multipart;
 mod password_reset;
 mod server;
 mod ui;
@@ -721,6 +725,14 @@ struct CrudRequestContext<'a> {
     granted_permissions: Vec<String>,
 }
 
+struct CrudFileDownloadContext<'a> {
+    database_url: Option<&'a str>,
+    storage_root: Option<&'a Path>,
+    validation_program: Option<&'a Program>,
+    actor_user_id: Option<i64>,
+    tenant_context: Option<&'a TenantContext>,
+}
+
 struct CrudMutationContext<'a> {
     database_url: Option<&'a str>,
     audit_table: Option<&'a str>,
@@ -764,6 +776,8 @@ struct FormDispatchContext<'a> {
     capability_grants: Option<&'a HashSet<String>>,
     runtime_policy: Option<&'a zelyra_runtime::RuntimePolicy>,
     granted_permissions: Vec<String>,
+    multipart_parts: &'a [multipart::MultipartPart<'a>],
+    upload_storage_root: Option<&'a Path>,
 }
 
 fn tenant_selector(request: &Request) -> Result<Option<String>, u16> {
@@ -1214,6 +1228,7 @@ pub struct WebApp {
     pub ui_stylesheet_css: Option<String>,
     pub project_theme_css: Option<String>,
     public_project_root: Option<PathBuf>,
+    upload_storage_root: Option<PathBuf>,
     allowed_hosts: Vec<String>,
     project_ui_catalogs: ProjectUiCatalogs,
     sessions: Arc<Mutex<HashMap<String, Session>>>,
@@ -1250,6 +1265,7 @@ impl WebApp {
             ui_stylesheet_css: None,
             project_theme_css: None,
             public_project_root: None,
+            upload_storage_root: None,
             allowed_hosts: default_allowed_hosts(),
             project_ui_catalogs: ProjectUiCatalogs::default(),
             sessions: Arc::new(Mutex::new(HashMap::new())),
@@ -1257,6 +1273,68 @@ impl WebApp {
             password_reset_issue_lock: Arc::new(Mutex::new(())),
             password_reset_mailer: None,
             api_throttle: Arc::new(Mutex::new(HashMap::new())),
+        }
+    }
+
+    fn request_body_limit_from_headers(&self, header_text: &str) -> usize {
+        let mut lines = header_text.split("\r\n");
+        let Some(request_line) = lines.next() else {
+            return MAX_REQUEST_BODY_BYTES;
+        };
+        let mut request_parts = request_line.split_whitespace();
+        let Some(method) = request_parts.next() else {
+            return MAX_REQUEST_BODY_BYTES;
+        };
+        let Some(target) = request_parts.next() else {
+            return MAX_REQUEST_BODY_BYTES;
+        };
+        if method != "POST" {
+            return MAX_REQUEST_BODY_BYTES;
+        }
+        let mut content_type = None;
+        for line in lines {
+            if line.is_empty() {
+                break;
+            }
+            if let Some((name, value)) = line.split_once(':') {
+                if name.trim().eq_ignore_ascii_case("content-type")
+                    && content_type.replace(value.trim()).is_some()
+                {
+                    return MAX_REQUEST_BODY_BYTES;
+                }
+            }
+        }
+        if !content_type.is_some_and(|value| {
+            value.split(';').next().is_some_and(|media_type| {
+                media_type
+                    .trim()
+                    .eq_ignore_ascii_case("multipart/form-data")
+            })
+        }) {
+            return MAX_REQUEST_BODY_BYTES;
+        }
+        let path = target.split_once('?').map_or(target, |(path, _)| path);
+        let Some(route) = self
+            .forms
+            .iter()
+            .find(|route| match_path(&route.path, path).is_some())
+        else {
+            return MAX_REQUEST_BODY_BYTES;
+        };
+        let upload_bytes = route
+            .form
+            .fields
+            .iter()
+            .filter_map(|field| field.file_upload.as_ref())
+            .fold(0_usize, |total, field| {
+                total.saturating_add(usize::try_from(field.max_size_bytes).unwrap_or(usize::MAX))
+            });
+        if upload_bytes == 0 {
+            MAX_REQUEST_BODY_BYTES
+        } else {
+            upload_bytes
+                .saturating_add(MULTIPART_FRAMING_BUDGET_BYTES)
+                .min(MAX_UPLOAD_REQUEST_BODY_BYTES)
         }
     }
 
@@ -1290,6 +1368,7 @@ impl WebApp {
             ui_stylesheet_css: None,
             project_theme_css: None,
             public_project_root: None,
+            upload_storage_root: None,
             allowed_hosts: default_allowed_hosts(),
             project_ui_catalogs: ProjectUiCatalogs::default(),
             sessions: Arc::new(Mutex::new(HashMap::new())),
@@ -1425,6 +1504,13 @@ impl WebApp {
     /// fallback after declared application routes have been considered.
     pub fn with_public_dir(mut self, project_root: impl Into<PathBuf>) -> Self {
         self.public_project_root = Some(project_root.into());
+        self
+    }
+
+    /// Configures private upload storage beneath a project-owned directory.
+    /// Uploads remain disabled when this is not configured.
+    pub fn with_upload_storage(mut self, storage_root: impl Into<PathBuf>) -> Self {
+        self.upload_storage_root = Some(storage_root.into());
         self
     }
 
@@ -1591,6 +1677,14 @@ impl WebApp {
     }
 
     pub fn dispatch(&self, request: &Request) -> Response {
+        self.dispatch_with_multipart(request, &[])
+    }
+
+    fn dispatch_with_multipart(
+        &self,
+        request: &Request,
+        multipart_parts: &[multipart::MultipartPart<'_>],
+    ) -> Response {
         let request_id = request_id(request);
         let mut correlated_request = request.clone();
         correlated_request
@@ -1623,7 +1717,7 @@ impl WebApp {
                 ),
             )
         } else {
-            self.dispatch_inner(&correlated_request)
+            self.dispatch_inner(&correlated_request, multipart_parts)
         };
         if response.content_type.starts_with("text/html") {
             if response.location.is_none() {
@@ -1671,7 +1765,11 @@ impl WebApp {
         response
     }
 
-    fn dispatch_inner(&self, request: &Request) -> Response {
+    fn dispatch_inner(
+        &self,
+        request: &Request,
+        multipart_parts: &[multipart::MultipartPart<'_>],
+    ) -> Response {
         if request.path == SCHEDULE_PROBE_PATH {
             return if self.valid_schedule_probe(request) {
                 Response::empty(204).with_header("Cache-Control", "no-store")
@@ -1855,6 +1953,11 @@ impl WebApp {
         }
         for form in &self.forms {
             if let Some(path_params) = match_path(&form.path, &request.path) {
+                // A POST-only mutation form may share its path with a checked
+                // GET page that renders the confirmation experience.
+                if form.post_only && request.method != "POST" {
+                    continue;
+                }
                 if self.database_capability_granted == Some(false) {
                     return database_capability_denied();
                 }
@@ -1910,6 +2013,8 @@ impl WebApp {
                                     self.database_url.as_deref(),
                                 )
                                 .unwrap_or_default(),
+                                multipart_parts,
+                                upload_storage_root: self.upload_storage_root.as_deref(),
                             },
                         ),
                         form.layout_html.as_deref(),
@@ -2031,6 +2136,8 @@ impl WebApp {
                                         self.database_url.as_deref(),
                                     )
                                     .unwrap_or_default(),
+                                    multipart_parts,
+                                    upload_storage_root: self.upload_storage_root.as_deref(),
                                 },
                             ),
                             action.form.layout_html.as_deref(),
@@ -2100,6 +2207,51 @@ impl WebApp {
                         crud.recipient_column.is_some(),
                     );
                 }
+            }
+            let file_path = format!("{}/{{id}}/files/{{field}}", crud.path.trim_end_matches('/'));
+            if let Some(path_params) = match_path(&file_path, &request.path) {
+                if self.database_capability_granted == Some(false) {
+                    return database_capability_denied();
+                }
+                if let Some(response) = authorize(
+                    true,
+                    &crud.permissions,
+                    request,
+                    self,
+                    self.database_url.as_deref(),
+                ) {
+                    return response;
+                }
+                let tenant_context = match resolve_tenant_context(
+                    self,
+                    crud.tenant_column.as_deref(),
+                    request,
+                    self.database_url.as_deref(),
+                ) {
+                    Ok(context) => context,
+                    Err(status) => return tenant_resolution_error(status),
+                };
+                return tenant_cache_policy(
+                    dispatch_crud_file_download(
+                        crud,
+                        request,
+                        &path_params,
+                        CrudFileDownloadContext {
+                            database_url: self.database_url.as_deref(),
+                            storage_root: self.upload_storage_root.as_deref(),
+                            validation_program: self.validation_program.as_deref(),
+                            actor_user_id: session_from_request(
+                                self,
+                                request,
+                                self.database_url.as_deref(),
+                            )
+                            .and_then(|session| session.user_id),
+                            tenant_context: tenant_context.as_ref(),
+                        },
+                    ),
+                    tenant_context.as_ref(),
+                    crud.recipient_column.is_some(),
+                );
             }
             let restore_path = format!("{}/{{id}}/restore", crud.path.trim_end_matches('/'));
             if let Some(path_params) = match_path(&restore_path, &request.path) {
@@ -2192,6 +2344,7 @@ impl WebApp {
                             crud,
                             request,
                             &path_params,
+                            self.upload_storage_root.as_deref(),
                             CrudMutationContext {
                                 database_url: self.database_url.as_deref(),
                                 audit_table: self
@@ -6280,6 +6433,8 @@ fn dispatch_form(
             capability_grants: None,
             runtime_policy: None,
             granted_permissions: Vec::new(),
+            multipart_parts: &[],
+            upload_storage_root: None,
         },
     )
 }
@@ -6302,6 +6457,8 @@ fn dispatch_form_with_language(
         capability_grants,
         runtime_policy,
         granted_permissions,
+        multipart_parts,
+        upload_storage_root,
     } = context;
     if form.tenant_column.is_some() && tenant_context.is_none() {
         return Response::html(403, "<h1>403 Forbidden</h1>");
@@ -6314,7 +6471,25 @@ fn dispatch_form_with_language(
         .actions
         .first()
         .and_then(|action| action.confirm_page.as_ref());
+    let verified_token_route = form.form.verify.is_some();
     if request.method == "GET" {
+        if let Some(verify) = &form.form.verify {
+            let Some(database_url) = database_url else {
+                return Response::html(503, "<h1>503 Service Unavailable</h1>");
+            };
+            let zelyra_ast::ExprKind::Sql { query, .. } = &verify.kind else {
+                return Response::html(500, "<h1>500 Internal Server Error</h1>");
+            };
+            let params = path_params
+                .iter()
+                .map(|(name, value)| (name.clone(), path_parameter_query_value(value)))
+                .collect();
+            match zelyra_database::execute_read_only_query(database_url, query, params) {
+                Ok(result) if !result.rows.is_empty() => {}
+                Ok(_) => return Response::html(404, "<h1>404 Not Found</h1>"),
+                Err(_) => return Response::html(503, "<h1>503 Service Unavailable</h1>"),
+            }
+        }
         if let Some(confirmation_view) = confirmation_view {
             let rendered_form = form_with_path_params(form, path_params);
             let options = match load_relation_options(&rendered_form, database_url, tenant_context)
@@ -6322,10 +6497,15 @@ fn dispatch_form_with_language(
                 Ok(options) => options,
                 Err(error) => return relation_options_error(database_url, error),
             };
-            return Response::html(
+            let response = Response::html(
                 200,
                 render_action_confirmation(&rendered_form, confirmation_view, &options, language),
             );
+            return if verified_token_route {
+                response.with_header("Cache-Control", "no-store")
+            } else {
+                response
+            };
         }
     }
     if form.post_only && request.method != "POST" {
@@ -6471,7 +6651,12 @@ fn dispatch_form_with_language(
             };
             html = attach_form_snapshot(&html, &snapshot);
         }
-        return Response::html(200, html);
+        let response = Response::html(200, html);
+        return if verified_token_route {
+            response.with_header("Cache-Control", "no-store")
+        } else {
+            response
+        };
     }
     if request.method != "POST" {
         return Response::html(405, "<h1>405 Method Not Allowed</h1>");
@@ -6491,6 +6676,67 @@ fn dispatch_form_with_language(
     }
     let mut values = input;
     values.remove("_zelyra_csrf");
+    let mut uploaded_fields = HashSet::new();
+    let mut staged_uploads = Vec::new();
+    let upload_tenant_id = tenant_context.map_or(0, |tenant| tenant.tenant_id);
+    if !multipart_parts.is_empty() {
+        let Some(storage_root) = upload_storage_root else {
+            return Response::html(503, "<h1>503 Service Unavailable</h1>");
+        };
+        if form.tenant_column.is_some() && tenant_context.is_none() {
+            return Response::html(403, "<h1>403 Forbidden</h1>");
+        }
+        let storage = match file_storage::FileStorage::new(storage_root) {
+            Ok(storage) => storage,
+            Err(error) => {
+                eprintln!("zelyra web: private upload storage unavailable: {error}");
+                return Response::html(503, "<h1>503 Service Unavailable</h1>");
+            }
+        };
+        for part in multipart_parts {
+            let Some(filename) = part.filename.as_deref() else {
+                continue;
+            };
+            if filename.is_empty() && part.data.is_empty() {
+                continue;
+            }
+            if filename.len() > 255
+                || filename.chars().any(char::is_control)
+                || filename.contains(['/', '\\'])
+            {
+                return Response::html(400, "<h1>400 Bad Request</h1>");
+            }
+            let Some(field) = rendered_form
+                .form
+                .fields
+                .iter()
+                .find(|field| field.name == part.name)
+            else {
+                return Response::html(400, "<h1>400 Bad Request</h1>");
+            };
+            let Some(options) = field.file_upload.as_ref() else {
+                return Response::html(400, "<h1>400 Bad Request</h1>");
+            };
+            let staged = match storage.stage(
+                upload_tenant_id,
+                part.data,
+                options.max_size_bytes,
+                &options.allowed_types,
+            ) {
+                Ok(staged) => staged,
+                Err(error) => {
+                    let message = html_escape(&error.to_string());
+                    return Response::html(
+                        422,
+                        format!("<h1>422 Unprocessable Content</h1><p>{message}</p>"),
+                    );
+                }
+            };
+            values.insert(field.name.clone(), staged.metadata().file_ref.clone());
+            uploaded_fields.insert(field.name.clone());
+            staged_uploads.push(staged);
+        }
+    }
     let expected_snapshot = if is_edit_form(form) {
         let Some(snapshot) = values
             .remove("_zelyra_snapshot")
@@ -6505,6 +6751,55 @@ fn dispatch_form_with_language(
     } else {
         None
     };
+    // File inputs are intentionally blank on edit pages and browsers never
+    // submit their previous value. Preserve optional existing FileRefs from
+    // the server-side row when no replacement upload was supplied; never
+    // accept a client-provided reference as the fallback. The normal action
+    // transaction still locks the row and validates the signed snapshot before
+    // any write, so a concurrent edit fails with the existing conflict path.
+    let mut preserved_file_refs = HashMap::new();
+    let mut previous_file_refs = HashMap::new();
+    if is_edit_form(form)
+        && rendered_form
+            .form
+            .fields
+            .iter()
+            .any(|field| field.file_upload.is_some())
+    {
+        let existing = match load_existing_form_values(
+            &rendered_form,
+            path_params,
+            database_url,
+            tenant_context,
+            actor_user_id,
+        ) {
+            Ok(Some(existing)) => existing,
+            Ok(None) => return Response::html(404, "<h1>404 Not Found</h1>"),
+            Err(error) if error.contains("unavailable") => {
+                return Response::html(404, "<h1>404 Not Found</h1>")
+            }
+            Err(error) => {
+                eprintln!("zelyra web: existing upload reference could not be loaded: {error}");
+                return Response::html(500, "<h1>500 Internal Server Error</h1>");
+            }
+        };
+        for field in &rendered_form.form.fields {
+            if field.file_upload.is_none() {
+                continue;
+            }
+            if existing.nulls.contains(&field.name) {
+                if !uploaded_fields.contains(&field.name) {
+                    values.remove(&field.name);
+                }
+            } else if let Some(file_ref) = existing.values.get(&field.name) {
+                previous_file_refs.insert(field.name.clone(), file_ref.clone());
+                if !uploaded_fields.contains(&field.name) {
+                    values.insert(field.name.clone(), file_ref.clone());
+                    preserved_file_refs.insert(field.name.clone(), file_ref.clone());
+                }
+            }
+        }
+    }
     if let Some(child_action) = values.remove("_zelyra_child_action") {
         if form.child_collections.is_empty() {
             return Response::html(400, "<h1>400 Bad Request</h1>");
@@ -6697,11 +6992,14 @@ fn dispatch_form_with_language(
     } else {
         values.clone()
     };
-    let validation = validate(
+    let existing_file_fields = preserved_file_refs.keys().cloned().collect::<HashSet<_>>();
+    let validation = zelyra_forms::validate_with_existing_file_refs(
         &validation_form,
         form.table.as_ref(),
         form.schema.as_ref(),
         &parent_values,
+        &uploaded_fields,
+        &existing_file_fields,
     );
     let mut errors = validation.errors;
     validate_relation_values(form, &relation_options, &values, &mut errors);
@@ -6769,8 +7067,39 @@ fn dispatch_form_with_language(
             ),
         );
     }
+    if !staged_uploads.is_empty() && form.form.actions.is_empty() {
+        return Response::html(400, "<h1>400 Bad Request</h1>");
+    }
+    let storage = if staged_uploads.is_empty() {
+        None
+    } else {
+        match upload_storage_root.and_then(|root| file_storage::FileStorage::new(root).ok()) {
+            Some(storage) => Some(storage),
+            None => return Response::html(503, "<h1>503 Service Unavailable</h1>"),
+        }
+    };
+    let mut published_upload_refs = Vec::new();
+    for staged in staged_uploads {
+        match staged.publish() {
+            Ok(file) => published_upload_refs.push(file.file_ref),
+            Err(error) => {
+                if let Some(storage) = &storage {
+                    for file_ref in &published_upload_refs {
+                        let _ = storage.remove(upload_tenant_id, file_ref);
+                    }
+                }
+                eprintln!("zelyra web: private upload publication failed: {error}");
+                return Response::html(500, "<h1>500 Internal Server Error</h1>");
+            }
+        }
+    }
     if let Some(action) = form.form.actions.first() {
         let Some(database_url) = database_url else {
+            if let Some(storage) = &storage {
+                for file_ref in &published_upload_refs {
+                    let _ = storage.remove(upload_tenant_id, file_ref);
+                }
+            }
             return action_error_response(
                 action,
                 503,
@@ -6799,7 +7128,15 @@ fn dispatch_form_with_language(
             },
         ) {
             eprintln!("zelyra web: form action failed: {error}");
+            if let Some(storage) = &storage {
+                for file_ref in &published_upload_refs {
+                    let _ = storage.remove(upload_tenant_id, file_ref);
+                }
+            }
             if error.starts_with("ZELYRA_TENANT_DENIED:") {
+                return Response::html(404, "<h1>404 Not Found</h1>");
+            }
+            if error.starts_with("ZELYRA_NOT_FOUND:") {
                 return Response::html(404, "<h1>404 Not Found</h1>");
             }
             if error.starts_with("ZELYRA_CONFLICT:") {
@@ -6862,6 +7199,22 @@ fn dispatch_form_with_language(
             .and_then(|page| page.title.as_deref())
         {
             redirect = append_query_parameter(&redirect, "zelyra_success_title", title);
+        }
+        if let Some(storage) = &storage {
+            for (field, previous_ref) in &previous_file_refs {
+                if validation
+                    .values
+                    .get(field)
+                    .is_some_and(|current_ref| current_ref != previous_ref)
+                {
+                    if let Err(error) = storage.remove(upload_tenant_id, previous_ref) {
+                        // The database transaction already committed. Leave a
+                        // failed cleanup as an unreferenced managed blob for
+                        // the explicit, reference-aware cleanup command.
+                        eprintln!("zelyra web: replaced upload cleanup failed: {error}");
+                    }
+                }
+            }
         }
         return Response::redirect(redirect);
     }
@@ -6969,6 +7322,9 @@ fn crud_child_route(parent: &FormRoute, child: &CrudChildFormRoute) -> FormRoute
     route.form = zelyra_ast::FormDef {
         name: format!("{}Child", child.definition.name),
         table: Some(child.table.name.clone()),
+        path: None,
+        post_only: false,
+        verify: None,
         fields: child.fields.clone(),
         actions: Vec::new(),
         span: child.definition.span,
@@ -8851,6 +9207,175 @@ fn tableview_page_url(
     url
 }
 
+fn crud_file_fields(program: Option<&Program>, table: &str) -> BTreeMap<String, u64> {
+    let Some(program) = program else {
+        return BTreeMap::new();
+    };
+    let Some(table_definition) = program
+        .tables
+        .iter()
+        .find(|candidate| candidate.name == table)
+    else {
+        return BTreeMap::new();
+    };
+    let mut fields = BTreeMap::new();
+    for field in program
+        .forms
+        .iter()
+        .filter(|form| form.table.as_deref() == Some(table))
+        .flat_map(|form| form.fields.iter())
+    {
+        let Some(options) = field.file_upload.as_ref() else {
+            continue;
+        };
+        if !table_definition
+            .columns
+            .iter()
+            .any(|column| column.name == field.name)
+        {
+            continue;
+        }
+        fields
+            .entry(field.name.clone())
+            .and_modify(|max_size: &mut u64| *max_size = (*max_size).max(options.max_size_bytes))
+            .or_insert(options.max_size_bytes);
+    }
+    fields
+}
+
+fn dispatch_crud_file_download(
+    crud: &CrudRoute,
+    request: &Request,
+    path_params: &HashMap<String, String>,
+    context: CrudFileDownloadContext<'_>,
+) -> Response {
+    let CrudFileDownloadContext {
+        database_url,
+        storage_root,
+        validation_program,
+        actor_user_id,
+        tenant_context,
+    } = context;
+    if request.method != "GET" {
+        return Response::empty(405)
+            .with_header("Allow", "GET")
+            .with_header("Cache-Control", "private, no-store");
+    }
+    let (Some(database_url), Some(storage_root)) = (database_url, storage_root) else {
+        return Response::empty(404).with_header("Cache-Control", "private, no-store");
+    };
+    let Some(field) = path_params.get("field") else {
+        return Response::empty(404).with_header("Cache-Control", "private, no-store");
+    };
+    let fields = crud_file_fields(validation_program, &crud.table);
+    let Some(max_size_bytes) = fields.get(field).copied() else {
+        return Response::empty(404).with_header("Cache-Control", "private, no-store");
+    };
+    let Some(id) = path_params
+        .get("id")
+        .and_then(|value| value.parse::<i64>().ok())
+    else {
+        return Response::empty(404).with_header("Cache-Control", "private, no-store");
+    };
+    if (crud.tenant_column.is_some() && tenant_context.is_none())
+        || (crud.recipient_column.is_some() && actor_user_id.is_none())
+    {
+        return Response::empty(404).with_header("Cache-Control", "private, no-store");
+    }
+    let Some(table) = crud
+        .schema
+        .tables
+        .iter()
+        .find(|table| table.name == crud.table)
+    else {
+        return Response::empty(404).with_header("Cache-Control", "private, no-store");
+    };
+    if !table.columns.iter().any(|column| column.name == *field) {
+        return Response::empty(404).with_header("Cache-Control", "private, no-store");
+    }
+
+    let is_postgres = zelyra_database::is_postgres_url(database_url);
+    let mut conditions = vec![format!("{} = :id", quote_ident("id", is_postgres))];
+    if let Some(soft_delete) = &crud.soft_delete {
+        conditions.push(format!(
+            "{} IS NULL",
+            quote_ident(&soft_delete.column, is_postgres)
+        ));
+    }
+    if let (Some(tenant_column), Some(tenant_context)) =
+        (crud.tenant_column.as_deref(), tenant_context)
+    {
+        conditions.push(format!(
+            "{} = :zelyra_tenant_id AND {}",
+            quote_ident(tenant_column, is_postgres),
+            tenant_access_predicate(tenant_context, is_postgres)
+        ));
+    }
+    if let Some(recipient_column) = crud.recipient_column.as_deref() {
+        conditions.push(format!(
+            "{} = :zelyra_user_id",
+            quote_ident(recipient_column, is_postgres)
+        ));
+    }
+    let sql = format!(
+        "SELECT {} FROM {} WHERE {} LIMIT 1",
+        quote_ident(field, is_postgres),
+        quote_ident(&crud.table, is_postgres),
+        conditions.join(" AND ")
+    );
+    let mut params = vec![("id".into(), QueryValue::Int(id))];
+    if let Some(tenant_context) = tenant_context {
+        params.extend(tenant_query_params(tenant_context));
+    }
+    if let Some(user_id) = actor_user_id.filter(|_| crud.recipient_column.is_some()) {
+        params.push(("zelyra_user_id".into(), QueryValue::Int(user_id)));
+    }
+    let file_ref = match zelyra_database::execute_query(database_url, &sql, params) {
+        Ok(result) => result
+            .rows
+            .first()
+            .and_then(|row| row.first())
+            .filter(|value| !value.is_empty())
+            .cloned(),
+        Err(error) => {
+            eprintln!("zelyra web: authorized CRUD file lookup failed: {error}");
+            None
+        }
+    };
+    let Some(file_ref) = file_ref else {
+        return Response::empty(404).with_header("Cache-Control", "private, no-store");
+    };
+    // Unscoped applications use the private project-local storage namespace 0.
+    let tenant_id = tenant_context.map_or(0, |context| context.tenant_id);
+    let storage = match file_storage::FileStorage::new(storage_root) {
+        Ok(storage) => storage,
+        Err(error) => {
+            eprintln!("zelyra web: private upload storage unavailable: {error}");
+            return Response::empty(404).with_header("Cache-Control", "private, no-store");
+        }
+    };
+    let (metadata, bytes) = match storage.read_verified(tenant_id, &file_ref, max_size_bytes) {
+        Ok(file) => file,
+        Err(error) => {
+            eprintln!("zelyra web: authorized CRUD file verification failed: {error}");
+            return Response::empty(404).with_header("Cache-Control", "private, no-store");
+        }
+    };
+    let filename = match metadata.media_type {
+        "application/pdf" => "download.pdf",
+        "image/png" => "download.png",
+        "image/jpeg" => "download.jpg",
+        _ => return Response::empty(404).with_header("Cache-Control", "private, no-store"),
+    };
+    Response::binary(200, metadata.media_type, bytes)
+        .with_header(
+            "Content-Disposition",
+            format!("attachment; filename=\"{filename}\""),
+        )
+        .with_header("Cache-Control", "private, no-store")
+        .with_header("X-Content-Type-Options", "nosniff")
+}
+
 fn dispatch_crud_detail(
     crud: &CrudRoute,
     request: &Request,
@@ -9080,9 +9605,20 @@ fn dispatch_crud_detail(
             }
         }
     }
+    let file_columns = crud_file_fields(validation_program, &crud.table)
+        .into_keys()
+        .collect::<Vec<_>>();
     Response::html(
         200,
-        render_crud_detail_with_actions(crud, &columns, row, &id_text, ui_actions, language),
+        render_crud_detail_with_actions(
+            crud,
+            &columns,
+            row,
+            &id_text,
+            ui_actions,
+            language,
+            &file_columns,
+        ),
     )
 }
 
@@ -9268,10 +9804,90 @@ fn crud_scope_params(
     params
 }
 
+fn is_file_ref_column_type(
+    ty: &Type,
+    aliases: &HashMap<&str, &Type>,
+    visited: &mut HashSet<String>,
+) -> bool {
+    match ty {
+        Type::Option(inner) => is_file_ref_column_type(inner, aliases, visited),
+        Type::Named(name) if name == "FileRef" => true,
+        Type::Named(name) => {
+            if !visited.insert(name.clone()) {
+                return false;
+            }
+            aliases
+                .get(name.as_str())
+                .is_some_and(|target| is_file_ref_column_type(target, aliases, visited))
+        }
+        _ => false,
+    }
+}
+
+fn file_ref_is_still_referenced(
+    program: &Program,
+    database_url: &str,
+    tenant_id: i64,
+    file_ref: &str,
+) -> Result<bool, String> {
+    let aliases = program
+        .types
+        .iter()
+        .map(|alias| (alias.name.as_str(), &alias.target))
+        .collect::<HashMap<_, _>>();
+    let is_postgres = zelyra_database::is_postgres_url(database_url);
+    for table in &program.tables {
+        for column in &table.columns {
+            if !is_file_ref_column_type(&column.ty, &aliases, &mut HashSet::new()) {
+                continue;
+            }
+            let file_column = column
+                .storage_name
+                .as_deref()
+                .unwrap_or(column.name.as_str());
+            let tenant_column = table.tenant_scope.as_ref().map(|scope| {
+                table
+                    .columns
+                    .iter()
+                    .find(|candidate| candidate.name == scope.column)
+                    .and_then(|candidate| candidate.storage_name.as_deref())
+                    .unwrap_or(scope.column.as_str())
+            });
+            let mut sql = format!(
+                "SELECT 1 FROM {} WHERE {} = :zelyra_file_ref",
+                quote_ident(&table.name, is_postgres),
+                quote_ident(file_column, is_postgres)
+            );
+            let mut params = vec![(
+                "zelyra_file_ref".into(),
+                zelyra_database::QueryValue::String(file_ref.to_owned()),
+            )];
+            if let Some(tenant_column) = tenant_column {
+                sql.push_str(&format!(
+                    " AND {} = :zelyra_upload_tenant_id",
+                    quote_ident(tenant_column, is_postgres)
+                ));
+                params.push((
+                    "zelyra_upload_tenant_id".into(),
+                    zelyra_database::QueryValue::Int(tenant_id),
+                ));
+            }
+            sql.push_str(" LIMIT 1");
+            let rows = zelyra_database::execute_read_only_query(database_url, &sql, params)
+                .map_err(|error| format!("{}.{}: {error}", table.name, column.name))?;
+            if !rows.rows.is_empty() {
+                return Ok(true);
+            }
+        }
+    }
+    Ok(false)
+}
+
 fn dispatch_crud_delete(
     crud: &CrudRoute,
     request: &Request,
     path_params: &HashMap<String, String>,
+    upload_storage_root: Option<&Path>,
     context: CrudMutationContext<'_>,
 ) -> Response {
     let CrudMutationContext {
@@ -9417,9 +10033,70 @@ fn dispatch_crud_delete(
                     .map(|condition| format!(" AND {condition}"))
                     .collect::<String>()
             ),
-            params: scope_params,
+            params: scope_params.clone(),
         }
     });
+    let file_refs_before_delete = if crud.soft_delete.is_none() {
+        validation_program
+            .and_then(|program| program.tables.iter().find(|table| table.name == crud.table))
+            .map(|table| {
+                let aliases = validation_program
+                    .expect("program exists when file table is selected")
+                    .types
+                    .iter()
+                    .map(|alias| (alias.name.as_str(), &alias.target))
+                    .collect::<HashMap<_, _>>();
+                let file_columns = table
+                    .columns
+                    .iter()
+                    .filter(|column| {
+                        is_file_ref_column_type(&column.ty, &aliases, &mut HashSet::new())
+                    })
+                    .map(|column| {
+                        quote_ident(
+                            column
+                                .storage_name
+                                .as_deref()
+                                .unwrap_or(column.name.as_str()),
+                            is_postgres,
+                        )
+                    })
+                    .collect::<Vec<_>>();
+                if file_columns.is_empty() {
+                    return Vec::new();
+                }
+                let conditions = scope_conditions
+                    .iter()
+                    .map(|condition| format!(" AND {condition}"))
+                    .collect::<String>();
+                let query = format!(
+                    "SELECT {} FROM {} WHERE {} = :id{} LIMIT 1",
+                    file_columns.join(", "),
+                    quote_ident(&crud.table, is_postgres),
+                    quote_ident("id", is_postgres),
+                    conditions
+                );
+                match zelyra_database::execute_read_only_query(
+                    database_url,
+                    &query,
+                    scope_params.clone(),
+                ) {
+                    Ok(result) => result
+                        .rows
+                        .into_iter()
+                        .flat_map(|row| row.into_iter())
+                        .filter(|value| !value.is_empty())
+                        .collect(),
+                    Err(error) => {
+                        eprintln!("zelyra web: file references could not be loaded before CRUD deletion: {error}");
+                        Vec::new()
+                    }
+                }
+            })
+            .unwrap_or_default()
+    } else {
+        Vec::new()
+    };
     let (query, success_message) = if let Some(soft_delete) = &crud.soft_delete {
         (
             format!(
@@ -9520,6 +10197,36 @@ fn dispatch_crud_delete(
             "Internal Server Error",
             "The record could not be deleted.",
         );
+    }
+    if crud.soft_delete.is_none() && !file_refs_before_delete.is_empty() {
+        if let (Some(program), Some(storage_root)) = (validation_program, upload_storage_root) {
+            match file_storage::FileStorage::new(storage_root) {
+                Ok(storage) => {
+                    let upload_tenant_id = tenant_context.map_or(0, |tenant| tenant.tenant_id);
+                    for file_ref in file_refs_before_delete {
+                        match file_ref_is_still_referenced(
+                            program,
+                            database_url,
+                            upload_tenant_id,
+                            &file_ref,
+                        ) {
+                            Ok(false) => {
+                                if let Err(error) = storage.remove(upload_tenant_id, &file_ref) {
+                                    eprintln!("zelyra web: deleted record upload cleanup failed: {error}");
+                                }
+                            }
+                            Ok(true) => {}
+                            Err(error) => eprintln!(
+                                "zelyra web: remaining upload references could not be checked; retaining file: {error}"
+                            ),
+                        }
+                    }
+                }
+                Err(error) => eprintln!(
+                    "zelyra web: private upload storage could not be opened after record deletion: {error}"
+                ),
+            }
+        }
     }
     Response::redirect(append_query_parameter(
         &crud.path,
@@ -10496,6 +11203,7 @@ fn render_crud_detail(crud: &CrudRoute, columns: &[&str], row: &[String], id: &s
             custom: Vec::new(),
         },
         UiLanguage::English,
+        &[],
     )
 }
 
@@ -10506,6 +11214,7 @@ fn render_crud_detail_with_actions(
     id: &str,
     ui_actions: CrudUiActions,
     language: UiLanguage,
+    file_columns: &[String],
 ) -> String {
     let title = crud
         .detail_view
@@ -10531,9 +11240,25 @@ fn render_crud_detail_with_actions(
             &crud_column_label(language, &crud.schema, &crud.table, column),
         ));
         html.push_str("</dt><dd>");
-        html.push_str(&html_escape_preserving_locale_references(
-            &display_crud_database_value(value, &crud.schema, &crud.table, column, language),
-        ));
+        if file_columns
+            .iter()
+            .any(|file_column| file_column.as_str() == *column)
+        {
+            if !value.is_empty() {
+                html.push_str("<a href=\"");
+                html.push_str(&html_escape(&format!(
+                    "{}/{}/files/{}",
+                    crud.path, id, column
+                )));
+                html.push_str(&format!("\">{}</a>", tr(language, "file.download")));
+            } else {
+                html.push('—');
+            }
+        } else {
+            html.push_str(&html_escape_preserving_locale_references(
+                &display_crud_database_value(value, &crud.schema, &crud.table, column, language),
+            ));
+        }
         html.push_str("</dd>");
     }
     if ui_actions.edit || ui_actions.create {
@@ -11449,7 +12174,7 @@ fn runtime_value_for_type(
         Type::Named(name) if name == "Money" => zelyra_ast::decimal::parse_scaled(value, 9)
             .map(RuntimeValue::Decimal)
             .ok_or_else(invalid),
-        Type::Named(name) if matches!(name.as_str(), "Email" | "Url" | "Uuid") => {
+        Type::Named(name) if matches!(name.as_str(), "Email" | "Url" | "Uuid" | "FileRef") => {
             Ok(RuntimeValue::String(value.to_owned()))
         }
         Type::Named(name) => {
@@ -11533,7 +12258,10 @@ fn relation_target_for_field(form: &FormRoute, field: &zelyra_ast::FormField) ->
     let Type::Named(name) = ty? else {
         return None;
     };
-    if matches!(name.as_str(), "Id" | "Email" | "Url" | "Uuid" | "Money") {
+    if matches!(
+        name.as_str(),
+        "Id" | "Email" | "Url" | "Uuid" | "Money" | "FileRef"
+    ) {
         return None;
     }
     let schema = form.schema.as_ref()?;
@@ -11642,10 +12370,10 @@ fn execute_form_action_with_children(
         }
     }
     for (name, value) in path_params {
-        let parsed = value
-            .parse::<i64>()
-            .map(zelyra_database::QueryValue::Int)
-            .map_err(|_| format!("path parameter `{name}` is not an integer"))?;
+        // Numeric route values preserve the existing integer binding behavior;
+        // opaque route tokens (such as unsubscribe tokens) remain strings and
+        // are still passed only through prepared SQL parameters.
+        let parsed = path_parameter_query_value(value);
         parameters.push((name.clone(), parsed));
     }
     let mut queries = Vec::new();
@@ -11910,7 +12638,22 @@ fn execute_form_action_with_children(
             None
         };
 
-        for query in &queries {
+        let first_write_query = if action.require_match {
+            let Some(select) = queries.first() else {
+                return Err(zelyra_database::DatabaseError {
+                    message: "ZELYRA_NOT_FOUND: matching record is unavailable".into(),
+                });
+            };
+            if transaction.execute(select)?.rows.is_empty() {
+                return Err(zelyra_database::DatabaseError {
+                    message: "ZELYRA_NOT_FOUND: matching record is unavailable".into(),
+                });
+            }
+            1
+        } else {
+            0
+        };
+        for query in queries.iter().skip(first_write_query) {
             transaction.execute(query)?;
         }
         let created_parent_id = if !is_edit_form(form)
@@ -12180,6 +12923,13 @@ fn execute_form_action_with_children(
         Ok(())
     })
     .map_err(|error| error.to_string())
+}
+
+fn path_parameter_query_value(value: &str) -> zelyra_database::QueryValue {
+    value.parse::<i64>().map_or_else(
+        |_| zelyra_database::QueryValue::String(value.to_owned()),
+        zelyra_database::QueryValue::Int,
+    )
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -13791,12 +14541,80 @@ fn handle_connection_until(
     app: &WebApp,
     deadline: Instant,
 ) -> io::Result<()> {
-    let response = match read_http_request(stream, deadline) {
-        Ok(raw) => match parse_request(&raw) {
-            Ok(mut request) => {
-                request.remote_addr = stream.peer_addr().ok();
-                let _query_deadline = zelyra_database::set_query_deadline(deadline);
-                app.dispatch(&request)
+    let response = match read_http_request_bytes(stream, deadline, |headers| {
+        app.request_body_limit_from_headers(headers)
+    }) {
+        Ok(read) => match parse_request_bytes_with_limit(&read.bytes, read.max_body_bytes) {
+            Ok(parsed) => {
+                if let Some(content_type) = parsed.headers.get("content-type") {
+                    if content_type
+                        .split(';')
+                        .next()
+                        .is_some_and(|media_type| media_type.trim().eq_ignore_ascii_case("multipart/form-data"))
+                    {
+                        match multipart::decode(
+                            content_type,
+                            parsed.body,
+                            multipart::MultipartLimits::new(read.max_body_bytes),
+                        ) {
+                            Ok(parts) => {
+                                let route_accepts_uploads = parsed.method == "POST"
+                                    && app.forms.iter().any(|form| {
+                                        match_path(&form.path, &parsed.path).is_some()
+                                            && form.form.fields.iter().any(|field| {
+                                                field.file_upload.is_some()
+                                            })
+                                    });
+                                if !route_accepts_uploads {
+                                    Response::json(
+                                        415,
+                                        "{\"error\":{\"code\":\"UnsupportedMediaType\",\"message\":\"this route does not accept multipart form data\"}}",
+                                    )
+                                } else if parts.iter().any(|part| {
+                                    parts.iter().filter(|candidate| candidate.name == part.name).count() > 1
+                                }) {
+                                    Response::html(400, "<h1>400 Bad Request</h1>")
+                                } else {
+                                    let mut fields = Vec::new();
+                                    let mut valid = true;
+                                    for part in &parts {
+                                        if part.filename.is_some() {
+                                            continue;
+                                        }
+                                        let Ok(value) = std::str::from_utf8(part.data) else {
+                                            valid = false;
+                                            break;
+                                        };
+                                        fields.push(format!(
+                                            "{}={}",
+                                            form_urlencode(&part.name),
+                                            form_urlencode(value)
+                                        ));
+                                    }
+                                    if !valid {
+                                        Response::html(400, "<h1>400 Bad Request</h1>")
+                                    } else {
+                                        let request = Request {
+                                            method: parsed.method,
+                                            target: parsed.target,
+                                            path: parsed.path,
+                                            headers: parsed.headers,
+                                            body: fields.join("&"),
+                                            remote_addr: stream.peer_addr().ok(),
+                                        };
+                                        let _query_deadline = zelyra_database::set_query_deadline(deadline);
+                                        app.dispatch_with_multipart(&request, &parts)
+                                    }
+                                }
+                            }
+                            Err(_) => Response::html(400, "<h1>400 Bad Request</h1>"),
+                        }
+                    } else {
+                        dispatch_text_request(parsed, stream, app, deadline)
+                    }
+                } else {
+                    dispatch_text_request(parsed, stream, app, deadline)
+                }
             }
             Err(error) if error.message.contains("request body exceeds") => Response::json(
                 413,
@@ -13807,6 +14625,10 @@ fn handle_connection_until(
         Err(RequestReadError::PayloadTooLarge) => Response::json(
             413,
             "{\"error\":{\"code\":\"PayloadTooLarge\",\"message\":\"request body is too large\"}}",
+        ),
+        Err(RequestReadError::InFlightLimit) => Response::json(
+            503,
+            "{\"error\":{\"code\":\"RequestCapacityExceeded\",\"message\":\"request body capacity is temporarily unavailable\"}}",
         ),
         Err(RequestReadError::Http(error)) => {
             drop(error);
@@ -13860,6 +14682,44 @@ fn handle_connection_until(
         }
     }
     Ok(())
+}
+
+fn form_urlencode(value: &str) -> String {
+    let mut encoded = String::with_capacity(value.len());
+    for byte in value.bytes() {
+        if byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_' | b'.' | b'*') {
+            encoded.push(char::from(byte));
+        } else if byte == b' ' {
+            encoded.push('+');
+        } else {
+            encoded.push('%');
+            encoded.push(char::from(b"0123456789ABCDEF"[(byte >> 4) as usize]));
+            encoded.push(char::from(b"0123456789ABCDEF"[(byte & 0x0f) as usize]));
+        }
+    }
+    encoded
+}
+
+fn dispatch_text_request(
+    parsed: ParsedRequestBytes<'_>,
+    stream: &TcpStream,
+    app: &WebApp,
+    deadline: Instant,
+) -> Response {
+    let body = match std::str::from_utf8(parsed.body) {
+        Ok(body) => body,
+        Err(_) => return Response::html(400, "<h1>400 Bad Request</h1>"),
+    };
+    let request = Request {
+        method: parsed.method,
+        target: parsed.target,
+        path: parsed.path,
+        headers: parsed.headers,
+        body: body.to_owned(),
+        remote_addr: stream.peer_addr().ok(),
+    };
+    let _query_deadline = zelyra_database::set_query_deadline(deadline);
+    app.dispatch(&request)
 }
 
 #[cfg(test)]

@@ -2496,6 +2496,8 @@ version = "1.2.28"
 dependencies = [
  "zelyra-ast",
  "zelyra-database",
+ "zelyra-lexer",
+ "zelyra-parser",
 ]
 
 [[package]]
@@ -2566,9 +2568,12 @@ dependencies = [
  "argon2",
  "blake2",
  "lettre",
+ "libc",
  "rand_core 0.6.4",
  "ring",
+ "serde",
  "serde_json",
+ "sha2 0.10.9",
  "subtle",
  "url",
  "zelyra-ast",

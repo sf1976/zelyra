@@ -1591,19 +1591,34 @@ fn language_console_keeps_bindings_and_recovers_after_runtime_errors_in_piped_in
 }
 
 #[test]
-fn language_console_rejects_unimplemented_bytecode_backend_instead_of_falling_back_to_ast() {
+fn language_console_bytecode_backend_keeps_bindings_and_recovers_after_errors() {
     let (directory, source) =
         temporary_project_source("language-console-backend", "fn main() {}\n");
-    let output = Command::new(binary())
+    let mut child = Command::new(binary())
         .args(["console", source.to_str().unwrap(), "--backend", "bytecode"])
-        .output()
-        .expect("language console should report the backend limitation");
-    assert!(!output.status.success());
-    let stderr = String::from_utf8_lossy(&output.stderr);
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .expect("language console should start the bytecode backend");
+    child
+        .stdin
+        .take()
+        .unwrap()
+        .write_all(b"x = 10\ny = 20\nx + y\n1 / 0\n\"weiter\"\n")
+        .expect("REPL inputs should be written");
+    let output = child.wait_with_output().unwrap();
     assert!(
-        stderr.contains("currently supports only --backend ast"),
-        "unexpected stderr: {stderr}"
+        output.status.success(),
+        "stdout: {}\nstderr: {}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
     );
+    assert_eq!(
+        String::from_utf8_lossy(&output.stdout),
+        "=> 30\n=> \"weiter\"\n"
+    );
+    assert!(String::from_utf8_lossy(&output.stderr).contains("division by zero"));
     fs::remove_dir_all(directory).unwrap();
 }
 

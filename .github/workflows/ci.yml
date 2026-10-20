@@ -49,7 +49,7 @@ jobs:
         env:
           CC: clang
         run: |
-          for target in lexer_parser sql_binder template_renderer http_request bytecode_decode backend_differential; do
+          for target in lexer_parser sql_binder template_renderer http_request multipart_decoder bytecode_decode backend_differential; do
             cargo +nightly fuzz run "$target" "fuzz/corpus/$target" -- \
               -max_total_time=15 -max_len=16384 -timeout=5
           done
@@ -189,6 +189,16 @@ jobs:
         run: |
           cargo build -p zelyra-cli
           python3 scripts/check_release_metadata.py --binary target/debug/zelyra
+      - name: Verify language console transaction sandbox
+        env:
+          ZELYRA_BIN: target/debug/zelyra
+          ZELYRA_REPL_MARIADB_IMAGE: mariadb:11.8
+        run: ./tests/language-console-mariadb-e2e.sh
+      - name: Verify upload cleanup and storage backup/restore
+        env:
+          ZELYRA_BIN: target/debug/zelyra
+          ZELYRA_UPLOAD_MARIADB_IMAGE: mariadb:11.8
+        run: ./tests/mariadb-upload-cleanup-e2e.sh
       - name: Exercise installation-aware uninstall
         env:
           ZELYRA_BIN: target/debug/zelyra
@@ -304,6 +314,14 @@ jobs:
           ZELYRA_GENERATED_AUTH_ADDRESS: 127.0.0.1:38525
           ZELYRA_BIN: target/debug/zelyra
         run: ./tests/generated-project-auth-e2e.sh
+      - name: Run Laravel-imported native authentication end-to-end test
+        env:
+          ZELYRA_LARAVEL_IMPORT_DB_PASSWORD: root
+          ZELYRA_LARAVEL_IMPORT_DB_HOST: 127.0.0.1
+          ZELYRA_LARAVEL_IMPORT_DB_PORT: 3306
+          ZELYRA_LARAVEL_IMPORT_AUTH_ADDRESS: 127.0.0.1:38536
+          ZELYRA_BIN: target/debug/zelyra
+        run: ./tests/laravel-import-auth-e2e.sh tests/fixtures/laravel-auth-minimal
       - name: Run password-reset MariaDB and SMTP end-to-end test
         env:
           DATABASE_URL: mariadb://root:root@127.0.0.1:3306/zelyra_ci
