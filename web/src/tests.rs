@@ -1251,6 +1251,30 @@ fn child_collection_legends_localize_after_html_escaping() {
 }
 
 #[test]
+fn child_collection_legend_uses_project_translation_and_language_fallback() {
+    let route = child_collection_form_route();
+    let rendered = render_form(&route, &HashMap::new(), &[], None);
+    let mut catalogs = ProjectUiCatalogs::default();
+    catalogs
+        .set_json(
+            UiLanguage::German,
+            r#"{"identifier.items":"Rechnungspositionen"}"#,
+        )
+        .unwrap();
+
+    let german = localize_html_with_catalog(&rendered, UiLanguage::German, &catalogs);
+    assert!(german.contains("<legend>Rechnungspositionen</legend>"));
+    assert!(german.contains("<legend>Rechnungspositionen 1</legend>"));
+
+    // A missing project entry falls back through the built-in English identifier
+    // humanizer instead of exposing the internal locale marker.
+    let english = localize_html_with_catalog(&rendered, UiLanguage::English, &catalogs);
+    assert!(english.contains("<legend>Items</legend>"));
+    assert!(!german.contains("zelyra-locale:"));
+    assert!(!english.contains("zelyra-locale:"));
+}
+
+#[test]
 fn automatic_invoice_number_queries_are_tenant_scoped() {
     let mut route = form_route();
     route.form.table = Some("invoices".into());
