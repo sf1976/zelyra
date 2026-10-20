@@ -654,8 +654,11 @@ computed fields and generated uploads remain open:
   forged client values. A MariaDB CRUD HTTP integration test covers create,
   edit, rejected validation, unchanged persistence after rejection, and the
   recalculated value shown on the error response. Decimal scale and rounding
-  are implemented. API `PATCH`, broader backend tests, and complete release
-  gates remain open. See `examples/computed_api.zyl`.
+  are implemented. Validated API `PATCH` also recomputes fields and is covered
+  by unit and isolated MariaDB persistence tests; it currently requires all
+  required table inputs and does not merge partial payloads with a stored row.
+  Broader backend tests and complete release gates remain open. See
+  `examples/computed_api.zyl`.
 - [~] **1.2.33 — FileRef-aware generated CRUD:** Add bounded declarative
   attachment constraints to schema/CRUD metadata and render safe upload fields
   on create/edit plus authorized download links on details. Reuse existing

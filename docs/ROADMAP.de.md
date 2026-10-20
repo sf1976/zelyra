@@ -706,8 +706,11 @@ geprüft; berechnete Felder und generierte Uploads sind weiterhin offen:
   nach dem Fehler und den neu berechneten Wert in der Fehlerantwort ab. Optionale
   Eingaben bleiben typisierte `Option<T>` und müssen mit `match` behandelt
   werden; `None` wird bei optionalen Zielfeldern als fehlender Wert gespeichert.
-  API-`PATCH`, weitere Datenbankläufe und
-  vollständige Release-Prüfungen sind noch offen. Beispiel:
+  Validierte API-`PATCH`-Handler berechnen Felder ebenfalls neu; Unit- und
+  isolierte MariaDB-Schreibtests decken dies ab. Der PATCH-Vertrag verlangt
+  derzeit alle Pflichtfelder und führt kein partielles Zusammenführen mit
+  einem gespeicherten Datensatz aus. Weitere Backend-Läufe und vollständige
+  Release-Prüfungen sind noch offen. Beispiel:
   `examples/computed_api.zyl`.
 - [~] **1.2.33 — FileRef-Unterstützung im generierten CRUD:** Begrenzte,
   deklarative Anhangsregeln für Schema und CRUD ergänzen und sichere

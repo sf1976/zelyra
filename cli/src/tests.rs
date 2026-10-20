@@ -3107,7 +3107,17 @@ fn api_validation_passes_server_computed_fields_to_handlers_without_request_inpu
                 output Result<Int, String>
                 errors { 422 ValidationError: String }
             }
+            api PATCH "/invoice-items/{id}" {
+                handler patch_item
+                input { id: Id quantity: Int unit_price: Int }
+                validates invoice_items
+                output Result<Int, String>
+                errors { 422 ValidationError: String }
+            }
             fn create_item(quantity: Int, unit_price: Int, total: Int) -> Result<Int, String> {
+                return Ok(total)
+            }
+            fn patch_item(id: Id, quantity: Int, unit_price: Int, total: Int) -> Result<Int, String> {
                 return Ok(total)
             }
             fn main() { }
@@ -3132,6 +3142,24 @@ fn api_validation_passes_server_computed_fields_to_handlers_without_request_inpu
     );
     assert_eq!(response.status, 200, "{}", response.body);
     assert_eq!(response.body, "24", "client-supplied total must be ignored");
+
+    let patch = zelyra_web::parse_request(
+        "PATCH /invoice-items/7 HTTP/1.1\r\nContent-Type: application/json\r\n\r\n{\"quantity\":4,\"unit_price\":8,\"total\":999}",
+    )
+    .unwrap();
+    let response = dispatch_api(
+        &program,
+        &program.apis[1],
+        "patch_item",
+        &patch,
+        &HashMap::from([("id".to_owned(), "7".to_owned())]),
+        None,
+    );
+    assert_eq!(response.status, 200, "{}", response.body);
+    assert_eq!(
+        response.body, "32",
+        "PATCH recomputes the derived value and ignores the submitted value"
+    );
 }
 
 #[test]
@@ -3215,6 +3243,13 @@ fn computed_api_fields_are_recomputed_before_validation_and_database_write() {
             output Result<Decimal, String>
             errors { 422 ValidationError: String }
         }
+            api PATCH "/items/{id}" {
+                handler update_item
+                input { id: Id quantity: Decimal unit_price: Decimal }
+                validates __TABLE__
+                output Result<Decimal, String>
+                errors { 422 ValidationError: String }
+            }
         fn create_item(quantity: Decimal, unit_price: Decimal, total: Decimal) -> Result<Decimal, String> uses Database(write) {
             transaction {
                 sql { INSERT INTO __TABLE__ (quantity, unit_price, total) VALUES (:quantity, :unit_price, :total) }
@@ -3272,7 +3307,7 @@ fn computed_api_fields_are_recomputed_before_validation_and_database_write() {
         &program.apis[1],
         "update_item",
         &update_request,
-        &HashMap::from([("id".to_owned(), id)]),
+        &HashMap::from([("id".to_owned(), id.clone())]),
         Some(&database_url),
     );
     assert_eq!(response.status, 200, "{}", response.body);
@@ -3285,6 +3320,28 @@ fn computed_api_fields_are_recomputed_before_validation_and_database_write() {
     )
     .unwrap();
     assert_eq!(rows.rows, vec![vec!["1.54".to_owned()]]);
+    let patch_request = zelyra_web::parse_request(
+        "PATCH /items/1 HTTP/1.1\r\nContent-Type: application/json\r\n\r\n{\"quantity\":5,\"unit_price\":0.385,\"total\":999}",
+    )
+    .unwrap();
+    let response = dispatch_api(
+        &program,
+        &program.apis[2],
+        "update_item",
+        &patch_request,
+        &HashMap::from([("id".to_owned(), id)]),
+        Some(&database_url),
+    );
+    assert_eq!(response.status, 200, "{}", response.body);
+    let body: serde_json::Value = serde_json::from_str(&response.body).unwrap();
+    assert_eq!(body.as_str(), Some("1.93"));
+    let rows = zelyra_database::execute_query(
+        &database_url,
+        &format!("SELECT total FROM {table_name}"),
+        Vec::new(),
+    )
+    .unwrap();
+    assert_eq!(rows.rows, vec![vec!["1.93".to_owned()]]);
     zelyra_database::execute_query(
         &database_url,
         &format!("DROP TABLE {table_name}"),
