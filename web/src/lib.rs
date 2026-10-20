@@ -725,6 +725,14 @@ struct CrudRequestContext<'a> {
     granted_permissions: Vec<String>,
 }
 
+struct CrudFileDownloadContext<'a> {
+    database_url: Option<&'a str>,
+    storage_root: Option<&'a Path>,
+    validation_program: Option<&'a Program>,
+    actor_user_id: Option<i64>,
+    tenant_context: Option<&'a TenantContext>,
+}
+
 struct CrudMutationContext<'a> {
     database_url: Option<&'a str>,
     audit_table: Option<&'a str>,
@@ -2199,6 +2207,51 @@ impl WebApp {
                         crud.recipient_column.is_some(),
                     );
                 }
+            }
+            let file_path = format!("{}/{{id}}/files/{{field}}", crud.path.trim_end_matches('/'));
+            if let Some(path_params) = match_path(&file_path, &request.path) {
+                if self.database_capability_granted == Some(false) {
+                    return database_capability_denied();
+                }
+                if let Some(response) = authorize(
+                    true,
+                    &crud.permissions,
+                    request,
+                    self,
+                    self.database_url.as_deref(),
+                ) {
+                    return response;
+                }
+                let tenant_context = match resolve_tenant_context(
+                    self,
+                    crud.tenant_column.as_deref(),
+                    request,
+                    self.database_url.as_deref(),
+                ) {
+                    Ok(context) => context,
+                    Err(status) => return tenant_resolution_error(status),
+                };
+                return tenant_cache_policy(
+                    dispatch_crud_file_download(
+                        crud,
+                        request,
+                        &path_params,
+                        CrudFileDownloadContext {
+                            database_url: self.database_url.as_deref(),
+                            storage_root: self.upload_storage_root.as_deref(),
+                            validation_program: self.validation_program.as_deref(),
+                            actor_user_id: session_from_request(
+                                self,
+                                request,
+                                self.database_url.as_deref(),
+                            )
+                            .and_then(|session| session.user_id),
+                            tenant_context: tenant_context.as_ref(),
+                        },
+                    ),
+                    tenant_context.as_ref(),
+                    crud.recipient_column.is_some(),
+                );
             }
             let restore_path = format!("{}/{{id}}/restore", crud.path.trim_end_matches('/'));
             if let Some(path_params) = match_path(&restore_path, &request.path) {
@@ -9086,6 +9139,175 @@ fn tableview_page_url(
     url
 }
 
+fn crud_file_fields(program: Option<&Program>, table: &str) -> BTreeMap<String, u64> {
+    let Some(program) = program else {
+        return BTreeMap::new();
+    };
+    let Some(table_definition) = program
+        .tables
+        .iter()
+        .find(|candidate| candidate.name == table)
+    else {
+        return BTreeMap::new();
+    };
+    let mut fields = BTreeMap::new();
+    for field in program
+        .forms
+        .iter()
+        .filter(|form| form.table.as_deref() == Some(table))
+        .flat_map(|form| form.fields.iter())
+    {
+        let Some(options) = field.file_upload.as_ref() else {
+            continue;
+        };
+        if !table_definition
+            .columns
+            .iter()
+            .any(|column| column.name == field.name)
+        {
+            continue;
+        }
+        fields
+            .entry(field.name.clone())
+            .and_modify(|max_size: &mut u64| *max_size = (*max_size).max(options.max_size_bytes))
+            .or_insert(options.max_size_bytes);
+    }
+    fields
+}
+
+fn dispatch_crud_file_download(
+    crud: &CrudRoute,
+    request: &Request,
+    path_params: &HashMap<String, String>,
+    context: CrudFileDownloadContext<'_>,
+) -> Response {
+    let CrudFileDownloadContext {
+        database_url,
+        storage_root,
+        validation_program,
+        actor_user_id,
+        tenant_context,
+    } = context;
+    if request.method != "GET" {
+        return Response::empty(405)
+            .with_header("Allow", "GET")
+            .with_header("Cache-Control", "private, no-store");
+    }
+    let (Some(database_url), Some(storage_root)) = (database_url, storage_root) else {
+        return Response::empty(404).with_header("Cache-Control", "private, no-store");
+    };
+    let Some(field) = path_params.get("field") else {
+        return Response::empty(404).with_header("Cache-Control", "private, no-store");
+    };
+    let fields = crud_file_fields(validation_program, &crud.table);
+    let Some(max_size_bytes) = fields.get(field).copied() else {
+        return Response::empty(404).with_header("Cache-Control", "private, no-store");
+    };
+    let Some(id) = path_params
+        .get("id")
+        .and_then(|value| value.parse::<i64>().ok())
+    else {
+        return Response::empty(404).with_header("Cache-Control", "private, no-store");
+    };
+    if (crud.tenant_column.is_some() && tenant_context.is_none())
+        || (crud.recipient_column.is_some() && actor_user_id.is_none())
+    {
+        return Response::empty(404).with_header("Cache-Control", "private, no-store");
+    }
+    let Some(table) = crud
+        .schema
+        .tables
+        .iter()
+        .find(|table| table.name == crud.table)
+    else {
+        return Response::empty(404).with_header("Cache-Control", "private, no-store");
+    };
+    if !table.columns.iter().any(|column| column.name == *field) {
+        return Response::empty(404).with_header("Cache-Control", "private, no-store");
+    }
+
+    let is_postgres = zelyra_database::is_postgres_url(database_url);
+    let mut conditions = vec![format!("{} = :id", quote_ident("id", is_postgres))];
+    if let Some(soft_delete) = &crud.soft_delete {
+        conditions.push(format!(
+            "{} IS NULL",
+            quote_ident(&soft_delete.column, is_postgres)
+        ));
+    }
+    if let (Some(tenant_column), Some(tenant_context)) =
+        (crud.tenant_column.as_deref(), tenant_context)
+    {
+        conditions.push(format!(
+            "{} = :zelyra_tenant_id AND {}",
+            quote_ident(tenant_column, is_postgres),
+            tenant_access_predicate(tenant_context, is_postgres)
+        ));
+    }
+    if let Some(recipient_column) = crud.recipient_column.as_deref() {
+        conditions.push(format!(
+            "{} = :zelyra_user_id",
+            quote_ident(recipient_column, is_postgres)
+        ));
+    }
+    let sql = format!(
+        "SELECT {} FROM {} WHERE {} LIMIT 1",
+        quote_ident(field, is_postgres),
+        quote_ident(&crud.table, is_postgres),
+        conditions.join(" AND ")
+    );
+    let mut params = vec![("id".into(), QueryValue::Int(id))];
+    if let Some(tenant_context) = tenant_context {
+        params.extend(tenant_query_params(tenant_context));
+    }
+    if let Some(user_id) = actor_user_id.filter(|_| crud.recipient_column.is_some()) {
+        params.push(("zelyra_user_id".into(), QueryValue::Int(user_id)));
+    }
+    let file_ref = match zelyra_database::execute_query(database_url, &sql, params) {
+        Ok(result) => result
+            .rows
+            .first()
+            .and_then(|row| row.first())
+            .filter(|value| !value.is_empty())
+            .cloned(),
+        Err(error) => {
+            eprintln!("zelyra web: authorized CRUD file lookup failed: {error}");
+            None
+        }
+    };
+    let Some(file_ref) = file_ref else {
+        return Response::empty(404).with_header("Cache-Control", "private, no-store");
+    };
+    // Unscoped applications use the private project-local storage namespace 0.
+    let tenant_id = tenant_context.map_or(0, |context| context.tenant_id);
+    let storage = match file_storage::FileStorage::new(storage_root) {
+        Ok(storage) => storage,
+        Err(error) => {
+            eprintln!("zelyra web: private upload storage unavailable: {error}");
+            return Response::empty(404).with_header("Cache-Control", "private, no-store");
+        }
+    };
+    let (metadata, bytes) = match storage.read_verified(tenant_id, &file_ref, max_size_bytes) {
+        Ok(file) => file,
+        Err(error) => {
+            eprintln!("zelyra web: authorized CRUD file verification failed: {error}");
+            return Response::empty(404).with_header("Cache-Control", "private, no-store");
+        }
+    };
+    let filename = match metadata.media_type {
+        "application/pdf" => "download.pdf",
+        "image/png" => "download.png",
+        "image/jpeg" => "download.jpg",
+        _ => return Response::empty(404).with_header("Cache-Control", "private, no-store"),
+    };
+    Response::binary(200, metadata.media_type, bytes)
+        .with_header(
+            "Content-Disposition",
+            format!("attachment; filename=\"{filename}\""),
+        )
+        .with_header("Cache-Control", "private, no-store")
+        .with_header("X-Content-Type-Options", "nosniff")
+}
+
 fn dispatch_crud_detail(
     crud: &CrudRoute,
     request: &Request,
@@ -9315,9 +9537,20 @@ fn dispatch_crud_detail(
             }
         }
     }
+    let file_columns = crud_file_fields(validation_program, &crud.table)
+        .into_keys()
+        .collect::<Vec<_>>();
     Response::html(
         200,
-        render_crud_detail_with_actions(crud, &columns, row, &id_text, ui_actions, language),
+        render_crud_detail_with_actions(
+            crud,
+            &columns,
+            row,
+            &id_text,
+            ui_actions,
+            language,
+            &file_columns,
+        ),
     )
 }
 
@@ -10731,6 +10964,7 @@ fn render_crud_detail(crud: &CrudRoute, columns: &[&str], row: &[String], id: &s
             custom: Vec::new(),
         },
         UiLanguage::English,
+        &[],
     )
 }
 
@@ -10741,6 +10975,7 @@ fn render_crud_detail_with_actions(
     id: &str,
     ui_actions: CrudUiActions,
     language: UiLanguage,
+    file_columns: &[String],
 ) -> String {
     let title = crud
         .detail_view
@@ -10766,9 +11001,25 @@ fn render_crud_detail_with_actions(
             &crud_column_label(language, &crud.schema, &crud.table, column),
         ));
         html.push_str("</dt><dd>");
-        html.push_str(&html_escape_preserving_locale_references(
-            &display_crud_database_value(value, &crud.schema, &crud.table, column, language),
-        ));
+        if file_columns
+            .iter()
+            .any(|file_column| file_column.as_str() == *column)
+        {
+            if !value.is_empty() {
+                html.push_str("<a href=\"");
+                html.push_str(&html_escape(&format!(
+                    "{}/{}/files/{}",
+                    crud.path, id, column
+                )));
+                html.push_str(&format!("\">{}</a>", tr(language, "file.download")));
+            } else {
+                html.push('—');
+            }
+        } else {
+            html.push_str(&html_escape_preserving_locale_references(
+                &display_crud_database_value(value, &crud.schema, &crud.table, column, language),
+            ));
+        }
         html.push_str("</dd>");
     }
     if ui_actions.edit || ui_actions.create {

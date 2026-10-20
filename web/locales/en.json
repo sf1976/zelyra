@@ -238,6 +238,7 @@
   "detail.suffix": "detail",
   "detail.back": "Back to list",
   "action.edit": "Edit",
+  "file.download": "Download file",
   "action.select": "Select",
   "action.restore": "Restore",
   "action.delete": "Delete",

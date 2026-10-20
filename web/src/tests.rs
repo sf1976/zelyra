@@ -3165,7 +3165,7 @@ fn multipart_upload_commits_reference_and_removes_file_after_sql_rollback() {
     .expect("drop test-only upload table");
     zelyra_database::execute_query(
         &database_url,
-        "CREATE TABLE zelyra_upload_e2e (document CHAR(36) NOT NULL PRIMARY KEY)",
+        "CREATE TABLE zelyra_upload_e2e (id BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY, document CHAR(36) NULL, owner_id BIGINT NOT NULL DEFAULT 7)",
         Vec::new(),
     )
     .expect("create test-only upload table");
@@ -3231,7 +3231,7 @@ fn multipart_upload_commits_reference_and_removes_file_after_sql_rollback() {
         span: zelyra_ast::Span::default(),
     };
     route.form.actions = vec![sql_action(vec![
-        "INSERT INTO zelyra_upload_e2e (document) VALUES (:document)",
+        "INSERT INTO zelyra_upload_e2e (document, owner_id) VALUES (:document, 7)",
     ])];
     let app =
         WebApp::with_database_url(Vec::new(), vec![route.clone()], Some(database_url.clone()))
@@ -3258,12 +3258,13 @@ fn multipart_upload_commits_reference_and_removes_file_after_sql_rollback() {
     assert_eq!(committed.status, 303, "{}", committed.body);
     let rows = zelyra_database::execute_read_only_query(
         &database_url,
-        "SELECT document FROM zelyra_upload_e2e",
+        "SELECT id, document FROM zelyra_upload_e2e",
         Vec::new(),
     )
     .expect("read saved file reference");
     assert_eq!(rows.rows.len(), 1);
-    let file_ref = &rows.rows[0][0];
+    let id = rows.rows[0][0].clone();
+    let file_ref = &rows.rows[0][1];
     let storage = file_storage::FileStorage::new(&storage_root).expect("open managed storage");
     let (metadata, saved_bytes) = storage
         .read_verified(0, file_ref, 1024)
@@ -3271,9 +3272,142 @@ fn multipart_upload_commits_reference_and_removes_file_after_sql_rollback() {
     assert_eq!(metadata.media_type, "application/pdf");
     assert_eq!(saved_bytes, bytes);
 
+    let program = zelyra_parser::parse(
+        &zelyra_lexer::lex(
+            r#"
+            database main { engine: mariadb }
+            table zelyra_upload_e2e {
+                id: Id primary auto
+                document: FileRef?
+                owner_id: Int required
+            }
+            form Upload -> zelyra_upload_e2e {
+                field document: File { max_size: "1KB" allowed_types: ["application/pdf"] }
+            }
+            fn main() {}
+            "#,
+        )
+        .expect("lex upload download route metadata"),
+    )
+    .expect("parse upload download route metadata");
+    let mut crud = default_shell_crud(None);
+    crud.path = "/uploads".into();
+    crud.table = "zelyra_upload_e2e".into();
+    crud.recipient_column = Some("owner_id".into());
+    crud.schema = zelyra_database::build_schema(&program).expect("build upload table schema");
+    let path_params = HashMap::from([
+        ("id".into(), id.clone()),
+        ("field".into(), "document".into()),
+    ]);
+    let download = dispatch_crud_file_download(
+        &crud,
+        &Request {
+            method: "GET".into(),
+            target: format!("/uploads/{id}/files/document"),
+            path: format!("/uploads/{id}/files/document"),
+            headers: HashMap::new(),
+            body: String::new(),
+            remote_addr: None,
+        },
+        &path_params,
+        CrudFileDownloadContext {
+            database_url: Some(&database_url),
+            storage_root: Some(&storage_root),
+            validation_program: Some(&program),
+            actor_user_id: Some(7),
+            tenant_context: None,
+        },
+    );
+    assert_eq!(download.status, 200);
+    assert_eq!(download.content_type, "application/pdf");
+    assert_eq!(download.body_bytes.as_deref(), Some(bytes.as_slice()));
+    assert_eq!(
+        download
+            .headers
+            .iter()
+            .find(|(name, _)| name == "Content-Disposition")
+            .map(|(_, value)| value.as_str()),
+        Some("attachment; filename=\"download.pdf\"")
+    );
+    assert!(download
+        .headers
+        .iter()
+        .any(|(name, value)| name == "Cache-Control" && value == "private, no-store"));
+    let unauthenticated_app =
+        WebApp::with_database_url(Vec::new(), Vec::new(), Some(database_url.clone()))
+            .with_cruds(vec![crud.clone()])
+            .with_validation_program(program.clone())
+            .with_upload_storage(&storage_root);
+    assert_ne!(
+        unauthenticated_app
+            .dispatch(&Request {
+                method: "GET".into(),
+                target: format!("/uploads/{id}/files/document"),
+                path: format!("/uploads/{id}/files/document"),
+                headers: HashMap::new(),
+                body: String::new(),
+                remote_addr: None,
+            })
+            .status,
+        200,
+        "the generated file route requires an authenticated session"
+    );
+    assert_eq!(
+        dispatch_crud_file_download(
+            &crud,
+            &Request {
+                method: "GET".into(),
+                target: format!("/uploads/{id}/files/document"),
+                path: format!("/uploads/{id}/files/document"),
+                headers: HashMap::new(),
+                body: String::new(),
+                remote_addr: None,
+            },
+            &path_params,
+            CrudFileDownloadContext {
+                database_url: Some(&database_url),
+                storage_root: Some(&storage_root),
+                validation_program: Some(&program),
+                actor_user_id: Some(8),
+                tenant_context: None,
+            },
+        )
+        .status,
+        404,
+        "file download must not cross the CRUD recipient boundary"
+    );
+    let file_columns = crud_file_fields(Some(&program), &crud.table)
+        .into_keys()
+        .collect::<Vec<_>>();
+    assert_eq!(file_columns, vec!["document"]);
+    let detail_html = localize_html(
+        &render_crud_detail_with_actions(
+            &crud,
+            &["document"],
+            &[file_ref.clone()],
+            &id,
+            CrudUiActions {
+                create: false,
+                edit: false,
+                delete: false,
+                restore: false,
+                custom: Vec::new(),
+            },
+            UiLanguage::English,
+            &file_columns,
+        ),
+        UiLanguage::English,
+    );
+    assert!(detail_html.contains(&format!("/uploads/{id}/files/document")));
+    assert!(detail_html.contains("Download file"));
+    assert!(
+        !detail_html.contains(file_ref),
+        "opaque references are not shown"
+    );
+
     let mut failing_route = route;
     failing_route.form.actions = vec![sql_action(vec![
-        "INSERT INTO zelyra_upload_e2e (document) VALUES (:document)",
+        "INSERT INTO zelyra_upload_e2e (document, owner_id) VALUES (:document, 7)",
         "INSERT INTO zelyra_upload_missing_table (document) VALUES (:document)",
     ])];
     let failing_app =
@@ -3283,7 +3417,7 @@ fn multipart_upload_commits_reference_and_removes_file_after_sql_rollback() {
     assert_eq!(rolled_back.status, 500, "{}", rolled_back.body);
     let rows = zelyra_database::execute_read_only_query(
         &database_url,
-        "SELECT document FROM zelyra_upload_e2e",
+        "SELECT id, document FROM zelyra_upload_e2e",
         Vec::new(),
     )
     .expect("read rows after transaction rollback");
@@ -5216,6 +5350,7 @@ fn renders_crud_delete_confirmation_form() {
                 custom: Vec::new(),
             },
             UiLanguage::English,
+            &[],
         ),
         UiLanguage::English,
     );
@@ -5235,6 +5370,7 @@ fn renders_crud_delete_confirmation_form() {
             custom: Vec::new(),
         },
         UiLanguage::English,
+        &[],
     );
     assert!(!read_html.contains("/machines/1/read"));
 
@@ -5251,6 +5387,7 @@ fn renders_crud_delete_confirmation_form() {
             custom: Vec::new(),
         },
         UiLanguage::English,
+        &[],
     );
     assert!(!restricted_html.contains("/machines/1/edit"));
     assert!(!restricted_html.contains("/machines/new"));
@@ -5299,6 +5436,7 @@ fn renders_crud_delete_confirmation_form() {
             }],
         },
         UiLanguage::English,
+        &[],
     );
     assert!(action_html.contains("action=\"/machines/1/deactivate\""));
     assert!(action_html.contains(">Deactivate</button>"));

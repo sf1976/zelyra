@@ -369,10 +369,15 @@ security and compatibility gates stated for that milestone.
   provides staged publication, opaque tenant-scoped references, private
   sidecar manifests, verified reads, file modes, no-follow opens,
   signature-based PDF/PNG/JPEG selection, and size/SHA-256 checks. Partial
-  publication failures remove both final entries. The HTTP/storage path is not
-  crash-atomic across filesystem and database commits; a crash can leave an
-  orphan. Protected downloads, replacement/deletion, cleanup, and backup/
-  restore remain open. Non-Unix creation fails closed pending ACL support.
+  publication failures remove both final entries. The generated
+  `/crud/{id}/files/{field}` download route requires authentication, uses the
+  CRUD read permission, verifies the owning row and tenant/recipient scope, and
+  returns only checksum-verified bytes with private attachment headers. CRUD
+  detail pages show a localized download link and never display the opaque
+  FileRef. The HTTP/storage path is not crash-atomic across filesystem and
+  database commits; a crash can leave an orphan. Replacement/deletion, cleanup,
+  and backup/restore remain open. Non-Unix creation fails closed pending ACL
+  support.
   `FileRef` maps to `CHAR(36)`/`UUID`/`TEXT` by backend, checked file forms must
   match a same-named reference column, automatic CRUD cannot render it as text,
   and JSON API inputs reject the opaque reference. A MariaDB E2E verifies that
@@ -390,8 +395,8 @@ security and compatibility gates stated for that milestone.
   `/opt/siedelmann-laravel/app` identified upload
   flows in invoices,
   contracts, settings, postal letters, and inbound mail; the importer does not
-  generate them. Remaining release gates include authorized downloads,
-  replacement/deletion, crash-orphan cleanup, and backup/restore. See the
+  generate them. Remaining release gates include replacement/deletion,
+  crash-orphan cleanup, and backup/restore. See the
   [1.2.29 secure upload plan](release-plans/1.2.29-secure-uploads.en.md).
 - [~] **1.2.30 — Laravel import workflow coverage:** Standalone forms now
   support checked local routes with captured path parameters, a compiler-checked
