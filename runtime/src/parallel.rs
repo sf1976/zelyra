@@ -1,7 +1,7 @@
 //! Parallel execution kept outside the recursive statement dispatch frame.
 use super::*;
 
-impl Interpreter<'_> {
+impl Interpreter<'_, '_> {
     pub(super) fn exec_parallel(
         &mut self,
         body: &Block,
@@ -53,6 +53,7 @@ impl Interpreter<'_> {
                         call_depth: 0,
                         database_url: self.database_url.clone(),
                         database_transaction: self.database_transaction.clone(),
+                        transactional_query: None,
                         storage_schema: self.storage_schema.clone(),
                         storage_checked: self.storage_checked,
                         scoped_tables: self.scoped_tables.clone(),

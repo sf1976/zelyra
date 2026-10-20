@@ -2411,6 +2411,83 @@ fn accepts_declared_database_capability_for_sql() {
 }
 
 #[test]
+fn ast_sql_uses_the_borrowed_request_transaction_for_each_query() {
+    let program =
+        parse(&lex("fn update() uses Database(read) { sql<Int> { SELECT 1 } sql<Int> { SELECT 2 } } fn main() uses Database(read) { update() }").unwrap()).unwrap();
+    check(&program).expect("the SQL expression is statically checked");
+
+    let mut observed = Vec::new();
+    let mut query_executor = |query: &zelyra_database::Query| {
+        observed.push(query.sql.clone());
+        Ok(zelyra_database::QueryResult {
+            columns: vec!["value".into()],
+            rows: vec![vec!["1".into()]],
+            nulls: vec![vec![false]],
+            column_types: vec![zelyra_database::QueryColumnType::Integer],
+        })
+    };
+    let outcome = execute_function_captured_with_transactional_query(
+        &program,
+        "update",
+        Vec::new(),
+        "mysql://zelyra:zelyra@127.0.0.1/zelyra",
+        None,
+        None,
+        &mut query_executor,
+    );
+
+    assert!(outcome.error.is_none(), "{:?}", outcome.error);
+    assert_eq!(observed, [" SELECT 1 ", " SELECT 2 "]);
+}
+
+#[test]
+fn borrowed_request_transaction_bridge_rejects_nested_and_parallel_escape_paths() {
+    let transaction_program = parse(
+        &lex("table invoices { id: Id primary auto status: String required } fn main() uses Database(write) { transaction { sql { UPDATE invoices SET status = 'locked' WHERE id = 1 } } }").unwrap(),
+    )
+    .unwrap();
+    check(&transaction_program).expect("nested SQL transaction is otherwise valid Zelyra");
+
+    let parallel_program =
+        parse(&lex("fn main() { parallel { result = await 1 } }").unwrap()).unwrap();
+    check(&parallel_program).expect("parallel expression is statically valid");
+
+    for (program, expected) in [
+        (
+            &transaction_program,
+            "nested transaction blocks are unavailable",
+        ),
+        (
+            &parallel_program,
+            "parallel execution is unavailable inside a borrowed database transaction",
+        ),
+    ] {
+        let mut query_count = 0;
+        let mut query_executor = |_query: &zelyra_database::Query| {
+            query_count += 1;
+            Ok(zelyra_database::QueryResult::default())
+        };
+        let outcome = execute_function_captured_with_transactional_query(
+            program,
+            "main",
+            Vec::new(),
+            "mysql://zelyra:zelyra@127.0.0.1/zelyra",
+            None,
+            None,
+            &mut query_executor,
+        );
+        assert!(outcome
+            .error
+            .as_ref()
+            .is_some_and(|error| error.message.contains(expected)));
+        assert_eq!(
+            query_count, 0,
+            "unsafe operation must not use another connection"
+        );
+    }
+}
+
+#[test]
 fn scopes_sql_to_read_or_write_database_effects() {
     let read = parse(
         &lex("fn report() uses Database(read) { rows = sql<Int> { SELECT 1 } } fn main() { }")

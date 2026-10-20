@@ -1,6 +1,6 @@
 use super::*;
 
-impl<'program> Interpreter<'program> {
+impl<'program, 'services> Interpreter<'program, 'services> {
     fn check_loop_invariants(
         &mut self,
         invariants: &[Expr],
@@ -347,6 +347,12 @@ impl<'program> Interpreter<'program> {
                 Err(self.runtime_error(*span, "non-exhaustive match at runtime"))
             }
             Stmt::Transaction { span, .. } => {
+                if self.transactional_query.is_some() {
+                    return Err(self.runtime_error(
+                        *span,
+                        "nested transaction blocks are unavailable inside a borrowed database transaction",
+                    ));
+                }
                 let Some(database_url) = self.database_url.clone() else {
                     return Err(self.runtime_error(
                         *span,
@@ -386,7 +392,15 @@ impl<'program> Interpreter<'program> {
                 }
                 Ok(Flow::Continue)
             }
-            Stmt::Parallel { body, span } => self.exec_parallel(body, *span, env),
+            Stmt::Parallel { body, span } => {
+                if self.transactional_query.is_some() {
+                    return Err(self.runtime_error(
+                        *span,
+                        "parallel execution is unavailable inside a borrowed database transaction",
+                    ));
+                }
+                self.exec_parallel(body, *span, env)
+            }
         }
     }
     pub(crate) fn expect_bool(&self, value: Value, span: Span) -> Result<bool, RuntimeError> {

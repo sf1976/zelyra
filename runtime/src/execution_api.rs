@@ -246,6 +246,7 @@ pub fn execute_function_with_host_services_and_capabilities_and_policies(
             RuntimeServices {
                 host_services,
                 database_transaction: None,
+                transactional_query: None,
             },
         );
         result
@@ -296,6 +297,57 @@ pub fn execute_function_captured_with_host_services_and_capabilities_and_policie
             RuntimeServices {
                 host_services,
                 database_transaction: None,
+                transactional_query: None,
+            },
+        ))
+    }) {
+        Ok((Ok(value), output)) => FunctionExecutionOutcome {
+            output,
+            value: Some(value),
+            error: None,
+        },
+        Ok((Err(error), output)) => FunctionExecutionOutcome {
+            output,
+            value: None,
+            error: Some(error),
+        },
+        Err(error) => FunctionExecutionOutcome {
+            output: Vec::new(),
+            value: None,
+            error: Some(error),
+        },
+    }
+}
+
+/// Execute a function with each SQL query routed through a caller-owned active
+/// request transaction. The query bridge is borrowed for the duration of this
+/// bounded execution and cannot escape it.
+pub fn execute_function_captured_with_transactional_query<'services>(
+    program: &Program,
+    name: &str,
+    args: Vec<Value>,
+    database_url: &str,
+    grants: Option<&HashSet<String>>,
+    policy: Option<&RuntimePolicy>,
+    query: &'services mut (dyn FnMut(
+        &zelyra_database::Query,
+    ) -> Result<zelyra_database::QueryResult, String>
+                        + Send
+                        + 'services),
+) -> FunctionExecutionOutcome {
+    let depth = effective_call_depth(policy.and_then(|policy| policy.max_stack_depth));
+    match run_on_runtime_stack(runtime_stack_size(depth), move || {
+        Ok(execute_function_on_runtime_stack(
+            program,
+            name,
+            args,
+            Some(database_url),
+            grants,
+            policy,
+            RuntimeServices {
+                host_services: Arc::new(SystemHostServices),
+                database_transaction: None,
+                transactional_query: Some(query),
             },
         ))
     }) {
@@ -340,6 +392,7 @@ pub fn execute_function_captured_with_mariadb_transaction(
             RuntimeServices {
                 host_services: Arc::new(SystemHostServices),
                 database_transaction: Some(transaction),
+                transactional_query: None,
             },
         ))
     }) {
@@ -361,19 +414,20 @@ pub fn execute_function_captured_with_mariadb_transaction(
     }
 }
 
-struct RuntimeServices {
+struct RuntimeServices<'services> {
     host_services: Arc<dyn HostServices>,
     database_transaction: Option<Arc<Mutex<zelyra_database::MariaDbInteractiveTransaction>>>,
+    transactional_query: Option<&'services mut super::TransactionalQuery<'services>>,
 }
 
-fn execute_function_on_runtime_stack(
+fn execute_function_on_runtime_stack<'services>(
     program: &Program,
     name: &str,
     args: Vec<Value>,
     database_url: Option<&str>,
     grants: Option<&HashSet<String>>,
     policy: Option<&RuntimePolicy>,
-    services: RuntimeServices,
+    services: RuntimeServices<'services>,
 ) -> (Result<Value, RuntimeError>, Vec<String>) {
     let mut interpreter = Interpreter {
         functions: program
@@ -396,6 +450,7 @@ fn execute_function_on_runtime_stack(
         call_depth: 0,
         database_url: database_url.map(str::to_owned),
         database_transaction: services.database_transaction,
+        transactional_query: services.transactional_query,
         storage_schema: zelyra_database::build_schema(program),
         storage_checked: false,
         scoped_tables: program
@@ -577,6 +632,7 @@ fn execute_internal_on_runtime_stack(
         call_depth: 0,
         database_url,
         database_transaction: None,
+        transactional_query: None,
         storage_schema: zelyra_database::build_schema(program),
         storage_checked: false,
         scoped_tables: program

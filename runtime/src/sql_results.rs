@@ -190,7 +190,7 @@ pub(crate) fn validate_target(target: &Type, program: &Program) -> Result<(), St
     .map(|_| ())
 }
 
-impl Interpreter<'_> {
+impl Interpreter<'_, '_> {
     pub(crate) fn eval_sql_decode(
         &mut self,
         type_args: &[Type],

@@ -336,7 +336,9 @@ abgeschlossen.
   den Paketverbrauch mit einer minimalen Laravel-Fixture. Ungelöste Abläufe und
   genaue Quellpositionen
   in einem versionierten Bericht erhalten. Abnahmeprojekt ist
-  `/opt/siedelmann-laravel/app`; weitere Abdeckung folgt in 1.2.30. Siehe den
+  `/opt/siedelmann-laravel/app`; weitere Abdeckung folgt in 1.2.30. Als
+  [`v1.2.27`](https://github.com/sf1976/zelyra/releases/tag/v1.2.27)
+  veröffentlicht; PR- und Releaseprüfungen bestanden. Siehe den
   [Arbeitsplan 1.2.27](release-plans/1.2.27-laravel-website-importer.de.md).
   Die Grundlage ist implementiert und zusammengeführt; alle PR-Prüfungen
   bestanden.
@@ -349,7 +351,10 @@ abgeschlossen.
   Transaktion. Vorhandene Schreibweisen und Effekte verwenden:
   `hash_sha256`, `now()`, PDF-Rendering und Outbox-Mail mit deren bestehenden
   Einschränkungen. Kein impliziter Namespace `crypto::` und keine ungeprüfte
-  SQL-Interpolation. Siehe den
+  SQL-Interpolation. Grundlage: Die AST-Runtime kann SQL über einen geliehenen
+  Request-Transaktions-Callback ausführen; verschachtelte Transaktionen und
+  Parallelblöcke werden abgewiesen. Compiler-Scopes für Actions und die
+  Web-CRUD-Integration fehlen noch. Siehe den
   [Arbeitsplan 1.2.28](release-plans/1.2.28-typed-crud-actions.de.md).
 - [ ] **1.2.29 — begrenzte sichere Datei-Uploads (Design-Gate):** Vor einem
   `File`-Formularfeld Multipart-Größenlimits, Metadatentypen, Inhaltsprüfung,

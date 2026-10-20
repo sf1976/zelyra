@@ -217,7 +217,8 @@ pub use ast_interpreter::execution_api::{
     execute_captured_with_database_and_host_services, execute_captured_with_host_services,
     execute_function, execute_function_captured_with_capabilities_and_policies,
     execute_function_captured_with_host_services_and_capabilities_and_policies,
-    execute_function_captured_with_mariadb_transaction, execute_function_with_capabilities,
+    execute_function_captured_with_mariadb_transaction,
+    execute_function_captured_with_transactional_query, execute_function_with_capabilities,
     execute_function_with_capabilities_and_filesystem_policy,
     execute_function_with_capabilities_and_policies,
     execute_function_with_host_services_and_capabilities_and_policies, execute_with_capabilities,
@@ -831,7 +832,7 @@ fn json_codec_interpreter(
     records: &[RecordDef],
     aliases: &[TypeDef],
     enums: &[zelyra_ast::EnumDef],
-) -> Interpreter<'static> {
+) -> Interpreter<'static, 'static> {
     Interpreter {
         functions: HashMap::new(),
         view_definitions: HashMap::new(),
@@ -843,6 +844,7 @@ fn json_codec_interpreter(
         call_depth: 0,
         database_url: None,
         database_transaction: None,
+        transactional_query: None,
         storage_schema: Ok(zelyra_database::Schema {
             database: None,
             tables: Vec::new(),

@@ -94,6 +94,14 @@ let output = execute_with_host_services(
 The exact public signatures are in `runtime/src/lib.rs`. A host must implement
 `Send + Sync`, because parallel Zelyra expressions share the same host object.
 
+For an embedding that already owns a request transaction, the AST runtime also
+provides `execute_function_captured_with_transactional_query`. It routes every
+`sql<T>` expression through the supplied borrowed query callback while keeping
+ordinary capability and storage checks. The callback is scoped to one bounded
+runtime execution; nested `transaction { ... }` and `parallel { ... }` blocks
+are rejected in this mode so they cannot escape to another connection. This
+is a low-level embedding API; web CRUD actions do not use it yet.
+
 ## Security boundary and status
 
 Zelyra function capabilities and project grants are checked before each of
