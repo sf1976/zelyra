@@ -1412,6 +1412,37 @@ fn run_reads_console_input_and_handles_eof_and_capability_denial() {
 }
 
 #[test]
+fn language_console_keeps_bindings_and_recovers_after_runtime_errors_in_piped_input() {
+    let (directory, source) = temporary_project_source("language-console-repl", "fn main() {}\n");
+    let mut child = Command::new(binary())
+        .args(["console", source.to_str().unwrap(), "--sandbox"])
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .expect("language console should start");
+    child
+        .stdin
+        .take()
+        .unwrap()
+        .write_all(b"x = 10\ny = 20\nx + y\n1 / 0\n\"weiter\"\n")
+        .expect("REPL inputs should be written");
+    let output = child.wait_with_output().unwrap();
+    assert!(
+        output.status.success(),
+        "stdout: {}\nstderr: {}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert_eq!(
+        String::from_utf8_lossy(&output.stdout),
+        "=> 30\n=> \"weiter\"\n"
+    );
+    assert!(String::from_utf8_lossy(&output.stderr).contains("division by zero"));
+    fs::remove_dir_all(directory).unwrap();
+}
+
+#[test]
 fn standard_layout_namespaces_resolve_and_remain_opt_in() {
     let directory = temporary_directory("standard-layout-namespaces");
     for path in ["schema", "domain/sales", "routes", "public", "assets"] {
