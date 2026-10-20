@@ -3092,7 +3092,7 @@ table invoices scoped by tenant_id: TenantId {
    ```
    This physically blocks cross-tenant access attacks (such as assigning Tenant A's customer to Tenant B's invoice) at the database layer.
 3. **Tenant-Scoped Uniqueness:** Fields marked `unique within tenant` produce `UNIQUE KEY (tenant_id, customer_number)`. Different tenants can use identical numbering schemes without collisions.
-4. **Optional Relations & Decimals:** Optional relationships (`Customer?`) generate typed `BIGINT NULL`. `Decimal(p, s)` (e.g. `Decimal(12, 2)`) guarantees exact commercial rounding without IEEE 754 floating-point inaccuracies.
+4. **Optional Relations & Decimals:** Optional relationships (`Customer?`) generate typed `BIGINT NULL`. `Decimal(p, s)` (e.g. `Decimal(12, 2)`) is stored without floating-point conversion. Forms reject values exceeding the declared precision or scale; computed fields are calculated exactly before storage and rounded to their target scale.
 
 ## 33. Table Invariants and Validation Rules
 

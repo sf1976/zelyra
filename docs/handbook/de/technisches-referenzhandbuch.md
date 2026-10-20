@@ -3273,7 +3273,7 @@ table invoices scoped by tenant_id: TenantId {
    ```
    Dadurch ist ein Cross-Tenant-Angriff (z. B. Zuweisen eines Kunden von Mandant A zu einer Rechnung von Mandant B) auf physischer Datenbankebene unmöglich.
 3. **Mandantenbezogene Eindeutigkeit:** Mit `unique within tenant` deklarierte Felder erzeugen `UNIQUE KEY (tenant_id, customer_number)`. Unterschiedliche Mandanten können dieselbe Belegnummer führen, innerhalb eines Mandanten sind Duplikate ausgeschlossen.
-4. **Optionale Relationen und kaufmännische Dezimalzahlen:** Optionale Verknüpfungen (`Customer?`) erzeugen typsicher `BIGINT NULL`. `Decimal(p, s)` (z. B. `Decimal(12, 2)`) garantiert exakte kaufmännische Rundung ohne Gleitkomma-Ungenauigkeiten.
+4. **Optionale Relationen und kaufmännische Dezimalzahlen:** Optionale Verknüpfungen (`Customer?`) erzeugen typsicher `BIGINT NULL`. `Decimal(p, s)` (z. B. `Decimal(12, 2)`) wird ohne Gleitkomma-Ungenauigkeit gespeichert. Formulare weisen Werte ab, die die deklarierte Präzision oder Skala überschreiten; berechnete Felder werden vor dem Speichern exakt berechnet und auf ihre Zielskala gerundet.
 
 ## 33. Tabelleninvarianten und Validierungsregeln
 

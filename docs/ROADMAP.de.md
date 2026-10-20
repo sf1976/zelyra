@@ -723,6 +723,11 @@ keine Produktionsreife.
   nach dem Fehler und den neu berechneten Wert in der Fehlerantwort ab. Optionale
   Eingaben bleiben typisierte `Option<T>` und müssen mit `match` behandelt
   werden; `None` wird bei optionalen Zielfeldern als fehlender Wert gespeichert.
+  Benutzereingaben vom Typ Decimal bleiben bis zur Formularprüfung unverändert;
+  dadurch kann Rundung keine überzähligen Nachkommastellen verbergen. Der
+  Exact-Number-HTTP-Test gegen MySQL 8.4.11 bestätigt, dass `Money` mit fünf
+  Nachkommastellen abgewiesen wird. Die Präzisions-/Skalenanalyse erkennt auch
+  abweichende Großschreibung und Leerzeichen in MySQL-Metadaten.
   Validierte API-`PATCH`-Handler berechnen Felder ebenfalls neu; Unit- und
   isolierte MariaDB-Schreibtests decken dies ab. Der PATCH-Vertrag verlangt
   derzeit alle Pflichtfelder und führt kein partielles Zusammenführen mit

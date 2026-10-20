@@ -12134,52 +12134,9 @@ fn evaluate_computed_columns(
             is_user_input: false,
         });
     };
-    for column in table
-        .columns
-        .iter()
-        .filter(|column| column.computed.is_none())
-    {
-        let Some(input) = values.get(&column.name).cloned() else {
-            continue;
-        };
-        if input.is_empty() {
-            continue;
-        }
-        let input_value =
-            runtime_value_for_column(program, column, Some(&input)).map_err(|message| {
-                ComputedFieldError {
-                    field: column.name.clone(),
-                    message,
-                    is_user_input: true,
-                }
-            })?;
-        if computed_decimal_kind(&column.ty, &program.types, &mut HashSet::new()).is_some() {
-            let normalized = match input_value {
-                RuntimeValue::Option(None) => None,
-                RuntimeValue::Option(Some(value)) => Some(
-                    normalize_computed_decimal(program, column, *value)
-                        .map_err(|message| ComputedFieldError {
-                            field: column.name.clone(),
-                            message,
-                            is_user_input: true,
-                        })?
-                        .output(),
-                ),
-                value => Some(
-                    normalize_computed_decimal(program, column, value)
-                        .map_err(|message| ComputedFieldError {
-                            field: column.name.clone(),
-                            message,
-                            is_user_input: true,
-                        })?
-                        .output(),
-                ),
-            };
-            if let Some(normalized) = normalized {
-                values.insert(column.name.clone(), normalized);
-            }
-        }
-    }
+    // Keep submitted Decimal text intact until the normal form validator checks
+    // it against the declared SQL precision and scale. Rounding these source
+    // fields here would hide excess fractional digits from that validation.
     let mut pending = mappings
         .iter()
         .filter(|mapping| mapping.table_index == table_index)

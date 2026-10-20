@@ -418,6 +418,85 @@ fn computed_table_columns_are_recalculated_and_replace_submitted_values() {
 }
 
 #[test]
+fn computed_field_evaluation_preserves_decimal_input_for_storage_validation() {
+    let source = r#"
+        table invoice_items {
+            amount: Decimal(12, 2) required
+            squared: Decimal(12, 2) required compute(amount * amount)
+        }
+        fn main() {}
+    "#;
+    let program = zelyra_parser::parse(&zelyra_lexer::lex(source).unwrap()).unwrap();
+    zelyra_runtime::check(&program).expect("decimal computed fields should type check");
+    let schema = zelyra_database::build_schema(&program).unwrap();
+    let (functions, mappings) = zelyra_ast::build_computed_column_functions(&program);
+    let mut lowered = program.clone();
+    lowered.functions.extend(functions);
+    let mut values = HashMap::from([
+        ("amount".to_owned(), "1.001".to_owned()),
+        ("squared".to_owned(), "forged".to_owned()),
+    ]);
+
+    evaluate_computed_columns(&lowered, &mappings, "invoice_items", &mut values)
+        .expect("computed output can be calculated before normal field validation");
+    assert_eq!(values.get("amount").map(String::as_str), Some("1.001"));
+    assert_eq!(values.get("squared").map(String::as_str), Some("1"));
+
+    let mut input_form = zelyra_ast::FormDef {
+        name: "InvoiceItemCreate".into(),
+        table: Some("invoice_items".into()),
+        path: None,
+        post_only: false,
+        verify: None,
+        fields: vec![
+            zelyra_ast::FormField {
+                name: "amount".into(),
+                ty: Some(Type::Decimal),
+                label: None,
+                placeholder: None,
+                required: true,
+                min_length: None,
+                max: None,
+                min_value: None,
+                max_value: None,
+                choices: Vec::new(),
+                widget: None,
+                appearance: None,
+                file_upload: None,
+                readonly: false,
+                span: zelyra_ast::Span::default(),
+            },
+            zelyra_ast::FormField {
+                name: "squared".into(),
+                ty: Some(Type::Decimal),
+                label: None,
+                placeholder: None,
+                required: true,
+                min_length: None,
+                max: None,
+                min_value: None,
+                max_value: None,
+                choices: Vec::new(),
+                widget: None,
+                appearance: None,
+                file_upload: None,
+                readonly: false,
+                span: zelyra_ast::Span::default(),
+            },
+        ],
+        actions: Vec::new(),
+        span: zelyra_ast::Span::default(),
+    };
+    input_form.fields[1].readonly = false;
+    let validation =
+        zelyra_forms::validate(&input_form, program.tables.first(), Some(&schema), &values);
+    assert!(validation
+        .errors
+        .iter()
+        .any(|error| error.field == "amount"));
+}
+
+#[test]
 fn computed_field_invalid_input_returns_form_error_before_database_access() {
     let source = r#"
         table invoice_items {

@@ -620,7 +620,7 @@ release. The current verified status is:
 | --- | --- | --- |
 | Reusable sequential document numbers | Implemented in the 1.2.31 work: declarative `auto_sequence`, transactional counters, tenant/year scope, and generated CRUD protection from forged values. | Supported-backend/version matrix, SQLite diagnostic and migration behavior, legacy invoice compatibility, full release gates. No gapless-number guarantee. |
 | Tenant scope for invoice-number collision checks | The existing invoice-number path and the generic sequence allocator both bind the authenticated tenant. MariaDB integration verifies independent tenant counters and atomic allocation. | Keep the regression coverage in the release suite and verify all supported backends. |
-| Server-computed business fields | Implemented for generated CRUD and validated API POST/PUT/PATCH paths, with dependency/type checks and exact Decimal rounding. | Complete backend and AST/MIR/bytecode parity gates; PATCH does not merge omitted required fields from the stored row. |
+| Server-computed business fields | Implemented for generated CRUD and validated API POST/PUT/PATCH paths, with dependency/type checks and exact Decimal rounding. CRUD preserves source Decimal text until form validation checks declared storage precision and scale, including normalized MySQL metadata. | Complete backend and AST/MIR/bytecode parity gates; PATCH does not merge omitted required fields from the stored row. |
 | Localized master-detail labels | The HTML-escaped locale markers are resolved for child-collection legends; a regression test covers the escaped rendering path. | Preserve the test in the release gates and verify locale fallback behavior in the tutorial. |
 | File attachments in generated CRUD | Implemented using checked `FileRef` metadata, existing private storage, generated upload fields, and authorized downloads. MariaDB tests cover persistence, rollback cleanup, and dispatcher-level tenant denial. | Full authenticated cross-tenant HTTP and browser checks, plus coordinated application backup/recovery; these are not claimed complete. |
 
@@ -670,7 +670,12 @@ syntax or a unit test alone does not establish production readiness.
   forged client values. A MariaDB CRUD HTTP integration test covers create,
   edit, rejected validation, unchanged persistence after rejection, and the
   recalculated value shown on the error response. Decimal scale and rounding
-  are implemented. Validated API `PATCH` also recomputes fields and is covered
+  are implemented. User-provided Decimal inputs are no longer normalized before
+  form validation, so excess scale cannot be hidden by rounding. MySQL 8.4.11
+  exact-number HTTP coverage confirms rejection of `Money` input with five
+  fractional digits; schema parsing accepts case- and whitespace-normalized
+  MySQL precision/scale metadata. Validated API `PATCH` also recomputes fields
+  and is covered
   by unit and isolated MariaDB persistence tests; it currently requires all
   required table inputs and does not merge partial payloads with a stored row.
   Broader backend tests and complete release gates remain open. See
