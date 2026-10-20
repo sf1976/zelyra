@@ -641,8 +641,8 @@ syntax or a unit test alone does not establish production readiness.
   collisions, forged values, yearly formats, and concurrent allocation. The
   same integration test also passes on PostgreSQL 16. CI now runs it across
   MariaDB 10.11/11.4/11.8/12.3 and MySQL 8.4, as well as PostgreSQL 16; these
-  matrix runs are pending. On MariaDB 11.8 and
-  PostgreSQL 16 the managed schema was applied and replanned with no drift.
+  matrix runs are pending. On MariaDB 11.8, MySQL 8.4.11, and PostgreSQL 16
+  the managed schema was applied and replanned with no drift.
   MariaDB inspection now distinguishes composite unique keys using the actual
   primary-key constraint. Full release CI, the supported-version matrix,
   tutorial compatibility and publication remain open. No gapless numbering

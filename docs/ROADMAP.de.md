@@ -695,8 +695,8 @@ keine Produktionsreife.
   prüfen Mandantentrennung, Rollback, Altwert-Kollisionen, gefälschte Eingaben
   und parallele Vergabe. Derselbe Integrationstest läuft auch mit PostgreSQL
   16. CI testet den Zähler außerdem mit MariaDB 10.11/11.4/11.8/12.3, MySQL
-  8.4 und PostgreSQL 16; diese Matrixläufe stehen noch aus. Auf MariaDB 11.8
-  und PostgreSQL 16 wurde das verwaltete Schema außerdem
+  8.4 und PostgreSQL 16; diese Matrixläufe stehen noch aus. Auf MariaDB 11.8,
+  MySQL 8.4.11 und PostgreSQL 16 wurde das verwaltete Schema außerdem
   jeweils angewendet und danach ohne Drift erneut geplant. Der
   MariaDB-Inspektor unterscheidet zusammengesetzte Unique-Schlüssel jetzt
   anhand der echten Primärschlüssel-Constraint. Die vollständige Release-CI,
