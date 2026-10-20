@@ -657,28 +657,37 @@ Diese Meilensteine sind in Arbeit und noch nicht veröffentlicht. Bereits teilwe
 - [ ] Paketvertrauen, Veröffentlichung, Supply-Chain-Sicherheit, Kompatibilität, CLI-/Studio-Anbindung, Diagnostik, positive/negative Tests und ausführbare Beispiele dokumentieren.
 - [ ] Freigabekriterium: 1.1.5 erst nach bestandenen Kompatibilitäts-, Berechtigungsverweigerungs-, Abhängigkeits-, Offline-/Reproduzierbarkeits- und Integrationstests als fertig kennzeichnen.
 
-### 🗺️ [ ] Geschäfts-CRUD vor 1.3.0 abschließen
+### 🧪 [~] Geschäfts-CRUD vor 1.3.0 abschließen
 
 Die fünf im 1.2.30-Review gemeldeten Hürden für Geschäftsbelege sind jetzt
 Release-Arbeit. Die Mandantenfilterung der bestehenden Rechnungsnummern-
 Kollisionssuche und die Lokalisierung generierter Master-Detail-Legenden sind
-im 1.2.30-Kandidaten korrigiert. Die übrigen Funktionen sind den Releases
-unten zugeordnet und müssen vor 1.3.0 compilergeprüft, dokumentiert und auf den
-betroffenen Datenbank- und Ausführungspfaden getestet werden:
+im 1.2.30-Kandidaten korrigiert. Der erste Nummernkreis-Baustein ist im
+aktuellen unveröffentlichten Branch implementiert und wird noch releaseweit
+geprüft; berechnete Felder und generierte Uploads sind weiterhin offen:
 
-- [ ] **1.2.31 — mandantenbezogene Belegnummernkreise:** Explizite,
-  transaktionale Nummernkreisdeklarationen für Kunden-, Angebots-, Auftrags-,
-  Lieferschein- und Rechnungsnummern ergänzen. Deterministische Formate mit
-  Literalen, Jahr und aufgefülltem Zähler sowie unabhängige Zähler je Mandant
-  für scoped Tabellen unterstützen. Eindeutigkeit muss dem deklarierten
-  Mandantenscope entsprechen und konkurrierende Requests überstehen. Keine
-  mathematisch lückenlosen Nummern versprechen: zurückgerollte Reservierungen
-  und rechtlich stornierte Belege brauchen eine ausdrückliche Auditregel;
-  verbrauchte Nummern werden nicht still wiederverwendet. Die bestehende
-  `invoice_number`-Automatik bleibt rückwärtskompatibel. Tests decken
-  parallele Zuweisung, Rollback, Mandantentrennung, Eindeutigkeit,
-  Formatprüfung und MariaDB/PostgreSQL ab; nicht unterstützte Backends müssen
-  die Funktion ausdrücklich ablehnen.
+- [~] **1.2.31 — mandantenbezogene Belegnummernkreise:** Der Branch parst
+  `auto_sequence("KD-{0001}")` und `auto_sequence("AG-{year}-{0001}")`, nimmt
+  eine verwaltete Zählertabelle in den Schema-Plan auf und vergibt Nummern in
+  der Anlegen-Transaktion. Der Zähler ist nach Mandant und – bei `{year}` –
+  UTC-Kalenderjahr getrennt. Vorhandene Werte werden geprüft und übersprungen;
+  generierte Create-Routen ignorieren übermittelte Nummern und Edit-Formulare
+  lassen generierte Nummern aus. Unit-Tests und ein MariaDB-Integrationstest
+  prüfen Mandantentrennung, Rollback, Altwert-Kollisionen, gefälschte Eingaben
+  und parallele Vergabe. Derselbe Integrationstest läuft auch mit PostgreSQL
+  16. Auf MariaDB 11.8 und PostgreSQL 16 wurde das verwaltete Schema außerdem
+  jeweils angewendet und danach ohne Drift erneut geplant. Der
+  MariaDB-Inspektor unterscheidet zusammengesetzte Unique-Schlüssel jetzt
+  anhand der echten Primärschlüssel-Constraint. Die vollständige Release-CI,
+  Versionsmatrix, Tutorial-Kompatibilität und Veröffentlichung sind noch
+  offen. Eine lückenlose Vergabe wird nicht garantiert.
+- [ ] **1.2.31 Rest — mandantenbezogene Belegnummernkreise:** PostgreSQL
+  zusätzlich auf der unterstützten Versionsmatrix prüfen, Laufzeit- und
+  Migrationsverhalten für SQLite mit stabilem Diagnosecode prüfen, Release-
+  Gates abschließen und die Kompatibilität mit der bisherigen
+  `invoice_number`-Vergabe prüfen. Konkurrenz, Rollback, Mandantentrennung,
+  Eindeutigkeit und Formatprüfung bleiben erforderlich; nicht unterstützte
+  Backends müssen ausdrücklich abgewiesen werden.
 - [ ] **1.2.32 — typisierte berechnete Geschäftsfelder:** Reine, typisierte
   und deterministische Ausdrücke für abgeleitete Felder ergänzen, einschließlich
   unterstützter skalarer und Decimal-Operationen. Abhängigkeitsgraphen prüfen;

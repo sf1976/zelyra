@@ -6968,6 +6968,14 @@ fn dispatch_form_with_language(
             Err(error) => return relation_options_error(database_url, error),
         };
     let mut validation_form = form.form.clone();
+    let mut validation_table = form.table.clone();
+    if let Some(table) = &mut validation_table {
+        for column in &mut table.columns {
+            if column.auto_sequence.is_some() {
+                column.required = false;
+            }
+        }
+    }
     if generate_invoice_number {
         if let Some(field) = validation_form
             .fields
@@ -6995,7 +7003,7 @@ fn dispatch_form_with_language(
     let existing_file_fields = preserved_file_refs.keys().cloned().collect::<HashSet<_>>();
     let validation = zelyra_forms::validate_with_existing_file_refs(
         &validation_form,
-        form.table.as_ref(),
+        validation_table.as_ref(),
         form.schema.as_ref(),
         &parent_values,
         &uploaded_fields,
@@ -7813,11 +7821,178 @@ fn is_automatic_invoice_number_form(form: &FormRoute) -> bool {
     !is_edit_form(form)
         && form.form.name.ends_with("Create")
         && form.form.table.as_deref() == Some("invoices")
-        && form
-            .form
-            .fields
-            .iter()
-            .any(|field| field.name == "invoice_number")
+        && form.form.fields.iter().any(|field| {
+            field.name == "invoice_number"
+                && !form.table.as_ref().is_some_and(|table| {
+                    table
+                        .columns
+                        .iter()
+                        .any(|column| column.name == field.name && column.auto_sequence.is_some())
+                })
+        })
+}
+
+fn render_number_series_value(format: &str, counter: u64, year: &str) -> Option<String> {
+    let mut output = String::new();
+    let mut rest = format;
+    while let Some(open) = rest.find('{') {
+        if rest[..open].contains('}') {
+            return None;
+        }
+        output.push_str(&rest[..open]);
+        let token_start = open + 1;
+        let close = rest[token_start..]
+            .find('}')
+            .map(|index| token_start + index)?;
+        let token = &rest[token_start..close];
+        if token == "year" {
+            output.push_str(year);
+        } else if !token.is_empty()
+            && token.as_bytes().last() == Some(&b'1')
+            && token.as_bytes()[..token.len() - 1]
+                .iter()
+                .all(|byte| *byte == b'0')
+        {
+            output.push_str(&format!("{counter:0width$}", width = token.len()));
+        } else {
+            return None;
+        }
+        rest = &rest[close + 1..];
+    }
+    if rest.contains('}') {
+        return None;
+    }
+    output.push_str(rest);
+    Some(output)
+}
+
+struct NumberSeriesTarget<'a> {
+    table: &'a str,
+    column: &'a str,
+    tenant_column: Option<&'a str>,
+    tenant_id: Option<i64>,
+}
+
+fn allocate_number_series(
+    transaction: &mut zelyra_database::DecisionTransaction<'_>,
+    is_postgres: bool,
+    series_key: &str,
+    scope_key: &str,
+    format: &str,
+    target: &NumberSeriesTarget<'_>,
+    attempt: u16,
+) -> Result<String, zelyra_database::DatabaseError> {
+    let year = if format.contains("{year}") {
+        let query = if is_postgres {
+            "SELECT EXTRACT(YEAR FROM CURRENT_TIMESTAMP)::bigint AS year"
+        } else {
+            "SELECT YEAR(UTC_TIMESTAMP()) AS year"
+        };
+        let result = transaction.execute(&zelyra_database::Query {
+            sql: query.into(),
+            params: Vec::new(),
+        })?;
+        result
+            .rows
+            .first()
+            .and_then(|row| row.first())
+            .cloned()
+            .ok_or_else(|| zelyra_database::DatabaseError {
+                message: "database did not return the current year for number series".into(),
+            })?
+    } else {
+        String::new()
+    };
+    // Year-bearing series reset at the calendar year boundary. The database
+    // session is configured for UTC, making the boundary deterministic.
+    let scope_key = if format.contains("{year}") {
+        let year_suffix = format!(":year:{year}");
+        if scope_key.ends_with(&year_suffix) {
+            scope_key.to_owned()
+        } else {
+            format!("{scope_key}{year_suffix}")
+        }
+    } else {
+        scope_key.to_owned()
+    };
+    let series = QueryValue::String(series_key.to_owned());
+    let scope = QueryValue::String(scope_key.clone());
+    let allocated = if is_postgres {
+        transaction.execute(&zelyra_database::Query {
+            sql: "INSERT INTO \"_zelyra_number_sequences\" (\"series_key\", \"scope_key\", \"next_value\") VALUES (:series, :scope, 1) ON CONFLICT (\"series_key\", \"scope_key\") DO UPDATE SET \"next_value\" = \"_zelyra_number_sequences\".\"next_value\" + 1 RETURNING \"next_value\"".into(),
+            params: vec![("series".into(), series.clone()), ("scope".into(), scope.clone())],
+        })?
+    } else {
+        transaction.execute(&zelyra_database::Query {
+            sql: "INSERT INTO `_zelyra_number_sequences` (`series_key`, `scope_key`, `next_value`) VALUES (:series, :scope, 1) ON DUPLICATE KEY UPDATE `next_value` = `next_value` + 1".into(),
+            params: vec![("series".into(), series), ("scope".into(), scope)],
+        })?;
+        transaction.execute(&zelyra_database::Query {
+            sql: if is_postgres {
+                unreachable!("handled above")
+            } else {
+                "SELECT `next_value` FROM `_zelyra_number_sequences` WHERE `series_key` = :series AND `scope_key` = :scope FOR UPDATE"
+            }.into(),
+            params: vec![
+                ("series".into(), QueryValue::String(series_key.into())),
+                ("scope".into(), QueryValue::String(scope_key.clone())),
+            ],
+        })?
+    };
+    let counter = allocated
+        .rows
+        .first()
+        .and_then(|row| row.first())
+        .and_then(|value| value.parse::<u64>().ok())
+        .ok_or_else(|| zelyra_database::DatabaseError {
+            message: "number series counter could not be read".into(),
+        })?;
+    let output = render_number_series_value(format, counter, &year).ok_or_else(|| {
+        zelyra_database::DatabaseError {
+            message: "invalid compiled auto_sequence format".into(),
+        }
+    })?;
+    // Existing rows may predate this sequence. The allocator serializes on its
+    // counter row, then skips any already-used value within this exact scope.
+    let mut exists_sql = format!(
+        "SELECT 1 FROM {} WHERE {} = :candidate",
+        quote_ident(target.table, is_postgres),
+        quote_ident(target.column, is_postgres)
+    );
+    let mut exists_params = vec![("candidate".into(), QueryValue::String(output.clone()))];
+    if let (Some(column), Some(tenant)) = (target.tenant_column, target.tenant_id) {
+        exists_sql.push_str(&format!(
+            " AND {} = :tenant_id",
+            quote_ident(column, is_postgres)
+        ));
+        exists_params.push(("tenant_id".into(), QueryValue::Int(tenant)));
+    }
+    exists_sql.push_str(" LIMIT 1");
+    if !transaction
+        .execute(&zelyra_database::Query {
+            sql: exists_sql,
+            params: exists_params,
+        })?
+        .rows
+        .is_empty()
+    {
+        if attempt >= 999 {
+            return Err(zelyra_database::DatabaseError {
+                message: "number series could not find an unused value after 1000 allocations"
+                    .into(),
+            });
+        }
+        return allocate_number_series(
+            transaction,
+            is_postgres,
+            series_key,
+            &scope_key,
+            format,
+            target,
+            attempt + 1,
+        );
+    }
+    Ok(output)
 }
 
 fn automatic_invoice_number_lookup_query(
@@ -12489,6 +12664,70 @@ fn execute_form_action_with_children(
                 });
             }
         }
+        if !is_edit_form(form) {
+            if let Some(table) = &form.table {
+                for column in table.columns.iter().filter(|column| column.auto_sequence.is_some()) {
+                    if form
+                        .schema
+                        .as_ref()
+                        .is_some_and(|schema| schema.backend() == zelyra_database::Backend::Sqlite)
+                    {
+                        return Err(zelyra_database::DatabaseError {
+                            message: "auto_sequence is not supported on SQLite; use MariaDB or PostgreSQL".into(),
+                        });
+                    }
+                    let format = column.auto_sequence.as_deref().expect("filtered above");
+                    let scope_key = match (form.tenant_column.as_deref(), tenant_context) {
+                        (Some(_), Some(context)) => format!("tenant:{}", context.tenant_id),
+                        (Some(_), None) => return Err(zelyra_database::DatabaseError {
+                            message: "tenant context is required to allocate this number series".into(),
+                        }),
+                        (None, _) => "global".into(),
+                    };
+                    let series_key = format!("{}.{}", table.name, column.name);
+                    let target_column = column
+                        .storage_name
+                        .clone()
+                        .unwrap_or_else(|| column.name.clone());
+                    let tenant_storage = form.tenant_column.as_deref().map(|tenant_column| {
+                        table
+                            .columns
+                            .iter()
+                            .find(|column| column.name == tenant_column)
+                            .and_then(|column| column.storage_name.clone())
+                            .unwrap_or_else(|| tenant_column.to_owned())
+                    });
+                    let generated = allocate_number_series(
+                        transaction,
+                        is_postgres,
+                        &series_key,
+                        &scope_key,
+                        format,
+                        &NumberSeriesTarget {
+                            table: &table.name,
+                            column: &target_column,
+                            tenant_column: tenant_storage.as_deref(),
+                            tenant_id: tenant_context.map(|context| context.tenant_id),
+                        },
+                        0,
+                    )?;
+                    let mut found_parameter = false;
+                    for parameter in queries
+                        .iter_mut()
+                        .flat_map(|query| &mut query.params)
+                        .filter(|(name, _)| name == &column.name)
+                    {
+                        found_parameter = true;
+                        parameter.1 = QueryValue::String(generated.clone());
+                    }
+                    if !found_parameter {
+                        return Err(zelyra_database::DatabaseError {
+                            message: format!("auto_sequence field `{}` is not present in the create query", column.name),
+                        });
+                    }
+                }
+            }
+        }
         if form.post_only {
             if let (Some(recipient_column), Some(table_name), Some(id), Some(user_id)) = (
                 form.recipient_column.as_deref(),
@@ -13204,6 +13443,17 @@ fn form_query_parameters(
             field,
         );
         let Some(value) = values.get(&field.name) else {
+            if !is_edit_form(form)
+                && form.table.as_ref().is_some_and(|table| {
+                    table
+                        .columns
+                        .iter()
+                        .any(|column| column.name == field.name && column.auto_sequence.is_some())
+                })
+            {
+                parameters.push((field.name.clone(), QueryValue::String(String::new())));
+                continue;
+            }
             if matches!(ty, Some(Type::Option(_))) && !field.readonly {
                 parameters.push((field.name.clone(), QueryValue::Null));
             }

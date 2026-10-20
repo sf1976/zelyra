@@ -1,6 +1,7 @@
 {
   "invoice.number.label": "Rechnungsnummer",
   "invoice.number.auto_hint": "Wird beim Speichern automatisch vergeben.",
+  "number.series.auto_hint": "Wird beim Speichern automatisch vergeben.",
   "invoice.issued_at.label": "Ausgestellt am",
   "invoice.overview.title": "Rechnungsübersicht",
   "invoice.nav.document_title": "Rechnungsbüro · Zelyra",

@@ -2796,6 +2796,7 @@ impl<'a> Parser<'a> {
         self.expect(TokenKind::Colon, "`:` after column name")?;
         let (ty, length, decimal_precision) = self.column_type()?;
         let mut storage_name = None;
+        let mut auto_sequence = None;
         let mut required = false;
         let mut primary_key = false;
         let mut auto = false;
@@ -2873,6 +2874,15 @@ impl<'a> Parser<'a> {
                     }
                     storage_name = Some(self.string_value("quoted database storage name")?);
                 }
+                TokenKind::Ident(ref value) if value == "auto_sequence" => {
+                    self.advance();
+                    if auto_sequence.is_some() {
+                        return self.error("`auto_sequence` may be specified only once");
+                    }
+                    self.expect(TokenKind::LParen, "`(` after `auto_sequence`")?;
+                    auto_sequence = Some(self.string_value("quoted number-series format")?);
+                    self.expect(TokenKind::RParen, "`)` after number-series format")?;
+                }
                 _ => break,
             }
         }
@@ -2882,6 +2892,7 @@ impl<'a> Parser<'a> {
             length,
             storage_name,
             decimal_precision,
+            auto_sequence,
             required,
             primary_key,
             auto,
@@ -5765,6 +5776,28 @@ mod tests {
         assert_eq!(
             program.tables[0].columns[2].ty,
             Type::Option(Box::new(Type::Decimal))
+        );
+    }
+
+    #[test]
+    fn parses_declarative_business_number_series() {
+        let tokens = lex(
+            "table customers { customer_number: String(32) required auto_sequence(\"KD-{0001}\") }",
+        )
+        .unwrap();
+        let program = parse(&tokens).expect("number-series column should parse");
+        assert_eq!(
+            program.tables[0].columns[0].auto_sequence.as_deref(),
+            Some("KD-{0001}")
+        );
+        let tokens = lex(
+            "table quotes { quote_number: String required auto_sequence(\"AG-{year}-{0001}\") }",
+        )
+        .unwrap();
+        let program = parse(&tokens).expect("year token should parse");
+        assert_eq!(
+            program.tables[0].columns[0].auto_sequence.as_deref(),
+            Some("AG-{year}-{0001}")
         );
     }
 

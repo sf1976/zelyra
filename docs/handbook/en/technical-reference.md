@@ -407,6 +407,40 @@ select controls.
 | `Bool` | Boolean database value |
 | `Timestamp` | timestamp value |
 
+### Declared number series
+
+A `String` field can declare a transactional number series for generated CRUD
+create forms:
+
+~~~zelyra
+table customers {
+    id: Id primary auto
+    customer_number: String(32) required auto_sequence("KD-{0001}")
+    name: String(255) required
+}
+
+table quotes {
+    id: Id primary auto
+    quote_number: String(40) required auto_sequence("AG-{year}-{0001}")
+}
+~~~
+
+`{0001}` means a counter padded with zeroes to at least four digits. The
+counter cannot grow beyond the width reserved by the format. `{year}` is
+replaced by the current UTC calendar year and gets a separate counter for each
+year. Supported formats contain literal text, exactly one counter token, and
+at most one year token. Unknown or incomplete tokens and formats too long for
+the String column are rejected.
+
+The schema plan adds `_zelyra_number_sequences`. Review the plan and
+deliberately apply it with `zelyra db apply main.zyl` before using the CRUD
+form. MariaDB and PostgreSQL support runtime allocation; SQLite returns a
+clear unsupported-backend error. Allocation shares the transaction used to
+save the record. Browser-submitted values are ignored, and generated numbers
+cannot be edited in the edit form. Zelyra checks for existing values before
+allocation. Numbering is not guaranteed gapless, and voided documents must not
+silently reuse their numbers.
+
 ### Prepare MariaDB safely
 
 Create a dedicated database and application user. Do not run the Zelyra web

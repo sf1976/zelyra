@@ -1,6 +1,7 @@
 {
   "invoice.number.label": "Rechnungsnummer",
   "invoice.number.auto_hint": "Wird beim Speichern automatisch vergeben.",
+  "number.series.auto_hint": "Wird beim Speichern automatisch vergeben.",
   "invoice.overview.title": "Rechnungsübersicht",
   "learning.button": "Lernhilfe",
   "learning.machine.title": "Deine Zelyra-Lernhilfe",

@@ -97,3 +97,21 @@ Fremdschlüssel belegt. Ein zusammengesetzter Tenant-FK kann
 Mandantenschlüssel geleert würde. Der Importer kennzeichnet das erzeugte
 `RESTRICT` als prüfpflichtige Verhaltensabweichung. Siehe den
 [1.2.30-Arbeitsplan](release-plans/1.2.30-typed-schema-references.de.md).
+
+## Nummernkreise im generierten CRUD (1.2.31-Entwicklung)
+
+Im unveröffentlichten Entwicklungsbranch kann ein String-Feld einen
+Nummernkreis deklarieren, zum Beispiel `customer_number: String(32) required
+auto_sequence("KD-{0001}")` oder `quote_number: String(40) required
+auto_sequence("AG-{year}-{0001}")`. `{0001}` legt die Breite des
+aufgefüllten Zählers fest; `{year}` verwendet das UTC-Kalenderjahr und startet
+für jedes Jahr einen eigenen Zähler. Der Schema-Plan enthält dazu die intern
+verwaltete Tabelle `_zelyra_number_sequences`; Projekte müssen die
+Schemaänderung prüfen und bewusst anwenden, bevor Create-Requests diese Felder
+verwenden. Generierte Create-Formulare ignorieren manipulierte Clientwerte;
+Edit-Formulare lassen die Nummer weg. MariaDB und PostgreSQL 16 wurden mit
+Transaktion, Rollback, Mandantentrennung, Altwertkollisionen und Konkurrenz
+getestet. SQLite wird für diese Laufzeitfunktion abgewiesen. Nummern sind nicht
+lückenlos garantiert: zurückgezogene oder stornierte Belege dürfen ihre
+Nummer nicht still wiederverwenden. Diese Syntax ist in Zelyra 1.2.30 noch
+nicht verfügbar.

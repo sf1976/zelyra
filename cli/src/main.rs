@@ -11267,9 +11267,15 @@ fn generated_crud_form(
                 .iter()
                 .all(|target| target != &column.name)
         })
-        .filter(|column| !(edit && crud.table == "invoices" && column.name == "invoice_number"))
         .filter(|column| {
-            configured_fields.is_none_or(|fields| fields.iter().any(|name| name == &column.name))
+            !(edit
+                && (column.auto_sequence.is_some()
+                    || (crud.table == "invoices" && column.name == "invoice_number")))
+        })
+        .filter(|column| {
+            column.auto_sequence.is_some()
+                || configured_fields
+                    .is_none_or(|fields| fields.iter().any(|name| name == &column.name))
         })
         .filter(|column| {
             crud.soft_delete
@@ -11279,12 +11285,16 @@ fn generated_crud_form(
         .map(|column| {
             let generated_invoice_number =
                 !edit && crud.table == "invoices" && column.name == "invoice_number";
+            let generated_number_series = !edit && column.auto_sequence.is_some();
             zelyra_ast::FormField {
                 name: column.name.clone(),
                 ty: None,
                 label: generated_invoice_number.then(|| "@i18n:invoice.number.label".into()),
                 placeholder: generated_invoice_number
-                    .then(|| "@i18n:invoice.number.auto_hint".into()),
+                    .then(|| "@i18n:invoice.number.auto_hint".into())
+                    .or_else(|| {
+                        generated_number_series.then(|| "@i18n:number.series.auto_hint".into())
+                    }),
                 required: false,
                 min_length: None,
                 max: None,
@@ -11294,7 +11304,7 @@ fn generated_crud_form(
                 widget: None,
                 appearance: None,
                 file_upload: None,
-                readonly: generated_invoice_number,
+                readonly: generated_invoice_number || generated_number_series,
                 span: column.span,
             }
         })
