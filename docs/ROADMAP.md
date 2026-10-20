@@ -446,8 +446,9 @@ security and compatibility gates stated for that milestone.
   The source-only full-project check also asserts the generated native
   login/logout and unsubscribe routes, validates the package lock offline, and
   runs module plan for pkg:imported_identity to verify its package identity
-  and declaration closure; this verifies module/package wiring, not
-  authentication runtime behavior.
+  and declaration closure, then creates an offline source bundle and checks
+  its entry and package lock. This verifies module/package distribution
+  wiring, not authentication runtime behavior or deployment readiness.
   `tests/laravel-import-auth-e2e.sh` adds the separate runtime proof: against
   both a compact CI fixture and `/opt/siedelmann-laravel/app`, it provisions a
   new destination-only test account and verifies invalid login, successful

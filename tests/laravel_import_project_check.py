@@ -168,7 +168,60 @@ def main() -> int:
             )
             return 1
 
-        print("Laravel importer scaffold, compiler, route graph, locked identity package, and module-plan checks passed.")
+        bundle_output = Path(temporary) / "imported-identity-bundle"
+        bundle = subprocess.run(
+            [
+                str(binary),
+                "module",
+                "bundle",
+                str(output / "main.zyl"),
+                "pkg:imported_identity",
+                "--output",
+                str(bundle_output),
+            ],
+            env=environment,
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        if bundle.returncode:
+            print(bundle.stdout, file=sys.stderr, end="")
+            print(bundle.stderr, file=sys.stderr, end="")
+            return bundle.returncode
+        bundled_entry = bundle_output / "main.zyl"
+        bundled_identity = bundle_output / "packages/imported_identity/src/lib.zyl"
+        if not bundled_entry.is_file() or not bundled_identity.is_file():
+            print(
+                "error: module bundle is missing the generated entry or reusable identity package",
+                file=sys.stderr,
+            )
+            return 1
+
+        bundle_check = subprocess.run(
+            [str(binary), "check", str(bundled_entry)],
+            env=environment,
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        if bundle_check.returncode:
+            print(bundle_check.stdout, file=sys.stderr, end="")
+            print(bundle_check.stderr, file=sys.stderr, end="")
+            return bundle_check.returncode
+
+        bundle_lock = subprocess.run(
+            [str(binary), "package", "lock", str(bundled_entry), "--check"],
+            env=environment,
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        if bundle_lock.returncode:
+            print(bundle_lock.stdout, file=sys.stderr, end="")
+            print(bundle_lock.stderr, file=sys.stderr, end="")
+            return bundle_lock.returncode
+
+        print("Laravel importer scaffold, compiler, route graph, locked identity package, module plan, and offline bundle checks passed.")
         print("Generated files were temporary and have been removed.")
     return 0
 

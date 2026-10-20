@@ -490,8 +490,10 @@ abgeschlossen.
   Die Quellprüfung des Gesamtprojekts bestätigt zudem die generierten
   Login-/Logout- und Abmelderouten, validiert den Paket-Lock offline und
   führt module plan für pkg:imported_identity aus, einschließlich
-  Paketidentität und Deklarationsabschluss. Das prüft Modul-/Paketverdrahtung,
-  nicht das Laufzeitverhalten der Authentifizierung.
+  Paketidentität und Deklarationsabschluss, und erzeugt anschließend ein
+  Offline-Quellpaket, dessen Einstieg und Lockfile geprüft werden. Dies prüft
+  die Modul-/Paketverteilung, nicht das Authentifizierungsverhalten oder die
+  Deployment-Bereitschaft.
   `tests/laravel-import-auth-e2e.sh` ergänzt den Laufzeitnachweis: Mit einem
   kleinen CI-Fixture und `/opt/siedelmann-laravel/app` werden ausschließlich
   neue Testbenutzer in einer Wegwerf-Zieldatenbank angelegt und ungültiger
