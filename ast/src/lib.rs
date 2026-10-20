@@ -412,6 +412,15 @@ pub struct FormDef {
     pub span: Span,
 }
 
+/// Compiler-checked metadata for a single uploaded file input. The client
+/// filename and MIME header are untrusted and are not represented here as
+/// storage paths or trusted content types.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct FileUploadOptions {
+    pub max_size_bytes: u64,
+    pub allowed_types: Vec<String>,
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct FormField {
     pub name: String,
@@ -431,6 +440,8 @@ pub struct FormField {
     pub widget: Option<String>,
     /// Optional visual variant; it does not alter validation state.
     pub appearance: Option<String>,
+    /// Present only when `ty` is the transient `File` form-input type.
+    pub file_upload: Option<FileUploadOptions>,
     pub readonly: bool,
     pub span: Span,
 }

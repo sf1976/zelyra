@@ -11225,6 +11225,7 @@ fn generated_crud_form(
                     choices: Vec::new(),
                     widget: None,
                     appearance: None,
+                    file_upload: None,
                     readonly: false,
                     span: column.span,
                 })
@@ -11281,6 +11282,7 @@ fn generated_crud_form(
                 choices: Vec::new(),
                 widget: None,
                 appearance: None,
+                file_upload: None,
                 readonly: generated_invoice_number,
                 span: column.span,
             }

@@ -355,8 +355,13 @@ security and compatibility gates stated for that milestone.
   receives HTTP 400. Parser and live HTTP tests cover binary payloads,
   malformed boundaries, duplicate headers, and limit failures. A
   coverage-guided fuzz target completed a local six-second run with 647,431
-  inputs and no crash. There are still no File fields or storage. A static
-  analysis of `/opt/siedelmann-laravel/app` identified upload
+  inputs and no crash. Compiler-checked `File` form metadata now accepts bounded
+  sizes and the PDF/PNG/JPEG allowlist, rejects table-backed forms and
+  storage/action contexts, and renders a multipart file input without echoing
+  client filenames. Submissions
+  are still rejected with 415; detected-content validation, route-specific
+  limits, and storage are not implemented. A static analysis of
+  `/opt/siedelmann-laravel/app` identified upload
   flows in invoices,
   contracts, settings, postal letters, and inbound mail; the importer does not
   generate them. Remaining release gates include content validation, private

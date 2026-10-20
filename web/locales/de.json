@@ -126,6 +126,7 @@
   "validation.min_value": "Der Wert liegt unter dem erlaubten Mindestwert.",
   "validation.max_value": "Der Wert überschreitet den erlaubten Höchstwert.",
   "validation.choice": "Bitte wählen Sie eine der zulässigen Optionen.",
+  "validation.file_upload_unavailable": "Datei-Uploads werden von diesem Formular-Prüfbefehl nicht unterstützt.",
   "validation.integer": "Bitte geben Sie eine Ganzzahl ein.",
   "validation.unsigned_integer": "Bitte geben Sie eine nicht negative Ganzzahl ein.",
   "validation.number": "Bitte geben Sie eine Zahl ein.",

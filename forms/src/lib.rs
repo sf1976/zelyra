@@ -28,6 +28,32 @@ impl ValidationResult {
 
 pub fn check_program(program: &zelyra_ast::Program, schema: &Schema) -> Result<(), Vec<FormError>> {
     let mut errors = Vec::new();
+    for table in &program.tables {
+        for column in &table.columns {
+            if contains_file_type(&column.ty) {
+                errors.push(FormError {
+                    message: format!(
+                        "`File` is a transient form input and cannot be stored as table column `{}.{}`",
+                        table.name, column.name
+                    ),
+                    span: column.span,
+                });
+            }
+        }
+    }
+    for record in &program.records {
+        for field in &record.fields {
+            if contains_file_type(&field.ty) {
+                errors.push(FormError {
+                    message: format!(
+                        "`File` is a transient form input and cannot be used as record field `{}.{}`",
+                        record.name, field.name
+                    ),
+                    span: field.span,
+                });
+            }
+        }
+    }
     let mut form_names = HashSet::new();
     for form in &program.forms {
         if !form_names.insert(form.name.clone()) {
@@ -67,6 +93,15 @@ pub fn check_program(program: &zelyra_ast::Program, schema: &Schema) -> Result<(
                     span: field.span,
                 });
             }
+            if form.table.is_some() && field.file_upload.is_some() {
+                errors.push(FormError {
+                    message: format!(
+                        "file field `{}` is not supported in a table-backed form until file references can be stored",
+                        field.name
+                    ),
+                    span: field.span,
+                });
+            }
             if form.table.is_none() && field.ty.is_none() {
                 errors.push(FormError {
                     message: format!(
@@ -82,6 +117,7 @@ pub fn check_program(program: &zelyra_ast::Program, schema: &Schema) -> Result<(
                     span: field.span,
                 });
             }
+            check_file_field(field, true, &mut errors);
             let declared_type = form
                 .table
                 .as_deref()
@@ -102,6 +138,9 @@ pub fn check_program(program: &zelyra_ast::Program, schema: &Schema) -> Result<(
                     message: format!("duplicate action `{}` in form `{}`", action.name, form.name),
                     span: action.span,
                 });
+            }
+            for field in &action.fields {
+                check_file_field(field, false, &mut errors);
             }
         }
     }
@@ -148,6 +187,7 @@ pub fn check_program(program: &zelyra_ast::Program, schema: &Schema) -> Result<(
                         span: field.span,
                     });
                 }
+                check_file_field(field, false, &mut errors);
                 let declared_type = program
                     .tables
                     .iter()
@@ -167,6 +207,114 @@ pub fn check_program(program: &zelyra_ast::Program, schema: &Schema) -> Result<(
         Ok(())
     } else {
         Err(errors)
+    }
+}
+
+fn check_file_field(field: &FormField, can_receive_file: bool, errors: &mut Vec<FormError>) {
+    let is_file = matches!(field.ty, Some(Type::Named(ref name)) if name == "File");
+    if is_file && !can_receive_file {
+        errors.push(FormError {
+            message: format!(
+                "file field `{}` is not supported in this form action context",
+                field.name
+            ),
+            span: field.span,
+        });
+        return;
+    }
+    match (&field.file_upload, is_file) {
+        (Some(options), true) => {
+            if options.max_size_bytes == 0 || options.max_size_bytes > 100 * 1024 * 1024 {
+                errors.push(FormError {
+                    message: format!(
+                        "maximum file size for `{}` must be between 1 byte and 100 MiB",
+                        field.name
+                    ),
+                    span: field.span,
+                });
+            }
+            if options.allowed_types.is_empty() || options.allowed_types.len() > 8 {
+                errors.push(FormError {
+                    message: format!(
+                        "allowed_types for `{}` must contain between 1 and 8 MIME types",
+                        field.name
+                    ),
+                    span: field.span,
+                });
+            }
+            let mut seen = HashSet::new();
+            for mime in &options.allowed_types {
+                if !matches!(
+                    mime.as_str(),
+                    "application/pdf" | "image/png" | "image/jpeg"
+                ) {
+                    errors.push(FormError {
+                        message: format!(
+                            "MIME type `{mime}` is not supported for file field `{}`",
+                            field.name
+                        ),
+                        span: field.span,
+                    });
+                }
+                if !seen.insert(mime) {
+                    errors.push(FormError {
+                        message: format!(
+                            "allowed_types for `{}` must not contain duplicates",
+                            field.name
+                        ),
+                        span: field.span,
+                    });
+                }
+            }
+            if field.max.is_some()
+                || field.min_length.is_some()
+                || field.min_value.is_some()
+                || field.max_value.is_some()
+                || !field.choices.is_empty()
+            {
+                errors.push(FormError {
+                    message: format!(
+                        "text, numeric, and choice constraints cannot be used on file field `{}`",
+                        field.name
+                    ),
+                    span: field.span,
+                });
+            }
+        }
+        (Some(_), false) => errors.push(FormError {
+            message: format!(
+                "file upload options require `{}` to have type File",
+                field.name
+            ),
+            span: field.span,
+        }),
+        (None, true) => errors.push(FormError {
+            message: format!(
+                "file field `{}` requires max_size and allowed_types",
+                field.name
+            ),
+            span: field.span,
+        }),
+        (None, false) => {}
+    }
+}
+
+fn contains_file_type(ty: &Type) -> bool {
+    match ty {
+        Type::Named(name) => name == "File",
+        Type::Option(inner) | Type::Array(inner) | Type::Set(inner) => contains_file_type(inner),
+        Type::Result(ok, error) | Type::Map(ok, error) => {
+            contains_file_type(ok) || contains_file_type(error)
+        }
+        Type::Tuple(items) => items.iter().any(contains_file_type),
+        Type::Applied { name, args } => name == "File" || args.iter().any(contains_file_type),
+        Type::Function {
+            params,
+            return_type,
+            ..
+        } => params.iter().any(contains_file_type) || contains_file_type(return_type),
+        Type::HttpResult(inner) => contains_file_type(inner),
+        _ => false,
     }
 }
 
@@ -279,6 +427,13 @@ pub fn validate(
     }
 
     for field in &form.fields {
+        if field.file_upload.is_some() {
+            errors.push(FieldError {
+                field: field.name.clone(),
+                message: "file inputs require an HTTP multipart upload route".into(),
+            });
+            continue;
+        }
         if field.readonly && input.contains_key(&field.name) {
             errors.push(FieldError {
                 field: field.name.clone(),
@@ -661,6 +816,7 @@ mod tests {
             choices: Vec::new(),
             widget: None,
             appearance: None,
+            file_upload: None,
             readonly: false,
             span: Span::default(),
         }
@@ -755,6 +911,234 @@ mod tests {
         assert!(errors
             .iter()
             .any(|error| error.message == "duplicate form definition `CustomerCreate`"));
+    }
+
+    #[test]
+    fn checks_file_field_size_mime_allowlist_and_form_action_context() {
+        let mut valid = form();
+        valid.fields = vec![FormField {
+            name: "document".into(),
+            ty: Some(Type::Named("File".into())),
+            label: None,
+            placeholder: None,
+            required: true,
+            min_length: None,
+            max: None,
+            min_value: None,
+            max_value: None,
+            choices: Vec::new(),
+            widget: None,
+            appearance: None,
+            file_upload: Some(zelyra_ast::FileUploadOptions {
+                max_size_bytes: 10 * 1024 * 1024,
+                allowed_types: vec!["application/pdf".into()],
+            }),
+            readonly: false,
+            span: Span::default(),
+        }];
+        let valid_program = zelyra_ast::Program {
+            imports: Vec::new(),
+            databases: Vec::new(),
+            tables: Vec::new(),
+            types: Vec::new(),
+            records: Vec::new(),
+            enums: Vec::new(),
+            views: Vec::new(),
+            components: Vec::new(),
+            pages: Vec::new(),
+            tableviews: Vec::new(),
+            forms: vec![valid.clone()],
+            cruds: Vec::new(),
+            auth: Vec::new(),
+            apis: Vec::new(),
+            commands: Vec::new(),
+            schedules: Vec::new(),
+            functions: Vec::new(),
+        };
+        check_program(&valid_program, &build_schema(&valid_program).unwrap())
+            .expect("declared supported file metadata is accepted in a form");
+
+        valid.fields[0].file_upload.as_mut().unwrap().allowed_types[0] =
+            "application/x-executable".into();
+        let invalid_mime = zelyra_ast::Program {
+            forms: vec![valid.clone()],
+            ..valid_program.clone()
+        };
+        let errors = check_program(&invalid_mime, &build_schema(&invalid_mime).unwrap())
+            .expect_err("unsupported MIME types must be rejected");
+        assert!(errors
+            .iter()
+            .any(|error| error.message.contains("not supported")));
+
+        valid.fields[0].file_upload.as_mut().unwrap().allowed_types[0] = "application/pdf".into();
+        valid.actions.push(zelyra_ast::FormAction {
+            name: "submit".into(),
+            label: None,
+            icon: None,
+            confirm: None,
+            confirm_page: None,
+            success_page: None,
+            error_page: None,
+            fields: vec![valid.fields[0].clone()],
+            requires_auth: false,
+            permissions: Vec::new(),
+            capabilities: Vec::new(),
+            statements: Vec::new(),
+            execute_body: None,
+            guard: None,
+            success: None,
+            redirect: None,
+            span: Span::default(),
+        });
+        let action_file = zelyra_ast::Program {
+            forms: vec![valid],
+            ..valid_program
+        };
+        let errors = check_program(&action_file, &build_schema(&action_file).unwrap())
+            .expect_err("file uploads are not action parameters");
+        assert!(errors.iter().any(|error| error
+            .message
+            .contains("not supported in this form action context")));
+
+        let mut zero_limit_form = form();
+        zero_limit_form.fields = vec![FormField {
+            name: "document".into(),
+            ty: Some(Type::Named("File".into())),
+            label: None,
+            placeholder: None,
+            required: false,
+            min_length: None,
+            max: None,
+            min_value: None,
+            max_value: None,
+            choices: Vec::new(),
+            widget: None,
+            appearance: None,
+            file_upload: Some(zelyra_ast::FileUploadOptions {
+                max_size_bytes: 0,
+                allowed_types: vec!["application/pdf".into()],
+            }),
+            readonly: false,
+            span: Span::default(),
+        }];
+        let zero_limit = zelyra_ast::Program {
+            imports: Vec::new(),
+            databases: Vec::new(),
+            tables: Vec::new(),
+            types: Vec::new(),
+            records: Vec::new(),
+            enums: Vec::new(),
+            views: Vec::new(),
+            components: Vec::new(),
+            pages: Vec::new(),
+            tableviews: Vec::new(),
+            forms: vec![zero_limit_form],
+            cruds: Vec::new(),
+            auth: Vec::new(),
+            apis: Vec::new(),
+            commands: Vec::new(),
+            schedules: Vec::new(),
+            functions: Vec::new(),
+        };
+        let errors = check_program(&zero_limit, &build_schema(&zero_limit).unwrap())
+            .expect_err("zero-byte file limits must be rejected");
+        assert!(errors
+            .iter()
+            .any(|error| error.message.contains("must be between 1 byte and 100 MiB")));
+    }
+
+    #[test]
+    fn rejects_file_inputs_in_table_backed_forms_until_file_references_exist() {
+        let mut document = field("document", Type::Named("File".into()), false, None);
+        document.file_upload = Some(zelyra_ast::FileUploadOptions {
+            max_size_bytes: 10 * 1024 * 1024,
+            allowed_types: vec!["application/pdf".into()],
+        });
+        let program = zelyra_ast::Program {
+            imports: Vec::new(),
+            databases: Vec::new(),
+            tables: vec![TableDef {
+                name: "documents".into(),
+                validations: Vec::new(),
+                indexes: Vec::new(),
+                uniques: Vec::new(),
+                access: zelyra_ast::TableAccessDef::default(),
+                tenant_scope: None,
+                columns: vec![zelyra_ast::ColumnDef {
+                    name: "document".into(),
+                    ty: Type::String,
+                    length: Some(255),
+                    storage_name: None,
+                    decimal_precision: None,
+                    required: false,
+                    primary_key: false,
+                    auto: false,
+                    unique: false,
+                    unique_within_tenant: false,
+                    default: None,
+                    on_delete: None,
+                    span: Span::default(),
+                }],
+                span: Span::default(),
+            }],
+            types: Vec::new(),
+            records: Vec::new(),
+            enums: Vec::new(),
+            views: Vec::new(),
+            components: Vec::new(),
+            pages: Vec::new(),
+            tableviews: Vec::new(),
+            forms: vec![FormDef {
+                name: "DocumentCreate".into(),
+                table: Some("documents".into()),
+                fields: vec![document],
+                actions: Vec::new(),
+                span: Span::default(),
+            }],
+            cruds: Vec::new(),
+            auth: Vec::new(),
+            apis: Vec::new(),
+            commands: Vec::new(),
+            schedules: Vec::new(),
+            functions: Vec::new(),
+        };
+        let schema = zelyra_database::build_schema(&program).expect("valid table schema");
+        let errors = check_program(&program, &schema).expect_err("file storage is not implemented");
+        assert!(errors.iter().any(|error| {
+            error
+                .message
+                .contains("not supported in a table-backed form")
+        }));
+    }
+
+    #[test]
+    fn string_validation_never_accepts_a_path_as_an_uploaded_file() {
+        let mut upload_form = form();
+        upload_form.fields = vec![FormField {
+            name: "document".into(),
+            ty: Some(Type::Named("File".into())),
+            label: None,
+            placeholder: None,
+            required: true,
+            min_length: None,
+            max: None,
+            min_value: None,
+            max_value: None,
+            choices: Vec::new(),
+            widget: None,
+            appearance: None,
+            file_upload: Some(zelyra_ast::FileUploadOptions {
+                max_size_bytes: 1024,
+                allowed_types: vec!["application/pdf".into()],
+            }),
+            readonly: false,
+            span: Span::default(),
+        }];
+        let submitted_path = HashMap::from([("document".into(), "../../invoice.pdf".into())]);
+        let result = validate(&upload_form, None, None, &submitted_path);
+        assert!(!result.is_valid());
+        assert_eq!(result.errors[0].field, "document");
+        assert!(result.errors[0].message.contains("multipart upload route"));
     }
 
     #[test]
@@ -958,6 +1342,7 @@ mod tests {
                 choices: Vec::new(),
                 widget: None,
                 appearance: None,
+                file_upload: None,
                 readonly: false,
                 span: Span::default(),
             }],

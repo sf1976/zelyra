@@ -395,8 +395,12 @@ abgeschlossen.
   HTTP 415; fehlerhaftes Multipart erhält HTTP 400. Parser- und Live-HTTP-Tests
   prüfen Binärdaten, fehlerhafte Grenzen, doppelte Header und Limitfehler. Ein
   Coverage-guided-Fuzz-Ziel absolvierte lokal sechs Sekunden und 647.431
-  Eingaben ohne Absturz. File-Felder und Speicherung gibt es weiterhin nicht.
-  Eine statische Analyse von
+  Eingaben ohne Absturz. Compilergeprüfte `File`-Formmetadaten prüfen jetzt
+  Größenlimits und die PDF-/PNG-/JPEG-Allowlist, weisen tabellengebundene
+  Formulare sowie Speicher- und Action-Kontexte ab und rendern ein
+  Multipart-Dateifeld ohne Dateinamen-Ausgabe.
+  Übermittlungen erhalten weiterhin HTTP 415; Inhaltserkennung, Routenlimits
+  und Speicherung fehlen. Eine statische Analyse von
   `/opt/siedelmann-laravel/app` fand Uploadabläufe bei Rechnungen, Verträgen,
   Einstellungen, Postbriefen und eingehender Mail; der Importer erzeugt sie
   nicht. Offen sind Inhaltsprüfung, private mandantengebundene Speicherung,

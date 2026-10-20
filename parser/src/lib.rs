@@ -2157,6 +2157,7 @@ impl<'a> Parser<'a> {
                         choices: Vec::new(),
                         widget: None,
                         appearance: None,
+                        file_upload: None,
                         readonly: false,
                         span: field_span,
                     });
@@ -2206,9 +2207,12 @@ impl<'a> Parser<'a> {
             choices: Vec::new(),
             widget: None,
             appearance: None,
+            file_upload: None,
             readonly: false,
             span: start,
         };
+        let mut max_size_seen = false;
+        let mut allowed_types_seen = false;
         self.skip_newlines();
         while !self.at(&TokenKind::RBrace) && !self.at(&TokenKind::Eof) {
             match self.current().kind.clone() {
@@ -2276,6 +2280,58 @@ impl<'a> Parser<'a> {
                     self.advance();
                     self.expect(TokenKind::Colon, "`:` after appearance")?;
                     field.appearance = Some(self.form_value("appearance")?);
+                }
+                TokenKind::Ident(ref name) if name == "max_size" => {
+                    if max_size_seen {
+                        return self.error("duplicate `max_size` in file field");
+                    }
+                    max_size_seen = true;
+                    let option_span = self.current().span;
+                    self.advance();
+                    self.expect(TokenKind::Colon, "`:` after max_size")?;
+                    let max_size = self.string_value("maximum file size, such as `10MB`")?;
+                    let max_size_bytes = parse_file_size(&max_size).ok_or_else(|| ParseError {
+                        message: "max_size must be a positive byte size such as `10MB` or `512KiB`"
+                            .into(),
+                        span: option_span,
+                    })?;
+                    field
+                        .file_upload
+                        .get_or_insert_with(|| zelyra_ast::FileUploadOptions {
+                            max_size_bytes: 0,
+                            allowed_types: Vec::new(),
+                        })
+                        .max_size_bytes = max_size_bytes;
+                }
+                TokenKind::Ident(ref name) if name == "allowed_types" => {
+                    if allowed_types_seen {
+                        return self.error("duplicate `allowed_types` in file field");
+                    }
+                    allowed_types_seen = true;
+                    self.advance();
+                    self.expect(TokenKind::Colon, "`:` after allowed_types")?;
+                    self.expect(TokenKind::LBracket, "`[` before allowed_types")?;
+                    self.skip_newlines();
+                    let options =
+                        field
+                            .file_upload
+                            .get_or_insert_with(|| zelyra_ast::FileUploadOptions {
+                                max_size_bytes: 0,
+                                allowed_types: Vec::new(),
+                            });
+                    while !self.at(&TokenKind::RBracket) && !self.at(&TokenKind::Eof) {
+                        options
+                            .allowed_types
+                            .push(self.string_value("allowed MIME type")?);
+                        self.skip_newlines();
+                        if self.at(&TokenKind::Comma) {
+                            self.advance();
+                            self.skip_newlines();
+                        } else if !self.at(&TokenKind::RBracket) {
+                            return self.error("expected `,` or `]` after allowed MIME type");
+                        }
+                    }
+                    self.expect(TokenKind::RBracket, "`]` after allowed_types")?;
                 }
                 TokenKind::Readonly => {
                     field.readonly = true;
@@ -4816,6 +4872,27 @@ fn pipeline_builtin_alias(name: &str) -> &str {
     }
 }
 
+fn parse_file_size(input: &str) -> Option<u64> {
+    let input = input.trim();
+    let split = input
+        .find(|character: char| !character.is_ascii_digit())
+        .unwrap_or(input.len());
+    let (number, suffix) = input.split_at(split);
+    let number = number.parse::<u64>().ok()?;
+    if number == 0 {
+        return None;
+    }
+    let multiplier = match suffix.to_ascii_lowercase().as_str() {
+        "b" => 1_u64,
+        "kb" => 1_000,
+        "mb" => 1_000_000,
+        "kib" => 1_024,
+        "mib" => 1_048_576,
+        _ => return None,
+    };
+    number.checked_mul(multiplier)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -5715,6 +5792,45 @@ mod tests {
         ));
         assert_eq!(program.forms[1].table.as_deref(), Some("customers"));
         assert_eq!(program.forms[1].fields.len(), 2);
+    }
+
+    #[test]
+    fn parses_bounded_file_upload_form_metadata() {
+        let source = r#"
+            form InvoiceDocument {
+                field document: File {
+                    label: "Rechnungs-PDF"
+                    required
+                    max_size: "10MB"
+                    allowed_types: ["application/pdf", "image/png"]
+                }
+            }
+        "#;
+        let program = parse(&lex(source).unwrap()).unwrap();
+        let field = &program.forms[0].fields[0];
+        assert_eq!(field.ty, Some(Type::Named("File".into())));
+        let upload = field.file_upload.as_ref().unwrap();
+        assert_eq!(upload.max_size_bytes, 10_000_000);
+        assert_eq!(upload.allowed_types, ["application/pdf", "image/png"]);
+    }
+
+    #[test]
+    fn rejects_unsupported_file_size_units() {
+        let source = r#"form Upload { field document: File { max_size: "10GB" allowed_types: ["application/pdf"] } }"#;
+        let error = parse(&lex(source).unwrap()).unwrap_err();
+        assert!(error
+            .message
+            .contains("max_size must be a positive byte size"));
+    }
+
+    #[test]
+    fn rejects_duplicate_file_upload_options() {
+        for source in [
+            r#"form Upload { field document: File { max_size: "1MB" max_size: "2MB" allowed_types: ["application/pdf"] } }"#,
+            r#"form Upload { field document: File { max_size: "1MB" allowed_types: ["application/pdf"] allowed_types: ["image/png"] } }"#,
+        ] {
+            assert!(parse(&lex(source).unwrap()).is_err(), "accepted {source}");
+        }
     }
 
     #[test]

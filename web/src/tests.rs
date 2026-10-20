@@ -301,6 +301,7 @@ fn form_route() -> FormRoute {
                 choices: Vec::new(),
                 widget: None,
                 appearance: None,
+                file_upload: None,
                 readonly: false,
                 span: zelyra_ast::Span::default(),
             }],
@@ -346,6 +347,7 @@ fn child_collection_form_route() -> FormRoute {
             choices: Vec::new(),
             widget: None,
             appearance: None,
+            file_upload: None,
             readonly: false,
             span: zelyra_ast::Span::default(),
         },
@@ -362,6 +364,7 @@ fn child_collection_form_route() -> FormRoute {
             choices: Vec::new(),
             widget: None,
             appearance: None,
+            file_upload: None,
             readonly: false,
             span: zelyra_ast::Span::default(),
         },
@@ -598,6 +601,7 @@ fn table_validation_rejects_invalid_form_before_action_execution() {
             choices: Vec::new(),
             widget: None,
             appearance: None,
+            file_upload: None,
             readonly: false,
             span: zelyra_ast::Span::default(),
         },
@@ -614,6 +618,7 @@ fn table_validation_rejects_invalid_form_before_action_execution() {
             choices: Vec::new(),
             widget: None,
             appearance: None,
+            file_upload: None,
             readonly: false,
             span: zelyra_ast::Span::default(),
         },
@@ -1286,6 +1291,7 @@ fn relation_form_route() -> FormRoute {
         choices: Vec::new(),
         widget: None,
         appearance: None,
+        file_upload: None,
         readonly: false,
         span: zelyra_ast::Span::default(),
     });
@@ -1372,6 +1378,7 @@ fn formats_crud_audit_changes_without_exposing_sensitive_values() {
         choices: Vec::new(),
         widget: None,
         appearance: None,
+        file_upload: None,
         readonly: false,
         span: zelyra_ast::Span::default(),
     });
@@ -3350,6 +3357,7 @@ fn renders_form_with_csrf_and_field_attributes() {
         choices: Vec::new(),
         widget: None,
         appearance: None,
+        file_upload: None,
         readonly: false,
         span: zelyra_ast::Span::default(),
     };
@@ -3368,6 +3376,7 @@ fn renders_form_with_csrf_and_field_attributes() {
         choices: Vec::new(),
         widget: None,
         appearance: None,
+        file_upload: None,
         readonly: false,
         span: zelyra_ast::Span::default(),
     };
@@ -3386,6 +3395,7 @@ fn renders_form_with_csrf_and_field_attributes() {
         choices: vec!["draft".into(), "<script>".into()],
         widget: None,
         appearance: None,
+        file_upload: None,
         readonly: false,
         span: zelyra_ast::Span::default(),
     });
@@ -3421,6 +3431,23 @@ fn renders_form_with_csrf_and_field_attributes() {
     let get_request = parse_request("GET /forms/action HTTP/1.1\r\n\r\n").unwrap();
     let response = dispatch_form(&post_only_route, &get_request, &HashMap::new(), None, None);
     assert_eq!(response.status, 405);
+}
+
+#[test]
+fn file_form_renders_multipart_without_echoing_submitted_file_names() {
+    let mut route = form_route();
+    route.form.fields[0].ty = Some(Type::Named("File".into()));
+    route.form.fields[0].required = true;
+    route.form.fields[0].file_upload = Some(zelyra_ast::FileUploadOptions {
+        max_size_bytes: 10 * 1024 * 1024,
+        allowed_types: vec!["application/pdf".into()],
+    });
+    let values = HashMap::from([("name".into(), "../../private.pdf".into())]);
+    let html = render_form(&route, &values, &[], None);
+    assert!(html.contains("<form method=\"post\" enctype=\"multipart/form-data\""));
+    assert!(html.contains("id=\"name\" name=\"name\" type=\"file\""));
+    assert!(!html.contains("value=\"../../private.pdf\""));
+    assert!(!html.contains("type=\"file\" value="));
 }
 
 #[test]
@@ -5066,6 +5093,7 @@ fn invalid_form_post_preserves_safe_input_and_redacts_secrets() {
         choices: Vec::new(),
         widget: Some("email".into()),
         appearance: None,
+        file_upload: None,
         readonly: false,
         span: zelyra_ast::Span::default(),
     });
@@ -5083,6 +5111,7 @@ fn invalid_form_post_preserves_safe_input_and_redacts_secrets() {
             choices: Vec::new(),
             widget: (name == "password").then(|| "password".into()),
             appearance: None,
+            file_upload: None,
             readonly: false,
             span: zelyra_ast::Span::default(),
         });
