@@ -280,8 +280,9 @@ abgeschlossen.
   Datenbanktransaktion laufen und beim Verlassen standardmäßig zurückgerollt
   werden; `--persist` ist die bewusste Ausnahme. `:commit` und `:rollback`
   nutzen eine festgehaltene MariaDB-/MySQL-Transaktion und eröffnen danach eine
-  neue. PostgreSQL-Sandbox und Bytecode-REPL bleiben nicht unterstützt;
-  `--tenant` und `:tenant` stellen `tenant_id` sowie das typisierte
+  neue. AST- und Bytecode-SQL verwenden dieselbe festgehaltene MariaDB-
+  Transaktion und Eingabe-Savepoints. PostgreSQL-Sandbox bleibt nicht
+  unterstützt. `--tenant` und `:tenant` stellen `tenant_id` sowie das typisierte
   `session.tenant_id: Option<Int>` bereit, aktivieren aber keine automatische
   Zeilenfilterung. Compiler-, Capability-, Contract-, Schrittbudget- und
   Stacktiefenprüfungen bleiben aktiv. Kann ein Eingabe-Savepoint nicht sicher
@@ -291,7 +292,9 @@ abgeschlossen.
   [Arbeitsplan 1.2.26](release-plans/1.2.26-interactive-language-console.en.md).
   `tests/language-console-mariadb-e2e.sh` prüft Rollback beim Beenden,
   explizites `:rollback`, Batch-Commit und `--persist` gegen eine isolierte
-  Wegwerf-MariaDB. PostgreSQL-Sandbox und Bytecode-REPL bleiben offen.
+  Wegwerf-MariaDB; derselbe E2E-Test prüft Bytecode-SQL-Rollback. Pipe-Tests
+  decken persistente Bindungen und Fehlererholung für beide Backends ab.
+  PostgreSQL-Sandboxtransaktionen bleiben offen.
 - [x] **1.2.27 — Grundlage für den Import von Laravel-Webseiten:** Einen neu
   entwickelten, zuerst schreibgeschützten Importer für ausgewählte
   Webseitenfunktionen in native Zelyra-Module bereitstellen; keine Laravel-
