@@ -17,7 +17,9 @@ use zelyra_ast::{
     TableDef, Type,
 };
 use zelyra_database::{QueryValue, Schema};
-use zelyra_forms::{validate, FieldError};
+#[cfg(test)]
+use zelyra_forms::validate;
+use zelyra_forms::FieldError;
 use zelyra_runtime::Value as RuntimeValue;
 mod edit_snapshot;
 pub mod file_storage;
@@ -766,6 +768,8 @@ struct FormDispatchContext<'a> {
     capability_grants: Option<&'a HashSet<String>>,
     runtime_policy: Option<&'a zelyra_runtime::RuntimePolicy>,
     granted_permissions: Vec<String>,
+    multipart_parts: &'a [multipart::MultipartPart<'a>],
+    upload_storage_root: Option<&'a Path>,
 }
 
 fn tenant_selector(request: &Request) -> Result<Option<String>, u16> {
@@ -1216,6 +1220,7 @@ pub struct WebApp {
     pub ui_stylesheet_css: Option<String>,
     pub project_theme_css: Option<String>,
     public_project_root: Option<PathBuf>,
+    upload_storage_root: Option<PathBuf>,
     allowed_hosts: Vec<String>,
     project_ui_catalogs: ProjectUiCatalogs,
     sessions: Arc<Mutex<HashMap<String, Session>>>,
@@ -1252,6 +1257,7 @@ impl WebApp {
             ui_stylesheet_css: None,
             project_theme_css: None,
             public_project_root: None,
+            upload_storage_root: None,
             allowed_hosts: default_allowed_hosts(),
             project_ui_catalogs: ProjectUiCatalogs::default(),
             sessions: Arc::new(Mutex::new(HashMap::new())),
@@ -1354,6 +1360,7 @@ impl WebApp {
             ui_stylesheet_css: None,
             project_theme_css: None,
             public_project_root: None,
+            upload_storage_root: None,
             allowed_hosts: default_allowed_hosts(),
             project_ui_catalogs: ProjectUiCatalogs::default(),
             sessions: Arc::new(Mutex::new(HashMap::new())),
@@ -1489,6 +1496,13 @@ impl WebApp {
     /// fallback after declared application routes have been considered.
     pub fn with_public_dir(mut self, project_root: impl Into<PathBuf>) -> Self {
         self.public_project_root = Some(project_root.into());
+        self
+    }
+
+    /// Configures private upload storage beneath a project-owned directory.
+    /// Uploads remain disabled when this is not configured.
+    pub fn with_upload_storage(mut self, storage_root: impl Into<PathBuf>) -> Self {
+        self.upload_storage_root = Some(storage_root.into());
         self
     }
 
@@ -1655,6 +1669,14 @@ impl WebApp {
     }
 
     pub fn dispatch(&self, request: &Request) -> Response {
+        self.dispatch_with_multipart(request, &[])
+    }
+
+    fn dispatch_with_multipart(
+        &self,
+        request: &Request,
+        multipart_parts: &[multipart::MultipartPart<'_>],
+    ) -> Response {
         let request_id = request_id(request);
         let mut correlated_request = request.clone();
         correlated_request
@@ -1687,7 +1709,7 @@ impl WebApp {
                 ),
             )
         } else {
-            self.dispatch_inner(&correlated_request)
+            self.dispatch_inner(&correlated_request, multipart_parts)
         };
         if response.content_type.starts_with("text/html") {
             if response.location.is_none() {
@@ -1735,7 +1757,11 @@ impl WebApp {
         response
     }
 
-    fn dispatch_inner(&self, request: &Request) -> Response {
+    fn dispatch_inner(
+        &self,
+        request: &Request,
+        multipart_parts: &[multipart::MultipartPart<'_>],
+    ) -> Response {
         if request.path == SCHEDULE_PROBE_PATH {
             return if self.valid_schedule_probe(request) {
                 Response::empty(204).with_header("Cache-Control", "no-store")
@@ -1979,6 +2005,8 @@ impl WebApp {
                                     self.database_url.as_deref(),
                                 )
                                 .unwrap_or_default(),
+                                multipart_parts,
+                                upload_storage_root: self.upload_storage_root.as_deref(),
                             },
                         ),
                         form.layout_html.as_deref(),
@@ -2100,6 +2128,8 @@ impl WebApp {
                                         self.database_url.as_deref(),
                                     )
                                     .unwrap_or_default(),
+                                    multipart_parts,
+                                    upload_storage_root: self.upload_storage_root.as_deref(),
                                 },
                             ),
                             action.form.layout_html.as_deref(),
@@ -6349,6 +6379,8 @@ fn dispatch_form(
             capability_grants: None,
             runtime_policy: None,
             granted_permissions: Vec::new(),
+            multipart_parts: &[],
+            upload_storage_root: None,
         },
     )
 }
@@ -6371,6 +6403,8 @@ fn dispatch_form_with_language(
         capability_grants,
         runtime_policy,
         granted_permissions,
+        multipart_parts,
+        upload_storage_root,
     } = context;
     if form.tenant_column.is_some() && tenant_context.is_none() {
         return Response::html(403, "<h1>403 Forbidden</h1>");
@@ -6588,6 +6622,67 @@ fn dispatch_form_with_language(
     }
     let mut values = input;
     values.remove("_zelyra_csrf");
+    let mut uploaded_fields = HashSet::new();
+    let mut staged_uploads = Vec::new();
+    let upload_tenant_id = tenant_context.map_or(0, |tenant| tenant.tenant_id);
+    if !multipart_parts.is_empty() {
+        let Some(storage_root) = upload_storage_root else {
+            return Response::html(503, "<h1>503 Service Unavailable</h1>");
+        };
+        if form.tenant_column.is_some() && tenant_context.is_none() {
+            return Response::html(403, "<h1>403 Forbidden</h1>");
+        }
+        let storage = match file_storage::FileStorage::new(storage_root) {
+            Ok(storage) => storage,
+            Err(error) => {
+                eprintln!("zelyra web: private upload storage unavailable: {error}");
+                return Response::html(503, "<h1>503 Service Unavailable</h1>");
+            }
+        };
+        for part in multipart_parts {
+            let Some(filename) = part.filename.as_deref() else {
+                continue;
+            };
+            if filename.is_empty() && part.data.is_empty() {
+                continue;
+            }
+            if filename.len() > 255
+                || filename.chars().any(char::is_control)
+                || filename.contains(['/', '\\'])
+            {
+                return Response::html(400, "<h1>400 Bad Request</h1>");
+            }
+            let Some(field) = rendered_form
+                .form
+                .fields
+                .iter()
+                .find(|field| field.name == part.name)
+            else {
+                return Response::html(400, "<h1>400 Bad Request</h1>");
+            };
+            let Some(options) = field.file_upload.as_ref() else {
+                return Response::html(400, "<h1>400 Bad Request</h1>");
+            };
+            let staged = match storage.stage(
+                upload_tenant_id,
+                part.data,
+                options.max_size_bytes,
+                &options.allowed_types,
+            ) {
+                Ok(staged) => staged,
+                Err(error) => {
+                    let message = html_escape(&error.to_string());
+                    return Response::html(
+                        422,
+                        format!("<h1>422 Unprocessable Content</h1><p>{message}</p>"),
+                    );
+                }
+            };
+            values.insert(field.name.clone(), staged.metadata().file_ref.clone());
+            uploaded_fields.insert(field.name.clone());
+            staged_uploads.push(staged);
+        }
+    }
     let expected_snapshot = if is_edit_form(form) {
         let Some(snapshot) = values
             .remove("_zelyra_snapshot")
@@ -6794,11 +6889,12 @@ fn dispatch_form_with_language(
     } else {
         values.clone()
     };
-    let validation = validate(
+    let validation = zelyra_forms::validate_with_uploaded_files(
         &validation_form,
         form.table.as_ref(),
         form.schema.as_ref(),
         &parent_values,
+        &uploaded_fields,
     );
     let mut errors = validation.errors;
     validate_relation_values(form, &relation_options, &values, &mut errors);
@@ -6866,8 +6962,39 @@ fn dispatch_form_with_language(
             ),
         );
     }
+    if !staged_uploads.is_empty() && form.form.actions.is_empty() {
+        return Response::html(400, "<h1>400 Bad Request</h1>");
+    }
+    let storage = if staged_uploads.is_empty() {
+        None
+    } else {
+        match upload_storage_root.and_then(|root| file_storage::FileStorage::new(root).ok()) {
+            Some(storage) => Some(storage),
+            None => return Response::html(503, "<h1>503 Service Unavailable</h1>"),
+        }
+    };
+    let mut published_upload_refs = Vec::new();
+    for staged in staged_uploads {
+        match staged.publish() {
+            Ok(file) => published_upload_refs.push(file.file_ref),
+            Err(error) => {
+                if let Some(storage) = &storage {
+                    for file_ref in &published_upload_refs {
+                        let _ = storage.remove(upload_tenant_id, file_ref);
+                    }
+                }
+                eprintln!("zelyra web: private upload publication failed: {error}");
+                return Response::html(500, "<h1>500 Internal Server Error</h1>");
+            }
+        }
+    }
     if let Some(action) = form.form.actions.first() {
         let Some(database_url) = database_url else {
+            if let Some(storage) = &storage {
+                for file_ref in &published_upload_refs {
+                    let _ = storage.remove(upload_tenant_id, file_ref);
+                }
+            }
             return action_error_response(
                 action,
                 503,
@@ -6896,6 +7023,11 @@ fn dispatch_form_with_language(
             },
         ) {
             eprintln!("zelyra web: form action failed: {error}");
+            if let Some(storage) = &storage {
+                for file_ref in &published_upload_refs {
+                    let _ = storage.remove(upload_tenant_id, file_ref);
+                }
+            }
             if error.starts_with("ZELYRA_TENANT_DENIED:") {
                 return Response::html(404, "<h1>404 Not Found</h1>");
             }
@@ -13935,10 +14067,56 @@ fn handle_connection_until(
                             parsed.body,
                             multipart::MultipartLimits::new(read.max_body_bytes),
                         ) {
-                            Ok(_) => Response::json(
-                                415,
-                                "{\"error\":{\"code\":\"UnsupportedMediaType\",\"message\":\"this route does not accept multipart form data yet\"}}",
-                            ),
+                            Ok(parts) => {
+                                let route_accepts_uploads = parsed.method == "POST"
+                                    && app.forms.iter().any(|form| {
+                                        match_path(&form.path, &parsed.path).is_some()
+                                            && form.form.fields.iter().any(|field| {
+                                                field.file_upload.is_some()
+                                            })
+                                    });
+                                if !route_accepts_uploads {
+                                    Response::json(
+                                        415,
+                                        "{\"error\":{\"code\":\"UnsupportedMediaType\",\"message\":\"this route does not accept multipart form data\"}}",
+                                    )
+                                } else if parts.iter().any(|part| {
+                                    parts.iter().filter(|candidate| candidate.name == part.name).count() > 1
+                                }) {
+                                    Response::html(400, "<h1>400 Bad Request</h1>")
+                                } else {
+                                    let mut fields = Vec::new();
+                                    let mut valid = true;
+                                    for part in &parts {
+                                        if part.filename.is_some() {
+                                            continue;
+                                        }
+                                        let Ok(value) = std::str::from_utf8(part.data) else {
+                                            valid = false;
+                                            break;
+                                        };
+                                        fields.push(format!(
+                                            "{}={}",
+                                            form_urlencode(&part.name),
+                                            form_urlencode(value)
+                                        ));
+                                    }
+                                    if !valid {
+                                        Response::html(400, "<h1>400 Bad Request</h1>")
+                                    } else {
+                                        let request = Request {
+                                            method: parsed.method,
+                                            target: parsed.target,
+                                            path: parsed.path,
+                                            headers: parsed.headers,
+                                            body: fields.join("&"),
+                                            remote_addr: stream.peer_addr().ok(),
+                                        };
+                                        let _query_deadline = zelyra_database::set_query_deadline(deadline);
+                                        app.dispatch_with_multipart(&request, &parts)
+                                    }
+                                }
+                            }
                             Err(_) => Response::html(400, "<h1>400 Bad Request</h1>"),
                         }
                     } else {
@@ -14014,6 +14192,22 @@ fn handle_connection_until(
         }
     }
     Ok(())
+}
+
+fn form_urlencode(value: &str) -> String {
+    let mut encoded = String::with_capacity(value.len());
+    for byte in value.bytes() {
+        if byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_' | b'.' | b'*') {
+            encoded.push(char::from(byte));
+        } else if byte == b' ' {
+            encoded.push('+');
+        } else {
+            encoded.push('%');
+            encoded.push(char::from(b"0123456789ABCDEF"[(byte >> 4) as usize]));
+            encoded.push(char::from(b"0123456789ABCDEF"[(byte & 0x0f) as usize]));
+        }
+    }
+    encoded
 }
 
 fn dispatch_text_request(

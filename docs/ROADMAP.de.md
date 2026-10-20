@@ -393,9 +393,9 @@ abgeschlossen.
 - [~] **1.2.29 — begrenzte sichere Datei-Uploads:** Die Architekturaufnahme ist
   abgeschlossen. Der HTTP-Server liest Requests jetzt begrenzt als Bytes und
   leitet gültige Multipart-Bodies durch den Decoder; die öffentliche Text-
-  `Request`-API und das globale Limit von 1 MiB bleiben unverändert. Gültiges
-  Multipart erhält bis zur Deklaration und Autorisierung von Datei-Feldern
-  HTTP 415; fehlerhaftes Multipart erhält HTTP 400. POST-Multipart-Requests an
+  `Request`-API und das globale Limit von 1 MiB bleiben unverändert. Routen
+  ohne deklarierte Datei-Felder erhalten HTTP 415; fehlerhaftes
+  Multipart erhält HTTP 400. POST-Multipart-Requests an
   deklarierte File-Formulare erhalten ein daraus abgeleitetes Requestlimit;
   alle anderen Routen bleiben bei 1 MiB. Ein globales Budget von 256 MiB
   begrenzt gleichzeitig gepufferte Request-Bodies. Parser- und Live-HTTP-Tests
@@ -405,20 +405,27 @@ abgeschlossen.
   Größenlimits und die PDF-/PNG-/JPEG-Allowlist, weisen tabellengebundene
   Formulare sowie Speicher- und Action-Kontexte ab und rendern ein
   Multipart-Dateifeld ohne Dateinamen-Ausgabe. Tabellengebundene Datei-Felder
-  benötigen jetzt eine gleichnamige `FileRef`-Spalte.
-  Übermittlungen erhalten weiterhin HTTP 415. Ein Unix-Speicherprimitiv
+  benötigen jetzt eine gleichnamige `FileRef`-Spalte. Passende POST-Formrouten
+  validieren und stagen Dateien nach Autorisierung und CSRF-Prüfung; erfolgreiche
+  Actions veröffentlichen sie vor SQL, fehlgeschlagene Actions entfernen sie.
+  Ein Unix-Speicherprimitiv
   unterstützt Staging, opake mandantengebundene Referenzen, private
   Sidecar-Manifeste, verifizierte Lesezugriffe, private Dateirechte,
   No-Follow-Öffnen, Signaturauswahl für PDF/PNG/JPEG sowie Größen-/SHA-256-
-  Prüfung. Bei Teilfehlern werden beide endgültigen Einträge entfernt. Es ist
-  noch nicht mit HTTP, Forms, Datenbanktransaktionen oder Download-
-  Berechtigungen verbunden; Nicht-Unix-Anlegen schlägt bis zur ACL-
-  Unterstützung geschlossen fehl. `FileRef` wird je
+  Prüfung. Bei Teilfehlern werden beide endgültigen Einträge entfernt. Der
+  HTTP-/Speicherpfad ist über Datei- und Datenbankcommit nicht crash-atomar;
+  ein Absturz kann ein verwaistes Objekt hinterlassen. Geschützte Downloads,
+  Ersetzen/Löschen, Bereinigung und Backup/Restore sind offen. Nicht-Unix-
+  Anlegen schlägt bis zur ACL-Unterstützung geschlossen fehl. `FileRef` wird je
   Backend als `CHAR(36)`/`UUID`/`TEXT` abgebildet. Geprüfte
   Datei-Formulare müssen auf eine gleichnamige Referenzspalte zeigen;
   automatisches CRUD darf `FileRef` nicht als Textfeld rendern und JSON-API-
-  Eingaben dürfen die opake Referenz nicht setzen. Diese Compilerschranken
-  aktivieren HTTP-Uploads noch nicht. Die GitHub-Werkzeugkette wechselte auf
+  Eingaben dürfen die opake Referenz nicht setzen. Ein MariaDB-E2E bestätigt,
+  dass Referenz und private Bytes nach erfolgreichem POST gespeichert sind und
+  ein späterer SQL-Fehler den Datensatz zurückrollt und nur den fehlgeschlagenen
+  Upload entfernt. Unscoped Projekte verwenden die projektlokale Speicher-
+  Mandanten-ID 0; scoped Forms verlangen den authentifizierten Mandanten. Die
+  GitHub-Werkzeugkette wechselte auf
   Rust 1.99.1; Clippy beanstandete dort `fetch_update` als veraltet. Die
   Requestbudget-Reservierung nutzt jetzt eine begrenzte
   `compare_exchange_weak`-Schleife. Ein neuer Konkurrenztest deckte auf, dass
@@ -427,8 +434,8 @@ abgeschlossen.
   konnte. Der Code wird zusätzlich mit lokalem Rust 1.98 geprüft. Eine statische Analyse von
   `/opt/siedelmann-laravel/app` fand Uploadabläufe bei Rechnungen, Verträgen,
   Einstellungen, Postbriefen und eingehender Mail; der Importer erzeugt sie
-  nicht. Offen sind Inhaltsprüfung, private mandantengebundene Speicherung,
-  autorisierte Downloads, transaktionales Aufräumen und Backup-/Löschsemantik.
+  nicht. Offen sind autorisierte Downloads, Ersetzen/Löschen, Bereinigung nach
+  Prozessabstürzen und Backup/Restore.
   Siehe den [Plan für sichere Uploads 1.2.29](release-plans/1.2.29-secure-uploads.de.md).
 - [~] **1.2.30 — Abdeckung echter Laravel-Migrationsabläufe:** Standalone-Forms
   unterstützen geprüfte lokale Routen mit erfassten Pfadparametern, ein

@@ -353,8 +353,8 @@ security and compatibility gates stated for that milestone.
 - [~] **1.2.29 — bounded secure file upload foundation:** Architecture inventory
   is complete. The HTTP server now reads bounded byte requests and sends valid
   multipart bodies through the decoder; the existing public text `Request` API
-  and 1 MiB global limit remain unchanged. Valid multipart receives HTTP 415
-  until a route declares and authorizes file fields; malformed multipart
+  and 1 MiB global limit remain unchanged. Multipart receives HTTP 415 on
+  routes without declared file fields; malformed multipart
   receives HTTP 400. POST multipart requests matching a declared File form get
   a route-derived body ceiling; all other routes remain at 1 MiB. A global
   256 MiB in-flight body budget bounds aggregate buffering. Parser and live HTTP tests cover binary payloads,
@@ -363,18 +363,23 @@ security and compatibility gates stated for that milestone.
   inputs and no crash. Compiler-checked `File` form metadata now accepts bounded
   sizes and the PDF/PNG/JPEG allowlist, rejects table-backed forms and
   storage/action contexts, and renders a multipart file input without echoing
-  client filenames. Submissions
-  are still rejected with 415. A Unix-only private storage primitive now
+  client filenames. Matching POST form routes now validate and stage uploads
+  after authorization and CSRF; successful actions publish before SQL, failed
+  actions remove them. A Unix-only private storage primitive now
   provides staged publication, opaque tenant-scoped references, private
   sidecar manifests, verified reads, file modes, no-follow opens,
   signature-based PDF/PNG/JPEG selection, and size/SHA-256 checks. Partial
-  publication failures remove both final entries. It is not connected to HTTP,
-  Forms, database transactions, or download authorization. Non-Unix creation
-  fails closed pending ACL support.
+  publication failures remove both final entries. The HTTP/storage path is not
+  crash-atomic across filesystem and database commits; a crash can leave an
+  orphan. Protected downloads, replacement/deletion, cleanup, and backup/
+  restore remain open. Non-Unix creation fails closed pending ACL support.
   `FileRef` maps to `CHAR(36)`/`UUID`/`TEXT` by backend, checked file forms must
   match a same-named reference column, automatic CRUD cannot render it as text,
-  and JSON API inputs reject the opaque reference. These compiler boundaries
-  do not enable HTTP uploads yet. GitHub CI's rolling toolchain advanced to
+  and JSON API inputs reject the opaque reference. A MariaDB E2E verifies that
+  the reference and private bytes persist after a successful POST, while a later
+  SQL failure rolls back the row and removes only the failed upload. Unscoped
+  projects use a project-local storage tenant id of 0; scoped forms require the
+  authenticated tenant. GitHub CI's rolling toolchain advanced to
   Rust 1.99.1, where Clippy rejects the deprecated atomic `fetch_update` API.
   Request-budget reservation now uses a bounded `compare_exchange_weak` loop.
   A concurrent regression test exposed eager `then_some` guard construction,
@@ -385,9 +390,8 @@ security and compatibility gates stated for that milestone.
   `/opt/siedelmann-laravel/app` identified upload
   flows in invoices,
   contracts, settings, postal letters, and inbound mail; the importer does not
-  generate them. Remaining release gates include content validation, private
-  tenant-owned storage, authorized downloads, transactional cleanup, and
-  backup/delete semantics. See the
+  generate them. Remaining release gates include authorized downloads,
+  replacement/deletion, crash-orphan cleanup, and backup/restore. See the
   [1.2.29 secure upload plan](release-plans/1.2.29-secure-uploads.en.md).
 - [~] **1.2.30 — Laravel import workflow coverage:** Standalone forms now
   support checked local routes with captured path parameters, a compiler-checked

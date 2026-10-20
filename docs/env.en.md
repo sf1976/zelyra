@@ -493,6 +493,7 @@ loss and backup requirements.
 | `CLICOLOR_FORCE` | implemented | Any nonempty value other than `0` forces color when `ZELYRA_COLOR` is unset and `NO_COLOR` is absent |
 | `ZELYRA_DB_TIMEOUT_TEST_URL` | CI/test variable | MariaDB URL for timeout and pool integration tests; local/isolated test database only |
 | `ZELYRA_MODULE_IMPORTS_DATABASE_URL` | CI/test variable | Optional base MariaDB URL for package/module runtime integration tests; unset skips the database case, set only to an isolated test server because the test creates and drops a uniquely named database |
+| `ZELYRA_UPLOAD_TEST_URL` | CI/test variable | Used only by `tests/mariadb-file-upload-e2e.sh`; points to a disposable MariaDB test database where the test creates and drops `zelyra_upload_e2e`. Never use a production database; do not add it to a project `.env` |
 | `ZELYRA_MARIADB_ROOT_PASSWORD` | test/development tool | password for local MariaDB test runs |
 | `ZELYRA_MARIADB_PASSWORD` | test/development tool | user password for local MariaDB test runs |
 | `ZELYRA_GENERATED_E2E_ROOT_PASSWORD` | test/development tool | root password for generated Docker E2E tests |
@@ -507,6 +508,13 @@ loss and backup requirements.
 | `ZELYRA_AUDIT_CHAIN_E2E_PROJECT`, `ZELYRA_AUDIT_CHAIN_E2E_DB_PASSWORD` | test/development tool | audit-chain E2E project and test password |
 | `ZELYRA_DOCKER_E2E_WEB_PORT`, `ZELYRA_DOCKER_E2E_HOST_PORT`, `ZELYRA_DOCKER_E2E_DB_HOST_PORT`, `ZELYRA_DOCKER_E2E_ADDRESS` | test/development tool | generated Docker E2E project and ports |
 | `ZELYRA_DOCKER_E2E_REF` | test/development tool; defaults to the local checkout branch (published Zelyra tag on detached HEAD) | Git branch or tag used to build the isolated Docker E2E application image |
+
+`ZELYRA_UPLOAD_TEST_URL` is unset by default and read only from the process
+environment by the isolated `tests/mariadb-file-upload-e2e.sh`; that test does
+not load a project `.env`. The value may contain database credentials and must
+be treated as a secret. The script starts its own disposable MariaDB instance,
+creates `zelyra_upload_e2e` there, then removes the instance. Production
+commands are unaffected.
 
 `ZELYRA_DOCKER_E2E_REF` applies only to
 `tests/generated-project-docker-e2e.sh`. When unset, the test uses the local

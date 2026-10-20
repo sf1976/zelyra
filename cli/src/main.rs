@@ -11099,6 +11099,7 @@ fn serve_command(mut args: impl Iterator<Item = String>) -> ExitCode {
                 .parent()
                 .unwrap_or_else(|| std::path::Path::new("."))
         }))
+        .with_upload_storage(project_root.join("storage/zelyra"))
         .with_apis(api_routes)
         .with_auth(
             env::var("ZELYRA_AUTH_TOKEN").ok(),

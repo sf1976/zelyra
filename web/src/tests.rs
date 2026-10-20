@@ -683,6 +683,8 @@ fn table_validation_rejects_invalid_form_before_action_execution() {
             capability_grants: None,
             runtime_policy: None,
             granted_permissions: Vec::new(),
+            multipart_parts: &[],
+            upload_storage_root: None,
         },
     );
     assert_eq!(response.status, 422);
@@ -707,6 +709,8 @@ fn table_validation_rejects_invalid_form_before_action_execution() {
             capability_grants: None,
             runtime_policy: None,
             granted_permissions: Vec::new(),
+            multipart_parts: &[],
+            upload_storage_root: None,
         },
     );
     assert_eq!(
@@ -2960,7 +2964,7 @@ fn server_drops_connections_after_reaching_its_worker_limit() {
 }
 
 #[test]
-fn multipart_binary_request_is_parsed_and_explicitly_rejected_until_route_support_exists() {
+fn multipart_binary_request_is_rejected_when_route_declares_no_upload_field() {
     let listener = TcpListener::bind("127.0.0.1:0").unwrap();
     let address = listener.local_addr().unwrap();
     let app = Arc::new(WebApp::new(Vec::new(), Vec::new()));
@@ -2989,7 +2993,7 @@ fn multipart_binary_request_is_parsed_and_explicitly_rejected_until_route_suppor
         response.starts_with("HTTP/1.1 415 Unsupported Media Type"),
         "{response}"
     );
-    assert!(response.contains("this route does not accept multipart form data yet"));
+    assert!(response.contains("this route does not accept multipart form data"));
 }
 
 #[test]
@@ -3045,10 +3049,256 @@ fn multipart_reader_uses_declared_form_limit_without_raising_other_routes() {
     client.read_to_end(&mut response).unwrap();
     worker.join().unwrap();
     let response = String::from_utf8(response).unwrap();
-    assert!(
-        response.starts_with("HTTP/1.1 415 Unsupported Media Type"),
-        "{response}"
+    assert!(response.starts_with("HTTP/1.1 403 Forbidden"), "{response}");
+    assert!(response.contains("Invalid CSRF token."));
+}
+
+#[test]
+fn multipart_upload_stages_only_after_csrf_and_cleans_up_when_database_is_unavailable() {
+    let root = std::env::temp_dir().join(format!(
+        "zelyra-multipart-form-{}-{}",
+        std::process::id(),
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos()
+    ));
+    let mut route = form_route();
+    route.path = "/upload".into();
+    route.form.fields = vec![zelyra_ast::FormField {
+        name: "document".into(),
+        ty: Some(Type::Named("File".into())),
+        label: Some("Document".into()),
+        placeholder: None,
+        required: true,
+        min_length: None,
+        max: None,
+        min_value: None,
+        max_value: None,
+        choices: Vec::new(),
+        widget: None,
+        appearance: None,
+        file_upload: Some(zelyra_ast::FileUploadOptions {
+            max_size_bytes: 1024,
+            allowed_types: vec!["application/pdf".into()],
+        }),
+        readonly: false,
+        span: zelyra_ast::Span::default(),
+    }];
+    route.form.actions = vec![zelyra_ast::FormAction {
+        name: "save".into(),
+        label: None,
+        icon: None,
+        confirm: None,
+        confirm_page: None,
+        success_page: None,
+        error_page: None,
+        fields: Vec::new(),
+        requires_auth: false,
+        permissions: Vec::new(),
+        capabilities: Vec::new(),
+        require_match: false,
+        statements: vec![zelyra_ast::Stmt::Expr(zelyra_ast::Expr {
+            kind: zelyra_ast::ExprKind::Sql {
+                result_type: Type::Unit,
+                query: "INSERT INTO uploads (document) VALUES (:document)".into(),
+            },
+            span: zelyra_ast::Span::default(),
+        })],
+        execute_body: None,
+        guard: None,
+        success: None,
+        redirect: None,
+        span: zelyra_ast::Span::default(),
+    }];
+    let app = WebApp::new(Vec::new(), vec![route]).with_upload_storage(&root);
+    let data = b"%PDF-1.7\nminimal test document";
+    let parts = [multipart::MultipartPart {
+        name: "document".into(),
+        filename: Some("invoice.pdf".into()),
+        content_type: Some("application/pdf".into()),
+        data,
+    }];
+    let request = Request {
+        method: "POST".into(),
+        target: "/upload".into(),
+        path: "/upload".into(),
+        headers: HashMap::from([
+            ("host".into(), "localhost".into()),
+            ("origin".into(), "http://localhost".into()),
+        ]),
+        body: "_zelyra_csrf=csrf-token".into(),
+        remote_addr: None,
+    };
+
+    let invalid_csrf = Request {
+        body: "_zelyra_csrf=wrong".into(),
+        ..request.clone()
+    };
+    assert_eq!(
+        app.dispatch_with_multipart(&invalid_csrf, &parts).status,
+        403
     );
+    assert!(!root.exists(), "CSRF failure must precede storage creation");
+
+    assert_eq!(app.dispatch_with_multipart(&request, &parts).status, 503);
+    let tenant_dir = root.join("tenants/0");
+    assert!(tenant_dir.is_dir());
+    assert_eq!(
+        std::fs::read_dir(&tenant_dir).unwrap().count(),
+        0,
+        "a failed database action must remove published bytes and manifests"
+    );
+    std::fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
+#[ignore = "requires a disposable MariaDB URL in ZELYRA_UPLOAD_TEST_URL"]
+fn multipart_upload_commits_reference_and_removes_file_after_sql_rollback() {
+    let database_url = std::env::var("ZELYRA_UPLOAD_TEST_URL")
+        .expect("the upload E2E script provides a disposable MariaDB URL");
+    zelyra_database::execute_query(
+        &database_url,
+        "DROP TABLE IF EXISTS zelyra_upload_e2e",
+        Vec::new(),
+    )
+    .expect("drop test-only upload table");
+    zelyra_database::execute_query(
+        &database_url,
+        "CREATE TABLE zelyra_upload_e2e (document CHAR(36) NOT NULL PRIMARY KEY)",
+        Vec::new(),
+    )
+    .expect("create test-only upload table");
+    let storage_root = std::env::temp_dir().join(format!(
+        "zelyra-upload-e2e-{}-{}",
+        std::process::id(),
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos()
+    ));
+    let mut route = form_route();
+    route.path = "/upload".into();
+    route.form.fields = vec![zelyra_ast::FormField {
+        name: "document".into(),
+        ty: Some(Type::Named("File".into())),
+        label: Some("Document".into()),
+        placeholder: None,
+        required: true,
+        min_length: None,
+        max: None,
+        min_value: None,
+        max_value: None,
+        choices: Vec::new(),
+        widget: None,
+        appearance: None,
+        file_upload: Some(zelyra_ast::FileUploadOptions {
+            max_size_bytes: 1024,
+            allowed_types: vec!["application/pdf".into()],
+        }),
+        readonly: false,
+        span: zelyra_ast::Span::default(),
+    }];
+    let sql_action = |statements: Vec<&str>| zelyra_ast::FormAction {
+        name: "save".into(),
+        label: None,
+        icon: None,
+        confirm: None,
+        confirm_page: None,
+        success_page: None,
+        error_page: None,
+        fields: Vec::new(),
+        requires_auth: false,
+        permissions: Vec::new(),
+        capabilities: Vec::new(),
+        require_match: false,
+        statements: statements
+            .into_iter()
+            .map(|query| {
+                zelyra_ast::Stmt::Expr(zelyra_ast::Expr {
+                    kind: zelyra_ast::ExprKind::Sql {
+                        result_type: Type::Unit,
+                        query: query.into(),
+                    },
+                    span: zelyra_ast::Span::default(),
+                })
+            })
+            .collect(),
+        execute_body: None,
+        guard: None,
+        success: None,
+        redirect: None,
+        span: zelyra_ast::Span::default(),
+    };
+    route.form.actions = vec![sql_action(vec![
+        "INSERT INTO zelyra_upload_e2e (document) VALUES (:document)",
+    ])];
+    let app =
+        WebApp::with_database_url(Vec::new(), vec![route.clone()], Some(database_url.clone()))
+            .with_upload_storage(&storage_root);
+    let bytes = b"%PDF-1.7\ntransactional upload";
+    let parts = [multipart::MultipartPart {
+        name: "document".into(),
+        filename: Some("document.pdf".into()),
+        content_type: Some("application/pdf".into()),
+        data: bytes,
+    }];
+    let request = Request {
+        method: "POST".into(),
+        target: "/upload".into(),
+        path: "/upload".into(),
+        headers: HashMap::from([
+            ("host".into(), "localhost".into()),
+            ("origin".into(), "http://localhost".into()),
+        ]),
+        body: "_zelyra_csrf=csrf-token".into(),
+        remote_addr: None,
+    };
+    let committed = app.dispatch_with_multipart(&request, &parts);
+    assert_eq!(committed.status, 303, "{}", committed.body);
+    let rows = zelyra_database::execute_read_only_query(
+        &database_url,
+        "SELECT document FROM zelyra_upload_e2e",
+        Vec::new(),
+    )
+    .expect("read saved file reference");
+    assert_eq!(rows.rows.len(), 1);
+    let file_ref = &rows.rows[0][0];
+    let storage = file_storage::FileStorage::new(&storage_root).expect("open managed storage");
+    let (metadata, saved_bytes) = storage
+        .read_verified(0, file_ref, 1024)
+        .expect("verify stored upload referenced by committed row");
+    assert_eq!(metadata.media_type, "application/pdf");
+    assert_eq!(saved_bytes, bytes);
+
+    let mut failing_route = route;
+    failing_route.form.actions = vec![sql_action(vec![
+        "INSERT INTO zelyra_upload_e2e (document) VALUES (:document)",
+        "INSERT INTO zelyra_upload_missing_table (document) VALUES (:document)",
+    ])];
+    let failing_app =
+        WebApp::with_database_url(Vec::new(), vec![failing_route], Some(database_url.clone()))
+            .with_upload_storage(&storage_root);
+    let rolled_back = failing_app.dispatch_with_multipart(&request, &parts);
+    assert_eq!(rolled_back.status, 500, "{}", rolled_back.body);
+    let rows = zelyra_database::execute_read_only_query(
+        &database_url,
+        "SELECT document FROM zelyra_upload_e2e",
+        Vec::new(),
+    )
+    .expect("read rows after transaction rollback");
+    assert_eq!(rows.rows.len(), 1, "failed SQL action must roll back");
+    assert!(storage.read_verified(0, file_ref, 1024).is_ok());
+    let tenant_dir = storage_root.join("tenants/0");
+    assert_eq!(
+        std::fs::read_dir(&tenant_dir).unwrap().count(),
+        2,
+        "failed SQL action must remove only its staged/published file and manifest"
+    );
+
+    zelyra_database::execute_query(&database_url, "DROP TABLE zelyra_upload_e2e", Vec::new())
+        .expect("drop test-only upload table");
+    std::fs::remove_dir_all(storage_root).unwrap();
 }
 
 #[test]
