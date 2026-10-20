@@ -1,25 +1,42 @@
 ## Unreleased
 
+
+## 1.2.28 — 2026-10-20
+
+- Add typed CRUD action execution with compiler-checked `row` and trusted
+  `session` contexts, pure guards, explicit capabilities, and a shared locked
+  request transaction for SQL, audit, and outbox writes. Preserve CRUD
+  permissions, tenant revalidation, CSRF, parameter binding, and rollback.
+  Verify MariaDB and PostgreSQL HTTP flows, including concurrent guards and
+  rollback; the MariaDB fixture also verifies a real PDF queued without SMTP
+  delivery. / Typisierte CRUD-Actions mit compilergeprüften `row`- und
+  vertrauenswürdigen `session`-Kontexten, reinen Guards, expliziten
+  Capabilities und einer gemeinsamen gesperrten Request-Transaktion für SQL-,
+  Audit- und Outbox-Schreibvorgänge ergänzen. CRUD-Berechtigungen,
+  Mandantenprüfung, CSRF, Parameterbindung und Rollback erhalten. MariaDB-
+  und PostgreSQL-HTTP-Abläufe einschließlich konkurrierender Guards und
+  Rollback prüfen; das MariaDB-Fixture prüft außerdem ein echtes PDF in der
+  Outbox, ohne SMTP-Versand zu starten.
 - Harden the MariaDB/MySQL `zelyra console --sandbox` transaction boundary:
   reject DDL, transaction-control, and session-control SQL that could bypass
   rollback through implicit commits. Keep the sandbox limited to `SELECT`,
-  `INSERT`, `UPDATE`, and `DELETE`. / Die MariaDB-/MySQL-Transaktionsgrenze
-  von `zelyra console --sandbox` absichern: DDL sowie Transaktions- und
+  `INSERT`, `UPDATE`, and `DELETE`; verify grant denial, rollback, and explicit
+  commit. / Die MariaDB-/MySQL-Transaktionsgrenze von
+  `zelyra console --sandbox` absichern: DDL sowie Transaktions- und
   Sitzungsbefehle abweisen, die den Rollback durch implizite Commits umgehen
   könnten. Die Sandbox auf `SELECT`, `INSERT`, `UPDATE` und `DELETE`
-  beschränken.
+  beschränken; Grant-Ablehnung, Rollback und ausdrücklichen Commit prüfen.
 - Show declared table invariant messages and source positions in the console's
   `:schema` command. / `:schema` zeigt deklarierte Tabelleninvarianten mit
   Fehlermeldung und Quellposition an.
 - Declare the REPL's aggregate database effect when project database access is
-  granted, while keeping runtime read/write grant checks in force. A read-only
-  grant still cannot use SQL in this console because the current runtime
-  requires the aggregate `Database` effect. / Den
-  aggregierten Datenbankeffekt der REPL deklarieren, wenn das Projekt
-  Datenbankzugriff freigibt; die Laufzeitprüfung der Lese-/Schreibrechte bleibt
-  aktiv. Ein reiner Lese-Grant kann wegen der derzeit erforderlichen
-  aggregierten `Database`-Wirkung noch keine SQL-Abfragen in der Konsole
-  ausführen.
+  granted, while keeping runtime read/write grant checks in force. SQL in the
+  REPL still requires the aggregate `Database` grant; read-only-only REPL SQL
+  remains unsupported. / Den aggregierten Datenbankeffekt der REPL deklarieren,
+  wenn das Projekt Datenbankzugriff freigibt; die Laufzeitprüfung der
+  Lese-/Schreibrechte bleibt aktiv. SQL in der REPL benötigt weiterhin den
+  aggregierten `Database`-Grant; SQL mit reinem Lese-Grant wird noch nicht
+  unterstützt.
 
 ## 1.2.27 — 2026-10-20
 

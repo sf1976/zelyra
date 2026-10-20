@@ -342,7 +342,7 @@ abgeschlossen.
   [Arbeitsplan 1.2.27](release-plans/1.2.27-laravel-website-importer.de.md).
   Die Grundlage ist implementiert und zusammengeführt; alle PR-Prüfungen
   bestanden.
-- [~] **1.2.28 — typisierte CRUD-Domain-Actions:** Einen typgeprüften
+- [x] **1.2.28 — typisierte CRUD-Domain-Actions und REPL-Sicherheit (veröffentlicht):** Einen typgeprüften
   Ausführungskontext mit expliziten Datensatz-, Benutzer- und verifizierten
   Mandantenwerten ergänzen. Den Sprach-Typ- und Effektprüfer wiederverwenden,
   explizite Berechtigungen verlangen, transaktionssicheres SQL und erlaubte
@@ -377,9 +377,15 @@ abgeschlossen.
   nun Status-/Hash-/Zeitstempel- und Audit-Änderungen sowie Rollback nach einem
   Runtime-Fehler. Beide Datenbank-E2Es senden außerdem zwei gleichzeitige
   Festschreibungsanfragen und bestätigen genau einen Erfolg, einen Guard-
-  Konflikt und einen Audit-Eintrag. Die breitere Berechtigungs-/Sicherheits-
-  matrix bleibt offen.
-  Siehe den
+  Konflikt und einen Audit-Eintrag. Die REPL-Sandbox weist MariaDB-/MySQL-DDL
+  sowie Transaktions- und Sitzungsbefehle ab, die den Rollback umgehen könnten;
+  Tests prüfen verweigerte Grants, Rollback und ausdrücklichen Commit. `:schema`
+  zeigt Meldungen und Quellpositionen der Invarianten. SQL in der REPL benötigt
+  weiterhin den aggregierten `Database`-Grant; eine Bytecode-REPL ist nicht
+  implementiert. Veröffentlicht als
+  [`v1.2.28`](https://github.com/sf1976/zelyra/releases/tag/v1.2.28); die
+  Release-Gates bestanden. Die umfassendere Berechtigungs-/Sicherheitsmatrix
+  bleibt ein offener Folgepunkt. Siehe den
   [Arbeitsplan 1.2.28](release-plans/1.2.28-typed-crud-actions.de.md).
 - [ ] **1.2.29 — begrenzte sichere Datei-Uploads (Design-Gate):** Vor einem
   `File`-Formularfeld Multipart-Größenlimits, Metadatentypen, Inhaltsprüfung,

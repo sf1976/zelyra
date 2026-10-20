@@ -1110,7 +1110,7 @@ crud Invoice -> invoices {
 
 - **Atomare Datenbanktransaktion:** Alle SQL-Anweisungen innerhalb von `sql { ... }` laufen gebündelt in einer einzigen MariaDB-Transaktion (`with_decision_transaction`). Schlägt eine Anweisung fehl (z. B. durch einen Constraint-Fehler), wird die gesamte Transaktion atomar zurückgerollt.
 - **Parameterbindung:** Parameter wie `:id` werden automatisch aus dem URL-Pfad der CRUD-Ressource gebunden. Über `field <name>: <Typ>` deklarierte Zusatzfelder werden im Bestätigungsdialog als typisierte Eingabefelder gerendert, vorab geprüft und als Parameter `:name` an die SQL-Statements übergeben.
-- **Aktueller Quellstand (unveröffentlichte Arbeit an 1.2.28):** Actions können `guard when ... { error: ... }` und einen typisierten `execute { ... }`-Body verwenden. Der Compiler prüft `row` anhand der Ressourcentabelle; `session` enthält optionale authentifizierte Mandanten-/Benutzeridentitäten. Die Web-Runtime führt unterstützte Queries innerhalb der gesperrten Request-Transaktion aus und erhält Capability-, Berechtigungs-, CSRF-, Mandanten- und Auditprüfungen. MariaDB-HTTP-Atomarität ist getestet; PostgreSQL-Action-E2E und PDF-/Mail-Outbox-Effekte sind noch nicht verifiziert. Veröffentlichte 1.2.27-Binaries unterstützen weiterhin nur SQL-Actions.
+- **Seit 1.2.28:** Actions können `guard when ... { error: ... }` und einen typisierten `execute { ... }`-Body verwenden. Der Compiler prüft `row` anhand der Ressourcentabelle; `session` enthält optionale authentifizierte Mandanten-/Benutzeridentitäten. Die Web-Runtime führt unterstützte Queries innerhalb der gesperrten Request-Transaktion aus und erhält Capability-, Berechtigungs-, CSRF-, Mandanten- und Auditprüfungen. MariaDB- und PostgreSQL-HTTP-E2Es prüfen SQL-Atomarität, konkurrierende Guards und Rollback. Das MariaDB-E2E prüft zusätzlich eine echte PDF-Outbox-Anlage; es wird keine E-Mail versendet.
 
 Die Laufzeit erzwingt für solche Aktionen Datenbank-Capability,
 CSRF-Schutz, Authentifizierung und die deklarierte Berechtigung. Aktionen
@@ -3242,8 +3242,8 @@ Reale Geschäftsanwendungen erfordern neben Lifecycle-Sperren weitere Bausteine,
    Funktionen, die die aktuelle Zeit ermitteln, müssen die Capability `Clock` deklarieren (`fn festschreiben(...) uses Clock`). Dadurch bleibt Zeitverhalten in Unittests deterministisch überprüfbar und reproduzierbar.
 3. **Beleg-PDFs und Outbox-Mail (`render_pdf` und `mail_queue`):**
    Über `render_pdf("RechnungsDruck", invoice)` wird eine View serverseitig in PDF-Bytes umgewandelt. Innerhalb einer MariaDB-`transaction` reiht `mail_queue(to, subject, text, filename, pdf_bytes)` den Beleg atomar in die Outbox ein.
-4. **Typisierte CRUD-Actions (unveröffentlichte Arbeit an 1.2.28):**
-   `execute { ... }` akzeptiert compilergeprüfte Ausdrücke und SQL. Ein Guard wird vor Schreibvorgängen gegen den gespeicherten und gesperrten Datensatz ausgewertet. Der Web-Handler verwendet dieselbe Decision-Transaktion für typisiertes SQL und konfigurierte Audit-Einträge. Das aktuelle MariaDB-E2E prüft `hash_sha256`, `now()`, Guard, Datensatzänderung, Audit-Eintrag und Rollback nach einem späteren Runtime-Fehler. Das ist kein Nachweis für PDF-Erzeugung, Mailversand oder PostgreSQL; dafür sind eigene Integrationstests erforderlich.
+4. **Typisierte CRUD-Actions (seit 1.2.28):**
+   `execute { ... }` akzeptiert compilergeprüfte Ausdrücke und SQL. Ein Guard wird vor Schreibvorgängen gegen den gespeicherten und gesperrten Datensatz ausgewertet. Der Web-Handler verwendet dieselbe Decision-Transaktion für typisiertes SQL und konfigurierte Audit-Einträge. MariaDB- und PostgreSQL-HTTP-E2Es prüfen `hash_sha256`, `now()`, Guards, Datensatzänderung, Audit-Eintrag, konkurrierende Anfragen und Rollback nach einem späteren Runtime-Fehler. Das MariaDB-E2E prüft außerdem das Einreihen eines echten PDF in die Outbox; es startet keinen Mailversand.
 
 ### Transaktionale Master-Detail-CRUD-Formulare (`has_many`)
 

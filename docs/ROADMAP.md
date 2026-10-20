@@ -311,7 +311,7 @@ security and compatibility gates stated for that milestone.
   [`v1.2.27`](https://github.com/sf1976/zelyra/releases/tag/v1.2.27); its PR
   and release workflows passed all checks. See the
   [1.2.27 importer plan](release-plans/1.2.27-laravel-website-importer.en.md).
-- [~] **1.2.28 — typed CRUD domain actions:** Add a checked execution context
+- [x] **1.2.28 — typed CRUD domain actions and REPL safety (released):** Add a checked execution context
   for action statements with explicit row, authenticated user, and verified
   tenant values. Reuse the language type/effect checker, require explicit
   permissions, support transaction-safe SQL plus allowlisted typed calls, and
@@ -340,8 +340,12 @@ security and compatibility gates stated for that milestone.
   A separate-database PostgreSQL HTTP E2E now proves successful row/hash/
   time and audit updates plus rollback after a runtime error. Both database
   E2Es also send two simultaneous lock requests and verify exactly one success,
-  one guarded conflict, and one audit row. The broader security/permission
-  matrix remains open. See the
+  one guarded conflict, and one audit row. The REPL sandbox now rejects
+  MariaDB/MySQL DDL, transaction-control, and session-control statements that
+  could bypass rollback; tests cover denied grants, rollback, and explicit
+  commit. `:schema` prints invariant messages and source positions. The REPL
+  still requires the aggregate `Database` grant for SQL, and bytecode REPL
+  execution is not implemented. Released as [`v1.2.28`](https://github.com/sf1976/zelyra/releases/tag/v1.2.28); release gates passed. The broader security/permission matrix remains an open follow-up. See the
   [1.2.28 work plan](release-plans/1.2.28-typed-crud-actions.en.md).
 - [ ] **1.2.29 — bounded secure file upload foundation (subject to design
   gate):** Specify and test multipart size limits, file metadata types,

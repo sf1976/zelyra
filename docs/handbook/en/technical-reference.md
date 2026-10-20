@@ -1016,7 +1016,7 @@ crud Invoice -> invoices {
 
 - **Atomic database transaction:** All SQL statements within `sql { ... }` run together in a single MariaDB transaction (`with_decision_transaction`). If any statement fails (e.g., due to a constraint violation), the entire transaction is rolled back atomically.
 - **Parameter binding:** Parameters such as `:id` are bound automatically from the URL path of the target row. Custom fields declared with `field <name>: <Type>` are rendered in the confirmation dialog as typed inputs, validated upfront, and passed as `:name` parameters to the SQL statements.
-- **Current source-worktree scope (unreleased 1.2.28):** Actions may use `guard when ... { error: ... }` and a typed `execute { ... }` body. The compiler checks `row` against the resource table and `session` contains optional authenticated tenant/user identities. The web runtime executes supported queries through the locked request transaction and keeps its capability, permission, CSRF, tenant, and audit checks. MariaDB HTTP atomicity is covered; PostgreSQL action E2E and PDF/mail-outbox effects are not yet verified. Published 1.2.27 binaries still have the SQL-only behavior.
+- **Since 1.2.28:** Actions may use `guard when ... { error: ... }` and a typed `execute { ... }` body. The compiler checks `row` against the resource table and `session` contains optional authenticated tenant/user identities. The web runtime executes supported queries through the locked request transaction and keeps its capability, permission, CSRF, tenant, and audit checks. MariaDB and PostgreSQL HTTP E2Es cover SQL atomicity, concurrent guards, and rollback. The MariaDB E2E also verifies a real PDF outbox insert; it does not send an email.
 
 The runtime enforces the database capability, CSRF protection,
 authentication, and the declared permission. Actions can also declare typed
@@ -3066,8 +3066,8 @@ Production business applications require complementary primitives alongside life
    Functions querying the current system timestamp must declare the `Clock` capability (`fn post_invoice(...) uses Clock`). This guarantees time remains strictly mockable and deterministic across automated tests.
 3. **Document PDFs and Outbox Mail (`render_pdf` and `mail_queue`):**
    `render_pdf("InvoicePrint", invoice)` compiles a view into PDF bytes server-side. Within an atomic MariaDB `transaction`, `mail_queue(to, subject, text, filename, pdf_bytes)` enqueues the document and its binary attachment transactionally into the outbox.
-4. **Typed CRUD Actions (unreleased 1.2.28 work):**
-   `execute { ... }` accepts compiler-checked expressions and SQL. A guard is evaluated against the persisted, locked row before writes. The web handler uses a single decision transaction for typed SQL and configured audit insertion. The current MariaDB E2E covers `hash_sha256`, `now()`, a guard, a row update, an audit insert, and rollback after a later runtime failure. Do not treat this as proof for PDF generation, mail delivery, or PostgreSQL deployment; those require their own integration coverage.
+4. **Typed CRUD Actions (since 1.2.28):**
+   `execute { ... }` accepts compiler-checked expressions and SQL. A guard is evaluated against the persisted, locked row before writes. The web handler uses a single decision transaction for typed SQL and configured audit insertion. MariaDB and PostgreSQL HTTP E2Es cover `hash_sha256`, `now()`, guards, row updates, audit insertion, concurrent requests, and rollback after a later runtime failure. The MariaDB E2E also verifies enqueueing a real PDF in the outbox; it does not start mail delivery.
 
 ### Transactional Master-Detail CRUD Forms (`has_many`)
 

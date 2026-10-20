@@ -1086,9 +1086,9 @@ action set_active {
 }
 ~~~
 
-### Typed CRUD action bodies (1.2.28 work in progress)
+### Typed CRUD action bodies (since 1.2.28)
 
-The unreleased 1.2.28 work adds an explicit typed execution body and a pure
+Zelyra 1.2.28 adds an explicit typed execution body and a pure
 record guard to the existing action declaration:
 
 ~~~zelyra
@@ -1119,10 +1119,10 @@ queries and configured audit writes in one transaction. A failure rolls back
 all writes. Declare the needed capabilities in the action and grant them in
 `zelyra.toml`; UI permissions, CSRF protection, and server-side authorization
 remain active. `hash_sha256` and `now()` use their regular Zelyra names. Do not
-infer PDF or mail-outbox transaction support from SQL action tests. This
-section describes unreleased 1.2.28 work; MariaDB HTTP behavior is covered by
-an integration test, while PostgreSQL action E2E and PDF/outbox effects remain
-unverified.
+infer PDF or mail-outbox transaction support from SQL action tests. Release
+E2E tests cover transactional SQL actions on MariaDB and PostgreSQL, plus a
+real PDF outbox insert on MariaDB. That message remains pending; the test does
+not start SMTP delivery.
 
 `icon` adds an escaped `data-icon` hook to the generated action button.
 `success` is carried to the redirect and rendered as an escaped status notice

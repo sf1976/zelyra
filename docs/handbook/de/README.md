@@ -1181,9 +1181,9 @@ action set_active {
 }
 ~~~
 
-### Typisierte CRUD-Aktionsblöcke (Arbeit an 1.2.28)
+### Typisierte CRUD-Aktionsblöcke (seit 1.2.28)
 
-Die noch nicht veröffentlichte Arbeit an 1.2.28 ergänzt die bestehende
+Zelyra 1.2.28 ergänzt die bestehende
 Action-Deklaration um einen expliziten typisierten Ausführungsblock und einen
 reinen Datensatz-Guard:
 
@@ -1217,10 +1217,10 @@ Schreibvorgänge zurück. Benötigte Capabilities müssen an der Action deklarie
 und in `zelyra.toml` freigegeben werden; Berechtigungen, CSRF-Schutz und
 serverseitige Autorisierung bleiben aktiv. `hash_sha256` und `now()` behalten
 ihre normalen Zelyra-Schreibweisen. Aus SQL-Action-Tests folgt keine
-Transaktionsunterstützung für PDF oder Mail-Outbox. Dieser Abschnitt beschreibt
-unveröffentlichte Arbeit an 1.2.28: Das MariaDB-HTTP-Verhalten ist integriert
-getestet, während PostgreSQL-Action-E2E und PDF-/Outbox-Effekte noch nicht
-verifiziert sind.
+Transaktionsunterstützung für PDF oder Mail-Outbox. Die Release-E2Es prüfen
+transaktionale SQL-Actions auf MariaDB und PostgreSQL sowie eine echte PDF-
+Outbox-Anlage auf MariaDB. Die Nachricht bleibt ausstehend; der Test startet
+keinen SMTP-Versand.
 
 `icon` ergänzt einen escaped `data-icon`-Hook am erzeugten Aktionsbutton.
 `success` wird an den Redirect übergeben und auf CRUD-Listen als escaped
