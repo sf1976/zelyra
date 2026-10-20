@@ -623,7 +623,7 @@ release. The current verified status is:
 | --- | --- | --- |
 | Reusable sequential document numbers | Implemented in the 1.2.31 work: declarative `auto_sequence`, transactional counters, tenant/year scope, and generated CRUD protection from forged values. | Supported-backend/version matrix, SQLite diagnostic and migration behavior, legacy invoice compatibility, full release gates. No gapless-number guarantee. |
 | Tenant scope for invoice-number collision checks | The existing invoice-number path and the generic sequence allocator both bind the authenticated tenant. MariaDB integration verifies independent tenant counters and atomic allocation. | Keep the regression coverage in the release suite and verify all supported backends. |
-| Server-computed business fields | Implemented for generated CRUD and validated API POST/PUT/PATCH paths, with dependency/type checks and exact Decimal rounding. CRUD preserves source Decimal text until form validation checks declared storage precision and scale, including normalized MySQL metadata. A partial validated API PATCH now loads omitted values from the existing row, applies tenant scoping, then recomputes derived values before validation and handler execution. | Full backend and AST/MIR/bytecode parity gates; MariaDB partial-PATCH E2E passed locally and CI is being extended to MariaDB plus PostgreSQL. |
+| Server-computed business fields | Implemented for generated CRUD and validated API POST/PUT/PATCH paths, with dependency/type checks and exact Decimal rounding. CRUD preserves source Decimal text until form validation checks declared storage precision and scale, including normalized MySQL metadata. A partial validated API PATCH now loads omitted values from the existing row, applies tenant scoping, then recomputes derived values before validation and handler execution. | Full backend and AST/MIR/bytecode parity gates; MariaDB/PostgreSQL E2E covers partial PATCH and tenant isolation, and CI runs are pending. |
 | Localized master-detail labels | The HTML-escaped locale markers are resolved for child-collection legends; a regression test covers the escaped rendering path. | Preserve the test in the release gates and verify locale fallback behavior in the tutorial. |
 | File attachments in generated CRUD | Implemented using checked `FileRef` metadata, private storage, generated upload fields, and authorized downloads. MariaDB HTTP and Chromium E2E cover authenticated upload, same-tenant download, cross-tenant 404, MIME response, and reference redaction. A disposable MariaDB drill also proves paired database/file restore after removing both stores. | Full release gates. The verified procedure requires a stopped server and separate database/file backups; no single archive or crash-atomic snapshot is provided. |
 
@@ -684,7 +684,9 @@ syntax or a unit test alone does not establish production readiness.
   predicate for scoped tables, merges only absent request values, and computes
   derived fields before validation and handler execution. An invalid partial
   PATCH leaves the stored row unchanged; the MariaDB E2E then verifies a valid
-  partial update using the stored unit price. Missing rows return 404 and a
+  partial update using the stored unit price. A second database test confirms
+  another tenant receives 404 without merged values and that missing tenant
+  context fails closed. Missing rows return 404 and a
   missing database connection returns 503. Nominal API path parameters of
   type `Id` are converted to integer runtime values, allowing the full
   create/PUT/PATCH test to pass on PostgreSQL 16 as well as MariaDB. The test

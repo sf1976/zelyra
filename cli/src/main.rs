@@ -11722,6 +11722,27 @@ fn dispatch_api(
     path_params: &HashMap<String, String>,
     database_url: Option<&str>,
 ) -> Response {
+    dispatch_api_with_tenant(
+        program,
+        api,
+        handler,
+        request,
+        path_params,
+        database_url,
+        None,
+    )
+}
+
+#[cfg(test)]
+fn dispatch_api_with_tenant(
+    program: &zelyra_ast::Program,
+    api: &zelyra_ast::ApiDef,
+    handler: &str,
+    request: &zelyra_web::Request,
+    path_params: &HashMap<String, String>,
+    database_url: Option<&str>,
+    verified_tenant_id: Option<i64>,
+) -> Response {
     let (mut lowered_program, table_validation_functions) =
         zelyra_ast::lower_table_validation_functions(program);
     let (computed_functions, computed_column_functions) =
@@ -11739,7 +11760,7 @@ fn dispatch_api(
             runtime_policy: None,
             table_validation_functions: &table_validation_functions,
             computed_column_functions: &computed_column_functions,
-            verified_tenant_id: None,
+            verified_tenant_id,
         },
     )
 }
@@ -12048,6 +12069,7 @@ fn dispatch_api_with_capabilities(
     }
 }
 
+#[derive(Debug)]
 enum ApiPatchMergeError {
     BadRequest(String),
     NotFound,

@@ -736,8 +736,10 @@ keine Produktionsreife.
   Teilupdates lassen den Datensatz unverändert, fehlende Datensätze liefern
   404 und fehlende Datenbankverbindungen 503. Nominale API-Pfadparameter vom
   Typ `Id` werden in Integer-Runtimewerte konvertiert; damit besteht der
-  vollständige Create-/PUT-/PATCH-Test unter PostgreSQL 16 und MariaDB und ist
-  in CI für beide Datenbanken eingetragen. Weitere Backend- und
+  vollständige Create-/PUT-/PATCH-Test unter PostgreSQL 16 und MariaDB. Ein
+  zweiter Datenbanktest bestätigt 404 für einen fremden Mandanten und ein
+  sicheres Abbrechen ohne bestätigten Mandantenkontext. Beide Tests laufen in
+  CI für MariaDB und PostgreSQL. Weitere Backend- und
   AST/MIR/Bytecode-Parität sowie vollständige Release-Prüfungen sind noch
   offen. Beispiel: `examples/computed_api.zyl`.
 - [~] **1.2.33 — FileRef-Unterstützung im generierten CRUD:** Begrenzte,

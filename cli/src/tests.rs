@@ -3407,6 +3407,100 @@ fn computed_api_fields_are_recomputed_before_validation_and_database_write() {
 }
 
 #[test]
+#[ignore = "requires ZELYRA_TEST_DATABASE_URL pointing to a disposable MariaDB or PostgreSQL database"]
+fn api_patch_row_merge_is_limited_to_the_verified_tenant() {
+    let database_url = env::var("ZELYRA_TEST_DATABASE_URL")
+        .expect("ignored integration test needs a disposable database URL");
+    let engine = if zelyra_database::is_postgres_url(&database_url) {
+        "postgres"
+    } else {
+        "mariadb"
+    };
+    let source = format!(
+        r#"
+            database main {{ engine: {engine} }}
+            type TenantId = Id
+            table patch_tenant_scope_{pid} scoped by tenant_id: TenantId {{
+                id: Id primary
+                tenant_id: TenantId required
+                label: String required
+            }}
+            fn main() {{}}
+        "#,
+        pid = std::process::id()
+    );
+    let program = parse(&lex(&source).unwrap()).unwrap();
+    let table = &program.tables[0];
+    let schema = zelyra_database::build_schema(&program).unwrap();
+    zelyra_database::execute_query(&database_url, &schema.create_sql(), Vec::new()).unwrap();
+    for (id, tenant_id, label) in [(1, 10, "Northwind"), (2, 11, "Contoso")] {
+        zelyra_database::execute_query(
+            &database_url,
+            &format!(
+                "INSERT INTO {} (id, tenant_id, label) VALUES (:id, :tenant, :label)",
+                table.name
+            ),
+            vec![
+                ("id".into(), QueryValue::Int(id)),
+                ("tenant".into(), QueryValue::Int(tenant_id)),
+                ("label".into(), QueryValue::String(label.into())),
+            ],
+        )
+        .unwrap();
+    }
+
+    let mut foreign_tenant_values =
+        HashMap::from([(String::from("id"), serde_json::Value::from(1))]);
+    assert!(matches!(
+        merge_api_patch_row_values(
+            &program,
+            table,
+            &database_url,
+            Some(11),
+            &mut foreign_tenant_values
+        ),
+        Err(ApiPatchMergeError::NotFound)
+    ));
+    assert_eq!(foreign_tenant_values.len(), 1);
+
+    assert!(matches!(
+        merge_api_patch_row_values(
+            &program,
+            table,
+            &database_url,
+            None,
+            &mut HashMap::from([(String::from("id"), serde_json::Value::from(1))])
+        ),
+        Err(ApiPatchMergeError::BadRequest(_))
+    ));
+
+    let mut matching_tenant_values =
+        HashMap::from([(String::from("id"), serde_json::Value::from(1))]);
+    merge_api_patch_row_values(
+        &program,
+        table,
+        &database_url,
+        Some(10),
+        &mut matching_tenant_values,
+    )
+    .unwrap();
+    assert_eq!(
+        matching_tenant_values.get("label"),
+        Some(&serde_json::Value::from("Northwind"))
+    );
+    assert_eq!(
+        matching_tenant_values.get("tenant_id"),
+        Some(&serde_json::Value::from("10"))
+    );
+    zelyra_database::execute_query(
+        &database_url,
+        &format!("DROP TABLE {}", table.name),
+        Vec::new(),
+    )
+    .unwrap();
+}
+
+#[test]
 fn enforces_scoped_database_effects_in_generated_api_handlers() {
     let program = parse(
         &lex(
