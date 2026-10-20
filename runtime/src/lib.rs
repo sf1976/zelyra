@@ -234,7 +234,20 @@ pub use ast_interpreter::sql_results::decode_native_sql_rows;
 /// Return synthetic record metadata for table-derived SQL row projections.
 pub use ast_interpreter::sql_results::projection_records as sql_projection_records;
 use ast_interpreter::{AstInterpreter as Interpreter, Environment};
-const MAX_FUNCTION_CALL_DEPTH: usize = 20;
+/// Default language-level function call depth for all execution backends.
+pub const DEFAULT_FUNCTION_CALL_DEPTH: usize = 20;
+/// Return the effective function-call limit, applying the shared hard ceiling.
+pub fn effective_function_call_depth(configured_depth: Option<usize>) -> usize {
+    configured_depth
+        .unwrap_or(DEFAULT_FUNCTION_CALL_DEPTH)
+        .min(MAX_CONFIGURED_FUNCTION_CALL_DEPTH)
+}
+
+/// Size a runtime worker stack for the bounded recursive AST/MIR execution.
+pub fn runtime_stack_size_for_depth(depth: usize) -> usize {
+    2 * 1024 * 1024 + depth.min(MAX_CONFIGURED_FUNCTION_CALL_DEPTH) * 192 * 1024
+}
+
 mod csv;
 mod decimal_math;
 mod filesystem;
@@ -840,7 +853,7 @@ fn json_codec_interpreter(
         next_class_object_id: Arc::new(AtomicU64::new(1)),
         parallel_worker: false,
         step_budget: StepBudget::new(None),
-        call_depth_limit: MAX_FUNCTION_CALL_DEPTH,
+        call_depth_limit: DEFAULT_FUNCTION_CALL_DEPTH,
         call_depth: 0,
         database_url: None,
         database_transaction: None,

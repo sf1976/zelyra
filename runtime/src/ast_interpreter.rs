@@ -83,12 +83,6 @@ pub(super) type TransactionalQuery<'services> = dyn FnMut(&zelyra_database::Quer
     + Send
     + 'services;
 
-pub(super) fn effective_call_depth(configured_depth: Option<usize>) -> usize {
-    configured_depth
-        .unwrap_or(MAX_FUNCTION_CALL_DEPTH)
-        .min(MAX_CONFIGURED_FUNCTION_CALL_DEPTH)
-}
-
 /// Per-execution host resources shared by every AST entry point.
 pub(super) struct RuntimeServices<'services> {
     pub(super) host_services: Arc<dyn HostServices>,
@@ -122,7 +116,7 @@ impl<'program, 'services> AstInterpreter<'program, 'services> {
             next_class_object_id: Arc::new(AtomicU64::new(1)),
             parallel_worker: false,
             step_budget: StepBudget::new(policy.as_ref().and_then(|policy| policy.step_budget)),
-            call_depth_limit: effective_call_depth(
+            call_depth_limit: effective_function_call_depth(
                 policy.as_ref().and_then(|policy| policy.max_stack_depth),
             ),
             call_depth: 0,

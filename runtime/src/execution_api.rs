@@ -234,8 +234,8 @@ pub fn execute_function_with_host_services_and_capabilities_and_policies(
     policy: Option<&RuntimePolicy>,
     host_services: Arc<dyn HostServices>,
 ) -> Result<Value, RuntimeError> {
-    let depth = super::effective_call_depth(policy.and_then(|policy| policy.max_stack_depth));
-    run_on_runtime_stack(runtime_stack_size(depth), || {
+    let depth = effective_function_call_depth(policy.and_then(|policy| policy.max_stack_depth));
+    run_on_runtime_stack(runtime_stack_size_for_depth(depth), || {
         let (result, _) = execute_function_on_runtime_stack(
             program,
             name,
@@ -285,8 +285,8 @@ pub fn execute_function_captured_with_host_services_and_capabilities_and_policie
     policy: Option<&RuntimePolicy>,
     host_services: Arc<dyn HostServices>,
 ) -> FunctionExecutionOutcome {
-    let depth = super::effective_call_depth(policy.and_then(|policy| policy.max_stack_depth));
-    match run_on_runtime_stack(runtime_stack_size(depth), || {
+    let depth = effective_function_call_depth(policy.and_then(|policy| policy.max_stack_depth));
+    match run_on_runtime_stack(runtime_stack_size_for_depth(depth), || {
         Ok(execute_function_on_runtime_stack(
             program,
             name,
@@ -335,8 +335,8 @@ pub fn execute_function_captured_with_transactional_query<'services>(
                         + Send
                         + 'services),
 ) -> FunctionExecutionOutcome {
-    let depth = super::effective_call_depth(policy.and_then(|policy| policy.max_stack_depth));
-    match run_on_runtime_stack(runtime_stack_size(depth), move || {
+    let depth = effective_function_call_depth(policy.and_then(|policy| policy.max_stack_depth));
+    match run_on_runtime_stack(runtime_stack_size_for_depth(depth), move || {
         Ok(execute_function_on_runtime_stack(
             program,
             name,
@@ -380,8 +380,8 @@ pub fn execute_function_captured_with_mariadb_transaction(
     policy: Option<&RuntimePolicy>,
     transaction: Arc<Mutex<zelyra_database::MariaDbInteractiveTransaction>>,
 ) -> FunctionExecutionOutcome {
-    let depth = super::effective_call_depth(policy.and_then(|policy| policy.max_stack_depth));
-    match run_on_runtime_stack(runtime_stack_size(depth), || {
+    let depth = effective_function_call_depth(policy.and_then(|policy| policy.max_stack_depth));
+    match run_on_runtime_stack(runtime_stack_size_for_depth(depth), || {
         Ok(execute_function_on_runtime_stack(
             program,
             name,
@@ -532,8 +532,8 @@ fn execute_internal_captured_with_host_services(
     host_services: Arc<dyn HostServices>,
 ) -> ExecutionOutcome {
     let depth =
-        super::effective_call_depth(policy.as_ref().and_then(|policy| policy.max_stack_depth));
-    match run_on_runtime_stack(runtime_stack_size(depth), || {
+        effective_function_call_depth(policy.as_ref().and_then(|policy| policy.max_stack_depth));
+    match run_on_runtime_stack(runtime_stack_size_for_depth(depth), || {
         Ok(execute_internal_on_runtime_stack(
             program,
             database_url,
@@ -573,10 +573,6 @@ fn execute_internal_on_runtime_stack(
         output: interpreter.output,
         error,
     }
-}
-
-pub(super) fn runtime_stack_size(depth: usize) -> usize {
-    2 * 1024 * 1024 + depth.min(MAX_CONFIGURED_FUNCTION_CALL_DEPTH) * 192 * 1024
 }
 
 fn run_on_runtime_stack<T: Send>(
