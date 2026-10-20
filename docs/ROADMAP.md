@@ -262,6 +262,9 @@ security and compatibility gates stated for that milestone.
   without adding authorization or row filtering. PostgreSQL sandbox and bytecode REPL remain
   unsupported. Preserve compiler, capability, contract, step-budget, and stack
   depth checks.
+  `tests/language-console-mariadb-e2e.sh` verifies exit rollback, explicit
+  `:rollback`, batch commit, and `--persist` against an isolated disposable
+  MariaDB. PostgreSQL sandbox transactions and a bytecode REPL remain open.
 - [x] **1.2.27 — Laravel website import foundation:** Reintroduce a new,
   read-only-first importer for migrating selected website behavior into native
   Zelyra modules; this is not Laravel framework compatibility or PHP runtime

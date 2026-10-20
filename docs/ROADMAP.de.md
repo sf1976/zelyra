@@ -286,6 +286,9 @@ abgeschlossen.
   Zeilenfilterung. Compiler-, Capability-, Contract-, Schrittbudget- und
   Stacktiefenprüfungen bleiben aktiv. Siehe [Sprachkonsolen-Anleitung](language-console.de.md) und den
   [Arbeitsplan 1.2.26](release-plans/1.2.26-interactive-language-console.en.md).
+  `tests/language-console-mariadb-e2e.sh` prüft Rollback beim Beenden,
+  explizites `:rollback`, Batch-Commit und `--persist` gegen eine isolierte
+  Wegwerf-MariaDB. PostgreSQL-Sandbox und Bytecode-REPL bleiben offen.
 - [x] **1.2.27 — Grundlage für den Import von Laravel-Webseiten:** Einen neu
   entwickelten, zuerst schreibgeschützten Importer für ausgewählte
   Webseitenfunktionen in native Zelyra-Module bereitstellen; keine Laravel-

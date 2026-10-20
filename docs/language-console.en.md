@@ -36,6 +36,8 @@ By default, MariaDB/MySQL sessions hold one real transaction on a single connect
 
 The sandbox transaction starts only when a project URL is resolved from the process environment or `.env`. Without a connection, database-free expressions work; database access fails as in normal runtime execution. Console SQL currently requires the aggregate `Database` capability grant (`database = true`, or both `database_read = true` and `database_write = true` in `zelyra.toml`). A read-only grant alone does not yet allow database queries through the REPL; the console does not broaden project grants. PostgreSQL sandbox transactions and `--backend bytecode` are not available yet. `--tenant` exposes a `tenant_id` value in scope but does not provide database row-level security. Capabilities, project runtime policy, compiler checks, and SQL parameter binding remain active.
 
+The MariaDB integration test `tests/language-console-mariadb-e2e.sh` creates an isolated disposable database and verifies implicit rollback, `:rollback`, `:commit`, and `--persist`. It requires Docker and the `mariadb:11.8` image (or a compatible image selected through `ZELYRA_REPL_MARIADB_IMAGE`).
+
 ## Multiline input
 
 Continuation is detected from unclosed strings and curly, square, or round delimiters. Delimiters inside strings and single-line comments are ignored. An incomplete pipe at EOF reports a parse error. `Ctrl+C` discards only the current input buffer; `Ctrl+D` or `:quit` exits the session.

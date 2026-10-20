@@ -36,6 +36,8 @@ Standardmäßig hält die Sitzung für MariaDB/MySQL eine echte Transaktion auf 
 
 Die Sandbox-Transaktion wird nur gestartet, wenn eine Projektverbindung aus Prozessumgebung oder `.env` konfiguriert ist. Ohne Verbindung sind datenbankfreie Ausdrücke nutzbar; Datenbankzugriff scheitert wie bei normaler Runtime-Ausführung. SQL in der Konsole benötigt derzeit den aggregierten Capability-Grant `Database` (in `zelyra.toml`: `database = true` oder zusammen `database_read = true` und `database_write = true`). Ein reiner Lese-Grant erlaubt aktuell keine Datenbankabfragen aus der REPL; die Projektgrants werden nicht erweitert. PostgreSQL-Sandbox-Transaktionen und `--backend bytecode` sind noch nicht verfügbar. `--tenant` stellt den Wert als `tenant_id` im Scope bereit, führt aber keine Datenbank-Row-Level-Security ein. Capabilities, Projekt-Runtime-Policy, Compilerprüfung und SQL-Parameterbindung bleiben wirksam.
 
+Der MariaDB-Integrationstest `tests/language-console-mariadb-e2e.sh` erstellt eine isolierte Wegwerf-Datenbank und prüft implizites Rollback, `:rollback`, `:commit` sowie `--persist`. Er benötigt Docker und das MariaDB-Image `mariadb:11.8` (oder ein über `ZELYRA_REPL_MARIADB_IMAGE` angegebenes kompatibles Image).
+
 ## Verhalten bei mehrzeiliger Eingabe
 
 Die Fortsetzung wird anhand nicht abgeschlossener Zeichenketten sowie geschweifter, eckiger und runder Klammern erkannt. Zeichen in Zeichenketten und einzeiligen Kommentaren zählen nicht als Klammern. Nicht abgeschlossene Eingabe am Ende einer Pipe wird als Parsefehler gemeldet. `Ctrl+C` verwirft nur den aktuellen Eingabepuffer; `Ctrl+D` beziehungsweise `:quit` beendet die Sitzung.
