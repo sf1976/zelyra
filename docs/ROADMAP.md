@@ -439,8 +439,10 @@ security and compatibility gates stated for that milestone.
   contracts, settings, postal letters, and inbound mail; the importer does not
   generate them. `tests/mariadb-upload-cleanup-e2e.sh` now simulates a crashed
   upload leaving a staged blob/manifest pair and verifies preview and explicit
-  cleanup, alongside rollback cleanup in the upload POST E2E. File-storage
-  backup intentionally excludes the database, configuration, and secrets;
+  cleanup. The upload POST E2E sends a successful multipart request over a
+  local HTTP connection and verifies the stored reference/bytes, then separately
+  checks rollback cleanup. File-storage backup intentionally excludes the
+  database, configuration, and secrets;
   coordinated whole-application backup remains a separate follow-up, with the
   database backed up/restored separately while Zelyra is stopped. See the
   [1.2.29 secure upload plan](release-plans/1.2.29-secure-uploads.en.md).

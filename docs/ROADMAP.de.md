@@ -483,8 +483,10 @@ abgeschlossen.
   Einstellungen, Postbriefen und eingehender Mail; der Importer erzeugt sie
   nicht. `tests/mariadb-upload-cleanup-e2e.sh` simuliert nun einen Absturz mit
   zurückgebliebenem Staging-/Manifestpaar und prüft Vorschau und ausdrückliche
-  Bereinigung; das Upload-POST-E2E prüft bereits die Bereinigung nach
-  Datenbank-Rollback. Das Dateispeicher-Backup schließt Datenbank,
+  Bereinigung. Das Upload-POST-E2E sendet den erfolgreichen Multipart-Upload
+  über eine echte lokale HTTP-Verbindung und prüft Verweis und Dateibytes;
+  zusätzlich prüft es die Bereinigung nach Datenbank-Rollback. Das
+  Dateispeicher-Backup schließt Datenbank,
   Projektkonfiguration und Geheimnisse ausdrücklich aus. Ein koordiniertes
   vollständiges Anwendungsbackup bleibt ein separates Folgepaket; die
   Datenbank muss separat und bei gestopptem Zelyra gesichert/wiederhergestellt
