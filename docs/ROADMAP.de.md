@@ -676,7 +676,7 @@ aktueller Branch-Stand veröffentlicht. Der derzeit verifizierte Stand:
 | Mandantenfilter der Rechnungsnummern-Kollisionssuche | Der bisherige Rechnungsnummernpfad und der generische Zähler binden den authentifizierten Mandanten. MariaDB-Integration prüft getrennte Zähler und atomare Vergabe. | Regressionstests in Release-Gates erhalten und unterstützte Backends verifizieren. |
 | Serverseitig berechnete Geschäftsfelder | Für generiertes CRUD und geprüfte API-POST-/PUT-/PATCH-Pfade implementiert, einschließlich Abhängigkeits-/Typprüfung und exakter Decimal-Rundung. | Backend- sowie AST-/MIR-/Bytecode-Paritätsabnahme; PATCH übernimmt ausgelassene Pflichtfelder nicht aus dem bestehenden Datensatz. |
 | Lokalisierte Master-Detail-Beschriftungen | HTML-escaped Locale-Marker werden für Kindlisten-Legenden aufgelöst; ein Regressionstest deckt diesen Rendering-Pfad ab. | Test in Release-Gates behalten und Fallback-Verhalten im Tutorial prüfen. |
-| Datei-Anhänge im generierten CRUD | Mit geprüften `FileRef`-Metadaten, bestehendem privaten Speicher, generierten Uploadfeldern und autorisierten Downloads implementiert. MariaDB-Tests prüfen Persistenz, Rollback-Bereinigung und Mandantenverweigerung im Dispatcher. | Vollständiger authentifizierter Cross-Tenant-HTTP- und Browser-Test sowie koordinierte Anwendungssicherung/-wiederherstellung. Diese Punkte gelten nicht als abgeschlossen. |
+| Datei-Anhänge im generierten CRUD | Mit geprüften `FileRef`-Metadaten, privatem Speicher, generierten Uploadfeldern und autorisierten Downloads implementiert. MariaDB-HTTP- und Chromium-E2E prüfen authentifizierten Upload, Download im eigenen Mandanten, fremdmandantige 404-Antwort, MIME-Typ und geschützte Referenz. Chromium läuft dabei ohne JavaScript. | Koordiniertes Anwendungsbackup aus Datenbank und Dateien samt Wiederherstellung sowie vollständige Release-Gates. Diese Punkte gelten nicht als abgeschlossen. |
 
 Dieser Arbeitsbereich ist erst abgeschlossen, wenn alle verbleibenden
 Abnahmen aus der Tabelle und den detaillierten Release-Plänen darunter
@@ -760,8 +760,11 @@ keine Produktionsreife.
   gespeicherten Mandanten, lädt die Datei im selben Mandanten herunter und
   bestätigt 404 bei Auswahl eines anderen Mandanten. Der Test prüft außerdem
   den PDF-Content-Type und dass die opake FileRef nicht im Detail-HTML erscheint.
-  Browserprüfungen und ein koordiniertes Datenbank-/Datei-Backup mit
-  Wiederherstellung bleiben Release-Gates.
+  Der vollständige MariaDB-Mandanten-CRUD-E2E wird zusätzlich in headless
+  Chromium ohne JavaScript ausgeführt; Upload-Control, Detail-Link, PDF-Bytes,
+  MIME-Typ und 404 im fremden Mandanten bestehen. Ein koordiniertes
+  Datenbank-/Datei-Backup mit Wiederherstellung und vollständige Release-Gates
+  bleiben offen.
 
 Siehe den [Plan zum Abschluss des Geschäfts-CRUD](release-plans/1.2.31-1.2.33-business-crud.de.md).
 

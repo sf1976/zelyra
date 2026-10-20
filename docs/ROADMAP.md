@@ -622,7 +622,7 @@ release. The current verified status is:
 | Tenant scope for invoice-number collision checks | The existing invoice-number path and the generic sequence allocator both bind the authenticated tenant. MariaDB integration verifies independent tenant counters and atomic allocation. | Keep the regression coverage in the release suite and verify all supported backends. |
 | Server-computed business fields | Implemented for generated CRUD and validated API POST/PUT/PATCH paths, with dependency/type checks and exact Decimal rounding. CRUD preserves source Decimal text until form validation checks declared storage precision and scale, including normalized MySQL metadata. | Complete backend and AST/MIR/bytecode parity gates; PATCH does not merge omitted required fields from the stored row. |
 | Localized master-detail labels | The HTML-escaped locale markers are resolved for child-collection legends; a regression test covers the escaped rendering path. | Preserve the test in the release gates and verify locale fallback behavior in the tutorial. |
-| File attachments in generated CRUD | Implemented using checked `FileRef` metadata, existing private storage, generated upload fields, and authorized downloads. MariaDB E2E covers authenticated upload, same-tenant download, forged tenant selection, cross-tenant 404, MIME response, and reference redaction. | Browser checks and coordinated application backup/recovery; these are not claimed complete. |
+| File attachments in generated CRUD | Implemented using checked `FileRef` metadata, private storage, generated upload fields, and authorized downloads. MariaDB HTTP and Chromium E2E cover authenticated upload, same-tenant download, cross-tenant 404, MIME response, and reference redaction. Chromium runs with JavaScript disabled. | Coordinated database-plus-file application backup/recovery and full release gates; these are not claimed complete. |
 
 Do not mark this workstream complete until every remaining acceptance item in
 the table and the detailed release plans below passes. In particular, feature
@@ -703,9 +703,11 @@ syntax or a unit test alone does not establish production readiness.
   tenant CRUD E2E now also uploads through the authenticated generated form,
   checks the stored tenant, downloads under that tenant, and confirms a request
   selecting another tenant receives 404. It verifies the PDF content type and
-  that the opaque FileRef is absent from detail HTML. Browser checks and
-  coordinated database-plus-file application backup/recovery remain release
-  gates.
+  that the opaque FileRef is absent from detail HTML. The full disposable-
+  MariaDB flow also passes in headless Chromium with JavaScript disabled,
+  checking the generated upload control, detail link, downloaded PDF bytes,
+  MIME type, and cross-tenant 404. Coordinated database-plus-file application
+  backup/recovery and full release gates remain open.
 
 See the [business CRUD completion plan](release-plans/1.2.31-1.2.33-business-crud.en.md).
 

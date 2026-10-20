@@ -183,6 +183,15 @@ cross_tenant_document_download_status="$(curl --silent --show-error --output "${
     "${base_url}/tenant_documents/${tenant_document_id}/files/attachment?tenant_id=10")"
 echo "cross-tenant attachment download HTTP ${cross_tenant_document_download_status}"
 [[ "${cross_tenant_document_download_status}" == "404" ]]
+if [[ "${ZELYRA_TENANT_FILE_BROWSER_E2E:-0}" == "1" ]]; then
+    echo "[2b/12] checking attachment UI and download in headless Chromium without JavaScript"
+    ZELYRA_TENANT_BROWSER_URL="${base_url}" \
+    ZELYRA_TENANT_BROWSER_EMAIL="${email}" \
+    ZELYRA_TENANT_BROWSER_PASSWORD="${password}" \
+    ZELYRA_TENANT_BROWSER_DOCUMENT_ID="${tenant_document_id}" \
+    ZELYRA_TENANT_BROWSER_FILE="${temp_dir}/tenant-document.pdf" \
+        node "${repo_dir}/editor/tests/tenant-file-download-browser-e2e.mjs"
+fi
 
 echo "[3/12] requiring explicit selection for a multi-tenant user"
 ambiguous_status="$(curl --silent --show-error --output "${temp_dir}/ambiguous.html" \

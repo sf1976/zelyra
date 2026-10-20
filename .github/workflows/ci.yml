@@ -492,6 +492,7 @@ jobs:
         env:
           DATABASE_URL: mariadb://root:root@127.0.0.1:3306/zelyra_ci
           ZELYRA_BIN: target/debug/zelyra
+          ZELYRA_TENANT_FILE_BROWSER_E2E: '1'
         run: ./tests/mariadb-tenant-crud-e2e.sh
       - name: Run authenticated tenant-scoped API validation integration test
         env:
