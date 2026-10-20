@@ -118,6 +118,12 @@ pub fn encode_with_limits(
         w.usize(function.code.len())?;
         for ins in &function.code {
             w.span(ins.span)?;
+            if let Some(span) = ins.source_step_span {
+                w.u8(1)?;
+                w.span(span)?;
+            } else {
+                w.u8(0)?;
+            }
             w.op(&ins.operation)?;
         }
     }
@@ -199,8 +205,17 @@ pub fn decode_with_limits(
         let mut code = Vec::new();
         for _ in 0..ncode {
             let span = r.span()?;
+            let source_step_span = match r.u8()? {
+                0 => None,
+                1 => Some(r.span()?),
+                _ => return Err(error("invalid source-step span flag in bytecode")),
+            };
             let operation = r.op()?;
-            code.push(BytecodeInstruction { operation, span });
+            code.push(BytecodeInstruction {
+                operation,
+                span,
+                source_step_span,
+            });
         }
         functions.push(BytecodeFunction {
             id,

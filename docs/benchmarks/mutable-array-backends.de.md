@@ -59,3 +59,25 @@ Step-Markierungen die Ursache sind. Der Branch bleibt experimentell; dieser
 Pfad muss optimiert und erneut gemessen werden, bevor der Benchmark eine
 Entscheidung zum Standard-Backend stützen kann. Alle Läufe ergaben den
 Sollwert `Int(20009)`.
+
+## Optimierung der Quellschritte in v27 — 20.10.2026
+
+Der v27-Kandidat bettet die häufige Quellschrittmarkierung in die folgende
+Instruktion ein und zählt serielle Schritte lokal; parallele Zweige behalten
+einen gemeinsamen atomaren Zähler. Verglichen wurde mit dem exakten Tag
+v1.2.28 (`fa54c045`) auf demselben AMD-EPYC-Milan-KVM-Host mit sechs vCPUs,
+Debian-Kernel `6.12.113+deb13-amd64` und Rust `1.98.1`. Jeder von drei
+Prozessläufen nutzte einen Warm-up und neun Messungen je Backend.
+
+| Backend | Laufmediane Baseline | Laufmediane v27 | Median der Laufmediane |
+| --- | --- | --- | --- |
+| AST | 28,20; 29,38; 30,10 ms | 29,06; 28,47; 27,78 ms | 29,38 → 28,47 ms |
+| MIR | 23,36; 24,97; 25,16 ms | 23,23; 23,33; 22,51 ms | 24,97 → 23,23 ms |
+| Bytecode | 26,52; 27,68; 26,71 ms | 30,87; 29,94; 30,10 ms | 26,71 → 30,10 ms |
+
+Der Median-Rückstand des Bytecodes gegenüber v1.2.28 liegt bei dieser einen
+Arbeitslast nun bei 12,7 %, nach 25,8 % im früheren v26-Kandidaten. v27 hat
+diesen Messfall erkennbar verbessert, den Unterschied aber nicht beseitigt.
+Das Ergebnis bleibt ein fokussierter CPU-Benchmark: Es belegt weder die
+allgemeine Runtime-Leistung noch rechtfertigt es einen Wechsel des
+Standard-Backends. Alle Läufe ergaben `Int(20009)`.

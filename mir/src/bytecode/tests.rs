@@ -6964,8 +6964,44 @@ fn main() -> Int {
             max_steps,
             ..ExecutionLimits::default()
         };
-        let mir_result = execution::execute_function(&mir, "main", Vec::new(), limits);
-        let bytecode_result = execute(&bytecode, Vec::new(), limits);
+        let mir_execution = execution::execute_function_captured_with_host_services_and_policy(
+            &mir,
+            "main",
+            Vec::new(),
+            limits,
+            None,
+            None,
+            Arc::new(SystemHostServices),
+        );
+        let mir_steps = mir_execution.steps;
+        let mir_result = match (mir_execution.value, mir_execution.error) {
+            (Some(value), None) => Ok(execution::ExecutionResult {
+                value,
+                steps: mir_steps,
+            }),
+            (_, Some(error)) => Err(error),
+            (None, None) => panic!("MIR returned neither a value nor an error"),
+        };
+        let bytecode_execution = execute_with_host_services_captured(
+            &bytecode,
+            Vec::new(),
+            limits,
+            None,
+            Arc::new(SystemHostServices),
+        );
+        let bytecode_steps = bytecode_execution.steps;
+        let bytecode_result = match (bytecode_execution.value, bytecode_execution.error) {
+            (Some(value), None) => Ok(execution::ExecutionResult {
+                value,
+                steps: bytecode_steps,
+            }),
+            (_, Some(error)) => Err(error),
+            (None, None) => panic!("bytecode returned neither a value nor an error"),
+        };
+        assert_eq!(
+            bytecode_steps, mir_steps,
+            "step count at budget {max_steps}"
+        );
         match (ast_result, mir_result, bytecode_result) {
             (Ok(ast_value), Ok(mir_value), Ok(bytecode_value)) => {
                 assert_eq!(mir_value.value, ast_value, "MIR result at budget {max_steps}");
@@ -7387,7 +7423,7 @@ fn bytecode_binary_format_is_deterministic_bounded_and_verified_on_load() {
         .windows(8)
         .position(|window| window == MARKER.to_le_bytes())
         .expect("marker source span was serialized");
-    let opcode_offset = span_offset + 36;
+    let opcode_offset = span_offset + 37;
     malformed[opcode_offset] = 13; // Jump
     malformed[opcode_offset + 1..opcode_offset + 9].copy_from_slice(&(u64::MAX).to_le_bytes());
     let rejected = decode(&malformed).unwrap_err();
@@ -7396,4 +7432,23 @@ fn bytecode_binary_format_is_deterministic_bounded_and_verified_on_load() {
         rejected[0].message.contains("control flow") || rejected[0].message.contains("target"),
         "{rejected:?}"
     );
+}
+
+#[test]
+fn bytecode_verifier_rejects_invalid_embedded_source_step_spans() {
+    let (_, mut bytecode) = compile_source("fn main() { value = 1 }", "main");
+    let instruction = bytecode
+        .functions
+        .iter_mut()
+        .flat_map(|function| &mut function.code)
+        .find(|instruction| instruction.source_step_span.is_some())
+        .expect("compiler attaches a source-step span");
+    instruction.source_step_span = Some(Span {
+        start: 2,
+        end: 1,
+        ..Span::default()
+    });
+
+    let errors = verify_bytecode(&bytecode).expect_err("invalid step spans are rejected");
+    assert!(errors[0].message.contains("source-step span is invalid"));
 }

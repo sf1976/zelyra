@@ -39,7 +39,7 @@ pub use format::{decode, decode_with_limits, encode, encode_with_limits, Bytecod
 mod compiler;
 pub use compiler::compile;
 
-pub const BYTECODE_VERSION: u16 = 26;
+pub const BYTECODE_VERSION: u16 = 27;
 const MAX_BYTECODE_OPERATIONS_PER_EXECUTION: usize = 10_000_000;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -121,6 +121,8 @@ pub enum BytecodeTransactionOperation {
 pub struct BytecodeInstruction {
     pub operation: BytecodeOp,
     pub span: Span,
+    /// A source-level step charged immediately before this operation.
+    pub source_step_span: Option<Span>,
 }
 
 #[derive(Clone, Debug)]
@@ -1190,6 +1192,15 @@ pub fn verify_bytecode(program: &BytecodeProgram) -> Result<(), Vec<MirError>> {
             )]);
         }
         for instruction in &function.code {
+            if instruction
+                .source_step_span
+                .is_some_and(|span| span.start > span.end)
+            {
+                return Err(vec![bytecode_error(
+                    "bytecode source-step span is invalid",
+                    instruction.span,
+                )]);
+            }
             match &instruction.operation {
                 BytecodeOp::Call {
                     function: target,
@@ -1930,6 +1941,7 @@ fn execute_with_database_context(
             database,
             host_services,
             shared_steps: StepBudget::new(Some(limits.max_steps)),
+            shared_budget_active: false,
         },
     )
 }
@@ -1942,6 +1954,7 @@ struct BytecodeExecutionContext<'a> {
     database: Option<BytecodeDatabaseExecution<'a>>,
     host_services: Arc<dyn HostServices>,
     shared_steps: StepBudget,
+    shared_budget_active: bool,
 }
 
 fn consume_bytecode_step(budget: &StepBudget, span: Span) -> Result<(), RuntimeError> {
@@ -1957,6 +1970,40 @@ fn consume_bytecode_step(budget: &StepBudget, span: Span) -> Result<(), RuntimeE
     }
 }
 
+fn consumed_bytecode_steps(
+    shared_budget_active: bool,
+    shared_steps: &StepBudget,
+    local_steps: usize,
+) -> usize {
+    if shared_budget_active {
+        shared_steps.consumed()
+    } else {
+        local_steps
+    }
+}
+
+fn charge_bytecode_step(
+    span: Span,
+    shared_budget_active: bool,
+    shared_steps: &StepBudget,
+    local_steps: &mut usize,
+    limit: usize,
+) -> Result<(), RuntimeError> {
+    if shared_budget_active {
+        return consume_bytecode_step(shared_steps, span);
+    }
+    *local_steps = local_steps
+        .checked_add(1)
+        .ok_or_else(|| runtime_error(span, "execution step counter overflow"))?;
+    if *local_steps > limit {
+        return Err(runtime_error(
+            span,
+            format!("execution step budget exceeded (limit {limit})"),
+        ));
+    }
+    Ok(())
+}
+
 fn execute_bytecode_entry(
     program: &BytecodeProgram,
     entry_index: usize,
@@ -1969,7 +2016,8 @@ fn execute_bytecode_entry(
         runtime_policy,
         database,
         host_services,
-        shared_steps,
+        mut shared_steps,
+        mut shared_budget_active,
     } = context;
     let verification_error = verify_bytecode(program).err().map(|errors| {
         let error = errors.into_iter().next();
@@ -2052,6 +2100,7 @@ fn execute_bytecode_entry(
     let mut pending_host_calls = Vec::<(usize, String, usize)>::new();
     let mut output = Vec::new();
     let mut executed_operations = 0usize;
+    let mut local_steps = 0usize;
     let execution = (|| -> Result<ExecutionResult, RuntimeError> {
         loop {
             let frame_index = frames.len() - 1;
@@ -2071,8 +2120,23 @@ fn execute_bytecode_entry(
                     "bytecode operation safety limit exceeded",
                 ));
             }
+            if let Some(span) = instruction.source_step_span {
+                charge_bytecode_step(
+                    span,
+                    shared_budget_active,
+                    &shared_steps,
+                    &mut local_steps,
+                    limits.max_steps,
+                )?;
+            }
             if matches!(instruction.operation, BytecodeOp::Step) {
-                consume_bytecode_step(&shared_steps, instruction.span)?;
+                charge_bytecode_step(
+                    instruction.span,
+                    shared_budget_active,
+                    &shared_steps,
+                    &mut local_steps,
+                    limits.max_steps,
+                )?;
             }
             frame.pc += 1;
             match instruction.operation {
@@ -2392,6 +2456,11 @@ fn execute_bytecode_entry(
                                 .collect::<Result<Vec<_>, _>>()
                         })
                         .collect::<Result<Vec<_>, _>>()?;
+                    let was_shared_budget_active = shared_budget_active;
+                    if !shared_budget_active {
+                        shared_steps = StepBudget::starting_at(Some(limits.max_steps), local_steps);
+                        shared_budget_active = true;
+                    }
                     let results = std::thread::scope(|scope| {
                         let handles = bindings
                             .iter()
@@ -2414,6 +2483,7 @@ fn execute_bytecode_entry(
                                                 database,
                                                 host_services,
                                                 shared_steps,
+                                                shared_budget_active: true,
                                             },
                                         );
                                         (binding.target, outcome)
@@ -2460,6 +2530,10 @@ fn execute_bytecode_entry(
                         }
                         (assignments, branch_outputs, first_error)
                     });
+                    if !was_shared_budget_active {
+                        local_steps = shared_steps.consumed();
+                        shared_budget_active = false;
+                    }
                     if let Some(mut error) = results.2 {
                         if error.message.contains("execution step budget exceeded") {
                             error = runtime_error(instruction.span, error.message);
@@ -3461,7 +3535,11 @@ fn execute_bytecode_entry(
                     if frames.is_empty() {
                         return Ok(ExecutionResult {
                             value: result,
-                            steps: shared_steps.consumed(),
+                            steps: consumed_bytecode_steps(
+                                shared_budget_active,
+                                &shared_steps,
+                                local_steps,
+                            ),
                         });
                     }
                     stack.truncate(base);
@@ -3488,13 +3566,13 @@ fn execute_bytecode_entry(
         Ok(result) => ExecutionOutcome {
             output,
             value: Some(result.value),
-            steps: shared_steps.consumed(),
+            steps: consumed_bytecode_steps(shared_budget_active, &shared_steps, local_steps),
             error: None,
         },
         Err(error) => ExecutionOutcome {
             output,
             value: None,
-            steps: shared_steps.consumed(),
+            steps: consumed_bytecode_steps(shared_budget_active, &shared_steps, local_steps),
             error: Some(error),
         },
     }

@@ -24,8 +24,16 @@ pub enum StepBudgetError {
 impl StepBudget {
     /// Create a fresh counter. `None` means unlimited steps, not uncounted steps.
     pub fn new(limit: Option<usize>) -> Self {
+        Self::starting_at(limit, 0)
+    }
+
+    /// Create a shared counter that already includes `initial_steps`.
+    ///
+    /// This supports runtimes that count locally while execution is serial,
+    /// then switch to a shared atomic counter when entering parallel work.
+    pub fn starting_at(limit: Option<usize>, initial_steps: usize) -> Self {
         Self {
-            steps: Arc::new(AtomicUsize::new(0)),
+            steps: Arc::new(AtomicUsize::new(initial_steps)),
             limit,
         }
     }

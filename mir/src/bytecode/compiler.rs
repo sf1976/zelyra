@@ -118,6 +118,7 @@ fn compile_function(
         generated_locals: Vec::new(),
         next_generated_index,
         generated_functions,
+        pending_source_step: None,
     };
     for contract in &function.requires {
         let span = program
@@ -160,6 +161,7 @@ fn compile_function(
         }
         compiler.terminator(block.terminator.as_ref(), block.id, block.span)?;
     }
+    compiler.flush_pending_source_step();
     for (instruction, target, second_target) in compiler.patches {
         let Some(address) = compiler.blocks.get(&target).copied() else {
             return Err(vec![bytecode_error(
@@ -663,6 +665,7 @@ struct FunctionCompiler<'a> {
     generated_locals: Vec<LocalId>,
     next_generated_index: &'a mut usize,
     generated_functions: &'a mut Vec<BytecodeFunction>,
+    pending_source_step: Option<Span>,
 }
 
 fn mir_instruction_source_span(instruction: &MirInstruction, program: &MirProgram) -> Option<Span> {
@@ -683,9 +686,33 @@ fn mir_instruction_source_span(instruction: &MirInstruction, program: &MirProgra
 
 impl FunctionCompiler<'_> {
     fn emit(&mut self, operation: BytecodeOp, span: Span) -> usize {
+        if matches!(operation, BytecodeOp::Step) {
+            if let Some(previous) = self.pending_source_step.replace(span) {
+                self.code.push(BytecodeInstruction {
+                    operation: BytecodeOp::Step,
+                    span: previous,
+                    source_step_span: None,
+                });
+            }
+            return self.code.len();
+        }
         let id = self.code.len();
-        self.code.push(BytecodeInstruction { operation, span });
+        self.code.push(BytecodeInstruction {
+            operation,
+            span,
+            source_step_span: self.pending_source_step.take(),
+        });
         id
+    }
+
+    fn flush_pending_source_step(&mut self) {
+        if let Some(span) = self.pending_source_step.take() {
+            self.code.push(BytecodeInstruction {
+                operation: BytecodeOp::Step,
+                span,
+                source_step_span: None,
+            });
+        }
     }
 
     fn lambda_expression(
@@ -828,9 +855,11 @@ impl FunctionCompiler<'_> {
                 generated_locals: Vec::new(),
                 next_generated_index: self.next_generated_index,
                 generated_functions: self.generated_functions,
+                pending_source_step: None,
             };
             compiler.expression(*body, &mut HashSet::new())?;
             compiler.emit(BytecodeOp::Return, binding.span);
+            compiler.flush_pending_source_step();
             let mut branch_function = BytecodeFunction {
                 id: FunctionId(*compiler.next_generated_index),
                 name: format!(
