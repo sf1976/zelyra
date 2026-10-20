@@ -447,9 +447,23 @@ pub struct FormAction {
     pub fields: Vec<FormField>,
     pub requires_auth: bool,
     pub permissions: Vec<String>,
+    /// Explicit language capabilities required by the typed execution block.
+    pub capabilities: Vec<String>,
+    /// Legacy action statements remain accepted for source compatibility.
     pub statements: Vec<Stmt>,
+    /// Explicit, compiler-checked execution body for domain actions.
+    pub execute_body: Option<Block>,
+    /// Optional precondition evaluated against the locked target row.
+    pub guard: Option<CrudActionGuardDef>,
     pub success: Option<String>,
     pub redirect: Option<String>,
+    pub span: Span,
+}
+
+#[derive(Clone, Debug)]
+pub struct CrudActionGuardDef {
+    pub condition: Expr,
+    pub message: String,
     pub span: Span,
 }
 
@@ -560,6 +574,191 @@ pub struct CrudPolicyFunction {
     pub policy_index: usize,
     pub is_guard: bool,
     pub function_name: String,
+}
+
+/// Names and synthetic row/session types used to typecheck and execute one
+/// typed CRUD action. Both the CLI validator and web runtime use this mapping
+/// so their private wrapper names and signatures cannot drift apart.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct CrudActionFunction {
+    pub crud_index: usize,
+    pub action_index: usize,
+    pub row_type_name: String,
+    pub session_type_name: String,
+    pub execute_function: Option<String>,
+    pub guard_function: Option<String>,
+}
+
+/// Builds compiler-checkable wrappers for typed CRUD action bodies.
+/// `row` has exactly the columns in the CRUD table. Session identity fields
+/// are nominal IDs, optional when no corresponding context is available.
+pub fn build_crud_action_functions(program: &Program) -> (Vec<Function>, Vec<CrudActionFunction>) {
+    let mut names = program
+        .functions
+        .iter()
+        .map(|function| function.name.clone())
+        .chain(program.records.iter().map(|record| record.name.clone()))
+        .collect::<std::collections::HashSet<_>>();
+    let mut functions = Vec::new();
+    let mut mappings = Vec::new();
+
+    for (crud_index, crud) in program.cruds.iter().enumerate() {
+        if !program.tables.iter().any(|table| table.name == crud.table) {
+            continue;
+        }
+        for (action_index, action) in crud.actions.iter().enumerate() {
+            if action.execute_body.is_none() && action.guard.is_none() {
+                continue;
+            }
+            let row_type_name = unique_crud_internal_name(
+                format!("__ZelyraCrudActionRow_{crud_index}_{action_index}"),
+                &mut names,
+            );
+            let session_type_name = unique_crud_internal_name(
+                format!("__ZelyraCrudActionSession_{crud_index}_{action_index}"),
+                &mut names,
+            );
+            let row_type = Type::Named(row_type_name.clone());
+            let session_type = Type::Named(session_type_name.clone());
+            let params = vec![
+                Param {
+                    name: "row".into(),
+                    ty: row_type,
+                    span: action.span,
+                },
+                Param {
+                    name: "session".into(),
+                    ty: session_type,
+                    span: action.span,
+                },
+            ];
+            let execute_function = action.execute_body.as_ref().map(|body| {
+                let name = unique_crud_internal_name(
+                    format!("__zelyra_crud_action_{crud_index}_{action_index}"),
+                    &mut names,
+                );
+                functions.push(Function {
+                    name: name.clone(),
+                    is_public: false,
+                    type_params: Vec::new(),
+                    params: params.clone(),
+                    return_type: Some(Type::Unit),
+                    capabilities: action.capabilities.clone(),
+                    requires: Vec::new(),
+                    ensures: Vec::new(),
+                    body: body.clone(),
+                    span: action.span,
+                });
+                name
+            });
+            let guard_function = action.guard.as_ref().map(|guard| {
+                let name = unique_crud_internal_name(
+                    format!("__zelyra_crud_action_guard_{crud_index}_{action_index}"),
+                    &mut names,
+                );
+                functions.push(Function {
+                    name: name.clone(),
+                    is_public: false,
+                    type_params: Vec::new(),
+                    params,
+                    return_type: Some(Type::Bool),
+                    capabilities: Vec::new(),
+                    requires: Vec::new(),
+                    ensures: Vec::new(),
+                    body: Block {
+                        statements: vec![Stmt::Return {
+                            value: Some(guard.condition.clone()),
+                            span: guard.span,
+                        }],
+                        span: guard.span,
+                    },
+                    span: guard.span,
+                });
+                name
+            });
+            mappings.push(CrudActionFunction {
+                crud_index,
+                action_index,
+                row_type_name,
+                session_type_name,
+                execute_function,
+                guard_function,
+            });
+        }
+    }
+    (functions, mappings)
+}
+
+fn unique_crud_internal_name(
+    base: String,
+    names: &mut std::collections::HashSet<String>,
+) -> String {
+    let mut name = base.clone();
+    let mut suffix = 0usize;
+    while !names.insert(name.clone()) {
+        suffix += 1;
+        name = format!("{base}_{suffix}");
+    }
+    name
+}
+
+/// Lowers typed CRUD action signatures into ordinary private language
+/// declarations. These declarations are compiler/runtime scaffolding only.
+pub fn lower_crud_action_functions_owned(
+    mut program: Program,
+) -> (Program, Vec<CrudActionFunction>) {
+    let (functions, mappings) = build_crud_action_functions(&program);
+    for mapping in &mappings {
+        let crud = &program.cruds[mapping.crud_index];
+        let table = program
+            .tables
+            .iter()
+            .find(|table| table.name == crud.table)
+            .unwrap();
+        program.records.push(RecordDef {
+            name: mapping.row_type_name.clone(),
+            is_public: false,
+            is_class: false,
+            type_params: Vec::new(),
+            fields: table
+                .columns
+                .iter()
+                .map(|column| RecordField {
+                    name: column.name.clone(),
+                    ty: column.ty.clone(),
+                    span: column.span,
+                })
+                .collect(),
+            span: crud.actions[mapping.action_index].span,
+        });
+        let action = &crud.actions[mapping.action_index];
+        let tenant_type = table
+            .tenant_scope
+            .as_ref()
+            .map(|scope| scope.tenant_type.clone())
+            .unwrap_or_else(|| Type::Named("Id".into()));
+        program.records.push(RecordDef {
+            name: mapping.session_type_name.clone(),
+            is_public: false,
+            is_class: false,
+            type_params: Vec::new(),
+            fields: vec![
+                RecordField {
+                    name: "tenant_id".into(),
+                    ty: Type::Option(Box::new(tenant_type)),
+                    span: action.span,
+                },
+                RecordField {
+                    name: "user_id".into(),
+                    ty: Type::Option(Box::new(Type::Named("Id".into()))),
+                    span: action.span,
+                },
+            ],
+            span: action.span,
+        });
+    }
+    program.functions.extend(functions);
+    (program, mappings)
 }
 
 /// Builds ordinary private predicates for row-conditioned CRUD policies.

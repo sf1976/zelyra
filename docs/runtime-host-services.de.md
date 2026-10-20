@@ -102,6 +102,15 @@ Die echten Funktionssignaturen stehen in `runtime/src/lib.rs`. Der Dienst muss
 `Send + Sync` erfüllen, weil parallele Zelyra-Ausdrücke dieselbe Hostinstanz
 verwenden.
 
+Für eine Einbettung, die bereits eine Request-Transaktion besitzt, bietet die
+AST-Runtime außerdem `execute_function_captured_with_transactional_query`.
+Jeder `sql<T>`-Ausdruck wird dabei über den geliehenen Query-Callback
+ausgeführt; Capability- und Storage-Prüfungen bleiben aktiv. Der Callback ist
+auf eine begrenzte Runtime-Ausführung beschränkt. Verschachtelte
+`transaction { ... }`- und `parallel { ... }`-Blöcke werden in diesem Modus
+abgewiesen, damit sie nicht auf eine andere Verbindung ausweichen. Dies ist
+eine niedrigstufige Einbettungs-API; CRUD-Web-Actions verwenden sie noch nicht.
+
 ## Sicherheitsgrenze und Status
 
 Zelyras Funktions-Capabilities und Projektfreigaben werden vor jedem dieser

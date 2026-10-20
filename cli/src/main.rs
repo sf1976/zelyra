@@ -1770,6 +1770,9 @@ fn validate_program(
         if !validate_cruds(path, &program, &schema) {
             return Err(());
         }
+        if !validate_typed_crud_actions(path, &program) {
+            return Err(());
+        }
         if !validate_tenant_access_boundaries(path, &program, &schema) {
             return Err(());
         }
@@ -1790,6 +1793,70 @@ fn validate_program(
         }
     }
     Ok(program)
+}
+
+fn validate_typed_crud_actions(path: &str, program: &zelyra_ast::Program) -> bool {
+    let mut valid = true;
+    for action in program.forms.iter().flat_map(|form| form.actions.iter()) {
+        if action.execute_body.is_some()
+            || action.guard.is_some()
+            || !action.capabilities.is_empty()
+        {
+            diagnostic_with_span(
+                path,
+                "E-FORM-002",
+                "typed execution blocks, guards, and action capabilities are supported only inside CRUD actions",
+                action.span,
+            );
+            valid = false;
+        }
+    }
+
+    for crud in &program.cruds {
+        for action in &crud.actions {
+            if action.execute_body.is_none()
+                && action.guard.is_none()
+                && !action.capabilities.is_empty()
+            {
+                diagnostic_with_span(
+                    path,
+                    "E-CRUD-009",
+                    "`uses` is only valid on a CRUD action with an `execute` block",
+                    action.span,
+                );
+                valid = false;
+            }
+        }
+    }
+    // Keep synthetic declarations in the same order as WebApp's runtime
+    // lowering so collision resolution yields identical wrapper names.
+    let (checked_program, _) = zelyra_ast::lower_table_validation_functions_owned(program.clone());
+    let (checked_program, _) = zelyra_ast::lower_crud_policy_functions_owned(checked_program);
+    let (checked_program, mappings) =
+        zelyra_ast::lower_crud_action_functions_owned(checked_program);
+    if mappings.is_empty() {
+        return valid;
+    }
+    if let Err(errors) = check(&checked_program) {
+        for error in errors {
+            diagnostic_with_span(path, error.code, &error.message, error.span);
+        }
+        valid = false;
+    }
+    let grants = match project_capability_grants(path) {
+        Ok(grants) => grants,
+        Err(error) => {
+            diagnostic(path, "E-CAP-002", &error, 1, 1);
+            return false;
+        }
+    };
+    if let Err(errors) = check_capabilities_with_grants(&checked_program, grants.as_ref()) {
+        for error in errors {
+            diagnostic_with_span(path, "E-CAP-001", &error.message, error.span);
+        }
+        valid = false;
+    }
+    valid
 }
 
 fn reject_typed_holes(source: &str, path: &str, program: &zelyra_ast::Program) -> bool {
@@ -7249,6 +7316,14 @@ fn validate_project_features(path: &str, program: &zelyra_ast::Program) -> Resul
     Ok(())
 }
 
+fn database_runtime_capability_granted(grants: Option<&HashSet<String>>) -> bool {
+    grants.is_none_or(|grants| {
+        grants.contains("Database")
+            || grants.contains("Database(read)")
+            || grants.contains("Database(write)")
+    })
+}
+
 fn project_capability_grants(path: &str) -> Result<Option<HashSet<String>>, String> {
     let Some(config_path) = project_config_path(path)? else {
         return Ok(None);
@@ -9576,6 +9651,16 @@ fn validate_tenant_access_boundaries(
                 },
                 &mut |query, span| valid &= check_query(query, span, None),
             );
+            if let Some(body) = &action.execute_body {
+                visit_block_sql(body, &mut |query, span| {
+                    valid &= check_query(query, span, None)
+                });
+            }
+            if let Some(guard) = &action.guard {
+                visit_expression_sql(&guard.condition, &mut |query, span| {
+                    valid &= check_query(query, span, None)
+                });
+            }
         }
     }
     for crud in &program.cruds {
@@ -9651,6 +9736,16 @@ fn validate_tenant_access_boundaries(
                     },
                     &mut |query, span| valid &= check_query(query, span, Some(&crud.table)),
                 );
+                if let Some(body) = &action.execute_body {
+                    visit_block_sql(body, &mut |query, span| {
+                        valid &= check_query(query, span, Some(&crud.table))
+                    });
+                }
+                if let Some(guard) = &action.guard {
+                    visit_expression_sql(&guard.condition, &mut |query, span| {
+                        valid &= check_query(query, span, Some(&crud.table))
+                    });
+                }
             }
         }
     }
@@ -10816,9 +10911,8 @@ fn serve_command(mut args: impl Iterator<Item = String>) -> ExitCode {
             permissions: tableview.permissions.clone(),
         })
         .collect();
-    let database_capability_granted = capability_grants
-        .as_ref()
-        .is_none_or(|grants| grants.contains("Database"));
+    let database_capability_granted =
+        database_runtime_capability_granted(capability_grants.as_ref());
     if database_capability_granted {
         if let Some(url) = database_url_from_program(&program) {
             if let Err(error) = zelyra_database::validate_decimal_storage(&url, &schema) {
@@ -10987,6 +11081,7 @@ fn serve_command(mut args: impl Iterator<Item = String>) -> ExitCode {
     println!("Zelyra server listening on http://{actual_address}");
     let app = WebApp::with_database_url(routes, form_routes, database_url_from_program(&program))
         .with_validation_program(program)
+        .with_runtime_security(capability_grants, runtime_policy)
         .with_ui_settings(ui_language, ui_level)
         .with_ui_stylesheet_css(ui_stylesheet_css)
         .with_project_theme_css(theme_css)
@@ -11307,6 +11402,7 @@ fn generated_crud_form(
                 fields: Vec::new(),
                 requires_auth: false,
                 permissions: Vec::new(),
+                capabilities: Vec::new(),
                 statements: vec![zelyra_ast::Stmt::Expr(zelyra_ast::Expr {
                     kind: zelyra_ast::ExprKind::Sql {
                         result_type: zelyra_ast::Type::Unit,
@@ -11314,6 +11410,8 @@ fn generated_crud_form(
                     },
                     span: table.span,
                 })],
+                execute_body: None,
+                guard: None,
                 success: Some("@i18n:form.saved".into()),
                 redirect: Some(format!("/{}", crud.table)),
                 span: table.span,

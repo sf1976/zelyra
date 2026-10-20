@@ -46,6 +46,42 @@ database_write = true
 EOF
 printf 'DATABASE_URL=%s\n' "${test_url}" >"${project}/.env"
 
+ddl_attempt="$(printf 'sql { DROP TABLE %s }\n' "${table}" | "${zelyra_bin}" console "${project}/main.zyl" --sandbox 2>&1)"
+if [[ "${ddl_attempt}" != *'DDL and transaction control are rejected'* ]]; then
+  printf 'error: sandbox did not reject DDL as expected:\n%s\n' "${ddl_attempt}" >&2
+  exit 1
+fi
+table_exists="$(MYSQL_PWD="${db_password}" mariadb --protocol=tcp --host="${db_host}" --port="${db_port}" --user="${db_user}" --database="${db_name}" --batch --skip-column-names -e "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name = '${table}'")"
+if [[ "${table_exists}" != "1" ]]; then
+  printf 'error: sandbox DDL attempt changed the disposable schema\n' >&2
+  exit 1
+fi
+
+cat >"${project}/zelyra.toml" <<'EOF'
+[capabilities]
+database_read = true
+database_write = false
+EOF
+sed -i 's/fn main() uses Database {}/fn main() uses Database(read) {}/' "${project}/main.zyl"
+readonly_attempt="$(printf "sql { INSERT INTO %s (tenant_id, name) VALUES (1, 'read-only-attempt') }\n" "${table}" | "${zelyra_bin}" console "${project}/main.zyl" --sandbox 2>&1)"
+if [[ "${readonly_attempt}" != *'`Database(write)` is not granted'* \
+  && "${readonly_attempt}" != *'function `__zelyra_repl_entry_'*' requires `Database`'* ]]; then
+  printf 'error: console write escaped a read-only project grant:\n%s\n' "${readonly_attempt}" >&2
+  exit 1
+fi
+count="$(MYSQL_PWD="${db_password}" mariadb --protocol=tcp --host="${db_host}" --port="${db_port}" --user="${db_user}" --database="${db_name}" --batch --skip-column-names -e "SELECT COUNT(*) FROM \`${table}\`")"
+if [[ "${count}" != "0" ]]; then
+  printf 'error: read-only console inserted a row\n' >&2
+  exit 1
+fi
+
+cat >"${project}/zelyra.toml" <<'EOF'
+[capabilities]
+database_read = true
+database_write = true
+EOF
+sed -i 's/fn main() uses Database(read) {}/fn main() uses Database {}/' "${project}/main.zyl"
+
 printf "sql { INSERT INTO ${table} (tenant_id, name) VALUES (:tenant_id, 'rolled-back') }\n" \
   | "${zelyra_bin}" console "${project}/main.zyl" --sandbox --tenant 7
 count="$(MYSQL_PWD="${db_password}" mariadb --protocol=tcp --host="${db_host}" --port="${db_port}" --user="${db_user}" --database="${db_name}" --batch --skip-column-names -e "SELECT COUNT(*) FROM \`${table}\`")"

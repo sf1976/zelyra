@@ -1,6 +1,6 @@
 use super::*;
 
-impl<'program> Interpreter<'program> {
+impl<'program, 'services> Interpreter<'program, 'services> {
     pub(crate) fn eval(
         &mut self,
         expr: &Expr,
@@ -221,7 +221,11 @@ impl<'program> Interpreter<'program> {
                     sql: query.clone(),
                     params,
                 };
-                let result = if let Some(transaction) = &self.database_transaction {
+                let result = if let Some(query_executor) = &mut self.transactional_query {
+                    query_executor(&database_query).map_err(|error| {
+                        self.runtime_error(expr.span, format!("database query failed: {error}"))
+                    })?
+                } else if let Some(transaction) = &self.database_transaction {
                     transaction
                         .lock()
                         .map_err(|_| {

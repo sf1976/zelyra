@@ -1086,6 +1086,44 @@ action set_active {
 }
 ~~~
 
+### Typed CRUD action bodies (1.2.28 work in progress)
+
+The unreleased 1.2.28 work adds an explicit typed execution body and a pure
+record guard to the existing action declaration:
+
+~~~zelyra
+action lock {
+    label: "Lock invoice"
+    permits "invoices.lock"
+    guard when row.is_locked == true {
+        error: "Invoice is already locked."
+    }
+    uses Database(write), Clock
+    execute {
+        invoice_id = row.id
+        locked_at = now()
+        digest = hash_sha256(row.invoice_number)
+        sql {
+            UPDATE invoices
+            SET is_locked = true, locked_at = :locked_at, integrity_hash = :digest
+            WHERE id = :invoice_id
+        }
+    }
+}
+~~~
+
+The compiler checks `row` against the CRUD table and exposes only trusted,
+optional `session.tenant_id` and `session.user_id` values. The server locks the
+selected row, rechecks tenant access, evaluates the guard, and executes body
+queries and configured audit writes in one transaction. A failure rolls back
+all writes. Declare the needed capabilities in the action and grant them in
+`zelyra.toml`; UI permissions, CSRF protection, and server-side authorization
+remain active. `hash_sha256` and `now()` use their regular Zelyra names. Do not
+infer PDF or mail-outbox transaction support from SQL action tests. This
+section describes unreleased 1.2.28 work; MariaDB HTTP behavior is covered by
+an integration test, while PostgreSQL action E2E and PDF/outbox effects remain
+unverified.
+
 `icon` adds an escaped `data-icon` hook to the generated action button.
 `success` is carried to the redirect and rendered as an escaped status notice
 on CRUD lists.

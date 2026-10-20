@@ -24,7 +24,7 @@ Im interaktiven Terminal bietet Reedline ANSI-Farben für Schlüsselwörter, Zei
 ## Befehle
 
 - `:help` zeigt die Befehle.
-- `:tables` und `:schema <tabelle>` zeigen deklarierte Tabellen und Spalten.
+- `:tables` listet deklarierte Tabellen auf. `:schema <tabelle>` zeigt Spalten, Typen, Schlüssel-/Pflichtangaben und deklarierte Invarianten mit Quellposition und Fehlermeldung.
 - `:tenant <id>` setzt `tenant_id` und `session.tenant_id`. Das typisierte Feld `session.tenant_id` hat den Typ `Option<Int>` (`None`, solange keine Mandanten-ID gesetzt ist); dies erzeugt keine zusätzliche Autorisierung oder automatische Filterung.
 - `:commit` bestätigt die laufende Sandbox-Transaktion und öffnet eine neue.
 - `:rollback` verwirft die laufende Sandbox-Transaktion und öffnet eine neue.
@@ -32,10 +32,10 @@ Im interaktiven Terminal bietet Reedline ANSI-Farben für Schlüsselwörter, Zei
 
 ## Datenbanksicherheit und Grenzen
 
-Standardmäßig hält die Sitzung für MariaDB/MySQL eine echte Transaktion auf einer einzelnen Verbindung. Jede Eingabe hat zusätzlich einen Savepoint: Schlägt eine Eingabe zur Laufzeit fehl, werden nur deren Datenbankänderungen zurückgenommen. Beim Beenden wird die noch offene Transaktion zurückgerollt. `:commit` ist eine ausdrückliche Ausnahme: Bereits bestätigte Änderungen bleiben bestehen; spätere Änderungen werden beim Beenden weiterhin zurückgerollt. `--persist` verwendet den normalen Datenbankpfad ohne Sandbox-Transaktion.
+Standardmäßig hält die Sitzung für MariaDB/MySQL eine echte Transaktion auf einer einzelnen Verbindung. Jede Eingabe hat zusätzlich einen Savepoint: Schlägt eine Eingabe zur Laufzeit fehl, werden nur deren Datenbankänderungen zurückgenommen. In der Sandbox sind nur `SELECT`, `INSERT`, `UPDATE` und `DELETE` erlaubt. DDL wie `CREATE`, `ALTER`, `DROP` sowie Transaktions- und Sitzungsbefehle werden abgewiesen, weil MariaDB/MySQL sie teilweise implizit festschreiben kann. Beim Beenden wird die noch offene Transaktion zurückgerollt. `:commit` ist eine ausdrückliche Ausnahme: Bereits bestätigte Änderungen bleiben bestehen; spätere Änderungen werden beim Beenden weiterhin zurückgerollt. `--persist` verwendet den normalen Datenbankpfad ohne Sandbox-Transaktion.
 
-Die Sandbox-Transaktion wird nur gestartet, wenn eine Projektverbindung aus Prozessumgebung oder `.env` konfiguriert ist. Ohne Verbindung sind datenbankfreie Ausdrücke nutzbar; Datenbankzugriff scheitert wie bei normaler Runtime-Ausführung. PostgreSQL-Sandbox-Transaktionen und `--backend bytecode` sind noch nicht verfügbar. `--tenant` stellt den Wert als `tenant_id` im Scope bereit, führt aber keine Datenbank-Row-Level-Security ein. Capabilities, Projekt-Runtime-Policy, Compilerprüfung und SQL-Parameterbindung bleiben wirksam.
+Die Sandbox-Transaktion wird nur gestartet, wenn eine Projektverbindung aus Prozessumgebung oder `.env` konfiguriert ist. Ohne Verbindung sind datenbankfreie Ausdrücke nutzbar; Datenbankzugriff scheitert wie bei normaler Runtime-Ausführung. SQL in der Konsole benötigt derzeit den aggregierten Capability-Grant `Database` (in `zelyra.toml`: `database = true` oder zusammen `database_read = true` und `database_write = true`). Ein reiner Lese-Grant erlaubt aktuell keine Datenbankabfragen aus der REPL; die Projektgrants werden nicht erweitert. PostgreSQL-Sandbox-Transaktionen und `--backend bytecode` sind noch nicht verfügbar. `--tenant` stellt den Wert als `tenant_id` im Scope bereit, führt aber keine Datenbank-Row-Level-Security ein. Capabilities, Projekt-Runtime-Policy, Compilerprüfung und SQL-Parameterbindung bleiben wirksam.
 
 ## Verhalten bei mehrzeiliger Eingabe
 
-Die Fortsetzung wird anhand nicht abgeschlossener Zeichenketten und geschweifter Blöcke erkannt. Nicht abgeschlossene Eingabe am Ende einer Pipe wird als Parsefehler gemeldet. `Ctrl+C` verwirft nur den aktuellen Eingabepuffer; `Ctrl+D` beziehungsweise `:quit` beendet die Sitzung.
+Die Fortsetzung wird anhand nicht abgeschlossener Zeichenketten sowie geschweifter, eckiger und runder Klammern erkannt. Zeichen in Zeichenketten und einzeiligen Kommentaren zählen nicht als Klammern. Nicht abgeschlossene Eingabe am Ende einer Pipe wird als Parsefehler gemeldet. `Ctrl+C` verwirft nur den aktuellen Eingabepuffer; `Ctrl+D` beziehungsweise `:quit` beendet die Sitzung.

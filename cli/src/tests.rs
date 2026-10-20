@@ -1,6 +1,129 @@
 use super::*;
 
 #[test]
+fn database_web_gate_accepts_any_explicit_database_operation_grant() {
+    assert!(database_runtime_capability_granted(None));
+    assert!(!database_runtime_capability_granted(Some(&HashSet::new())));
+    assert!(database_runtime_capability_granted(Some(&HashSet::from([
+        "Database(read)".to_owned(),
+    ]))));
+    assert!(database_runtime_capability_granted(Some(&HashSet::from([
+        "Database(write)".to_owned(),
+    ]))));
+}
+
+#[test]
+fn typed_crud_action_bodies_are_checked_in_row_and_session_scope() {
+    let directory = env::temp_dir().join(format!(
+        "zelyra-typed-crud-action-{}-{}",
+        std::process::id(),
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos()
+    ));
+    fs::create_dir_all(&directory).unwrap();
+    let entry = directory.join("main.zyl");
+    fs::write(&entry, "fn main() {}\n").unwrap();
+    fs::write(
+        directory.join("zelyra.toml"),
+        "[capabilities]\ndatabase_write = true\n",
+    )
+    .unwrap();
+    let entry = entry.to_string_lossy().into_owned();
+    let source = r#"
+        table invoices { id: Id primary auto is_locked: Bool required }
+        crud Invoice -> invoices {
+            action lock {
+                uses Database(write)
+                guard when row.is_locked == false { error: "Already locked." }
+                execute {
+                    previous_lock_state = row.is_locked
+                    active_tenant = session.tenant_id
+                    sql { UPDATE invoices SET is_locked = true WHERE id = :row.id }
+                }
+            }
+        }
+        fn main() {}
+    "#;
+    let program = zelyra_parser::parse(&zelyra_lexer::lex(source).unwrap()).unwrap();
+    assert!(validate_typed_crud_actions(&entry, &program));
+
+    let invalid = r#"
+        table invoices { id: Id primary auto is_locked: Bool required }
+        crud Invoice -> invoices {
+            action lock {
+                guard when row.missing_field == false { error: "Already locked." }
+                execute { previous_lock_state = row.is_locked }
+            }
+        }
+        fn main() {}
+    "#;
+    let program = zelyra_parser::parse(&zelyra_lexer::lex(invalid).unwrap()).unwrap();
+    assert!(!validate_typed_crud_actions(&entry, &program));
+
+    let standalone = zelyra_parser::parse(
+        &zelyra_lexer::lex("form Example { action run { execute { value = 1 } } } fn main() {}")
+            .unwrap(),
+    )
+    .unwrap();
+    assert!(!validate_typed_crud_actions(&entry, &standalone));
+    fs::remove_dir_all(directory).unwrap();
+}
+
+#[test]
+fn typed_crud_action_database_capability_requires_project_grant() {
+    let directory = env::temp_dir().join(format!(
+        "zelyra-typed-crud-action-capability-{}-{}",
+        std::process::id(),
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos()
+    ));
+    fs::create_dir_all(&directory).unwrap();
+    let entry = directory.join("main.zyl");
+    fs::write(&entry, "fn main() {}\n").unwrap();
+    fs::write(
+        directory.join("zelyra.toml"),
+        "[capabilities]\ndatabase_write = false\n",
+    )
+    .unwrap();
+    let entry = entry.to_string_lossy().into_owned();
+    let source = r#"
+        table invoices { id: Id primary auto }
+        crud Invoice -> invoices {
+            action mark {
+                uses Database(write)
+                execute { sql { UPDATE invoices SET id = :row.id } }
+            }
+        }
+        fn main() {}
+    "#;
+    let program = zelyra_parser::parse(&zelyra_lexer::lex(source).unwrap()).unwrap();
+    assert!(!validate_typed_crud_actions(&entry, &program));
+
+    fs::write(
+        directory.join("zelyra.toml"),
+        "[capabilities]\ndatabase_read = true\ndatabase_write = false\n",
+    )
+    .unwrap();
+    let read_only = r#"
+        table invoices { id: Id primary auto }
+        crud Invoice -> invoices {
+            action mark {
+                uses Database(read)
+                execute { sql { UPDATE invoices SET id = :row.id } }
+            }
+        }
+        fn main() {}
+    "#;
+    let program = zelyra_parser::parse(&zelyra_lexer::lex(read_only).unwrap()).unwrap();
+    assert!(!validate_typed_crud_actions(&entry, &program));
+    fs::remove_dir_all(directory).unwrap();
+}
+
+#[test]
 fn compiler_scope_gate_rejects_sql_touching_declared_tenant_tables() {
     let source = r#"
         type TenantId = Id

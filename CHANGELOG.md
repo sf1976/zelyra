@@ -1,5 +1,26 @@
 ## Unreleased
 
+- Harden the MariaDB/MySQL `zelyra console --sandbox` transaction boundary:
+  reject DDL, transaction-control, and session-control SQL that could bypass
+  rollback through implicit commits. Keep the sandbox limited to `SELECT`,
+  `INSERT`, `UPDATE`, and `DELETE`. / Die MariaDB-/MySQL-Transaktionsgrenze
+  von `zelyra console --sandbox` absichern: DDL sowie Transaktions- und
+  Sitzungsbefehle abweisen, die den Rollback durch implizite Commits umgehen
+  könnten. Die Sandbox auf `SELECT`, `INSERT`, `UPDATE` und `DELETE`
+  beschränken.
+- Show declared table invariant messages and source positions in the console's
+  `:schema` command. / `:schema` zeigt deklarierte Tabelleninvarianten mit
+  Fehlermeldung und Quellposition an.
+- Declare the REPL's aggregate database effect when project database access is
+  granted, while keeping runtime read/write grant checks in force. A read-only
+  grant still cannot use SQL in this console because the current runtime
+  requires the aggregate `Database` effect. / Den
+  aggregierten Datenbankeffekt der REPL deklarieren, wenn das Projekt
+  Datenbankzugriff freigibt; die Laufzeitprüfung der Lese-/Schreibrechte bleibt
+  aktiv. Ein reiner Lese-Grant kann wegen der derzeit erforderlichen
+  aggregierten `Database`-Wirkung noch keine SQL-Abfragen in der Konsole
+  ausführen.
+
 ## 1.2.27 — 2026-10-20
 
 - Add a read-only-first Laravel website importer with source graph analysis,

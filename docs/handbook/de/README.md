@@ -1181,6 +1181,47 @@ action set_active {
 }
 ~~~
 
+### Typisierte CRUD-Aktionsblöcke (Arbeit an 1.2.28)
+
+Die noch nicht veröffentlichte Arbeit an 1.2.28 ergänzt die bestehende
+Action-Deklaration um einen expliziten typisierten Ausführungsblock und einen
+reinen Datensatz-Guard:
+
+~~~zelyra
+action lock {
+    label: "Rechnung festschreiben"
+    permits "invoices.lock"
+    guard when row.is_locked == true {
+        error: "Die Rechnung ist bereits festgeschrieben."
+    }
+    uses Database(write), Clock
+    execute {
+        invoice_id = row.id
+        locked_at = now()
+        digest = hash_sha256(row.invoice_number)
+        sql {
+            UPDATE invoices
+            SET is_locked = true, locked_at = :locked_at, integrity_hash = :digest
+            WHERE id = :invoice_id
+        }
+    }
+}
+~~~
+
+Der Compiler prüft `row` anhand der CRUD-Tabelle. `session.tenant_id` und
+`session.user_id` sind ausschließlich vertrauenswürdige optionale Werte aus
+der Sitzung. Der Server sperrt den Zieldatensatz, prüft den Mandantenzugriff
+erneut, wertet den Guard aus und führt Body-Queries sowie konfigurierte
+Audit-Schreibvorgänge in einer Transaktion aus. Ein Fehler rollt alle
+Schreibvorgänge zurück. Benötigte Capabilities müssen an der Action deklariert
+und in `zelyra.toml` freigegeben werden; Berechtigungen, CSRF-Schutz und
+serverseitige Autorisierung bleiben aktiv. `hash_sha256` und `now()` behalten
+ihre normalen Zelyra-Schreibweisen. Aus SQL-Action-Tests folgt keine
+Transaktionsunterstützung für PDF oder Mail-Outbox. Dieser Abschnitt beschreibt
+unveröffentlichte Arbeit an 1.2.28: Das MariaDB-HTTP-Verhalten ist integriert
+getestet, während PostgreSQL-Action-E2E und PDF-/Outbox-Effekte noch nicht
+verifiziert sind.
+
 `icon` ergänzt einen escaped `data-icon`-Hook am erzeugten Aktionsbutton.
 `success` wird an den Redirect übergeben und auf CRUD-Listen als escaped
 Statusmeldung dargestellt.

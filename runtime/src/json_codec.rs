@@ -1,6 +1,6 @@
 use super::*;
 
-impl<'program> Interpreter<'program> {
+impl<'program, 'services> Interpreter<'program, 'services> {
     pub(crate) fn json_encode(&self, value: &Value, span: Span) -> Result<String, RuntimeError> {
         serde_json::to_string(&self.json_value(value, span)?).map_err(|error| {
             self.runtime_error(

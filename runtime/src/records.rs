@@ -2,7 +2,7 @@
 use super::*;
 use std::sync::atomic::Ordering;
 
-impl Interpreter<'_> {
+impl Interpreter<'_, '_> {
     pub(crate) fn eval_record_value(
         &mut self,
         type_name: &str,

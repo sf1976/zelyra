@@ -46,7 +46,7 @@ enum Flow {
     Break,
 }
 
-pub(super) struct AstInterpreter<'program> {
+pub(super) struct AstInterpreter<'program, 'services> {
     pub(super) functions: HashMap<String, &'program Function>,
     pub(super) view_definitions: HashMap<String, ViewDef>,
     pub(super) output: Vec<String>,
@@ -58,6 +58,9 @@ pub(super) struct AstInterpreter<'program> {
     pub(super) database_url: Option<String>,
     pub(super) database_transaction:
         Option<Arc<Mutex<zelyra_database::MariaDbInteractiveTransaction>>>,
+    /// A request-owned transaction query bridge. Its borrow is scoped to one
+    /// synchronous execution and is never cloned into parallel workers.
+    pub(super) transactional_query: Option<&'services mut TransactionalQuery<'services>>,
     pub(super) storage_schema: Result<zelyra_database::Schema, Vec<zelyra_database::SchemaError>>,
     pub(super) storage_checked: bool,
     pub(super) scoped_tables: Vec<String>,
@@ -76,7 +79,11 @@ pub(super) struct AstInterpreter<'program> {
     pub(super) active_type_substitutions: Vec<HashMap<String, Type>>,
 }
 
-impl<'program> AstInterpreter<'program> {
+pub(super) type TransactionalQuery<'services> = dyn FnMut(&zelyra_database::Query) -> Result<zelyra_database::QueryResult, String>
+    + Send
+    + 'services;
+
+impl<'program, 'services> AstInterpreter<'program, 'services> {
     pub(super) fn runtime_alias_type(&self, ty: &Type, span: Span) -> Result<Type, RuntimeError> {
         let mut aliases = HashMap::from([
             ("Id".into(), Type::Int),

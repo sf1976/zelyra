@@ -1,6 +1,6 @@
 use super::*;
 
-impl AstInterpreter<'_> {
+impl AstInterpreter<'_, '_> {
     /// Evaluate built-ins that directly consult injected host services.
     /// Returns `None` when the name belongs to another built-in family.
     pub(super) fn eval_host_builtin(

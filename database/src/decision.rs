@@ -1,7 +1,7 @@
 //! A scoped decision-making transaction with backend-neutral query results.
 use super::*;
 
-trait Executor {
+trait Executor: Send {
     fn allows_generated_audit_init(&self) -> bool {
         false
     }

@@ -1,6 +1,6 @@
 use super::*;
 
-impl<'program> Interpreter<'program> {
+impl<'program, 'services> Interpreter<'program, 'services> {
     pub(super) fn eval_filesystem_io_builtin(
         &mut self,
         name: &str,

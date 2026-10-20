@@ -1110,7 +1110,7 @@ crud Invoice -> invoices {
 
 - **Atomare Datenbanktransaktion:** Alle SQL-Anweisungen innerhalb von `sql { ... }` laufen gebündelt in einer einzigen MariaDB-Transaktion (`with_decision_transaction`). Schlägt eine Anweisung fehl (z. B. durch einen Constraint-Fehler), wird die gesamte Transaktion atomar zurückgerollt.
 - **Parameterbindung:** Parameter wie `:id` werden automatisch aus dem URL-Pfad der CRUD-Ressource gebunden. Über `field <name>: <Typ>` deklarierte Zusatzfelder werden im Bestätigungsdialog als typisierte Eingabefelder gerendert, vorab geprüft und als Parameter `:name` an die SQL-Statements übergeben.
-- **Aktueller Ausführungsumfang:** Der Inhalt einer CRUD-Action ist in Version 1.2.24 strikt auf SQL-Statements begrenzt (`form actions may contain only SQL statements`). Beliebige Zelyra-Funktionsaufrufe (wie `hash_sha256`), Ausdrücke oder Datensatz-/Sitzungsobjekte (`row`, `session`) können innerhalb von Actions noch nicht direkt ausgeführt werden.
+- **Aktueller Quellstand (unveröffentlichte Arbeit an 1.2.28):** Actions können `guard when ... { error: ... }` und einen typisierten `execute { ... }`-Body verwenden. Der Compiler prüft `row` anhand der Ressourcentabelle; `session` enthält optionale authentifizierte Mandanten-/Benutzeridentitäten. Die Web-Runtime führt unterstützte Queries innerhalb der gesperrten Request-Transaktion aus und erhält Capability-, Berechtigungs-, CSRF-, Mandanten- und Auditprüfungen. MariaDB-HTTP-Atomarität ist getestet; PostgreSQL-Action-E2E und PDF-/Mail-Outbox-Effekte sind noch nicht verifiziert. Veröffentlichte 1.2.27-Binaries unterstützen weiterhin nur SQL-Actions.
 
 Die Laufzeit erzwingt für solche Aktionen Datenbank-Capability,
 CSRF-Schutz, Authentifizierung und die deklarierte Berechtigung. Aktionen
@@ -3242,8 +3242,8 @@ Reale Geschäftsanwendungen erfordern neben Lifecycle-Sperren weitere Bausteine,
    Funktionen, die die aktuelle Zeit ermitteln, müssen die Capability `Clock` deklarieren (`fn festschreiben(...) uses Clock`). Dadurch bleibt Zeitverhalten in Unittests deterministisch überprüfbar und reproduzierbar.
 3. **Beleg-PDFs und Outbox-Mail (`render_pdf` und `mail_queue`):**
    Über `render_pdf("RechnungsDruck", invoice)` wird eine View serverseitig in PDF-Bytes umgewandelt. Innerhalb einer MariaDB-`transaction` reiht `mail_queue(to, subject, text, filename, pdf_bytes)` den Beleg atomar in die Outbox ein.
-4. **Grenzen in CRUD-Actions:**
-   Während diese Funktionen in Funktionskörpern und Transaktionsblöcken voll verfügbar sind, führen CRUD-Actions (`action`) in Version 1.2.24 ausschließlich SQL-Statements aus. Die Ausführung von typisierten Ausdrücken, Funktionsaufrufen und Datensatzkontexten (`row`, `session`) direkt in CRUD-Actions ist Gegenstand der kommenden Sprachversionen.
+4. **Typisierte CRUD-Actions (unveröffentlichte Arbeit an 1.2.28):**
+   `execute { ... }` akzeptiert compilergeprüfte Ausdrücke und SQL. Ein Guard wird vor Schreibvorgängen gegen den gespeicherten und gesperrten Datensatz ausgewertet. Der Web-Handler verwendet dieselbe Decision-Transaktion für typisiertes SQL und konfigurierte Audit-Einträge. Das aktuelle MariaDB-E2E prüft `hash_sha256`, `now()`, Guard, Datensatzänderung, Audit-Eintrag und Rollback nach einem späteren Runtime-Fehler. Das ist kein Nachweis für PDF-Erzeugung, Mailversand oder PostgreSQL; dafür sind eigene Integrationstests erforderlich.
 
 ### Transaktionale Master-Detail-CRUD-Formulare (`has_many`)
 

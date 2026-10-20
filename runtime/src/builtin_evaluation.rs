@@ -1,6 +1,6 @@
 use super::*;
 
-impl<'program> Interpreter<'program> {
+impl<'program, 'services> Interpreter<'program, 'services> {
     pub(crate) fn eval_builtin_call(
         &mut self,
         name: &str,

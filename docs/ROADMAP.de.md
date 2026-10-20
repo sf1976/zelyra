@@ -336,11 +336,13 @@ abgeschlossen.
   den Paketverbrauch mit einer minimalen Laravel-Fixture. Ungelöste Abläufe und
   genaue Quellpositionen
   in einem versionierten Bericht erhalten. Abnahmeprojekt ist
-  `/opt/siedelmann-laravel/app`; weitere Abdeckung folgt in 1.2.30. Siehe den
+  `/opt/siedelmann-laravel/app`; weitere Abdeckung folgt in 1.2.30. Als
+  [`v1.2.27`](https://github.com/sf1976/zelyra/releases/tag/v1.2.27)
+  veröffentlicht; PR- und Releaseprüfungen bestanden. Siehe den
   [Arbeitsplan 1.2.27](release-plans/1.2.27-laravel-website-importer.de.md).
   Die Grundlage ist implementiert und zusammengeführt; alle PR-Prüfungen
   bestanden.
-- [ ] **1.2.28 — typisierte CRUD-Domain-Actions:** Einen typgeprüften
+- [~] **1.2.28 — typisierte CRUD-Domain-Actions:** Einen typgeprüften
   Ausführungskontext mit expliziten Datensatz-, Benutzer- und verifizierten
   Mandantenwerten ergänzen. Den Sprach-Typ- und Effektprüfer wiederverwenden,
   explizite Berechtigungen verlangen, transaktionssicheres SQL und erlaubte
@@ -349,7 +351,35 @@ abgeschlossen.
   Transaktion. Vorhandene Schreibweisen und Effekte verwenden:
   `hash_sha256`, `now()`, PDF-Rendering und Outbox-Mail mit deren bestehenden
   Einschränkungen. Kein impliziter Namespace `crypto::` und keine ungeprüfte
-  SQL-Interpolation. Siehe den
+  SQL-Interpolation. Grundlage: Die AST-Runtime kann SQL über einen geliehenen
+  Request-Transaktions-Callback ausführen; ein `transaction`-Block in einer
+  Action ist eine logische Gruppe in dieser äußeren Transaktion und kann weder
+  selbst bestätigen noch eine zweite Verbindung öffnen. Parallelblöcke werden
+  weiterhin abgewiesen. Der Parser speichert getrennte Execute-/
+  Guard-Knoten; die CLI erstellt nun typisierte `row`-/`session`-Scopes,
+  prüft Unit-/Bool-Ergebnisse und erzwingt explizite Capabilities sowie
+  Projektfreigaben. Die Web-Ausführung lädt den Datensatz nun mit `FOR UPDATE`,
+  prüft Mandantenzugriff und -mitgliedschaft innerhalb derselben Transaktion
+  erneut, wertet den reinen Guard aus und führt typisiertes SQL sowie den
+  automatischen Audit-Eintrag über die geliehene Transaktionsbrücke aus. Ein
+  MariaDB-HTTP-E2E belegt Status-/Hash-/Zeitstempeländerung, einen Audit-Eintrag,
+  Ablehnung einer Wiederholung, Rollback nach einem späteren Runtime-Fehler
+  sowie eine unversandte Outbox-Nachricht mit echtem lokal gerendertem
+  PDF-Anhang. Nur ein ausdrücklich gestarteter Worker darf diese Nachricht
+  versenden. Granulare `Database(read/write)`-Freigaben öffnen außerdem korrekt
+  die Datenbank-Sperre der Web-Runtime. Das Tenant-HTTP-E2E prüft zusätzlich,
+  dass `session.tenant_id` und `session.user_id` aus dem authentifizierten,
+  ausgewählten Mandantenkontext stammen, ein Datensatz des falschen Mandanten
+  mit 404 abgewiesen wird und ein direkter Action-POST ohne Action-Berechtigung
+  403 liefert; ungültiges CSRF wird ohne Schreibvorgang abgewiesen und nur
+  der berechtigte Nutzer sieht den Aktionsbutton. Ein PostgreSQL-HTTP-E2E mit
+  separater Testdatenbank bestätigt
+  nun Status-/Hash-/Zeitstempel- und Audit-Änderungen sowie Rollback nach einem
+  Runtime-Fehler. Beide Datenbank-E2Es senden außerdem zwei gleichzeitige
+  Festschreibungsanfragen und bestätigen genau einen Erfolg, einen Guard-
+  Konflikt und einen Audit-Eintrag. Die breitere Berechtigungs-/Sicherheits-
+  matrix bleibt offen.
+  Siehe den
   [Arbeitsplan 1.2.28](release-plans/1.2.28-typed-crud-actions.de.md).
 - [ ] **1.2.29 — begrenzte sichere Datei-Uploads (Design-Gate):** Vor einem
   `File`-Formularfeld Multipart-Größenlimits, Metadatentypen, Inhaltsprüfung,

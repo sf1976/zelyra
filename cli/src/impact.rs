@@ -571,7 +571,18 @@ fn semantic_references(
 
     for form in &program.forms {
         for action in &form.actions {
-            for call in called_functions(&action.statements, &function_names) {
+            let calls = called_functions(&action.statements, &function_names)
+                .into_iter()
+                .chain(
+                    action
+                        .execute_body
+                        .iter()
+                        .flat_map(|body| called_functions(&body.statements, &function_names)),
+                )
+                .chain(action.guard.iter().flat_map(|guard| {
+                    called_functions_in_expression(&guard.condition, &function_names)
+                }));
+            for call in calls {
                 add_reference(
                     &mut references,
                     format!("form:{}", form.name),
@@ -584,7 +595,18 @@ fn semantic_references(
     }
     for crud in &program.cruds {
         for action in &crud.actions {
-            for call in called_functions(&action.statements, &function_names) {
+            let calls = called_functions(&action.statements, &function_names)
+                .into_iter()
+                .chain(
+                    action
+                        .execute_body
+                        .iter()
+                        .flat_map(|body| called_functions(&body.statements, &function_names)),
+                )
+                .chain(action.guard.iter().flat_map(|guard| {
+                    called_functions_in_expression(&guard.condition, &function_names)
+                }));
+            for call in calls {
                 add_reference(
                     &mut references,
                     format!("crud:{}", crud.name),
@@ -688,6 +710,26 @@ fn semantic_references(
                 &record_names,
                 sources,
             );
+            if let Some(body) = &action.execute_body {
+                add_statement_type_references(
+                    &mut references,
+                    &owner,
+                    &body.statements,
+                    &type_names,
+                    &record_names,
+                    sources,
+                );
+            }
+            if let Some(guard) = &action.guard {
+                add_expression_type_references(
+                    &mut references,
+                    &owner,
+                    &guard.condition,
+                    &type_names,
+                    &record_names,
+                    sources,
+                );
+            }
         }
     }
     for crud in &program.cruds {
@@ -714,6 +756,26 @@ fn semantic_references(
                 &record_names,
                 sources,
             );
+            if let Some(body) = &action.execute_body {
+                add_statement_type_references(
+                    &mut references,
+                    &owner,
+                    &body.statements,
+                    &type_names,
+                    &record_names,
+                    sources,
+                );
+            }
+            if let Some(guard) = &action.guard {
+                add_expression_type_references(
+                    &mut references,
+                    &owner,
+                    &guard.condition,
+                    &type_names,
+                    &record_names,
+                    sources,
+                );
+            }
         }
     }
     for function in &program.functions {
@@ -1712,26 +1774,68 @@ fn sql_entries(
     }
     for form in &program.forms {
         for action in &form.actions {
+            let owner = format!("form:{} action:{}", form.name, action.name);
             collect_statement_sql(
                 &action.statements,
-                &format!("form:{} action:{}", form.name, action.name),
+                &owner,
                 "form_action",
                 table_names,
                 sources,
                 &mut entries,
             );
+            if let Some(body) = &action.execute_body {
+                collect_statement_sql(
+                    &body.statements,
+                    &owner,
+                    "form_action",
+                    table_names,
+                    sources,
+                    &mut entries,
+                );
+            }
+            if let Some(guard) = &action.guard {
+                collect_expr_sql(
+                    &guard.condition,
+                    &owner,
+                    "form_action_guard",
+                    table_names,
+                    sources,
+                    &mut entries,
+                );
+            }
         }
     }
     for crud in &program.cruds {
         for action in &crud.actions {
+            let owner = format!("crud:{} action:{}", crud.name, action.name);
             collect_statement_sql(
                 &action.statements,
-                &format!("crud:{} action:{}", crud.name, action.name),
+                &owner,
                 "crud_action",
                 table_names,
                 sources,
                 &mut entries,
             );
+            if let Some(body) = &action.execute_body {
+                collect_statement_sql(
+                    &body.statements,
+                    &owner,
+                    "crud_action",
+                    table_names,
+                    sources,
+                    &mut entries,
+                );
+            }
+            if let Some(guard) = &action.guard {
+                collect_expr_sql(
+                    &guard.condition,
+                    &owner,
+                    "crud_action_guard",
+                    table_names,
+                    sources,
+                    &mut entries,
+                );
+            }
         }
     }
     for tableview in &program.tableviews {

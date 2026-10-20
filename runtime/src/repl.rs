@@ -248,11 +248,7 @@ impl ReplSession {
             return_type: None,
             // The wrapper may invoke any capability explicitly granted to the
             // project. Runtime policy and grant checks remain authoritative.
-            capabilities: self
-                .grants
-                .as_ref()
-                .map(|grants| grants.iter().cloned().collect())
-                .unwrap_or_default(),
+            capabilities: repl_capabilities(self.grants.as_ref()),
             requires: Vec::new(),
             ensures: Vec::new(),
             body: Block {
@@ -451,10 +447,10 @@ impl ReplSession {
                         }
                     ));
                 }
-                if !table.validations.is_empty() {
+                for invariant in &table.validations {
                     lines.push(format!(
-                        "  invariants: {} declared",
-                        table.validations.len()
+                        "  invariant at {}:{}: {}",
+                        invariant.span.line, invariant.span.column, invariant.message
                     ));
                 }
                 lines.join("\n")
@@ -521,6 +517,26 @@ impl ReplSession {
             },
         );
     }
+}
+
+fn repl_capabilities(grants: Option<&HashSet<String>>) -> Vec<String> {
+    let mut capabilities = grants
+        .map(|grants| grants.iter().cloned().collect::<Vec<_>>())
+        .unwrap_or_default();
+    // SQL evaluation first checks that the current function declares the
+    // aggregate Database effect. Runtime policy still checks read/write
+    // permissions per statement against the project's exact grants.
+    if grants.is_none_or(|grants| {
+        grants.contains("Database")
+            || grants.contains("Database(read)")
+            || grants.contains("Database(write)")
+    }) && !capabilities
+        .iter()
+        .any(|capability| capability == "Database")
+    {
+        capabilities.push("Database".into());
+    }
+    capabilities
 }
 
 fn unique_session_type_name(program: &Program) -> String {
@@ -720,6 +736,38 @@ mod tests {
         assert!(candidates.contains(&"name".to_owned()));
         assert!(candidates.contains(&"hash_sha256".to_owned()));
         assert!(candidates.contains(&"now".to_owned()));
+    }
+
+    #[test]
+    fn schema_description_includes_declared_invariant_messages() {
+        let program = parse(
+            &lex(
+                "table Invoice { id: Id primary amount: Decimal required validate { amount >= 0: \"Amount must not be negative.\" } }\nfn main() {}\n",
+            )
+            .expect("lex project"),
+        )
+        .expect("parse project");
+        let session = ReplSession::new(program, None, None, None, true).expect("start REPL");
+        let schema = session
+            .schema_description("Invoice")
+            .expect("invoice schema");
+        assert!(schema.contains("amount: Decimal (required)"));
+        assert!(
+            schema.contains("invariant at 1:") && schema.contains("Amount must not be negative.")
+        );
+    }
+
+    #[test]
+    fn repl_declares_database_effect_only_when_project_database_access_is_available() {
+        let read_only = HashSet::from(["Database(read)".to_owned()]);
+        let read_capabilities = repl_capabilities(Some(&read_only));
+        assert!(read_capabilities.contains(&"Database".to_owned()));
+        assert!(read_capabilities.contains(&"Database(read)".to_owned()));
+
+        let unrelated = HashSet::from(["Console".to_owned()]);
+        let other_capabilities = repl_capabilities(Some(&unrelated));
+        assert!(!other_capabilities.contains(&"Database".to_owned()));
+        assert_eq!(repl_capabilities(None), ["Database"]);
     }
 
     #[test]

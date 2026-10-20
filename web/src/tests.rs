@@ -3,6 +3,19 @@ use std::net::TcpListener;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
 #[test]
+fn database_timestamps_convert_to_zelyra_utc_milliseconds() {
+    assert_eq!(
+        timestamp_value("2026-10-20 04:25:38.161000"),
+        zelyra_ast::temporal::parse_timestamp_input("2026-10-20T04:25:38.161Z")
+    );
+    assert_eq!(
+        timestamp_value("2026-10-20 04:25:38"),
+        zelyra_ast::temporal::parse_timestamp_input("2026-10-20T04:25:38Z")
+    );
+    assert_eq!(timestamp_value("not-a-timestamp"), None);
+}
+
+#[test]
 fn table_validation_predicate_runs_before_form_writes_and_returns_declared_message() {
     let source = r#"
         table invoices {
@@ -616,6 +629,7 @@ fn table_validation_rejects_invalid_form_before_action_execution() {
         fields: Vec::new(),
         requires_auth: false,
         permissions: Vec::new(),
+        capabilities: Vec::new(),
         statements: vec![zelyra_ast::Stmt::Expr(zelyra_ast::Expr {
             kind: zelyra_ast::ExprKind::Sql {
                 result_type: Type::Unit,
@@ -623,6 +637,8 @@ fn table_validation_rejects_invalid_form_before_action_execution() {
             },
             span: zelyra_ast::Span::default(),
         })],
+        execute_body: None,
+        guard: None,
         success: None,
         redirect: None,
         span: zelyra_ast::Span::default(),
@@ -642,6 +658,9 @@ fn table_validation_rejects_invalid_form_before_action_execution() {
             validation_program: Some(&lowered),
             table_validation_functions: &mappings,
             crud_policy_functions: &[],
+            crud_action_functions: &[],
+            capability_grants: None,
+            runtime_policy: None,
             granted_permissions: Vec::new(),
         },
     );
@@ -663,6 +682,9 @@ fn table_validation_rejects_invalid_form_before_action_execution() {
             validation_program: Some(&lowered),
             table_validation_functions: &mappings,
             crud_policy_functions: &[],
+            crud_action_functions: &[],
+            capability_grants: None,
+            runtime_policy: None,
             granted_permissions: Vec::new(),
         },
     );
@@ -4951,7 +4973,10 @@ fn renders_action_error_without_database_details() {
         fields: Vec::new(),
         requires_auth: false,
         permissions: Vec::new(),
+        capabilities: Vec::new(),
         statements: Vec::new(),
+        execute_body: None,
+        guard: None,
         success: None,
         redirect: None,
         span: zelyra_ast::Span::default(),
@@ -5148,7 +5173,10 @@ fn protects_custom_form_actions_with_action_permissions() {
         fields: Vec::new(),
         requires_auth: true,
         permissions: vec!["customers.save".into()],
+        capabilities: Vec::new(),
         statements: Vec::new(),
+        execute_body: None,
+        guard: None,
         success: None,
         redirect: None,
         span: zelyra_ast::Span::default(),
@@ -5175,7 +5203,10 @@ fn protects_custom_form_actions_with_action_permissions() {
         fields: Vec::new(),
         requires_auth: true,
         permissions: vec!["customers.save".into()],
+        capabilities: Vec::new(),
         statements: Vec::new(),
+        execute_body: None,
+        guard: None,
         success: None,
         redirect: None,
         span: zelyra_ast::Span::default(),
@@ -5201,6 +5232,7 @@ fn form_action_requires_database_url() {
         fields: Vec::new(),
         requires_auth: false,
         permissions: Vec::new(),
+        capabilities: Vec::new(),
         statements: vec![zelyra_ast::Stmt::Expr(zelyra_ast::Expr {
             kind: zelyra_ast::ExprKind::Sql {
                 result_type: Type::Unit,
@@ -5208,6 +5240,8 @@ fn form_action_requires_database_url() {
             },
             span: zelyra_ast::Span::default(),
         })],
+        execute_body: None,
+        guard: None,
         success: Some("Saved".into()),
         redirect: Some("/customers".into()),
         span: zelyra_ast::Span::default(),
@@ -5494,9 +5528,12 @@ fn execute_form_action_rejects_postgres_chained_audit() {
             },
             span: zelyra_ast::Span::default(),
         })],
+        execute_body: None,
+        guard: None,
         fields: Vec::new(),
         requires_auth: false,
         permissions: Vec::new(),
+        capabilities: Vec::new(),
         success: None,
         redirect: None,
         span: zelyra_ast::Span::default(),
@@ -5510,6 +5547,9 @@ fn execute_form_action_rejects_postgres_chained_audit() {
         validation_program: None,
         table_validation_functions: &[],
         crud_policy_functions: &[],
+        crud_action_functions: &[],
+        capability_grants: None,
+        runtime_policy: None,
         granted_permissions: &[],
     };
     let err = execute_form_action(

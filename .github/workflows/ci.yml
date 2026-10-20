@@ -383,6 +383,11 @@ jobs:
           DATABASE_URL: postgres://zelyra_ci:zelyra_ci@127.0.0.1:5432/zelyra_ci
           ZELYRA_BIN: target/debug/zelyra
         run: bash ./tests/postgres-schema-safety-e2e.sh
+      - name: Verify typed CRUD actions and transactional rollback on PostgreSQL
+        env:
+          DATABASE_URL: postgres://zelyra_ci:zelyra_ci@127.0.0.1:5432/zelyra_ci
+          ZELYRA_BIN: target/debug/zelyra
+        run: bash ./tests/postgres-typed-crud-actions-e2e.sh
       - name: Verify exact decimal forms, filters, APIs, and legacy schemas on MariaDB
         env:
           DATABASE_URL: mariadb://root:root@127.0.0.1:3306/zelyra_ci
@@ -485,6 +490,15 @@ jobs:
           DATABASE_URL: mariadb://root:root@127.0.0.1:3306/zelyra_crud_policy_test_ci
           ZELYRA_BIN: target/debug/zelyra
         run: ./tests/mariadb-crud-lifecycle-policies-e2e.sh
+      - name: Create isolated typed CRUD action test database
+        env:
+          MYSQL_PWD: root
+        run: mariadb --protocol=tcp --host=127.0.0.1 --port=3306 --user=root --batch --skip-column-names -e "CREATE DATABASE IF NOT EXISTS typed_crud_actions_test"
+      - name: Verify typed CRUD actions and transactional rollback
+        env:
+          DATABASE_URL: mariadb://root:root@127.0.0.1:3306/typed_crud_actions_test
+          ZELYRA_BIN: target/debug/zelyra
+        run: bash ./tests/mariadb-typed-crud-actions-e2e.sh
       - name: Run tenant-scoped relational constraint integration test
         env:
           DATABASE_URL: mariadb://root:root@127.0.0.1:3306/zelyra_ci

@@ -307,10 +307,11 @@ security and compatibility gates stated for that milestone.
   minimal Laravel fixture.
   Keep unresolved behavior and exact source locations visible in a versioned
   report. The `/opt/siedelmann-laravel/app` project is the acceptance fixture;
-  broader route/workflow coverage continues in 1.2.30. The foundation is
-  implemented and merged; its PR workflow passed all checks. See the
+  broader route/workflow coverage continues in 1.2.30. Released as
+  [`v1.2.27`](https://github.com/sf1976/zelyra/releases/tag/v1.2.27); its PR
+  and release workflows passed all checks. See the
   [1.2.27 importer plan](release-plans/1.2.27-laravel-website-importer.en.md).
-- [ ] **1.2.28 — typed CRUD domain actions:** Add a checked execution context
+- [~] **1.2.28 — typed CRUD domain actions:** Add a checked execution context
   for action statements with explicit row, authenticated user, and verified
   tenant values. Reuse the language type/effect checker, require explicit
   permissions, support transaction-safe SQL plus allowlisted typed calls, and
@@ -319,7 +320,29 @@ security and compatibility gates stated for that milestone.
   `hash_sha256` and `now()` spellings and their capability rules; PDF rendering
   and mail outbox calls must follow their existing transaction and attachment
   restrictions. No implicit `crypto::` namespace or raw SQL interpolation.
-  See the [1.2.28 work plan](release-plans/1.2.28-typed-crud-actions.en.md).
+  The parser stores explicit execute/guard nodes; CLI and web use common AST
+  lowering for typed `row`/`session` scopes. Web execution now loads the target
+  under `FOR UPDATE`, revalidates tenant membership/ownership in the same
+  transaction, evaluates the pure guard, then executes typed SQL and automatic
+  audit insertion through the borrowed transaction bridge. A `transaction`
+  block inside an action is a logical batch on the caller-owned transaction;
+  it cannot commit or open a second connection. Its checked `mail_queue` path
+  supports locally rendered PDF attachments. MariaDB HTTP E2E proves
+  state/hash/time update, one audit insert, repeat-guard rejection, rollback
+  after a later runtime failure, and an outbox row with a real PDF attachment
+  that remains pending for a separately started worker. Granular
+  `Database(read/write)` grants also open the web database gate correctly.
+  The tenant HTTP E2E also verifies that `session.tenant_id` and
+  `session.user_id` come from the authenticated selected tenant, a wrong-tenant
+  target fails with 404, and direct POST without the action permission returns
+  403; invalid CSRF also fails without a write. The permitted user sees the
+  action control, while a CRUD viewer without the action permission does not.
+  A separate-database PostgreSQL HTTP E2E now proves successful row/hash/
+  time and audit updates plus rollback after a runtime error. Both database
+  E2Es also send two simultaneous lock requests and verify exactly one success,
+  one guarded conflict, and one audit row. The broader security/permission
+  matrix remains open. See the
+  [1.2.28 work plan](release-plans/1.2.28-typed-crud-actions.en.md).
 - [ ] **1.2.29 — bounded secure file upload foundation (subject to design
   gate):** Specify and test multipart size limits, file metadata types,
   content validation, tenant ownership, private storage outside `public/`,

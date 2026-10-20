@@ -1,6 +1,6 @@
 use super::*;
 
-impl AstInterpreter<'_> {
+impl AstInterpreter<'_, '_> {
     /// Evaluate filesystem metadata built-ins through the injected host.
     pub(super) fn eval_filesystem_metadata_builtin(
         &mut self,
