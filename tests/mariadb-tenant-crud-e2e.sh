@@ -188,6 +188,7 @@ grep -Fq 'href="/invoices/new?tenant_id=10"' "${temp_dir}/tenant-a.html"
 echo "[5a/12] checking typed action tenant and actor context"
 tenant_action_form_status="$(curl --silent --show-error --output "${temp_dir}/tenant-action-form.html" --write-out '%{http_code}' --cookie "${cookie}" "${base_url}/invoices/${tenant_a_id}?tenant_id=10")"
 [[ "${tenant_action_form_status}" == "200" ]]
+grep -Fq 'record_actor' "${temp_dir}/tenant-action-form.html"
 tenant_action_csrf="$(sed -n 's/.*name="_zelyra_csrf" value="\([^"]*\)".*/\1/p' "${temp_dir}/tenant-action-form.html")"
 [[ -n "${tenant_action_csrf}" ]]
 tenant_action_status="$(curl --silent --show-error --output "${temp_dir}/tenant-action-response.html" --write-out '%{http_code}' --header "Origin: ${base_url}" --cookie "${cookie}" --data-urlencode "_zelyra_csrf=${tenant_action_csrf}" "${base_url}/invoices/${tenant_a_id}/record_actor?tenant_id=10")"
@@ -212,6 +213,7 @@ owner_action_form_status="$(curl --silent --show-error --output "${temp_dir}/own
     --write-out '%{http_code}' --cookie "${owner_cookie}" \
     "${base_url}/invoices/${owner_action_invoice_id}?tenant_id=${owner_tenant_id}")"
 [[ "${owner_action_form_status}" == "200" ]]
+! grep -Fq 'record_actor' "${temp_dir}/owner-action-form.html"
 owner_action_csrf="$(sed -n 's/.*name="_zelyra_csrf" value="\([^"]*\)".*/\1/p' "${temp_dir}/owner-action-form.html")"
 owner_action_denied_status="$(curl --silent --show-error --output "${temp_dir}/owner-action-denied.html" \
     --write-out '%{http_code}' --header "Origin: ${base_url}" --cookie "${owner_cookie}" \

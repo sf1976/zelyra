@@ -371,7 +371,8 @@ abgeschlossen.
   dass `session.tenant_id` und `session.user_id` aus dem authentifizierten,
   ausgewählten Mandantenkontext stammen, ein Datensatz des falschen Mandanten
   mit 404 abgewiesen wird und ein direkter Action-POST ohne Action-Berechtigung
-  403 liefert. Ein PostgreSQL-HTTP-E2E mit separater Testdatenbank bestätigt
+  403 liefert; den Aktionsbutton sieht nur der dazu berechtigte Nutzer. Ein
+  PostgreSQL-HTTP-E2E mit separater Testdatenbank bestätigt
   nun Status-/Hash-/Zeitstempel- und Audit-Änderungen sowie Rollback nach einem
   Runtime-Fehler. Beide Datenbank-E2Es senden außerdem zwei gleichzeitige
   Festschreibungsanfragen und bestätigen genau einen Erfolg, einen Guard-

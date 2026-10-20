@@ -335,7 +335,8 @@ security and compatibility gates stated for that milestone.
   The tenant HTTP E2E also verifies that `session.tenant_id` and
   `session.user_id` come from the authenticated selected tenant, a wrong-tenant
   target fails with 404, and direct POST without the action permission returns
-  403. A separate-database PostgreSQL HTTP E2E now proves successful row/hash/
+  403; the permitted user sees the action control, while a CRUD viewer without
+  the action permission does not. A separate-database PostgreSQL HTTP E2E now proves successful row/hash/
   time and audit updates plus rollback after a runtime error. Both database
   E2Es also send two simultaneous lock requests and verify exactly one success,
   one guarded conflict, and one audit row. The broader security/permission
