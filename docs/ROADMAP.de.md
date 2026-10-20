@@ -294,7 +294,9 @@ abgeschlossen.
   explizites `:rollback`, Batch-Commit und `--persist` gegen eine isolierte
   Wegwerf-MariaDB; derselbe E2E-Test prüft Bytecode-SQL-Rollback. Pipe-Tests
   decken persistente Bindungen und Fehlererholung für beide Backends ab.
-  PostgreSQL-Sandboxtransaktionen bleiben offen.
+  PostgreSQL-Sandboxtransaktionen bleiben offen. Die Record-Ausgabe markiert
+  Decimal-Werte mit `[Decimal]`; sie erfindet keine im Runtime-Wert fehlende
+  Nachkommastellenskala.
 - [x] **1.2.27 — Grundlage für den Import von Laravel-Webseiten:** Einen neu
   entwickelten, zuerst schreibgeschützten Importer für ausgewählte
   Webseitenfunktionen in native Zelyra-Module bereitstellen; keine Laravel-

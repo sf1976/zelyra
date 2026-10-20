@@ -272,7 +272,8 @@ security and compatibility gates stated for that milestone.
   `:rollback`, batch commit, and `--persist` against an isolated disposable
   MariaDB; the same E2E verifies bytecode SQL rollback. Pipe tests cover
   persistent bindings and error recovery on both backends. PostgreSQL sandbox
-  transactions remain open.
+  transactions remain open. The record pretty-printer marks Decimal values
+  with `[Decimal]`; it does not invent scale absent from the runtime value.
 - [x] **1.2.27 — Laravel website import foundation:** Reintroduce a new,
   read-only-first importer for migrating selected website behavior into native
   Zelyra modules; this is not Laravel framework compatibility or PHP runtime
