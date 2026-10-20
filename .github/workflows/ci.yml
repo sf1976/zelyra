@@ -192,6 +192,10 @@ jobs:
       - name: Verify computed API PATCH merges omitted fields safely
         run: |
           ZELYRA_TEST_DATABASE_URL=mariadb://root:root@127.0.0.1:3306/zelyra_ci \
+            cargo test --locked -p zelyra-web number_series_allocator_is_atomic_and_scoped_per_tenant -- --ignored --nocapture
+          ZELYRA_TEST_DATABASE_URL=postgresql://zelyra_ci:zelyra_ci@127.0.0.1:5432/zelyra_ci \
+            cargo test --locked -p zelyra-web number_series_allocator_is_atomic_and_scoped_per_tenant -- --ignored --nocapture
+          ZELYRA_TEST_DATABASE_URL=mariadb://root:root@127.0.0.1:3306/zelyra_ci \
             cargo test --locked -p zelyra-cli computed_api_fields_are_recomputed_before_validation_and_database_write -- --ignored --nocapture
           ZELYRA_TEST_DATABASE_URL=mariadb://root:root@127.0.0.1:3306/zelyra_ci \
             cargo test --locked -p zelyra-cli api_patch_row_merge_is_limited_to_the_verified_tenant -- --ignored --nocapture

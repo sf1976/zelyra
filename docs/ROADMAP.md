@@ -621,8 +621,8 @@ release. The current verified status is:
 
 | Reported hurdle | Current status | Remaining acceptance work |
 | --- | --- | --- |
-| Reusable sequential document numbers | Implemented in the 1.2.31 work: declarative `auto_sequence`, transactional counters, tenant/year scope, and generated CRUD protection from forged values. | Supported-backend/version matrix, SQLite diagnostic and migration behavior, legacy invoice compatibility, full release gates. No gapless-number guarantee. |
-| Tenant scope for invoice-number collision checks | The existing invoice-number path and the generic sequence allocator both bind the authenticated tenant. MariaDB integration verifies independent tenant counters and atomic allocation. | Keep the regression coverage in the release suite and verify all supported backends. |
+| Reusable sequential document numbers | Implemented in the 1.2.31 work: declarative `auto_sequence`, transactional counters, tenant/year scope, and generated CRUD protection from forged values. SQLite now fails schema checking with a source-mapped `E-DB-001`. | Supported-backend/version matrix, retain the SQLite rejection in release tests, legacy invoice compatibility, full release gates. No gapless-number guarantee. |
+| Tenant scope for invoice-number collision checks | The existing invoice-number path and generic sequence allocator both bind the authenticated tenant. MariaDB 11.8 and PostgreSQL 16 integration runs verify independent tenant counters and atomic allocation; CI now exercises both. | Supported-version matrix and full release gates. |
 | Server-computed business fields | Implemented for generated CRUD and validated API POST/PUT/PATCH paths, with dependency/type checks and exact Decimal rounding. CRUD preserves source Decimal text until form validation checks declared storage precision and scale, including normalized MySQL metadata. A partial validated API PATCH now loads omitted values from the existing row, applies tenant scoping, then recomputes derived values before validation and handler execution. | Full backend and AST/MIR/bytecode parity gates; MariaDB/PostgreSQL E2E covers partial PATCH and tenant isolation, and CI runs are pending. |
 | Localized master-detail labels | The HTML-escaped locale markers are resolved for child-collection legends; a regression test covers the escaped rendering path. | Preserve the test in the release gates and verify locale fallback behavior in the tutorial. |
 | File attachments in generated CRUD | Implemented using checked `FileRef` metadata, private storage, generated upload fields, and authorized downloads. MariaDB HTTP and Chromium E2E cover authenticated upload, same-tenant download, cross-tenant 404, MIME response, and reference redaction. A disposable MariaDB drill also proves paired database/file restore after removing both stores. | Full release gates. The verified procedure requires a stopped server and separate database/file backups; no single archive or crash-atomic snapshot is provided. |
@@ -639,7 +639,8 @@ syntax or a unit test alone does not establish production readiness.
   submitted numbers and edit forms omit generated number fields. Unit coverage
   and a MariaDB integration test cover tenant separation, rollback, existing
   collisions, forged values, yearly formats, and concurrent allocation. The
-  same integration test also passes on PostgreSQL 16. On MariaDB 11.8 and
+  same integration test also passes on PostgreSQL 16 and is added to CI for
+  both backends. On MariaDB 11.8 and
   PostgreSQL 16 the managed schema was applied and replanned with no drift.
   MariaDB inspection now distinguishes composite unique keys using the actual
   primary-key constraint. Full release CI, the supported-version matrix,
