@@ -191,6 +191,9 @@ tenant_action_form_status="$(curl --silent --show-error --output "${temp_dir}/te
 grep -Fq 'record_actor' "${temp_dir}/tenant-action-form.html"
 tenant_action_csrf="$(sed -n 's/.*name="_zelyra_csrf" value="\([^"]*\)".*/\1/p' "${temp_dir}/tenant-action-form.html")"
 [[ -n "${tenant_action_csrf}" ]]
+invalid_tenant_action_csrf_status="$(curl --silent --show-error --output "${temp_dir}/invalid-tenant-action-csrf.html" --write-out '%{http_code}' --header "Origin: ${base_url}" --cookie "${cookie}" --data-urlencode '_zelyra_csrf=invalid' "${base_url}/invoices/${tenant_a_id}/record_actor?tenant_id=10")"
+[[ "${invalid_tenant_action_csrf_status}" == "403" ]]
+[[ "$(client --batch --skip-column-names -e "SELECT COUNT(*) FROM tenant_invoice_action_log WHERE invoice_id=${tenant_a_id}")" == "0" ]]
 tenant_action_status="$(curl --silent --show-error --output "${temp_dir}/tenant-action-response.html" --write-out '%{http_code}' --header "Origin: ${base_url}" --cookie "${cookie}" --data-urlencode "_zelyra_csrf=${tenant_action_csrf}" "${base_url}/invoices/${tenant_a_id}/record_actor?tenant_id=10")"
 [[ "${tenant_action_status}" == "303" ]]
 tenant_actor_id="$(client --batch --skip-column-names -e "SELECT id FROM users WHERE email='${email}'")"
