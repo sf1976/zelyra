@@ -12,10 +12,14 @@
   `:schema` command. / `:schema` zeigt deklarierte Tabelleninvarianten mit
   Fehlermeldung und Quellposition an.
 - Declare the REPL's aggregate database effect when project database access is
-  granted, while keeping runtime read/write grant checks in force. / Den
+  granted, while keeping runtime read/write grant checks in force. A read-only
+  grant still cannot use SQL in this console because the current runtime
+  requires the aggregate `Database` effect. / Den
   aggregierten Datenbankeffekt der REPL deklarieren, wenn das Projekt
   Datenbankzugriff freigibt; die Laufzeitprüfung der Lese-/Schreibrechte bleibt
-  aktiv.
+  aktiv. Ein reiner Lese-Grant kann wegen der derzeit erforderlichen
+  aggregierten `Database`-Wirkung noch keine SQL-Abfragen in der Konsole
+  ausführen.
 
 ## 1.2.27 — 2026-10-20
 
