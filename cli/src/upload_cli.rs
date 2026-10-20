@@ -44,7 +44,7 @@ pub(super) fn files_command(mut arguments: impl Iterator<Item = String>) -> Exit
         }
     }
     if apply && !maintenance_window_acknowledged {
-        eprintln!("error[E-CLI-001]: --apply requires --maintenance-window; stop all project servers before removing files");
+        eprintln!("error[E-CLI-001]: --apply requires --maintenance-window; Zelyra checks that no upload-enabled server holds the storage lock");
         return ExitCode::from(2);
     }
     if !apply && maintenance_window_acknowledged {
@@ -130,9 +130,16 @@ pub(super) fn files_command(mut arguments: impl Iterator<Item = String>) -> Exit
         return ExitCode::SUCCESS;
     }
 
-    // Refresh the database snapshot immediately before deletion. This is still
-    // a maintenance operation: the acknowledgement above requires all project
-    // servers to be stopped so no upload or reference write can race cleanup.
+    let _maintenance_lock = match storage.acquire_maintenance_lock() {
+        Ok(lock) => lock,
+        Err(error) => {
+            eprintln!("error[E-FILE-005]: cannot begin upload maintenance: {error}");
+            return ExitCode::from(1);
+        }
+    };
+
+    // Refresh the database snapshot while the exclusive activity lock prevents
+    // Zelyra servers from accepting uploads or starting against this storage.
     let references = match load_file_references(&program, &database_url) {
         Ok(references) => references,
         Err(error) => {

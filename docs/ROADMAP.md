@@ -382,12 +382,13 @@ security and compatibility gates stated for that milestone.
   database commits; a crash can leave an orphan. `zelyra files cleanup`
   previews old unreferenced blobs and abandoned staging pairs, rechecks declared
   FileRef columns, caps filesystem entries and fetched reference rows at 100,000
-  each, and refuses symlinks or
-  inconsistent paths. It defaults to 30 days and requires both `--apply` and
-  `--maintenance-window` to delete; operators must stop project servers and
-  workers. A disposable MariaDB E2E proves preview, referenced-file
-  preservation, and explicit orphan removal. This acknowledgement is not a
-  technical service lock, so concurrent uploads remain outside the guarantee.
+  each, and refuses symlinks or inconsistent paths. It defaults to 30 days and
+  requires both `--apply` and `--maintenance-window` to delete. Upload-enabled
+  Zelyra servers hold a shared local file lock; cleanup requires the exclusive
+  lock, rechecks references under it, and prevents another Zelyra server from
+  starting during deletion. This coordinates processes on one local host, not
+  unrelated programs or arbitrary network filesystems. A disposable MariaDB
+  E2E proves preview, referenced-file preservation, and explicit orphan removal.
   Replacement/deletion and backup/restore remain open. Non-Unix creation fails closed pending ACL
   support.
   `FileRef` maps to `CHAR(36)`/`UUID`/`TEXT` by backend, checked file forms must

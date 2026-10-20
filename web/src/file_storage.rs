@@ -62,6 +62,15 @@ pub struct FileStorage {
     root: PathBuf,
 }
 
+/// Advisory process-lifetime lock for managed upload storage. Web servers hold
+/// a shared lock; destructive maintenance requires a non-blocking exclusive
+/// lock. This coordinates Zelyra processes on one host, not arbitrary external
+/// programs or network filesystems.
+#[derive(Debug)]
+pub struct StorageActivityLock {
+    _file: File,
+}
+
 impl FileStorage {
     /// Creates or opens a private storage root. The configured root itself may
     /// resolve through a symlink, but generated descendants may not.
@@ -76,6 +85,20 @@ impl FileStorage {
         }
         set_private_directory_permissions(&root).map_err(storage_error)?;
         Ok(Self { root })
+    }
+
+    /// Acquires a non-blocking shared lock held by a running application
+    /// server. A cleanup operation in progress prevents the server from
+    /// starting against the same managed storage root.
+    pub fn acquire_server_lock(&self) -> Result<StorageActivityLock, FileStorageError> {
+        acquire_activity_lock(&self.root, false)
+    }
+
+    /// Acquires a non-blocking exclusive lock before destructive maintenance.
+    /// It fails while any Zelyra server holds a shared lock or another
+    /// maintenance operation holds the exclusive lock.
+    pub fn acquire_maintenance_lock(&self) -> Result<StorageActivityLock, FileStorageError> {
+        acquire_activity_lock(&self.root, true)
     }
 
     /// Writes validated bytes to a private staging file and returns an opaque
@@ -712,6 +735,64 @@ fn storage_error(error: io::Error) -> FileStorageError {
     FileStorageError(format!("private upload storage operation failed: {error}"))
 }
 
+#[cfg(unix)]
+fn acquire_activity_lock(
+    root: &Path,
+    exclusive: bool,
+) -> Result<StorageActivityLock, FileStorageError> {
+    use std::os::unix::fs::{MetadataExt, OpenOptionsExt, PermissionsExt};
+
+    let path = root.join(".zelyra-upload-activity.lock");
+    let file = OpenOptions::new()
+        .read(true)
+        .write(true)
+        .create(true)
+        .mode(0o600)
+        .custom_flags(libc::O_NOFOLLOW | libc::O_CLOEXEC)
+        .open(&path)
+        .map_err(storage_error)?;
+    let metadata = file.metadata().map_err(storage_error)?;
+    if !metadata.is_file() || metadata.nlink() != 1 {
+        return Err(FileStorageError(
+            "upload activity lock is not a private regular file".into(),
+        ));
+    }
+    file.set_permissions(fs::Permissions::from_mode(0o600))
+        .map_err(storage_error)?;
+    let operation = if exclusive {
+        libc::LOCK_EX | libc::LOCK_NB
+    } else {
+        libc::LOCK_SH | libc::LOCK_NB
+    };
+    // SAFETY: `file` owns a valid descriptor and remains alive for the lock's
+    // lifetime. flock does not retain pointers to the caller's memory.
+    let result = unsafe { libc::flock(std::os::fd::AsRawFd::as_raw_fd(&file), operation) };
+    if result != 0 {
+        let error = io::Error::last_os_error();
+        let message = if error.kind() == io::ErrorKind::WouldBlock {
+            if exclusive {
+                "managed uploads are in use by a running server or another cleanup; stop Zelyra servers and retry"
+            } else {
+                "managed uploads are in a maintenance window; retry starting the server"
+            }
+        } else {
+            return Err(storage_error(error));
+        };
+        return Err(FileStorageError(message.into()));
+    }
+    Ok(StorageActivityLock { _file: file })
+}
+
+#[cfg(not(unix))]
+fn acquire_activity_lock(
+    _root: &Path,
+    _exclusive: bool,
+) -> Result<StorageActivityLock, FileStorageError> {
+    Err(FileStorageError(
+        "upload activity coordination is not implemented on this platform".into(),
+    ))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -730,6 +811,25 @@ mod tests {
 
     fn pdf_allowed() -> Vec<String> {
         vec!["application/pdf".into()]
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn server_and_maintenance_locks_are_mutually_exclusive() {
+        let root = temporary_root();
+        let storage = FileStorage::new(&root).expect("create private store");
+        let server = storage.acquire_server_lock().expect("shared server lock");
+        assert!(storage.acquire_maintenance_lock().is_err());
+        drop(server);
+
+        let maintenance = storage
+            .acquire_maintenance_lock()
+            .expect("exclusive maintenance lock");
+        assert!(storage.acquire_server_lock().is_err());
+        assert!(storage.acquire_maintenance_lock().is_err());
+        drop(maintenance);
+        storage.acquire_server_lock().expect("server can restart");
+        let _ = fs::remove_dir_all(root);
     }
 
     #[cfg(unix)]

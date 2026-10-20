@@ -426,10 +426,12 @@ abgeschlossen.
   inkonsistenten Pfaden ab. Ein Wegwerf-MariaDB-E2E bestätigt Vorschau,
   Erhalt referenzierter Dateien und ausdrückliches Löschen des Waisen. Das
   Mindestalter beträgt standardmäßig 30 Tage; zum Löschen sind `--apply` und
-  `--maintenance-window` erforderlich. Betreiber müssen Server und Worker
-  stoppen; die Bestätigung ist keine technische Dienstsperre, daher sind
-  gleichzeitige Uploads nicht abgedeckt. Ersetzen/Löschen und Backup/Restore
-  bleiben offen. Nicht-Unix-
+  `--maintenance-window` erforderlich. Upload-fähige Zelyra-Server halten eine
+  gemeinsame lokale Dateisperre; die Bereinigung benötigt eine exklusive Sperre,
+  lädt darunter die Referenzen erneut und verhindert den Start eines weiteren
+  Zelyra-Servers. Das koordiniert Prozesse desselben lokalen Hosts, nicht fremde
+  Programme oder beliebige Netzwerkdateisysteme. Ersetzen/Löschen und
+  Backup/Restore bleiben offen. Nicht-Unix-
   Anlegen schlägt bis zur ACL-Unterstützung geschlossen fehl. `FileRef` wird je
   Backend als `CHAR(36)`/`UUID`/`TEXT` abgebildet. Geprüfte
   Datei-Formulare müssen auf eine gleichnamige Referenzspalte zeigen;
