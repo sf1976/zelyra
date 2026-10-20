@@ -669,11 +669,30 @@ fn generate_scaffold(
         let users_candidate = included_tables
             .iter()
             .find(|candidate| candidate["table"].as_str() == Some("users"));
+        let tenant_auth_mapping = if table_scoped {
+            authentication::TenantAuthMapping::default()
+        } else {
+            authentication::detect_tenant_auth_mapping(&included_tables)
+        };
+        let tenant_auth_tables = included_tables
+            .iter()
+            .filter(|candidate| {
+                candidate["table"]
+                    .as_str()
+                    .is_some_and(|table| tenant_auth_mapping.references_table(table))
+            })
+            .cloned()
+            .collect::<Vec<_>>();
         let (native_auth, auth_mapping_issue) = if login_evidence.is_some() {
             match users_candidate {
                 Some(users) => {
                     let session_table = generated_auth_session_table_name(&schema_generation);
-                    match authentication::render_native_auth_module(users, &session_table) {
+                    match authentication::render_native_auth_module(
+                        users,
+                        &session_table,
+                        &tenant_auth_mapping,
+                        &tenant_auth_tables,
+                    ) {
                         Ok(source) => (Some((session_table, source)), None),
                         Err(reason) => (None, Some(reason)),
                     }
@@ -689,7 +708,11 @@ fn generate_scaffold(
         let generated_schema_source = included_tables
             .iter()
             .filter(|candidate| {
-                native_auth.is_none() || candidate["table"].as_str() != Some("users")
+                native_auth.is_none()
+                    || (candidate["table"].as_str() != Some("users")
+                        && !candidate["table"]
+                            .as_str()
+                            .is_some_and(|table| tenant_auth_mapping.references_table(table)))
             })
             .filter_map(|candidate| candidate["candidate_source"].as_str())
             .collect::<Vec<_>>()
@@ -787,6 +810,8 @@ fn generate_scaffold(
                 "package": "imported_identity",
                 "users_table": "users",
                 "sessions_table": session_table,
+                "tenant_membership_table": tenant_auth_mapping.membership_table,
+                "tenant_owner_relation": tenant_auth_mapping.owner_table.as_ref().zip(tenant_auth_mapping.owner_column.as_ref()).map(|(table, column)| format!("{table}.{column}")),
                 "source_route_file": evidence.route_file,
                 "source_controller_file": evidence.controller_file,
                 "source_view_file": evidence.view_file,
@@ -795,7 +820,7 @@ fn generate_scaffold(
                 "user_records_copied": false,
                 "password_hashes_copied": false,
                 "limitations": [
-                    "Laravel registration, approval policy, tenant selection, 2FA, and controller behavior are not transferred.",
+                    "Laravel registration, approval policy, active/default tenant selection, 2FA, and controller behavior are not transferred.",
                     "Existing Laravel password hashes must be reset or deliberately converted before Zelyra login can use them.",
                     "The original Blade login page is inventoried but replaced by Zelyra's native login UI."
                 ]
@@ -1050,7 +1075,7 @@ fn generate_scaffold(
             append_generated_text(
                 &staging.join("README.md"),
                 &format!(
-                    "\n## Reusable native authentication module\n\nA statically linked Laravel `GET /login` page, `POST /login` handler, and `users` schema produced the local package `packages/imported_identity`. The package owns the projected `users` table, the Zelyra session table `{session_table}`, and a native `auth users` declaration. Zelyra supplies the login UI and routes; no Laravel controller, Blade template, session storage, or user data was copied. The generated package can be referenced from other Zelyra projects with a local package dependency.\n\nThe Laravel `password` field is projected to `password_hash`, and `remember_token` is omitted. This scaffold does not copy accounts or password hashes. Create new credentials with Zelyra or deliberately convert the source hashes after reviewing the source hashing scheme. Registration, account approval, tenant selection, 2FA, and custom controller policies are not transferred; review `GENERATION_SELECTION.json` before enabling access.\n"
+                    "\n## Reusable native authentication module\n\nA statically linked Laravel `GET /login` page, `POST /login` handler, and `users` schema produced the local package `packages/imported_identity`. The package owns the projected `users` table, the Zelyra session table `{session_table}`, and a native `auth users` declaration. When the source schema has one unambiguous conventional tenant pivot or owner relation, the package also owns those tenant-access tables and configures Zelyra's membership and owner checks. Zelyra supplies the login UI and routes; no Laravel controller, Blade template, session storage, or user data was copied. The generated package can be referenced from other Zelyra projects with a local package dependency.\n\nThe Laravel `password` field is projected to `password_hash`, and `remember_token` is omitted. This scaffold does not copy accounts or password hashes. Create new credentials with Zelyra or deliberately convert the source hashes after reviewing the source hashing scheme. Registration, account approval, Laravel's active/default tenant selection, 2FA, and custom controller policies are not transferred; review `GENERATION_SELECTION.json` before enabling access.\n"
                 ),
             )?;
         }

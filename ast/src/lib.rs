@@ -780,8 +780,14 @@ pub struct CrudErrorViewDef {
 pub struct AuthDef {
     pub name: String,
     pub table: String,
-    /// Optional table with active `(user_id, tenant_id, active)` membership rows.
+    /// Optional table with `(user_id, tenant_id)` membership rows and an
+    /// optional `active` Boolean column (when present, only active rows count).
     pub membership_table: Option<String>,
+    /// Optional tenant table and owner foreign-key column, written in source
+    /// as `tenant_owner: tenants.user_id`. This is an additional verified
+    /// access path for users who own a tenant directly.
+    pub tenant_owner_table: Option<String>,
+    pub tenant_owner_column: Option<String>,
     pub session_table: Option<String>,
     pub permissions_table: Option<String>,
     pub roles_table: Option<String>,

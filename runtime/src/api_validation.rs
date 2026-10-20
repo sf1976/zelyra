@@ -158,14 +158,12 @@ pub fn check_apis(program: &Program) -> Result<(), Vec<ApiDiagnostic>> {
                         ),
                         span: api.span,
                     });
-                } else if !program
-                    .auth
-                    .iter()
-                    .any(|auth| auth.membership_table.is_some())
-                {
+                } else if !program.auth.iter().any(|auth| {
+                    auth.membership_table.is_some() || auth.tenant_owner_table.is_some()
+                }) {
                     errors.push(ApiDiagnostic {
                         message: format!(
-                            "API table validation for scoped table `{table_name}` requires an auth declaration with `memberships`"
+                            "API table validation for scoped table `{table_name}` requires auth with `memberships` or `tenant_owner`"
                         ),
                         span: api.span,
                     });

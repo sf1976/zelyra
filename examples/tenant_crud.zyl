@@ -2,7 +2,8 @@ auth users {
     table: users
     sessions: auth_sessions
     permissions: user_permissions
-    memberships: tenant_memberships
+    memberships: tenant_user
+    tenant_owner: tenants.user_id
     audit: auth_audit_log
 }
 
@@ -27,11 +28,17 @@ table user_permissions {
     permission: String(100) required
 }
 
-table tenant_memberships {
+table tenants {
     id: Id primary auto
-    user_id: Int required
+    user: User?
+    name: String(255) required
+}
+
+table tenant_user {
+    id: Id primary auto
     tenant_id: Int required
-    active: Bool required
+    user_id: Int required
+    role: String(50) required default "employee"
 }
 
 table auth_audit_log {

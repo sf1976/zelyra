@@ -284,9 +284,21 @@ security and compatibility gates stated for that milestone.
   78 migration-table candidates with zero schema differences; two live tables
   were outside the migration scanner. Its `main.zyl` and separate validation
   candidate module both passed compiler checks. This does not prove route or
-  workflow migration. Keep unresolved behavior and exact source locations
-  visible in a versioned report. The `/opt/siedelmann-laravel/app` project is the
-  acceptance fixture; broader route/workflow coverage continues in 1.2.30. See the
+  workflow migration. A resolved conventional `tenant_user` pivot and
+  `tenants.user_id` owner relation are now included with `users` in the reusable
+  `imported_identity` package, so the package's auth declaration can validate
+  membership and direct ownership without a cross-package table dependency.
+  The actual Laravel active/default tenant selection is still not transferred.
+  The 1.2.27 fixture generated 71 schema declarations and passed `zelyra check`;
+  its auth package owns `users`, `tenant_user`, `tenants`, and Zelyra sessions.
+  A disposable MariaDB 11.4 runtime test also passed with a membership pivot
+  that has no `active` column: a user with direct `tenants.user_id` ownership
+  could create a tenant-scoped invoice without a pivot row, while an account
+  with neither membership nor ownership remained denied. Write transactions
+  revalidate the same membership/ownership rules before mutation.
+  Keep unresolved behavior and exact source locations visible in a versioned
+  report. The `/opt/siedelmann-laravel/app` project is the acceptance fixture;
+  broader route/workflow coverage continues in 1.2.30. See the
   [1.2.27 importer plan](release-plans/1.2.27-laravel-website-importer.en.md).
 - [ ] **1.2.28 — typed CRUD domain actions:** Add a checked execution context
   for action statements with explicit row, authenticated user, and verified

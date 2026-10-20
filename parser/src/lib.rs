@@ -624,6 +624,7 @@ impl<'a> Parser<'a> {
         self.skip_newlines();
         let mut table = None;
         let mut membership_table = None;
+        let mut tenant_owner = None;
         let mut session_table = None;
         let mut permissions_table = None;
         let mut roles_table = None;
@@ -658,6 +659,7 @@ impl<'a> Parser<'a> {
                 TokenKind::ResetTokens => "reset_tokens",
                 TokenKind::Ident(name) if name == "reset_rate_limits" => "reset_rate_limits",
                 TokenKind::Ident(name) if name == "memberships" => "memberships",
+                TokenKind::Ident(name) if name == "tenant_owner" => "tenant_owner",
                 TokenKind::ResetRateLimit => "reset_rate_limit",
                 TokenKind::ResetBlockSeconds => "reset_block_seconds",
                 TokenKind::Ident(name) if name == "mfa" => "mfa",
@@ -666,6 +668,17 @@ impl<'a> Parser<'a> {
             };
             self.advance();
             self.expect(TokenKind::Colon, "colon after authentication option")?;
+            if field == "tenant_owner" {
+                if tenant_owner.is_some() {
+                    return self.error("tenant_owner may only be declared once");
+                }
+                let (owner_table, _) = self.ident("tenant owner table")?;
+                self.expect(TokenKind::Dot, "`.` before tenant owner column")?;
+                let (owner_column, _) = self.ident("tenant owner column")?;
+                tenant_owner = Some((owner_table, owner_column));
+                self.skip_newlines();
+                continue;
+            }
             if field == "audit_chain" {
                 audit_chain = match self.current().kind.clone() {
                     TokenKind::True => {
@@ -778,6 +791,8 @@ impl<'a> Parser<'a> {
             name,
             table,
             membership_table,
+            tenant_owner_table: tenant_owner.as_ref().map(|(table, _)| table.clone()),
+            tenant_owner_column: tenant_owner.map(|(_, column)| column),
             session_table,
             permissions_table,
             roles_table,
@@ -5733,6 +5748,7 @@ mod tests {
                     table: users
                     sessions: auth_sessions
                     memberships: tenant_memberships
+                    tenant_owner: tenants.user_id
                 }
                 crud Invoice -> invoices {
                     tenant: tenant_id
@@ -5744,6 +5760,14 @@ mod tests {
         assert_eq!(
             program.auth[0].membership_table.as_deref(),
             Some("tenant_memberships")
+        );
+        assert_eq!(
+            program.auth[0].tenant_owner_table.as_deref(),
+            Some("tenants")
+        );
+        assert_eq!(
+            program.auth[0].tenant_owner_column.as_deref(),
+            Some("user_id")
         );
         assert_eq!(program.cruds[0].tenant_column.as_deref(), Some("tenant_id"));
     }

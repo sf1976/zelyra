@@ -310,8 +310,22 @@ abgeschlossen.
   nie automatisch deaktiviert. Ein vollständiger Scaffold verglich 78
   Migrationstabellenkandidaten mit null Schemaabweichungen; zwei Live-Tabellen
   lagen außerhalb des Migrationsscanners. `main.zyl` und das separate
-  Validierungskandidatenmodul bestanden Compilerprüfungen. Das beweist keine
-  Routen- oder Ablaufmigration. Ungelöste Abläufe und genaue Quellpositionen
+  Validierungskandidatenmodul bestanden Compilerprüfungen. Ein aufgelöstes,
+  konventionelles `tenant_user`-Pivot und die Eigentümerrelation
+  `tenants.user_id` werden nun mit `users` in das wiederverwendbare Paket
+  `imported_identity` aufgenommen. Dadurch prüft dessen Auth-Deklaration
+  Mitgliedschaften und direkte Eigentümerschaft ohne tabellenübergreifende
+  Paketabhängigkeit. Laravels aktive/standardmäßige Mandantenauswahl wird
+  weiterhin nicht übernommen. Der 1.2.27-Import erzeugte 71
+  Tabellendeklarationen und bestand `zelyra check`; das Auth-Paket besitzt
+  `users`, `tenant_user`, `tenants` und Zelyra-Sitzungen. Das beweist keine
+  Routen- oder Ablaufmigration. Ein Laufzeittest mit wegwerfbarer MariaDB 11.4
+  bestand außerdem mit einem Pivot ohne `active`-Spalte: Ein direkt über
+  `tenants.user_id` zugeordneter Eigentümer konnte ohne Pivot-Zeile eine
+  mandantengebundene Rechnung anlegen; ein Konto ohne Mitgliedschaft und ohne
+  Eigentümerschaft blieb abgewiesen. Schreibtransaktionen prüfen dieselben
+  Mitgliedschafts- und Eigentümerregeln vor der Mutation erneut. Ungelöste
+  Abläufe und genaue Quellpositionen
   in einem versionierten Bericht erhalten. Abnahmeprojekt ist
   `/opt/siedelmann-laravel/app`; weitere Abdeckung folgt in 1.2.30. Siehe den
   [Arbeitsplan 1.2.27](release-plans/1.2.27-laravel-website-importer.de.md).

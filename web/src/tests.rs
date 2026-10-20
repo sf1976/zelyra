@@ -1004,6 +1004,8 @@ fn generated_login_page_uses_the_localized_default_shell() {
     let auth = AuthRoute {
         table: "users".into(),
         membership_table: None,
+        tenant_owner_table: None,
+        tenant_owner_column: None,
         session_table: None,
         permissions_table: None,
         roles_table: None,
@@ -1509,6 +1511,8 @@ fn project_catalogs_override_generated_ui_and_parameterized_labels() {
     let auth = AuthRoute {
         table: "users".into(),
         membership_table: None,
+        tenant_owner_table: None,
+        tenant_owner_column: None,
         session_table: None,
         permissions_table: None,
         roles_table: None,
@@ -1596,6 +1600,8 @@ fn framework_errors_auth_labels_and_validation_use_the_locale_catalog() {
     let auth = AuthRoute {
         table: "users".into(),
         membership_table: None,
+        tenant_owner_table: None,
+        tenant_owner_column: None,
         session_table: None,
         permissions_table: None,
         roles_table: None,
@@ -2210,6 +2216,8 @@ fn logout_clears_session_cookie_with_the_matching_secure_attribute() {
     let auth = AuthRoute {
         table: "users".into(),
         membership_table: None,
+        tenant_owner_table: None,
+        tenant_owner_column: None,
         session_table: None,
         permissions_table: None,
         roles_table: None,
@@ -2972,6 +2980,8 @@ fn logout_requires_csrf() {
     let auth = AuthRoute {
         table: "users".into(),
         membership_table: None,
+        tenant_owner_table: None,
+        tenant_owner_column: None,
         session_table: None,
         permissions_table: None,
         roles_table: None,
@@ -3109,6 +3119,8 @@ fn rotating_memory_session_invalidates_previous_token() {
     let auth = AuthRoute {
         table: "users".into(),
         membership_table: None,
+        tenant_owner_table: None,
+        tenant_owner_column: None,
         session_table: None,
         permissions_table: None,
         roles_table: None,
@@ -3202,6 +3214,8 @@ fn session_administration_preserves_legacy_tables_and_escapes_rows() {
     let mut auth = AuthRoute {
         table: "users".into(),
         membership_table: None,
+        tenant_owner_table: None,
+        tenant_owner_column: None,
         session_table: Some("sessions".into()),
         permissions_table: None,
         roles_table: None,
@@ -4346,6 +4360,51 @@ fn tenant_selector_accepts_header_or_url_and_rejects_conflicts() {
 }
 
 #[test]
+fn tenant_access_supports_legacy_membership_rows_and_direct_ownership() {
+    let context = TenantContext {
+        user_id: 7,
+        tenant_id: 41,
+        membership_table: Some("tenant_user".into()),
+        membership_has_active: false,
+        tenant_owner_table: Some("tenants".into()),
+        tenant_owner_column: Some("user_id".into()),
+    };
+    let predicate = tenant_access_predicate(&context, false);
+    assert!(predicate.contains("zelyra_membership.user_id = :zelyra_user_id"));
+    assert!(!predicate.contains("zelyra_membership.active"));
+    assert!(predicate.contains(" OR "));
+    assert!(predicate.contains("zelyra_owner.`user_id` = :zelyra_user_id"));
+
+    let queries = tenant_access_queries(&context, false, Some(41), true);
+    assert_eq!(queries.len(), 2);
+    assert!(queries[0].sql.contains("FROM `tenant_user`"));
+    assert!(queries[0]
+        .sql
+        .contains("tenant_id = :zelyra_selected_tenant_id"));
+    assert!(!queries[0].sql.contains("active = true"));
+    assert!(queries[0].sql.ends_with("FOR UPDATE"));
+    assert!(queries[1].sql.contains("FROM `tenants`"));
+    assert!(queries[1].sql.contains("`user_id` = :zelyra_user_id"));
+    assert!(queries[1].sql.ends_with("FOR UPDATE"));
+}
+
+#[test]
+fn tenant_access_still_requires_active_for_membership_schemas_that_declare_it() {
+    let context = TenantContext {
+        user_id: 7,
+        tenant_id: 41,
+        membership_table: Some("tenant_memberships".into()),
+        membership_has_active: true,
+        tenant_owner_table: None,
+        tenant_owner_column: None,
+    };
+    assert!(tenant_access_predicate(&context, false).contains("active = true"));
+    assert!(tenant_access_queries(&context, false, None, false)[0]
+        .sql
+        .contains("active = true"));
+}
+
+#[test]
 fn tenant_urls_are_preserved_in_generated_links_forms_and_redirects() {
     assert_eq!(
         append_tenant_selector("/invoices", 41),
@@ -4413,6 +4472,8 @@ fn database_capability_denies_persistent_login() {
     let auth = AuthRoute {
         table: "users".into(),
         membership_table: None,
+        tenant_owner_table: None,
+        tenant_owner_column: None,
         session_table: Some("sessions".into()),
         permissions_table: None,
         roles_table: None,

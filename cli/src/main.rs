@@ -7900,7 +7900,7 @@ fn validate_auth(path: &str, program: &zelyra_ast::Program, schema: &Schema) -> 
                 valid = false;
                 continue;
             };
-            for required_column in ["user_id", "tenant_id", "active"] {
+            for required_column in ["user_id", "tenant_id"] {
                 if !membership_table
                     .columns
                     .iter()
@@ -7953,6 +7953,83 @@ fn validate_auth(path: &str, program: &zelyra_ast::Program, schema: &Schema) -> 
                     );
                     valid = false;
                 }
+            }
+        }
+        match (
+            auth.tenant_owner_table.as_deref(),
+            auth.tenant_owner_column.as_deref(),
+        ) {
+            (Some(owner_table_name), Some(owner_column_name)) => {
+                if owner_table_name == auth.table
+                    || auth.session_table.as_deref() == Some(owner_table_name)
+                    || auth.membership_table.as_deref() == Some(owner_table_name)
+                {
+                    diagnostic_with_span(
+                        path,
+                        "E-TENANT-001",
+                        "tenant ownership must refer to a separate tenant table",
+                        auth.span,
+                    );
+                    valid = false;
+                    continue;
+                }
+                if auth.session_table.is_none() {
+                    diagnostic_with_span(
+                        path,
+                        "E-TENANT-001",
+                        "tenant ownership requires database-backed authentication sessions",
+                        auth.span,
+                    );
+                    valid = false;
+                }
+                let Some(owner_table) = schema
+                    .tables
+                    .iter()
+                    .find(|candidate| candidate.name == owner_table_name)
+                else {
+                    diagnostic_with_span(
+                        path,
+                        "E-TENANT-001",
+                        &format!("unknown tenant owner table `{owner_table_name}`"),
+                        auth.span,
+                    );
+                    valid = false;
+                    continue;
+                };
+                let owner_column = owner_table
+                    .columns
+                    .iter()
+                    .find(|column| column.name == owner_column_name);
+                let valid_owner_reference = owner_column.is_some_and(|column| {
+                    tenant_sql_type_is_integer(&column.sql_type)
+                        && owner_table.foreign_keys.iter().any(|foreign_key| {
+                            foreign_key.column == owner_column_name
+                                && foreign_key.referenced_table == auth.table
+                                && foreign_key.referenced_column == "id"
+                        })
+                });
+                if !valid_owner_reference {
+                    diagnostic_with_span(
+                        path,
+                        "E-TENANT-001",
+                        &format!(
+                            "tenant owner `{owner_table_name}.{owner_column_name}` must be an integer foreign key to `{}.id`",
+                            auth.table
+                        ),
+                        auth.span,
+                    );
+                    valid = false;
+                }
+            }
+            (None, None) => {}
+            _ => {
+                diagnostic_with_span(
+                    path,
+                    "E-TENANT-001",
+                    "tenant_owner must include both a table and owner column",
+                    auth.span,
+                );
+                valid = false;
             }
         }
         if let Some(session_table_name) = &auth.session_table {
@@ -8845,13 +8922,12 @@ fn validate_cruds(path: &str, program: &zelyra_ast::Program, schema: &Schema) ->
                 fail_tenant("tenant-scoped CRUD must declare `requires auth`");
                 valid = false;
             }
-            if !program
-                .auth
-                .iter()
-                .any(|auth| auth.membership_table.is_some() && auth.session_table.is_some())
-            {
+            if !program.auth.iter().any(|auth| {
+                (auth.membership_table.is_some() || auth.tenant_owner_table.is_some())
+                    && auth.session_table.is_some()
+            }) {
                 fail_tenant(
-                    "tenant-scoped CRUD requires auth with database sessions and `memberships`",
+                    "tenant-scoped CRUD requires auth with database sessions and `memberships` or `tenant_owner`",
                 );
                 valid = false;
             }
@@ -10379,6 +10455,8 @@ fn serve_command(mut args: impl Iterator<Item = String>) -> ExitCode {
         Some(AuthRoute {
             table: auth.table.clone(),
             membership_table: auth.membership_table.clone(),
+            tenant_owner_table: auth.tenant_owner_table.clone(),
+            tenant_owner_column: auth.tenant_owner_column.clone(),
             session_table: auth.session_table.clone(),
             permissions_table: auth.permissions_table.clone(),
             roles_table: auth.roles_table.clone(),
@@ -11118,12 +11196,6 @@ fn generated_crud_form(
         .map(|field| storage_column_name(schema, &crud.table, &field.name))
         .collect::<Vec<_>>();
     let is_postgres = schema.backend() == Backend::Postgres;
-    let membership_guard = context.membership_table.as_deref().map(|membership_table| {
-        format!(
-            " AND EXISTS (SELECT 1 FROM {} AS zelyra_membership WHERE zelyra_membership.user_id = :zelyra_user_id AND zelyra_membership.tenant_id = :zelyra_tenant_id AND zelyra_membership.active = true)",
-            quote_ident(membership_table, is_postgres)
-        )
-    });
     let recipient_column = crud
         .recipient_column
         .as_deref()
@@ -11138,7 +11210,7 @@ fn generated_crud_form(
             .collect::<Vec<_>>()
             .join(", ");
         format!(
-            "UPDATE {} SET {} WHERE {} = :id{}{}{}",
+            "UPDATE {} SET {} WHERE {} = :id{}{}",
             quote_ident(&crud.table, is_postgres),
             assignments,
             quote_ident("id", is_postgres),
@@ -11160,8 +11232,7 @@ fn generated_crud_form(
                         " AND {} = :zelyra_user_id",
                         quote_ident(column, is_postgres)
                     )
-                }),
-            membership_guard.clone().unwrap_or_default()
+                })
         )
     } else {
         let mut insert_columns = storage_columns.clone();
@@ -11182,11 +11253,7 @@ fn generated_crud_form(
             insert_values.push(":zelyra_user_id".into());
         }
         let insert_select = if crud.tenant_column.is_some() || recipient_column.is_some() {
-            format!(
-                " SELECT {} WHERE true{}",
-                insert_values.join(", "),
-                membership_guard.unwrap_or_default()
-            )
+            format!(" SELECT {} WHERE true", insert_values.join(", "))
         } else {
             format!(" VALUES ({})", insert_values.join(", "))
         };
