@@ -779,6 +779,27 @@ mod tests {
     }
 
     #[test]
+    fn contract_violation_does_not_poison_the_next_input() {
+        let program = parse(
+            &lex("fn main() {}\nfn invalid_result() -> Int ensures { result > 0 } { return 0 }\n")
+                .expect("lex project"),
+        )
+        .expect("parse project");
+        let mut session = ReplSession::new(program, None, None, None, true)
+            .expect("start REPL with contract-bearing function");
+
+        let error = session
+            .eval_line("invalid_result()")
+            .expect_err("failed postcondition is reported to the current input");
+        assert!(error.to_string().contains("postcondition failed"));
+
+        let result = session
+            .eval_line("\"weiter\"")
+            .expect("evaluate next input after contract violation");
+        assert_eq!(result.value, Some(Value::String("weiter".into())));
+    }
+
+    #[test]
     fn syntax_and_type_errors_are_recoverable() {
         let mut session = session();
         assert!(session.eval_line("x = {").is_err());
