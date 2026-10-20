@@ -732,8 +732,10 @@ geprüft; berechnete Felder und generierte Uploads sind weiterhin offen:
   Wegwerf-MariaDB-/HTTP-Test bestand über den CLI-generierten CRUD-Pfad:
   `.env`-Datenbankauflösung, `/new`, Multipart-Speicherung, Listenlink ohne
   rohe Referenz und authentifizierter Download. Ein vorhandener Upload-
-  Integrationstest deckt Edit-Erhalt/Ersetzung sowie Rollback-Bereinigung ab.
-  Explizite mandantenfremde Ablehnung und Browserprüfungen bleiben Release-Gates.
+  Integrationstest deckt Edit-Erhalt/Ersetzung, Rollback-Bereinigung sowie
+  direkte Dispatcher-Prüfungen ab: Ein Mandantenmitglied darf laden, ein
+  anderer Mandant erhält 404. Ein vollständiger authentifizierter
+  Cross-Tenant-HTTP-Ablauf und Browserprüfungen bleiben Release-Gates.
 
 Siehe den [Plan zum Abschluss des Geschäfts-CRUD](release-plans/1.2.31-1.2.33-business-crud.de.md).
 

@@ -3994,16 +3994,28 @@ fn multipart_upload_commits_reference_and_removes_file_after_sql_rollback() {
     .expect("drop test-only upload table");
     zelyra_database::execute_query(
         &database_url,
-        "CREATE TABLE zelyra_upload_e2e (id BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY, document CHAR(36) NULL, title VARCHAR(80) NULL, owner_id BIGINT NOT NULL DEFAULT 7)",
+        "CREATE TABLE zelyra_upload_e2e (id BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY, document CHAR(36) NULL, title VARCHAR(80) NULL, owner_id BIGINT NOT NULL DEFAULT 7, tenant_id BIGINT NOT NULL DEFAULT 0)",
         Vec::new(),
     )
     .expect("create test-only upload table");
     zelyra_database::execute_query(
         &database_url,
-        "CREATE TABLE zelyra_upload_shared_e2e (id BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY, document CHAR(36) NULL, owner_id BIGINT NOT NULL DEFAULT 7)",
+        "CREATE TABLE zelyra_upload_shared_e2e (id BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY, document CHAR(36) NULL, owner_id BIGINT NOT NULL DEFAULT 7, tenant_id BIGINT NOT NULL DEFAULT 0)",
         Vec::new(),
     )
     .expect("create test-only shared upload reference table");
+    zelyra_database::execute_query(
+        &database_url,
+        "DROP TABLE IF EXISTS zelyra_upload_membership_e2e",
+        Vec::new(),
+    )
+    .expect("drop test-only upload membership table");
+    zelyra_database::execute_query(
+        &database_url,
+        "CREATE TABLE zelyra_upload_membership_e2e (id BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY, user_id BIGINT NOT NULL, tenant_id BIGINT NOT NULL)",
+        Vec::new(),
+    )
+    .expect("create test-only upload membership table");
     let storage_root = std::env::temp_dir().join(format!(
         "zelyra-upload-e2e-{}-{}",
         std::process::id(),
@@ -4135,11 +4147,13 @@ fn multipart_upload_commits_reference_and_removes_file_after_sql_rollback() {
                 document: FileRef?
                 title: String(80)?
                 owner_id: Int required default 7
+                tenant_id: Int required default 0
             }
             table zelyra_upload_shared_e2e {
                 id: Id primary auto
                 document: FileRef?
                 owner_id: Int required default 7
+                tenant_id: Int required default 0
             }
             fn main() {}
             "#,
@@ -4325,6 +4339,18 @@ fn multipart_upload_commits_reference_and_removes_file_after_sql_rollback() {
                     allowed_types: ["application/pdf"]
                 }
                 owner_id: Int required
+                tenant_id: Int required default 7
+            }
+            table zelyra_upload_shared_e2e {
+                id: Id primary auto
+                document: FileRef?
+                owner_id: Int required default 7
+                tenant_id: Int required default 7
+            }
+            table zelyra_upload_membership_e2e {
+                id: Id primary auto
+                user_id: Id required
+                tenant_id: Int required
             }
             form Upload -> zelyra_upload_e2e {
                 field document: File { max_size: "1KB" allowed_types: ["application/pdf"] }
@@ -4381,6 +4407,69 @@ fn multipart_upload_commits_reference_and_removes_file_after_sql_rollback() {
         .headers
         .iter()
         .any(|(name, value)| name == "Cache-Control" && value == "private, no-store"));
+    zelyra_database::execute_query(
+        &database_url,
+        "INSERT INTO zelyra_upload_membership_e2e (user_id, tenant_id) VALUES (7, 0)",
+        Vec::new(),
+    )
+    .expect("grant the test actor access to tenant 7");
+    let mut tenant_crud = crud.clone();
+    tenant_crud.tenant_column = Some("tenant_id".into());
+    let tenant_context = TenantContext {
+        user_id: 7,
+        tenant_id: 0,
+        membership_table: Some("zelyra_upload_membership_e2e".into()),
+        membership_has_active: false,
+        tenant_owner_table: None,
+        tenant_owner_column: None,
+    };
+    let tenant_download = dispatch_crud_file_download(
+        &tenant_crud,
+        &Request {
+            method: "GET".into(),
+            target: format!("/uploads/{id}/files/document"),
+            path: format!("/uploads/{id}/files/document"),
+            headers: HashMap::new(),
+            body: String::new(),
+            remote_addr: None,
+        },
+        &path_params,
+        CrudFileDownloadContext {
+            database_url: Some(&database_url),
+            storage_root: Some(&storage_root),
+            validation_program: Some(&program),
+            actor_user_id: Some(7),
+            tenant_context: Some(&tenant_context),
+        },
+    );
+    assert_eq!(tenant_download.status, 200, "tenant member can download");
+    let other_tenant = TenantContext {
+        tenant_id: 8,
+        ..tenant_context.clone()
+    };
+    let cross_tenant_download = dispatch_crud_file_download(
+        &tenant_crud,
+        &Request {
+            method: "GET".into(),
+            target: format!("/uploads/{id}/files/document"),
+            path: format!("/uploads/{id}/files/document"),
+            headers: HashMap::new(),
+            body: String::new(),
+            remote_addr: None,
+        },
+        &path_params,
+        CrudFileDownloadContext {
+            database_url: Some(&database_url),
+            storage_root: Some(&storage_root),
+            validation_program: Some(&program),
+            actor_user_id: Some(7),
+            tenant_context: Some(&other_tenant),
+        },
+    );
+    assert_eq!(
+        cross_tenant_download.status, 404,
+        "a different tenant cannot discover or download the attachment"
+    );
     let unauthenticated_app =
         WebApp::with_database_url(Vec::new(), Vec::new(), Some(database_url.clone()))
             .with_cruds(vec![crud.clone()])
@@ -4582,6 +4671,12 @@ fn multipart_upload_commits_reference_and_removes_file_after_sql_rollback() {
         Vec::new(),
     )
     .expect("drop test-only shared upload reference table");
+    zelyra_database::execute_query(
+        &database_url,
+        "DROP TABLE zelyra_upload_membership_e2e",
+        Vec::new(),
+    )
+    .expect("drop test-only upload membership table");
     zelyra_database::execute_query(&database_url, "DROP TABLE zelyra_upload_e2e", Vec::new())
         .expect("drop test-only upload table");
     std::fs::remove_dir_all(storage_root).unwrap();

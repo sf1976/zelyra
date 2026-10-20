@@ -677,8 +677,9 @@ computed fields and generated uploads remain open:
   test passed through the real CLI-generated CRUD path: `.env` database
   resolution, `/new`, multipart persistence, list links without raw references,
   and authenticated download. Existing upload-route integration tests cover
-  edit preservation/replacement and rollback cleanup. Explicit cross-tenant
-  denial and browser checks remain release gates.
+  edit preservation/replacement, rollback cleanup, and direct dispatcher checks
+  that a tenant member can download while another tenant receives 404. A full
+  authenticated cross-tenant HTTP flow and browser checks remain release gates.
 
 See the [business CRUD completion plan](release-plans/1.2.31-1.2.33-business-crud.en.md).
 
