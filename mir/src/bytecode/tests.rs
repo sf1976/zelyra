@@ -1033,6 +1033,42 @@ fn main() {}
 }
 
 #[test]
+fn zero_step_budget_failure_keeps_source_location_across_backends() {
+    let source = "fn run() -> Int {\n    answer = 40 + 2\n    return answer\n}\nfn main() {}\n";
+    let ast = parse(&lex(source).expect("source lexes")).expect("source parses");
+    let mir = crate::lower(&ast).expect("source type-checks and lowers");
+    let bytecode = compile(&mir, "run").expect("run function compiles");
+    let bytecode = decode(&encode(&bytecode).expect("bytecode encodes"))
+        .expect("bytecode verifies after decoding");
+    let policy = RuntimePolicy {
+        step_budget: Some(0),
+        ..RuntimePolicy::default()
+    };
+    let ast_error = zelyra_runtime::execute_function_with_capabilities_and_policies(
+        &ast,
+        "run",
+        Vec::new(),
+        None,
+        None,
+        Some(&policy),
+    )
+    .expect_err("AST rejects execution before the first step");
+    let limits = ExecutionLimits {
+        max_steps: 0,
+        ..ExecutionLimits::default()
+    };
+    let mir_error = execution::execute_function(&mir, "run", Vec::new(), limits)
+        .expect_err("MIR rejects execution before the first step");
+    let bytecode_error = execute(&bytecode, Vec::new(), limits)
+        .expect_err("bytecode rejects execution before the first step");
+    assert!(ast_error.message.contains("step budget exceeded"));
+    assert!(mir_error.message.contains("step budget exceeded"));
+    assert!(bytecode_error.message.contains("step budget exceeded"));
+    assert_eq!(mir_error.span, ast_error.span);
+    assert_eq!(bytecode_error.span.line, ast_error.span.line);
+}
+
+#[test]
 fn bytecode_to_float_conversion_matches_ast_for_the_laravel_projection_shape() {
     let source = r#"
 fn useful_life(months: UInt) -> Float {

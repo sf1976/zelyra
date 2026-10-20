@@ -522,6 +522,24 @@ fn bind_iterator_value(
     Ok(())
 }
 
+fn instruction_span(program: &MirProgram, instruction: &MirInstruction) -> Span {
+    match instruction {
+        MirInstruction::IteratorInit { span, .. }
+        | MirInstruction::MatchInit { span, .. }
+        | MirInstruction::Let { span, .. }
+        | MirInstruction::Assign { span, .. }
+        | MirInstruction::ArrayIndexAssign { span, .. }
+        | MirInstruction::TupleBind { span, .. }
+        | MirInstruction::Transaction { span, .. }
+        | MirInstruction::Parallel { span, .. }
+        | MirInstruction::LoopInvariantCheck { span, .. } => *span,
+        MirInstruction::Evaluate(expression) => program
+            .expressions
+            .get(expression.0)
+            .map_or(Span::default(), |expression| expression.span),
+    }
+}
+
 impl Machine<'_> {
     fn tick(&mut self, span: Span) -> Result<(), RuntimeError> {
         match self.step_budget.consume() {
@@ -794,7 +812,7 @@ impl Machine<'_> {
                     )?;
                 }
                 for instruction in &basic_block.instructions {
-                    self.tick(basic_block.span)?;
+                    self.tick(instruction_span(self.program, instruction))?;
                     match instruction {
                         MirInstruction::Let {
                             local, value, span, ..
