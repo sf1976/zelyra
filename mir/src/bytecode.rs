@@ -39,7 +39,8 @@ pub use format::{decode, decode_with_limits, encode, encode_with_limits, Bytecod
 mod compiler;
 pub use compiler::compile;
 
-pub const BYTECODE_VERSION: u16 = 25;
+pub const BYTECODE_VERSION: u16 = 26;
+const MAX_BYTECODE_OPERATIONS_PER_EXECUTION: usize = 10_000_000;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum BytecodeIteratorKind {
@@ -124,6 +125,8 @@ pub struct BytecodeInstruction {
 
 #[derive(Clone, Debug)]
 pub enum BytecodeOp {
+    /// Counts one Zelyra source-level execution step, independent of VM lowering.
+    Step,
     Constant(Value),
     LoadLocal(LocalId),
     StoreLocal(LocalId),
@@ -1473,6 +1476,7 @@ fn verify_function(function: &BytecodeFunction, span: Span) -> Result<usize, Vec
                 }
                 vec![pc + 1]
             }
+            BytecodeOp::Step => vec![pc + 1],
             BytecodeOp::StoreLocal(_) | BytecodeOp::Pop => {
                 next_height = next_height.checked_sub(1).ok_or_else(|| {
                     vec![bytecode_error("bytecode stack underflow", instruction.span)]
@@ -2047,6 +2051,7 @@ fn execute_bytecode_entry(
     let mut stack = Vec::<Value>::new();
     let mut pending_host_calls = Vec::<(usize, String, usize)>::new();
     let mut output = Vec::new();
+    let mut executed_operations = 0usize;
     let execution = (|| -> Result<ExecutionResult, RuntimeError> {
         loop {
             let frame_index = frames.len() - 1;
@@ -2059,9 +2064,19 @@ fn execute_bytecode_entry(
                     "bytecode program counter is outside the function",
                 )
             })?;
-            consume_bytecode_step(&shared_steps, instruction.span)?;
+            executed_operations = executed_operations.saturating_add(1);
+            if executed_operations > MAX_BYTECODE_OPERATIONS_PER_EXECUTION {
+                return Err(runtime_error(
+                    instruction.span,
+                    "bytecode operation safety limit exceeded",
+                ));
+            }
+            if matches!(instruction.operation, BytecodeOp::Step) {
+                consume_bytecode_step(&shared_steps, instruction.span)?;
+            }
             frame.pc += 1;
             match instruction.operation {
+                BytecodeOp::Step => {}
                 BytecodeOp::Constant(value) => stack.push(value),
                 BytecodeOp::FunctionRef { function: target } => {
                     let target_index = target;
@@ -4537,6 +4552,7 @@ fn called_functions(program: &MirProgram, function: &crate::MirFunction) -> Vec<
         roots.extend(block.loop_invariants.iter().copied());
         for instruction in &block.instructions {
             match instruction {
+                MirInstruction::SourceStep { .. } => {}
                 MirInstruction::Let { value, .. }
                 | MirInstruction::Assign { value, .. }
                 | MirInstruction::Evaluate(value)

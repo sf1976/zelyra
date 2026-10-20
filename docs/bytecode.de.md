@@ -1,4 +1,4 @@
-# Experimentelles Zelyra-Bytecode v25
+# Experimentelles Zelyra-Bytecode v26
 
 `zelyra-mir::bytecode` bietet das erste ausführbare Bytecode-Backend für
 bereits typgeprüfte und verifizierte MIR. Der AST-Interpreter bleibt die Referenzimplementierung und das normale
@@ -234,9 +234,20 @@ Hostfreigaben.
 
 ## Format- und Sicherheitsgrenzen
 
-`BYTECODE_VERSION` bezeichnet Version `25` des deterministischen Binärformats.
-Version 25 ergänzt die verifizierte mutable Array-Pop-Instruktion und die
-typisierten strukturellen Array-/Tuple-/Option-/Result-Gleichheitsoperationen.
+Bytecode v26 verwendet explizite Quellschrittmarkierungen für das
+benutzerseitige `--max-steps`-Budget. VM-Befehle bestimmen damit nicht mehr
+die Sprachschritt-Einheit. Die getesteten Grenzen für Anweisungen, Ausdrücke
+und While-Schleifen stimmen einschließlich Fehlerpositionen zwischen AST und
+MIR überein; Aufrufe und Funktionsvor-/Nachbedingungen sind durch einen
+weiteren Budgetlauf abgedeckt. Transaktionen, Parallelität und weitere
+Sprachkonstrukte benötigen noch umfassendere Grenzwerttests. Für
+fehlerhafte oder handgebaute Artefakte begrenzt die VM die Ausführung zusätzlich
+auf 10.000.000 Befehle.
+
+`BYTECODE_VERSION` bezeichnet Version `26` des deterministischen Binärformats.
+Version 26 ergänzt Quellschrittmarkierungen. Version 25 ergänzte die
+verifizierte mutable Array-Pop-Instruktion und typisierte strukturelle
+Array-/Tuple-/Option-/Result-Gleichheitsoperationen.
 Version 24 serialisiert die Namen tenant-gescopter Tabellen. Verifier und VM
 weisen rohes SQL auf solchen Tabellen ab; bei Datenbankausführung muss diese
 Liste mit dem aus dem geprüften Projekt stammenden Schema übereinstimmen.

@@ -1,4 +1,4 @@
-# Experimental Zelyra Bytecode v25
+# Experimental Zelyra Bytecode v26
 
 `zelyra-mir::bytecode` provides the first executable bytecode backend for
 already type-checked and verified MIR. The AST interpreter remains the reference implementation and the normal
@@ -202,9 +202,18 @@ function arguments, return values, capability declarations, and host grants.
 
 ## Format and safety limits
 
-`BYTECODE_VERSION` identifies version `25` of a deterministic binary format.
-Version 25 adds the verified mutable-array pop instruction and typed structural
-array/tuple/Option/Result equality operations.
+Bytecode v26 uses explicit source-step markers for the user-visible
+`--max-steps` budget, so VM opcode count no longer defines the language-level
+fuel unit. The tested statement, expression, and while-loop boundaries match
+AST and MIR, including failure spans. Calls and function pre/postconditions
+are also covered by a separate budget sweep. Transactions, parallel work, and
+other source constructs still need broader boundary coverage. The VM also imposes a separate 10,000,000-op execution ceiling for
+malformed or hand-built artifacts.
+
+`BYTECODE_VERSION` identifies version `26` of a deterministic binary format.
+Version 26 adds source-step markers. Version 25 added the verified mutable-array
+pop instruction and typed structural array/tuple/Option/Result equality
+operations.
 Version 24 serializes tenant-scoped table names. The verifier and VM reject raw
 SQL against those tables; database execution also requires this list to match
 the schema derived from the checked project. Typed tenant queries are not yet

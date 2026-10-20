@@ -525,6 +525,7 @@ fn bind_iterator_value(
 fn instruction_span(program: &MirProgram, instruction: &MirInstruction) -> Span {
     match instruction {
         MirInstruction::IteratorInit { span, .. }
+        | MirInstruction::SourceStep { span }
         | MirInstruction::MatchInit { span, .. }
         | MirInstruction::Let { span, .. }
         | MirInstruction::Assign { span, .. }
@@ -802,6 +803,9 @@ impl Machine<'_> {
                     message: format!("MIR control flow reached missing block {}", block.0),
                     span: function.span,
                 })?;
+                if let Some(loop_span) = basic_block.loop_span {
+                    self.tick(loop_span)?;
+                }
                 if !basic_block.loop_invariants.is_empty() {
                     self.check_loop_invariants(
                         &basic_block.loop_invariants,
@@ -812,8 +816,15 @@ impl Machine<'_> {
                     )?;
                 }
                 for instruction in &basic_block.instructions {
-                    self.tick(instruction_span(self.program, instruction))?;
+                    if !matches!(
+                        instruction,
+                        MirInstruction::SourceStep { .. }
+                            | MirInstruction::LoopInvariantCheck { .. }
+                    ) {
+                        self.tick(instruction_span(self.program, instruction))?;
+                    }
                     match instruction {
+                        MirInstruction::SourceStep { span } => self.tick(*span)?,
                         MirInstruction::Let {
                             local, value, span, ..
                         } => {
@@ -1027,7 +1038,6 @@ impl Machine<'_> {
                     }
                 }
 
-                self.tick(basic_block.span)?;
                 match basic_block
                     .terminator
                     .as_ref()

@@ -436,6 +436,7 @@ impl Writer {
     }
     fn op(&mut self, op: &BytecodeOp) -> Result<(), Vec<MirError>> {
         match op {
+            BytecodeOp::Step => self.u8(50),
             BytecodeOp::Constant(Value::Int(x)) => {
                 self.u8(0)?;
                 self.raw(&x.to_le_bytes())
@@ -1085,6 +1086,7 @@ impl<'a> Reader<'a> {
     }
     fn op(&mut self) -> Result<BytecodeOp, Vec<MirError>> {
         Ok(match self.u8()? {
+            50 => BytecodeOp::Step,
             0 => BytecodeOp::Constant(Value::Int(i64::from_le_bytes(
                 self.raw(8)?.try_into().unwrap(),
             ))),

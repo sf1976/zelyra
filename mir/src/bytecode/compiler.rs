@@ -134,6 +134,9 @@ fn compile_function(
     }
     for block in &function.blocks {
         compiler.blocks.insert(block.id, compiler.code.len());
+        if let Some(loop_span) = block.loop_span {
+            compiler.emit(BytecodeOp::Step, loop_span);
+        }
         for invariant in &block.loop_invariants {
             compiler.expression(*invariant, &mut HashSet::new())?;
             compiler.emit(
@@ -144,17 +147,16 @@ fn compile_function(
             );
         }
         for instruction in &block.instructions {
-            let first_instruction = compiler.code.len();
             let source_span = mir_instruction_source_span(instruction, program);
-            compiler.instruction(instruction)?;
-            if let (Some(span), Some(first)) =
-                (source_span, compiler.code.get_mut(first_instruction))
-            {
-                // Charge the first emitted VM operation to the source-level
-                // MIR instruction. Later operations retain expression spans,
-                // so runtime failures still point at the specific operator.
-                first.span = span;
+            if !matches!(
+                instruction,
+                MirInstruction::SourceStep { .. } | MirInstruction::LoopInvariantCheck { .. }
+            ) {
+                if let Some(span) = source_span {
+                    compiler.emit(BytecodeOp::Step, span);
+                }
             }
+            compiler.instruction(instruction)?;
         }
         compiler.terminator(block.terminator.as_ref(), block.id, block.span)?;
     }
@@ -665,7 +667,8 @@ struct FunctionCompiler<'a> {
 
 fn mir_instruction_source_span(instruction: &MirInstruction, program: &MirProgram) -> Option<Span> {
     Some(match instruction {
-        MirInstruction::IteratorInit { span, .. }
+        MirInstruction::SourceStep { span }
+        | MirInstruction::IteratorInit { span, .. }
         | MirInstruction::MatchInit { span, .. }
         | MirInstruction::Let { span, .. }
         | MirInstruction::Assign { span, .. }
@@ -1448,6 +1451,9 @@ impl FunctionCompiler<'_> {
 
     fn instruction(&mut self, instruction: &MirInstruction) -> Result<(), Vec<MirError>> {
         match instruction {
+            MirInstruction::SourceStep { span } => {
+                self.emit(BytecodeOp::Step, *span);
+            }
             MirInstruction::IteratorInit {
                 iterator,
                 source: MirIteratorSource::IntegerRange { start, end, step },
@@ -1843,6 +1849,7 @@ impl FunctionCompiler<'_> {
             )]);
         };
         let span = expression.span;
+        self.emit(BytecodeOp::Step, span);
         let expression_type = expression.ty.clone();
         let kind = expression.kind.clone();
         let result = match kind {

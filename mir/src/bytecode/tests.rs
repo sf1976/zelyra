@@ -1259,6 +1259,125 @@ fn zero_step_budget_failure_keeps_source_location_across_backends() {
 }
 
 #[test]
+fn source_step_budget_boundaries_match_across_ast_mir_and_bytecode() {
+    let source = r#"
+fn run() -> Int {
+    mutable total = 0
+    mutable i = 0
+    while i < 3 {
+        total = total + i
+        i = i + 1
+    }
+    return total
+}
+fn main() {}
+"#;
+    let ast = parse(&lex(source).expect("source lexes")).expect("source parses");
+    let mir = crate::lower(&ast).expect("source type-checks and lowers");
+    let bytecode = compile(&mir, "run").expect("run function compiles");
+    let bytecode = decode(&encode(&bytecode).expect("bytecode encodes"))
+        .expect("bytecode verifies after decoding");
+
+    for max_steps in 0..64 {
+        let policy = RuntimePolicy {
+            step_budget: Some(max_steps),
+            ..RuntimePolicy::default()
+        };
+        let ast_result = zelyra_runtime::execute_function_with_capabilities_and_policies(
+            &ast,
+            "run",
+            Vec::new(),
+            None,
+            None,
+            Some(&policy),
+        );
+        let limits = ExecutionLimits {
+            max_steps,
+            ..ExecutionLimits::default()
+        };
+        let mir_result = execution::execute_function(&mir, "run", Vec::new(), limits);
+        let bytecode_result = execute(&bytecode, Vec::new(), limits);
+        match (ast_result, mir_result, bytecode_result) {
+            (Ok(ast_value), Ok(mir_value), Ok(bytecode_value)) => {
+                assert_eq!(mir_value.value, ast_value, "MIR result at budget {max_steps}");
+                assert_eq!(bytecode_value.value, ast_value, "bytecode result at budget {max_steps}");
+                assert_eq!(ast_value, Value::Int(3));
+            }
+            (Err(ast_error), Err(mir_error), Err(bytecode_error)) => {
+                assert!(ast_error.message.contains("step budget exceeded"));
+                assert!(mir_error.message.contains("step budget exceeded"));
+                assert!(bytecode_error.message.contains("step budget exceeded"));
+                assert_eq!(mir_error.span, ast_error.span, "MIR span at budget {max_steps}");
+                assert_eq!(bytecode_error.span, ast_error.span, "bytecode span at budget {max_steps}");
+            }
+            (ast, mir, bytecode) => panic!(
+                "backends disagree at budget {max_steps}: AST={ast:?}, MIR={mir:?}, bytecode={bytecode:?}"
+            ),
+        }
+    }
+}
+
+#[test]
+fn source_step_budgets_match_through_calls_and_contracts() {
+    let source = r#"
+fn increment(value: Int) -> Int
+requires { value > 0 }
+ensures { result > value }
+{
+    return value + 1
+}
+fn run() -> Int {
+    first = increment(2)
+    return increment(first)
+}
+fn main() {}
+"#;
+    let ast = parse(&lex(source).expect("source lexes")).expect("source parses");
+    let mir = crate::lower(&ast).expect("source type-checks and lowers");
+    let bytecode = compile(&mir, "run").expect("run function compiles");
+    let bytecode = decode(&encode(&bytecode).expect("bytecode encodes"))
+        .expect("bytecode verifies after decoding");
+
+    for max_steps in 0..96 {
+        let policy = RuntimePolicy {
+            step_budget: Some(max_steps),
+            ..RuntimePolicy::default()
+        };
+        let ast_result = zelyra_runtime::execute_function_with_capabilities_and_policies(
+            &ast,
+            "run",
+            Vec::new(),
+            None,
+            None,
+            Some(&policy),
+        );
+        let limits = ExecutionLimits {
+            max_steps,
+            ..ExecutionLimits::default()
+        };
+        let mir_result = execution::execute_function(&mir, "run", Vec::new(), limits);
+        let bytecode_result = execute(&bytecode, Vec::new(), limits);
+        match (ast_result, mir_result, bytecode_result) {
+            (Ok(ast_value), Ok(mir_value), Ok(bytecode_value)) => {
+                assert_eq!(mir_value.value, ast_value, "MIR result at budget {max_steps}");
+                assert_eq!(bytecode_value.value, ast_value, "bytecode result at budget {max_steps}");
+                assert_eq!(ast_value, Value::Int(4));
+            }
+            (Err(ast_error), Err(mir_error), Err(bytecode_error)) => {
+                assert!(ast_error.message.contains("step budget exceeded"));
+                assert!(mir_error.message.contains("step budget exceeded"));
+                assert!(bytecode_error.message.contains("step budget exceeded"));
+                assert_eq!(mir_error.span, ast_error.span, "MIR span at budget {max_steps}");
+                assert_eq!(bytecode_error.span, ast_error.span, "bytecode span at budget {max_steps}");
+            }
+            (ast, mir, bytecode) => panic!(
+                "backends disagree at budget {max_steps}: AST={ast:?}, MIR={mir:?}, bytecode={bytecode:?}"
+            ),
+        }
+    }
+}
+
+#[test]
 fn bytecode_to_float_conversion_matches_ast_for_the_laravel_projection_shape() {
     let source = r#"
 fn useful_life(months: UInt) -> Float {
