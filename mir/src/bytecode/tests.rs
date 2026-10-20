@@ -745,6 +745,7 @@ fn bytecode_pdf_attachment_survives_encoding_and_uses_the_shared_renderer() {
                 queue(Invoice { number: "INV-1" })
             }
         "#;
+    let ast = parse(&lex(source).expect("source lexes")).expect("source parses");
     let (mir, bytecode) = compile_source(source, "main");
     let bytecode =
         decode(&encode(&bytecode).expect("PDF bytecode encodes")).expect("PDF bytecode decodes");
@@ -756,8 +757,9 @@ fn bytecode_pdf_attachment_survives_encoding_and_uses_the_shared_renderer() {
         validations: AtomicUsize::new(0),
         random_calls: AtomicUsize::new(0),
     });
+    let database_url = "mariadb://user:secret@127.0.0.1:3306/bytecode_test";
     let database = BytecodeDatabaseExecution {
-        url: "mariadb://user:secret@127.0.0.1:3306/bytecode_test",
+        url: database_url,
         schema: &mir.database_schema,
     };
     let grants = HashSet::from(["Email".to_owned(), "Database(write)".to_owned()]);
@@ -784,6 +786,67 @@ fn bytecode_pdf_attachment_survives_encoding_and_uses_the_shared_renderer() {
         payload.contains("JVBER"),
         "the attachment contains encoded PDF bytes"
     );
+
+    // Compare the actual outbox write across all three backends. Independent
+    // checks for a PDF header would not establish parity for rendered content,
+    // attachment metadata, or the serialized outbox payload.
+    let ast_host = Arc::new(OutboxHost {
+        batch: Mutex::new(None),
+        validations: AtomicUsize::new(0),
+        random_calls: AtomicUsize::new(0),
+    });
+    let ast_outcome = zelyra_runtime::execute_captured_with_database_and_host_services(
+        &ast,
+        database_url,
+        ast_host.clone(),
+        Some(&grants),
+        None,
+    );
+    assert_eq!(ast_outcome.error, None);
+
+    let mir_host = Arc::new(OutboxHost {
+        batch: Mutex::new(None),
+        validations: AtomicUsize::new(0),
+        random_calls: AtomicUsize::new(0),
+    });
+    let mir_outcome = execution::execute_function_with_database_and_host_services_and_policy(
+        &mir,
+        "main",
+        Vec::new(),
+        ExecutionLimits::default(),
+        Some(&grants),
+        None,
+        crate::execution::DatabaseExecution {
+            url: database_url,
+            host_services: mir_host.clone(),
+        },
+    )
+    .expect("MIR executes the same PDF outbox operation");
+    assert_eq!(mir_outcome.value, Value::Unit);
+    assert_eq!(ast_outcome.output, outcome.output);
+
+    let (ast_queries, ast_transactional) = ast_host
+        .batch
+        .lock()
+        .unwrap()
+        .clone()
+        .expect("AST outbox batch");
+    let (mir_queries, mir_transactional) = mir_host
+        .batch
+        .lock()
+        .unwrap()
+        .clone()
+        .expect("MIR outbox batch");
+    assert!(ast_transactional && mir_transactional && transactional);
+    assert_eq!(ast_queries.len(), 1);
+    assert_eq!(mir_queries.len(), 1);
+    for actual in [&ast_queries[0], &mir_queries[0]] {
+        assert_eq!(actual.sql, queries[0].sql);
+        assert_eq!(
+            format!("{:?}", actual.params),
+            format!("{:?}", queries[0].params)
+        );
+    }
 
     let denied_host = Arc::new(OutboxHost {
         batch: Mutex::new(None),
