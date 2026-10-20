@@ -25,7 +25,7 @@ telemetry, explicit effects, portable data, resource discipline, and honest
 proof claims guide every phase. The [manifesto](MANIFESTO.md) states the
 principles; the roadmap below tracks what is actually implemented.
 
-The current stable release is 1.2.26, published at https://github.com/sf1976/zelyra/releases/tag/v1.2.26. **Current milestones** is the source of
+The current stable release is 1.2.28, published at https://github.com/sf1976/zelyra/releases/tag/v1.2.28. **Current milestones** is the source of
 near-term commitments. Older numbered release sections below are retained as
 historical planning and evidence; they do not by themselves define current
 release targets. Longer-term ideas remain in the post-1.0 evolution section.
@@ -347,14 +347,17 @@ security and compatibility gates stated for that milestone.
   still requires the aggregate `Database` grant for SQL, and bytecode REPL
   execution is not implemented. Released as [`v1.2.28`](https://github.com/sf1976/zelyra/releases/tag/v1.2.28); release gates passed. The broader security/permission matrix remains an open follow-up. See the
   [1.2.28 work plan](release-plans/1.2.28-typed-crud-actions.en.md).
-- [ ] **1.2.29 — bounded secure file upload foundation (subject to design
-  gate):** Specify and test multipart size limits, file metadata types,
-  content validation, tenant ownership, private storage outside `public/`,
-  authorized downloads, rollback cleanup, and backup/delete behavior before
-  exposing a `File` field. Reject the release if uploads can bypass request
-  limits, path containment, authorization, or cleanup guarantees. If those
-  guarantees cannot be completed by this milestone, defer uploads explicitly
-    past 1.3.0 rather than shipping a partial file API.
+- [~] **1.2.29 — bounded secure file upload foundation:** Architecture inventory
+  is complete. The HTTP parser currently accepts UTF-8 string bodies with a
+  1 MiB global limit, so binary multipart data needs an explicitly bounded
+  byte-oriented request path. A static analysis of `/opt/siedelmann-laravel/app`
+  identified upload-related flows in invoices, contracts, settings, postal
+  letters, and inbound mail; the importer does not currently generate them.
+  Before adding a `File` form field, implement and test multipart limits,
+  allowlisted content validation, opaque tenant-owned storage identities,
+  authorized downloads, commit/rollback cleanup, and backup/delete semantics.
+  The acceptance criteria and architecture decision are in the
+  [1.2.29 secure upload plan](release-plans/1.2.29-secure-uploads.en.md).
 - [ ] **1.2.30 — Laravel import workflow coverage:** Expand only from
   compiler-checked, reusable feature/domain/UI modules backed by route-to-
   controller-to-view evidence. Validate the selected generated modules against

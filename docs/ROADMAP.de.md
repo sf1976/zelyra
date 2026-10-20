@@ -27,7 +27,7 @@ Ressourcendisziplin und ehrliche Beweisaussagen leiten jede Phase. Das
 [Manifest](MANIFESTO.de.md) beschreibt die Prinzipien; die Roadmap kennzeichnet
 den tatsächlich implementierten Stand.
 
-Das aktuelle stabile Release ist 1.2.26 und wurde unter https://github.com/sf1976/zelyra/releases/tag/v1.2.26 veröffentlicht. **Aktuelle Meilensteine** ist die
+Das aktuelle stabile Release ist 1.2.28 und wurde unter https://github.com/sf1976/zelyra/releases/tag/v1.2.28 veröffentlicht. **Aktuelle Meilensteine** ist die
 verbindliche Übersicht der nächsten Vorhaben. Ältere, nummerierte Release-
 Abschnitte bleiben als historische Planung und Nachweise erhalten; sie legen
 für sich keine aktuellen Releaseziele fest. Langfristige Ideen stehen im
@@ -387,14 +387,17 @@ abgeschlossen.
   Release-Gates bestanden. Die umfassendere Berechtigungs-/Sicherheitsmatrix
   bleibt ein offener Folgepunkt. Siehe den
   [Arbeitsplan 1.2.28](release-plans/1.2.28-typed-crud-actions.de.md).
-- [ ] **1.2.29 — begrenzte sichere Datei-Uploads (Design-Gate):** Vor einem
-  `File`-Formularfeld Multipart-Größenlimits, Metadatentypen, Inhaltsprüfung,
-  Mandantenzuordnung, private Ablage außerhalb von `public/`, autorisierte
-  Downloads, Rollback-Aufräumen sowie Backup- und Löschverhalten festlegen und
-  testen. Die Freigabe scheitert, wenn Uploads Größenlimits, Pfadgrenzen,
-  Berechtigungen oder Aufräumregeln umgehen können. Falls diese Garantien bis
-  dahin nicht vollständig erreichbar sind, werden Uploads ausdrücklich über
-  1.3.0 hinaus verschoben statt teilweise ausgeliefert.
+- [~] **1.2.29 — begrenzte sichere Datei-Uploads:** Die Architekturaufnahme ist
+  abgeschlossen. Der HTTP-Parser verarbeitet derzeit UTF-8-Textkörper mit einem
+  globalen Limit von 1 MiB; Binär-Multipart benötigt daher einen ausdrücklich
+  begrenzten, byteorientierten Request-Pfad. Eine statische Analyse von
+  `/opt/siedelmann-laravel/app` fand Uploadabläufe bei Rechnungen, Verträgen,
+  Einstellungen, Postbriefen und eingehender Mail; der Importer erzeugt diese
+  Abläufe derzeit nicht. Vor einem `File`-Formularfeld sind Multipart-Limits,
+  Allowlist-Inhaltsprüfung, opake mandantengebundene Speicher-IDs, autorisierte
+  Downloads, Commit-/Rollback-Aufräumen und Backup-/Löschsemantik umzusetzen
+  und zu testen. Abnahmekriterien und Architekturentscheidung stehen im
+  [Plan für sichere Uploads 1.2.29](release-plans/1.2.29-secure-uploads.de.md).
 - [ ] **1.2.30 — Abdeckung echter Laravel-Migrationsabläufe:** Den getesteten
   Routen-/Controller-/View-zu-Modul-Umfang am Laravel-Projekt erweitern, aber
   nur für compilergeprüfte, wiederverwendbare Feature-/Domain-/UI-Module mit
