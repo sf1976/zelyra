@@ -486,11 +486,13 @@ abgeschlossen.
   Bereinigung. Das Upload-POST-E2E sendet den erfolgreichen Multipart-Upload
   über eine echte lokale HTTP-Verbindung und prüft Verweis und Dateibytes;
   zusätzlich prüft es die Bereinigung nach Datenbank-Rollback. Das
-  Dateispeicher-Backup schließt Datenbank,
-  Projektkonfiguration und Geheimnisse ausdrücklich aus. Ein koordiniertes
-  vollständiges Anwendungsbackup bleibt ein separates Folgepaket; die
-  Datenbank muss separat und bei gestopptem Zelyra gesichert/wiederhergestellt
-  werden.
+  Dateispeicher-Backup schließt Datenbank, Projektkonfiguration und Geheimnisse
+  ausdrücklich aus. Ein späterer Wegwerf-MariaDB-E2E prüft nun den manuellen
+  kombinierten Wiederherstellungsablauf: Zelyra stoppen, Datenbank dumpen,
+  Dateien sichern, beide Bestände entfernen, Datenbank wiederherstellen und
+  danach referenzierte Dateien mit Prüfsummenprüfung zurückspielen. Das ist
+  weder ein einzelnes Archiv noch ein absturzatomisches Anwendungsbackup;
+  Konfiguration und Geheimnisse bleiben separat.
   Siehe den [Plan für sichere Uploads 1.2.29](release-plans/1.2.29-secure-uploads.de.md).
   Veröffentlicht als [`v1.2.29`](https://github.com/sf1976/zelyra/releases/tag/v1.2.29);
   alle Release-Gates bestanden, Linux-/Windows-Artefakte und Prüfsummen
@@ -676,7 +678,7 @@ aktueller Branch-Stand veröffentlicht. Der derzeit verifizierte Stand:
 | Mandantenfilter der Rechnungsnummern-Kollisionssuche | Der bisherige Rechnungsnummernpfad und der generische Zähler binden den authentifizierten Mandanten. MariaDB-Integration prüft getrennte Zähler und atomare Vergabe. | Regressionstests in Release-Gates erhalten und unterstützte Backends verifizieren. |
 | Serverseitig berechnete Geschäftsfelder | Für generiertes CRUD und geprüfte API-POST-/PUT-/PATCH-Pfade implementiert, einschließlich Abhängigkeits-/Typprüfung und exakter Decimal-Rundung. | Backend- sowie AST-/MIR-/Bytecode-Paritätsabnahme; PATCH übernimmt ausgelassene Pflichtfelder nicht aus dem bestehenden Datensatz. |
 | Lokalisierte Master-Detail-Beschriftungen | HTML-escaped Locale-Marker werden für Kindlisten-Legenden aufgelöst; ein Regressionstest deckt diesen Rendering-Pfad ab. | Test in Release-Gates behalten und Fallback-Verhalten im Tutorial prüfen. |
-| Datei-Anhänge im generierten CRUD | Mit geprüften `FileRef`-Metadaten, privatem Speicher, generierten Uploadfeldern und autorisierten Downloads implementiert. MariaDB-HTTP- und Chromium-E2E prüfen authentifizierten Upload, Download im eigenen Mandanten, fremdmandantige 404-Antwort, MIME-Typ und geschützte Referenz. Chromium läuft dabei ohne JavaScript. | Koordiniertes Anwendungsbackup aus Datenbank und Dateien samt Wiederherstellung sowie vollständige Release-Gates. Diese Punkte gelten nicht als abgeschlossen. |
+| Datei-Anhänge im generierten CRUD | Mit geprüften `FileRef`-Metadaten, privatem Speicher, generierten Uploadfeldern und autorisierten Downloads implementiert. MariaDB-HTTP- und Chromium-E2E prüfen authentifizierten Upload, Download im eigenen Mandanten, fremdmandantige 404-Antwort, MIME-Typ und geschützte Referenz. Ein Wegwerf-MariaDB-Drill prüft außerdem das gemeinsame Wiederherstellen von Datenbank und Dateien. | Vollständige Release-Gates. Geprüft ist ein manueller Ablauf bei gestopptem Server mit separaten Sicherungen; ein einzelnes Archiv oder absturzatomisches Anwendungsbackup gibt es nicht. |
 
 Dieser Arbeitsbereich ist erst abgeschlossen, wenn alle verbleibenden
 Abnahmen aus der Tabelle und den detaillierten Release-Plänen darunter
@@ -762,9 +764,12 @@ keine Produktionsreife.
   den PDF-Content-Type und dass die opake FileRef nicht im Detail-HTML erscheint.
   Der vollständige MariaDB-Mandanten-CRUD-E2E wird zusätzlich in headless
   Chromium ohne JavaScript ausgeführt; Upload-Control, Detail-Link, PDF-Bytes,
-  MIME-Typ und 404 im fremden Mandanten bestehen. Ein koordiniertes
-  Datenbank-/Datei-Backup mit Wiederherstellung und vollständige Release-Gates
-  bleiben offen.
+  MIME-Typ und 404 im fremden Mandanten bestehen. Datenbank-/Datei-
+  Wiederherstellung besteht nun ebenfalls als Wegwerf-MariaDB-Drill: Dump und
+  Dateisnapshot sichern, beide Bestände entfernen, Datenbank zuerst
+  wiederherstellen, danach die referenzierte Datei mit Prüfsumme prüfen. Es
+  bleibt ein manueller Ablauf bei gestopptem Server und kein absturzatomisches
+  Gesamtarchiv. Vollständige Release-Gates bleiben offen.
 
 Siehe den [Plan zum Abschluss des Geschäfts-CRUD](release-plans/1.2.31-1.2.33-business-crud.de.md).
 
