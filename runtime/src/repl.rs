@@ -20,17 +20,17 @@ impl std::fmt::Display for ReplError {
         match self {
             Self::Parse { message, span } => write!(
                 formatter,
-                "error[E-PARSE-001] at {}:{}: {message}",
+                "error[E-PARSE-001]\n  --> {}:{}: {message}",
                 span.line, span.column
             ),
             Self::Type(error) => write!(
                 formatter,
-                "error[{}] at {}:{}: {}",
+                "error[{}]\n  --> {}:{}: {}",
                 error.code, error.span.line, error.span.column, error.message
             ),
             Self::Runtime(error) => write!(
                 formatter,
-                "error[E-RUNTIME-001] at {}:{}: {}",
+                "error[E-RUNTIME-001]\n  --> {}:{}: {}",
                 error.span.line, error.span.column, error.message
             ),
             Self::Session(message) => write!(formatter, "error[E-REPL-001]: {message}"),
@@ -516,6 +516,7 @@ fn collect_top_level_bindings(
             _ => {}
         }
     }
+
     bindings.into_iter().collect()
 }
 
@@ -573,6 +574,24 @@ mod tests {
         let program =
             parse(&lex("fn main() {}\n").expect("lex base program")).expect("parse base program");
         ReplSession::new(program, None, None, None, true).expect("start REPL")
+    }
+
+    #[test]
+    fn diagnostics_put_source_location_and_message_on_a_second_line() {
+        let error = ReplError::Parse {
+            message: "unexpected token".into(),
+            span: Span {
+                line: 3,
+                column: 5,
+                start: 0,
+                end: 0,
+                source_id: 0,
+            },
+        };
+        assert_eq!(
+            error.to_string(),
+            "error[E-PARSE-001]\n  --> 3:5: unexpected token"
+        );
     }
 
     #[test]
