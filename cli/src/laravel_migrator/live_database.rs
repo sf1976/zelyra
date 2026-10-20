@@ -8,7 +8,8 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::net::IpAddr;
 use std::path::{Path, PathBuf};
-use std::process::Command;
+use std::process::{Command, Stdio};
+use std::time::{Duration, Instant};
 use url::Url;
 
 const MAX_DOTENV_BYTES: u64 = 64 * 1024;
@@ -128,14 +129,9 @@ fn docker_compose_database_url(connection_url: &str, project_root: &Path) -> Opt
         "label=com.docker.compose.project.working_dir={}",
         working_directory.display()
     );
-    let containers = Command::new("docker")
-        .args(["ps", "--quiet", "--filter", &filter])
-        .output()
-        .ok()?;
-    if !containers.status.success() {
-        return None;
-    }
-    let ids = String::from_utf8(containers.stdout).ok()?;
+    let container_output =
+        docker_metadata_output(&["ps".into(), "--quiet".into(), "--filter".into(), filter])?;
+    let ids = String::from_utf8(container_output).ok()?;
     let ids = ids
         .lines()
         .filter(|id| {
@@ -150,16 +146,42 @@ fn docker_compose_database_url(connection_url: &str, project_root: &Path) -> Opt
     // and assigned IPs. Container environment variables (which may contain
     // secrets) are never requested from Docker or copied to this process.
     const INSPECT_TEMPLATE: &str = "{{ $wd := index .Config.Labels \"com.docker.compose.project.working_dir\" }}{{range $networkName,$network := .NetworkSettings.Networks}}{{range $alias := $network.Aliases}}{{printf \"%s\\t%s\\t%s\\n\" $wd $alias $network.IPAddress}}{{end}}{{end}}";
-    let mut inspect = Command::new("docker");
-    inspect.args(["inspect", "--format", INSPECT_TEMPLATE]);
-    inspect.args(ids);
-    let inspected = inspect.output().ok()?;
-    if !inspected.status.success() {
-        return None;
-    }
-    let inspected = String::from_utf8(inspected.stdout).ok()?;
+    let mut inspect_args = vec![
+        "inspect".to_owned(),
+        "--format".to_owned(),
+        INSPECT_TEMPLATE.to_owned(),
+    ];
+    inspect_args.extend(ids.into_iter().map(str::to_owned));
+    let inspected = String::from_utf8(docker_metadata_output(&inspect_args)?).ok()?;
     let ip = compose_alias_ip(&inspected, &working_directory, &configured_host)?;
     replace_database_host(connection_url, ip)
+}
+
+fn docker_metadata_output(args: &[String]) -> Option<Vec<u8>> {
+    const TIMEOUT: Duration = Duration::from_secs(5);
+    let mut child = Command::new("docker")
+        .args(args)
+        .stdout(Stdio::piped())
+        .stderr(Stdio::null())
+        .spawn()
+        .ok()?;
+    let started = Instant::now();
+    loop {
+        match child.try_wait() {
+            Ok(Some(_)) => {
+                let output = child.wait_with_output().ok()?;
+                return output.status.success().then_some(output.stdout);
+            }
+            Ok(None) if started.elapsed() < TIMEOUT => {
+                std::thread::sleep(Duration::from_millis(20));
+            }
+            Ok(None) | Err(_) => {
+                let _ = child.kill();
+                let _ = child.wait();
+                return None;
+            }
+        }
+    }
 }
 
 fn compose_working_directory(project_root: &Path) -> Option<PathBuf> {
