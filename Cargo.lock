@@ -2569,6 +2569,7 @@ dependencies = [
  "blake2",
  "lettre",
  "libc",
+ "mime",
  "rand_core 0.6.4",
  "ring",
  "serde",

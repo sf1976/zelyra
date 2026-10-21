@@ -2169,6 +2169,27 @@ fn validates_optional_typed_page_data_for_missing_detail_rows() {
 }
 
 #[test]
+fn validates_dynamic_page_media_types_and_rejects_wildcards() {
+    let valid_source = r#"
+        page "/feed.xml" {
+            content_type: "application/xml; charset=utf-8"
+            html { <feed><title>Zelyra</title></feed> }
+        }
+    "#;
+    let valid = parse(&lex(valid_source).unwrap()).unwrap();
+    assert!(validate_page_data("feed.zyl", &valid));
+
+    let invalid_source = r#"
+        page "/anything" {
+            content_type: "*/*"
+            html { <p>not a concrete media type</p> }
+        }
+    "#;
+    let invalid = parse(&lex(invalid_source).unwrap()).unwrap();
+    assert!(!validate_page_data("wildcard.zyl", &invalid));
+}
+
+#[test]
 fn validates_create_edit_contexts_and_custom_tableview_row_actions() {
     let source = r#"
         table customers { id: Id primary auto name: String(100) email: Email password_hash: String(255) }

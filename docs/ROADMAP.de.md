@@ -626,9 +626,9 @@ abgeschlossen.
   Standard unverändert bleiben. Ziel ist portabler geprüfter Bytecode, keine
   native Maschinencodegenerierung.
 - [ ] **1.3.0 — bestätigte Web-/Compilerlücken:** SQL-geladene
-  `Option<Record>`-Seitendaten zulassen (der CLI-Validator weist sie derzeit
-  zurück, obwohl der Web-Router fehlende optionale Zeilen bereits abbildet);
-  explizite dynamische Antworttypen für Seiten und typisierte API-Antworten
+  `Option<Record>`-Seitendaten akzeptieren (der Validatorfix liegt auf dem
+  aktiven, noch nicht zusammengeführten Feature-Branch); dynamische
+  Seitentypen abschließen und zusammenführen sowie typisierte API-Antworten
   ergänzen; begrenztes, bereinigtes CommonMark/GFM-Rendering bereitstellen;
   sowie stdin-Piping für die bereits erlaubnislisten-, timeout- und
   ausgabelimitierte Process-Capability ergänzen. `HttpResult<T>` beschreibt

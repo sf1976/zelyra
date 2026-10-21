@@ -1969,6 +1969,45 @@ fn default_shell_covers_standalone_forms_and_tableviews_but_not_custom_pages() {
 }
 
 #[test]
+fn dynamic_page_content_type_is_sent_and_rejects_header_injection() {
+    let route = Route {
+        path: "/sitemap.xml".into(),
+        html: "<urlset><url><loc>https://example.test/</loc></url></urlset>".into(),
+        query: Vec::new(),
+        page_size: None,
+        sort_columns: Vec::new(),
+        search_columns: Vec::new(),
+        filters: Vec::new(),
+        data: Vec::new(),
+        requires_auth: false,
+        permissions: Vec::new(),
+    };
+    let app = WebApp::new(vec![route], Vec::new())
+        .with_page_content_types(HashMap::from([(
+            "/sitemap.xml".into(),
+            "application/xml; charset=utf-8".into(),
+        )]))
+        .expect("valid XML media type is accepted");
+    let request = parse_request("GET /sitemap.xml HTTP/1.1\r\nHost: localhost\r\n\r\n").unwrap();
+    let response = app.dispatch(&request);
+    assert_eq!(response.content_type, "application/xml; charset=utf-8");
+    assert_eq!(
+        response.body,
+        "<urlset><url><loc>https://example.test/</loc></url></urlset>"
+    );
+    assert!(response
+        .to_http()
+        .contains("Content-Type: application/xml; charset=utf-8\r\n"));
+
+    assert!(WebApp::new(Vec::new(), Vec::new())
+        .with_page_content_types(HashMap::from([(
+            "/bad".into(),
+            "text/plain\r\nX-Injected: yes".into(),
+        )]))
+        .is_err());
+}
+
+#[test]
 fn generated_login_page_uses_the_localized_default_shell() {
     let auth = AuthRoute {
         table: "users".into(),

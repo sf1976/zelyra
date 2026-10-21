@@ -851,6 +851,25 @@ page "/customers" {
 }
 ~~~
 
+Seiten antworten standardmäßig mit `text/html; charset=utf-8`. Für XML-Feeds
+und vergleichbare Textantworten kann ein geprüfter Medientyp angegeben werden:
+
+~~~zelyra
+page "/sitemap.xml" {
+    content_type: "application/xml; charset=utf-8"
+    html {
+        <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+            <url><loc>https://example.test/</loc></url>
+        </urlset>
+    }
+}
+~~~
+
+`content_type` ändert nur den HTTP-Antwortheader. Der Inhalt verwendet weiter
+das geprüfte Seitentemplate mit escaped Interpolationen; Wildcards und ungültige
+Headerwerte werden abgewiesen. Nicht-HTML-Antworten erhalten weder die
+Anwendungsshell noch CSS-Injektion.
+
 ### Deklarative Query-Steuerungen: Suche, Sortierung, Pagination und Filter
 
 Seiten können typisierte Query-Eingaben für ausdrückliches SQL deklarieren:

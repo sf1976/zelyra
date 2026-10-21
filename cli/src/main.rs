@@ -2097,6 +2097,18 @@ fn validate_views(path: &str, program: &zelyra_ast::Program) -> bool {
 fn validate_page_data(path: &str, program: &zelyra_ast::Program) -> bool {
     let mut valid = true;
     for page in &program.pages {
+        if let Some(content_type) = &page.content_type {
+            if let Err(message) = zelyra_web::validate_page_content_type(content_type) {
+                diagnostic(
+                    path,
+                    "E-VIEW-038",
+                    &format!("invalid page content type: {message}"),
+                    page.span.line,
+                    page.span.column,
+                );
+                valid = false;
+            }
+        }
         if page.page_size.is_some()
             && !page
                 .data
@@ -11132,34 +11144,51 @@ fn serve_command(mut args: impl Iterator<Item = String>) -> ExitCode {
         }
     };
     println!("Zelyra server listening on http://{actual_address}");
-    let app = WebApp::with_database_url(routes, form_routes, database_url)
-        .with_validation_program(program)
-        .with_runtime_security(capability_grants, runtime_policy)
-        .with_ui_settings(ui_language, ui_level)
-        .with_ui_stylesheet_css(ui_stylesheet_css)
-        .with_project_theme_css(theme_css)
-        .with_project_ui_catalogs(ui_catalogs)
-        .with_schedule_probe_token(schedule_probe_token)
-        .with_database_capability(database_capability_granted)
-        .with_public_dir(schedule_project_root.as_deref().unwrap_or_else(|| {
-            std::path::Path::new(&path)
-                .parent()
-                .unwrap_or_else(|| std::path::Path::new("."))
-        }))
-        .with_upload_storage(project_root.join("storage/zelyra"))
-        .with_apis(api_routes)
-        .with_auth(
-            env::var("ZELYRA_AUTH_TOKEN").ok(),
-            env::var("ZELYRA_AUTH_PERMISSIONS")
-                .unwrap_or_default()
-                .split(',')
-                .map(str::trim)
-                .filter(|permission| !permission.is_empty())
-                .map(str::to_owned)
-                .collect(),
-        )
-        .with_cruds(crud_routes)
-        .with_tableviews(tableview_routes);
+    let page_content_types = program
+        .pages
+        .iter()
+        .filter_map(|page| {
+            page.content_type
+                .as_ref()
+                .map(|content_type| (page.path.clone(), content_type.clone()))
+        })
+        .collect::<HashMap<_, _>>();
+    let app = match WebApp::with_database_url(routes, form_routes, database_url)
+        .with_page_content_types(page_content_types)
+    {
+        Ok(app) => app,
+        Err(error) => {
+            diagnostic(&path, "E-VIEW-038", &error.message, 1, 1);
+            return ExitCode::from(1);
+        }
+    }
+    .with_validation_program(program)
+    .with_runtime_security(capability_grants, runtime_policy)
+    .with_ui_settings(ui_language, ui_level)
+    .with_ui_stylesheet_css(ui_stylesheet_css)
+    .with_project_theme_css(theme_css)
+    .with_project_ui_catalogs(ui_catalogs)
+    .with_schedule_probe_token(schedule_probe_token)
+    .with_database_capability(database_capability_granted)
+    .with_public_dir(schedule_project_root.as_deref().unwrap_or_else(|| {
+        std::path::Path::new(&path)
+            .parent()
+            .unwrap_or_else(|| std::path::Path::new("."))
+    }))
+    .with_upload_storage(project_root.join("storage/zelyra"))
+    .with_apis(api_routes)
+    .with_auth(
+        env::var("ZELYRA_AUTH_TOKEN").ok(),
+        env::var("ZELYRA_AUTH_PERMISSIONS")
+            .unwrap_or_default()
+            .split(',')
+            .map(str::trim)
+            .filter(|permission| !permission.is_empty())
+            .map(str::to_owned)
+            .collect(),
+    )
+    .with_cruds(crud_routes)
+    .with_tableviews(tableview_routes);
     let app = if let Some(store) = module_settings_store {
         app.with_module_settings_store(store)
     } else {
