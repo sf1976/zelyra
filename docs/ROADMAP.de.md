@@ -625,16 +625,19 @@ abgeschlossen.
   unterstützte Bytecode-Operationen fail-closed scheitern und der bisherige
   Standard unverändert bleiben. Ziel ist portabler geprüfter Bytecode, keine
   native Maschinencodegenerierung.
-- [ ] **1.3.0 — bestätigte Web-/Compilerlücken:** SQL-geladene
-  `Option<Record>`-Seitendaten akzeptieren (der Validatorfix liegt auf dem
-  aktiven, noch nicht zusammengeführten Feature-Branch); dynamische
-  Seitentypen abschließen und zusammenführen sowie typisierte API-Antworten
-  ergänzen; begrenztes, bereinigtes CommonMark/GFM-Rendering bereitstellen;
-  sowie stdin-Piping für die bereits erlaubnislisten-, timeout- und
-  ausgabelimitierte Process-Capability ergänzen. `HttpResult<T>` beschreibt
-  derzeit Antworten ausgehender HTTP-Aufrufe, nicht Status-/Header-Rückgaben
-  eines Zelyra-API-Handlers. Diese Punkte sind getrennt vom statischen
-  `public/`-Asset-Serving.
+- [~] **1.3.0 — bestätigte Web-/Compilerlücken:** SQL-geladene
+  `Option<Record>`-Seitendaten, dynamisches `page content_type`, statische
+  `public/`-Assets und begrenztes stdin für erlaubnislistengeprüfte Prozesse
+  (`run_process_piped`) sind bereits auf `main` vorhanden.
+  `run_process_piped` führt für sich allein weder Zelyra-Quelltext aus noch
+  stellt es eine Web-Sandbox bereit. Typisierte erfolgreiche API-Antworten sind
+  auf dem aktiven, noch nicht zusammengeführten Branch als `ApiResponse<T>` mit
+  Status-/Content-Type-Deklarationen, geprüften Headern, OpenAPI- und
+  TypeScript-Client-Unterstützung umgesetzt. `HttpResult<T>` beschreibt weiter
+  Antworten ausgehender HTTP-Aufrufe. Parametrisierte `view`-Props, eine
+  allgemeine Übersetzungssuche für Seiten und sicheres CommonMark/GFM-Rendering
+  bleiben offen. Statisches Asset-Serving ist bereits implementiert und keine
+  offene Lücke.
 
 **Nach 1.3.0 oder bei ausdrücklicher Neubewertung:** Ein natives AOT-Backend
 bleibt optional und hängt von Benchmarks ab. Kein offener Punkt entfällt stillschweigend: Arbeit, deren

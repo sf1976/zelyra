@@ -2561,6 +2561,55 @@ impl FunctionCompiler<'_> {
                 type_args,
                 args,
                 ..
+            } if name == "api_response" => {
+                if args.len() != 3 || type_args.len() > 1 {
+                    return Err(vec![bytecode_error(
+                        "api_response expects status, headers, and body",
+                        span,
+                    )]);
+                }
+                let body_type = self.expression_type(args[2], span)?;
+                if type_args
+                    .first()
+                    .is_some_and(|expected| expected != &body_type)
+                {
+                    return Err(vec![bytecode_error(
+                        "api_response body does not match its type argument",
+                        span,
+                    )]);
+                }
+                let expected_type = Type::Applied {
+                    name: "ApiResponse".into(),
+                    args: vec![type_args.first().cloned().unwrap_or(body_type)],
+                };
+                if expression_type != expected_type
+                    || self.expression_type(args[0], span)? != Type::Int
+                    || self.expression_type(args[1], span)? != Type::Array(Box::new(Type::String))
+                {
+                    return Err(vec![bytecode_error(
+                        "api_response has invalid argument or result types",
+                        span,
+                    )]);
+                }
+                for argument in &args {
+                    self.expression(*argument, active)?;
+                }
+                self.emit(
+                    BytecodeOp::Builtin {
+                        name,
+                        arguments: args.len(),
+                        type_arguments: type_args,
+                        result_type: expression_type,
+                    },
+                    span,
+                )
+            }
+            MirExpressionKind::Call {
+                name,
+                function: None,
+                type_args,
+                args,
+                ..
             } if matches!(
                 name.as_str(),
                 "now"

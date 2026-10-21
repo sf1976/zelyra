@@ -8,6 +8,33 @@ use zelyra_lexer::lex;
 use zelyra_parser::parse;
 
 #[test]
+fn api_response_value_rejects_header_injection_and_server_control_headers() {
+    let response = api_response_value(
+        201,
+        vec!["Cache-Control: no-store".into()],
+        Value::String("created".into()),
+    )
+    .unwrap();
+    assert_eq!(
+        response.ty(),
+        Type::Applied {
+            name: "ApiResponse".into(),
+            args: vec![Type::String],
+        }
+    );
+    for headers in [
+        vec!["Cache-Control: safe\r\nSet-Cookie: stolen=1".into()],
+        vec!["Content-Length: 10".into()],
+        vec!["Set-Cookie: session=unsafe".into()],
+        vec!["X-Unreviewed: value".into()],
+        vec!["Location: //evil.example/path".into()],
+    ] {
+        assert!(api_response_value(201, headers, Value::String("x".into())).is_err());
+    }
+    assert!(api_response_value(404, Vec::new(), Value::String("x".into())).is_err());
+}
+
+#[test]
 fn shared_execution_limits_define_defaults_caps_and_worker_stack_budget() {
     assert_eq!(effective_function_call_depth(None), 20);
     assert_eq!(effective_function_call_depth(Some(37)), 37);

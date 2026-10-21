@@ -70,6 +70,54 @@ impl<'program, 'services> Interpreter<'program, 'services> {
         ) {
             return self.eval_language_value_builtin(name, args, env, span);
         }
+        if name == "api_response" {
+            if args.len() != 3 || type_args.len() > 1 {
+                return Err(self.runtime_error(
+                    span,
+                    "api_response expects status, String[] headers, body, and at most one body type argument",
+                ));
+            }
+            let status = self.eval(&args[0], env)?;
+            let headers = self.eval(&args[1], env)?;
+            let body = self.eval(&args[2], env)?;
+            let Value::Int(status) = status else {
+                return Err(self.runtime_error(args[0].span, "api_response status must be Int"));
+            };
+            let Value::Array(headers) = headers else {
+                return Err(
+                    self.runtime_error(args[1].span, "api_response headers must be String[]")
+                );
+            };
+            let mut header_values = Vec::with_capacity(headers.len());
+            for header in headers {
+                let Value::String(header) = header else {
+                    return Err(
+                        self.runtime_error(args[1].span, "api_response headers must be String[]")
+                    );
+                };
+                header_values.push(header);
+            }
+            let body_type = type_args.first().cloned().unwrap_or_else(|| body.ty());
+            if body.ty() != body_type {
+                return Err(self.runtime_error(
+                    args[2].span,
+                    "api_response body does not match its declared type argument",
+                ));
+            }
+            let response = api_response_value(status, header_values, body)
+                .map_err(|message| self.runtime_error(span, message))?;
+            if response.ty()
+                != (Type::Applied {
+                    name: "ApiResponse".into(),
+                    args: vec![body_type],
+                })
+            {
+                return Err(
+                    self.runtime_error(span, "api_response produced an invalid response type")
+                );
+            }
+            return Ok(response);
+        }
         if name == "render_pdf" {
             if args.len() != 2 || !type_args.is_empty() {
                 return Err(self
