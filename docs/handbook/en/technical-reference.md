@@ -786,6 +786,40 @@ page "/customers" {
 }
 ~~~
 
+### Reusable views with typed properties
+
+A `view` can declare typed properties for page titles, descriptions, and other
+shared layout data. Each page supplies its values in the `view` declaration;
+optional properties may be omitted:
+
+~~~zelyra
+view SiteShell {
+    props { title: String description: String? }
+    html {
+        <html>
+            <head>
+                <title>{title}</title>
+                <meta name="description" content="{description}" />
+                <slot name="head" />
+            </head>
+            <body><main><slot /></main></body>
+        </html>
+    }
+}
+
+page "/handbook" {
+    view: SiteShell(title: "Zelyra Handbook", description: "Technical reference")
+    html { <h1>Handbook</h1> }
+}
+~~~
+
+View properties are type-checked before slot composition; missing, unknown, or
+incompatible values produce `E-VIEW-039`. Dynamic values may come from typed
+route parameters or `load` data, for example `title: "{page_title}"`; output
+remains HTML-escaped. Optional view properties may also be used in CRUD or
+TableView layouts and are left empty there. Required view properties are
+mandatory on pages and are not allowed in CRUD/TableView layouts.
+
 Pages return `text/html; charset=utf-8` by default. A page can declare another
 validated media type for XML feeds and similar text responses:
 

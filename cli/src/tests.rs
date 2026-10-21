@@ -1892,6 +1892,82 @@ fn composes_a_page_inside_its_named_view() {
 }
 
 #[test]
+fn composes_typed_view_properties_into_page_metadata_and_escapes_values() {
+    let source = r#"
+        view SiteShell {
+            props { title: String description: String? }
+            html {
+                <html><head><title>{title}</title><meta name="description" content="{description}" /></head>
+                <body><slot /></body></html>
+            }
+        }
+        page "/handbook" {
+            view: SiteShell(title: "Zelyra & Business", description: "Types < security")
+            html { <h1>Handbook</h1> }
+        }
+    "#;
+    let program = parse(&lex(source).unwrap()).unwrap();
+    assert!(validate_views("view-props.zyl", &program));
+    let html = compose_page_view(&program, &program.pages[0]);
+    assert!(html.contains("<title>Zelyra &amp; Business</title>"));
+    assert!(html.contains("content=\"Types &lt; security\""));
+    assert!(html.contains("<h1>Handbook</h1>"));
+    let body_start = html.find("<body>").expect("view body opening tag");
+    let page_content = html
+        .find("<h1>Handbook</h1>")
+        .expect("page content remains in the view body");
+    let body_end = html.find("</body>").expect("view body closing tag");
+    assert!(
+        body_start < page_content && page_content < body_end,
+        "composed layout lost its slot structure: {html}"
+    );
+    assert!(
+        !html.contains("<slot"),
+        "composed layout kept an unresolved slot: {html}"
+    );
+    assert!(!html.contains("{title}"));
+    assert!(!html.contains("{description}"));
+}
+
+#[test]
+fn rejects_missing_unknown_and_incompatible_page_view_properties() {
+    for source in [
+        r#"view Shell { props { title: String } html { <title>{title}</title><slot /> } }
+            page "/" { view: Shell html { <p>Home</p> } }"#,
+        r#"view Shell { props { title: String } html { <title>{title}</title><slot /> } }
+            page "/" { view: Shell(title: "Home", extra: "x") html { <p>Home</p> } }"#,
+        r#"view Shell { props { title: Int } html { <title>{title}</title><slot /> } }
+            page "/" { view: Shell(title: "Home") html { <p>Home</p> } }"#,
+    ] {
+        let program = parse(&lex(source).unwrap()).unwrap();
+        assert!(!validate_views("invalid-view-props.zyl", &program));
+    }
+}
+
+#[test]
+fn checks_dynamic_view_properties_against_page_inputs() {
+    let source = r#"
+        view SiteShell {
+            props { title: String }
+            html { <html><head><title>{title}</title></head><body><slot /></body></html> }
+        }
+        page "/handbook" {
+            input { page_title: String }
+            view: SiteShell(title: "{page_title}")
+            html { <h1>Handbook</h1> }
+        }
+    "#;
+    let program = parse(&lex(source).unwrap()).unwrap();
+    assert!(validate_views("dynamic-view-props.zyl", &program));
+    let html = compose_page_view(&program, &program.pages[0]);
+    assert!(html.contains("<title>{page_title}</title>"));
+
+    let incompatible = source.replace("page_title: String", "page_title: Int");
+    let program = parse(&lex(&incompatible).unwrap()).unwrap();
+    assert!(!validate_views("dynamic-view-props.zyl", &program));
+}
+
+#[test]
 fn composes_default_component_slots_and_nested_components() {
     let source = r#"
         component Panel {

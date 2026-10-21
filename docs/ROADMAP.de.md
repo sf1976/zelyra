@@ -625,18 +625,18 @@ abgeschlossen.
   unterstützte Bytecode-Operationen fail-closed scheitern und der bisherige
   Standard unverändert bleiben. Ziel ist portabler geprüfter Bytecode, keine
   native Maschinencodegenerierung.
-- [~] **1.3.0 — geprüfte Web-/Compilerfunktionen und offene Punkte:**
+- [~] **1.3.0 — umgesetzte Web-/Compilerfunktionen und offene Punkte:**
   SQL-geladene `Option<Record>`-Seitendaten, dynamisches `page content_type`,
-  statische `public/`-Assets, begrenztes `run_process_piped` und typisierte
-  erfolgreiche API-Antworten über `ApiResponse<T>` sind auf `main` umgesetzt.
-  Status, Medientyp, Header, OpenAPI-Ausgabe und TypeScript-Client-Unterstützung
-  sind abgedeckt. Piped Prozesseingabe führt für sich allein keinen Zelyra-Code
-  aus und stellt keine Web-Sandbox bereit. Parametrisierte `view`-Properties
-  liegen in PR #151, sicheres begrenztes CommonMark/GFM-Rendering in PR #154;
-  geprüfte statische Locale-Referenzen und `/{locale}/...`-Routenauswahl liegen
-  in PR #155. `HttpResult<T>` bleibt der Ergebnistyp für ausgehende HTTP-Aufrufe.
-  Übersetzungsaufrufe in beliebigen Ausdrücken, Markdown-Inhaltsverzeichnisse,
-  Pluralregeln und Codehervorhebung bleiben offen und benötigen eigene Tests.
+  statische `public/`-Assets, begrenztes `run_process_piped`, typisierte
+  erfolgreiche API-Antworten über `ApiResponse<T>` und typisierte Eigenschaften
+  wiederverwendbarer `view`-Layouts sind auf `main` umgesetzt. Piped
+  Prozesseingabe führt für sich allein keinen Zelyra-Quelltext aus und stellt
+  keine Web-Sandbox bereit. Geprüfte statische Locale-Referenzen und
+  `/{locale}/...`-Routenauswahl liegen in PR #155; sicheres, begrenztes
+  CommonMark/GFM-Rendering bleibt in PR #154. `HttpResult<T>` bleibt der
+  Ergebnistyp für ausgehende HTTP-Aufrufe. Übersetzungsaufrufe in beliebigen
+  Ausdrücken, Markdown-Inhaltsverzeichnisse, Pluralregeln und Codehervorhebung
+  bleiben offen und benötigen eigene Tests.
 
 **Nach 1.3.0 oder bei ausdrücklicher Neubewertung:** Ein natives AOT-Backend
 bleibt optional und hängt von Benchmarks ab. Kein offener Punkt entfällt stillschweigend: Arbeit, deren
@@ -1200,7 +1200,10 @@ werden. Details stehen im [Projektlayout-Arbeitsplan](release-plans/1.3.0-projec
   Pagination, APIs, OpenAPI und TypeScript-Client-Erzeugung.
 - [~] Wiederverwendbare Web-Views: benannte Layouts, Seitenkomposition, ein
   validierter Content-Slot und typisierte selbstschließende Komponenten mit
-  Properties sind verfügbar. Benannte Slots mit Fallback-Inhalt, CRUD-View-
+  Properties sind verfügbar. Views können ebenfalls typisierte Properties
+  deklarieren; Seiten übergeben statisch geprüfte Literale oder Werte aus dem
+  Seitenscope, etwa für Titel und Meta-Inhalte. Optionale Properties sind in
+  CRUD- und TableView-Layouts zulässig. Benannte Slots mit Fallback-Inhalt, CRUD-View-
   Überschreibungen und ressourcenspezifische Inhalte für benannte CRUD-Layout-
   Slots sind verfügbar. Statische Slot-Markups dürfen geprüfte Komponenten
   verwenden; datensatzgebundene Slot-Inhalte bleiben offen. Projektlokale
