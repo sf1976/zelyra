@@ -984,6 +984,7 @@ impl<'a> Resolver<'a> {
                             | "mail_deliver"
                             | "run_process"
                             | "run_process_piped"
+                            | "api_response"
                             | "read_text"
                             | "read_text_result"
                             | "write_text"

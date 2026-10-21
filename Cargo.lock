@@ -2441,6 +2441,7 @@ dependencies = [
  "fs2",
  "glob",
  "libc",
+ "mime",
  "nu-ansi-term",
  "rand_core 0.6.4",
  "reedline",
@@ -2548,6 +2549,7 @@ dependencies = [
 name = "zelyra-runtime"
 version = "1.2.33"
 dependencies = [
+ "mime",
  "num-bigint",
  "rand_core 0.6.4",
  "serde_json",
