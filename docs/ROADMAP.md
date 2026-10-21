@@ -600,6 +600,11 @@ an accepted implementation. The new work must generate idiomatic reusable
 Zelyra modules from selected source-backed website behavior and state exactly
 what remains unmigrated. It must not recreate Laravel or claim complete PHP
 translation. The bounded plan is in the linked 1.2.27 work plan.
+The 2026-10-21 read-only live-schema inspection found 89 database tables;
+nine were outside the 80 migration-derived candidates, and their ownership is
+not established. It also reported 473 catalog differences. The candidate
+projection is not a safe replacement for the current database schema; see the
+importer progress log.
 
 ### 1.2.34 — ordered, wholly guarded migration callbacks
 
