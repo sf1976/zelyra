@@ -683,8 +683,7 @@ PR #177 passed full GitHub CI; PR #179 passed full release CI and PR #180
 fixed the release workflow's 21,000-character input limit, then passed CI and
 reproducible Linux/Windows artifact builds. Release v1.2.41 was published
 with checksum sidecars, SPDX SBOMs, and attestations. Downloaded Linux and
-Windows archives and binaries passed SHA-256 verification. Tag-triggered
-workspace CI is still completing. This remains a narrow static file-route
+Windows archives and binaries passed SHA-256 verification. Tag-triggered workspace CI passed on run #39693042950. This remains a narrow static file-route
 import, not general Laravel compatibility.
 
 ## Active architecture milestones (1.1.5 through 1.3.0)
