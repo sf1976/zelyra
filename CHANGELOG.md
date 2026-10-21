@@ -1,5 +1,15 @@
 ## Unreleased
 
+## 1.2.39 — 2026-10-21
+
+- Add exact `parse_date` and `parse_time` results and explicit Date/Time
+  conversions to the reusable CSV importer. Canonical formats are
+  `YYYY-MM-DD` and `HH:MM:SS`; locale and timezone are never inferred.
+  / Exaktes `parse_date` und `parse_time` mit Result-Werten sowie explizite
+  Date-/Time-Konvertierung für den wiederverwendbaren CSV-Importer ergänzen.
+  Die kanonischen Formate sind `YYYY-MM-DD` und `HH:MM:SS`; Locale und
+  Zeitzone werden nicht abgeleitet.
+
 ## 1.2.38 — 2026-10-21
 
 - Add `parse_decimal(String) -> Result<Decimal, String>` and explicit Decimal conversion to the reusable CSV importer. Parsing is exact base 10, accepts at most nine fractional digits, and never passes through Float; date/time conversion and database writes remain open. / `parse_decimal(String) -> Result<Decimal, String>` und explizite Decimal-Konvertierung für den wiederverwendbaren CSV-Importer ergänzen. Das Parsing erfolgt exakt zur Basis 10 mit höchstens neun Nachkommastellen und ohne Float-Zwischenschritt; Datums-/Zeitkonvertierung und Datenbankschreibvorgänge bleiben offen.
