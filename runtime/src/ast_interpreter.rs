@@ -80,11 +80,29 @@ pub(super) struct ProgramContext<'program> {
     pub(super) record_definitions: HashMap<String, RecordDef>,
     pub(super) sql_record_definitions: HashMap<String, RecordDef>,
     pub(super) type_aliases: HashMap<String, Type>,
+    pub(super) runtime_type_aliases: HashMap<String, Type>,
     pub(super) enum_definitions: HashMap<String, zelyra_ast::EnumDef>,
 }
 
 impl<'program> ProgramContext<'program> {
     fn from_program(program: &'program Program) -> Self {
+        let record_definitions = program
+            .records
+            .iter()
+            .map(|record| (record.name.clone(), record.clone()))
+            .collect::<HashMap<_, _>>();
+        let type_aliases = program
+            .types
+            .iter()
+            .map(|definition| (definition.name.clone(), definition.target.clone()))
+            .collect::<HashMap<_, _>>();
+        let enum_definitions = program
+            .enums
+            .iter()
+            .map(|definition| (definition.name.clone(), definition.clone()))
+            .collect::<HashMap<_, _>>();
+        let runtime_type_aliases =
+            runtime_type_aliases(&record_definitions, &type_aliases, &enum_definitions);
         Self {
             functions: program
                 .functions
@@ -104,21 +122,10 @@ impl<'program> ProgramContext<'program> {
                 .map(|table| table.name.clone())
                 .collect(),
             sql_record_definitions: sql_results::definitions(program),
-            record_definitions: program
-                .records
-                .iter()
-                .map(|record| (record.name.clone(), record.clone()))
-                .collect(),
-            type_aliases: program
-                .types
-                .iter()
-                .map(|definition| (definition.name.clone(), definition.target.clone()))
-                .collect(),
-            enum_definitions: program
-                .enums
-                .iter()
-                .map(|definition| (definition.name.clone(), definition.clone()))
-                .collect(),
+            record_definitions,
+            type_aliases,
+            runtime_type_aliases,
+            enum_definitions,
         }
     }
 
@@ -127,6 +134,22 @@ impl<'program> ProgramContext<'program> {
         aliases: &[TypeDef],
         enums: &[zelyra_ast::EnumDef],
     ) -> Self {
+        let record_definitions = records
+            .iter()
+            .cloned()
+            .map(|record| (record.name.clone(), record))
+            .collect::<HashMap<_, _>>();
+        let type_aliases = aliases
+            .iter()
+            .map(|definition| (definition.name.clone(), definition.target.clone()))
+            .collect::<HashMap<_, _>>();
+        let enum_definitions = enums
+            .iter()
+            .cloned()
+            .map(|definition| (definition.name.clone(), definition))
+            .collect::<HashMap<_, _>>();
+        let runtime_type_aliases =
+            runtime_type_aliases(&record_definitions, &type_aliases, &enum_definitions);
         Self {
             functions: HashMap::new(),
             view_definitions: HashMap::new(),
@@ -135,23 +158,31 @@ impl<'program> ProgramContext<'program> {
                 tables: Vec::new(),
             }),
             scoped_tables: Vec::new(),
-            record_definitions: records
-                .iter()
-                .cloned()
-                .map(|record| (record.name.clone(), record))
-                .collect(),
+            record_definitions,
             sql_record_definitions: HashMap::new(),
-            type_aliases: aliases
-                .iter()
-                .map(|definition| (definition.name.clone(), definition.target.clone()))
-                .collect(),
-            enum_definitions: enums
-                .iter()
-                .cloned()
-                .map(|definition| (definition.name.clone(), definition))
-                .collect(),
+            type_aliases,
+            runtime_type_aliases,
+            enum_definitions,
         }
     }
+}
+
+fn runtime_type_aliases(
+    records: &HashMap<String, RecordDef>,
+    declared_aliases: &HashMap<String, Type>,
+    enums: &HashMap<String, zelyra_ast::EnumDef>,
+) -> HashMap<String, Type> {
+    let mut aliases = HashMap::from([
+        ("Id".into(), Type::Int),
+        ("Money".into(), Type::Decimal),
+        ("Email".into(), Type::String),
+        ("Url".into(), Type::String),
+        ("Uuid".into(), Type::String),
+        ("FileRef".into(), Type::String),
+    ]);
+    aliases.retain(|name, _| !records.contains_key(name) && !enums.contains_key(name));
+    aliases.extend(declared_aliases.clone());
+    aliases
 }
 
 /// Host access and the policies that constrain it for one AST execution.
@@ -215,20 +246,8 @@ impl<'program, 'services> AstInterpreter<'program, 'services> {
     }
 
     pub(super) fn runtime_alias_type(&self, ty: &Type, span: Span) -> Result<Type, RuntimeError> {
-        let mut aliases = HashMap::from([
-            ("Id".into(), Type::Int),
-            ("Money".into(), Type::Decimal),
-            ("Email".into(), Type::String),
-            ("Url".into(), Type::String),
-            ("Uuid".into(), Type::String),
-            ("FileRef".into(), Type::String),
-        ]);
-        aliases.retain(|name, _| {
-            !self.program_context.record_definitions.contains_key(name)
-                && !self.program_context.enum_definitions.contains_key(name)
-        });
-        aliases.extend(self.program_context.type_aliases.clone());
-        expand_type_aliases(ty, &aliases).map_err(|message| self.runtime_error(span, message))
+        expand_type_aliases(ty, &self.program_context.runtime_type_aliases)
+            .map_err(|message| self.runtime_error(span, message))
     }
 
     pub(super) fn ensure_database_storage(&mut self, span: Span) -> Result<(), RuntimeError> {
