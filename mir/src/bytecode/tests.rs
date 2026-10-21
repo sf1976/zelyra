@@ -3460,6 +3460,41 @@ fn main() {}
 }
 
 #[test]
+fn markdown_escapes_raw_html_and_rejects_javascript_links_across_backends() {
+    let source = r#"
+fn render_untrusted() -> String {
+    return render_markdown("<script>alert(1)</script>\n\n[unsafe](javascript:alert%281%29)")
+}
+fn main() {}
+"#;
+    let ast = parse(&lex(source).expect("source lexes")).expect("source parses");
+    let mir = crate::lower(&ast).expect("source lowers to MIR");
+    let ast_result = zelyra_runtime::execute_function(&ast, "render_untrusted", vec![], None)
+        .expect("AST markdown rendering succeeds");
+    let mir_result =
+        execution::execute_function(&mir, "render_untrusted", vec![], ExecutionLimits::default())
+            .expect("MIR markdown rendering succeeds")
+            .value;
+    let bytecode = decode(
+        &encode(&compile(&mir, "render_untrusted").expect("bytecode compiles"))
+            .expect("bytecode encodes"),
+    )
+    .expect("bytecode verifies after decoding");
+    let bytecode_result = execute(&bytecode, vec![], ExecutionLimits::default())
+        .expect("bytecode markdown rendering succeeds")
+        .value;
+
+    assert_eq!(ast_result, mir_result);
+    assert_eq!(ast_result, bytecode_result);
+    let Value::String(rendered) = ast_result else {
+        panic!("Markdown builtin must return a string");
+    };
+    assert!(rendered.contains("&lt;script&gt;alert(1)&lt;/script&gt;"));
+    assert!(!rendered.contains("<script"));
+    assert!(!rendered.contains("href=\"javascript:"));
+}
+
+#[test]
 fn bytecode_clock_and_environment_use_declared_capabilities_and_host_grants() {
     let source = r#"
             fn current() -> Timestamp uses Clock { return now() }
