@@ -11,6 +11,8 @@ class AuthController
 
     public function login()
     {
-        return null;
+        if (!$user->is_approved && strcasecmp($user->email, ADMIN_EMAIL) !== 0) {
+            throw ValidationException::withMessages([]);
+        }
     }
 }

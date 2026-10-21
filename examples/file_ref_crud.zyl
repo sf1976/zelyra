@@ -1,0 +1,14 @@
+database main { engine: mariadb }
+
+table contracts {
+    id: Id primary auto
+    title: String(200) required
+    signed_pdf: FileRef? attachment {
+        max_size: "20MB"
+        allowed_types: ["application/pdf"]
+    }
+}
+
+crud Contract -> contracts {}
+
+fn main() {}

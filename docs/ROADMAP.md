@@ -442,9 +442,12 @@ security and compatibility gates stated for that milestone.
   cleanup. The upload POST E2E sends a successful multipart request over a
   local HTTP connection and verifies the stored reference/bytes, then separately
   checks rollback cleanup. File-storage backup intentionally excludes the
-  database, configuration, and secrets;
-  coordinated whole-application backup remains a separate follow-up, with the
-  database backed up/restored separately while Zelyra is stopped. See the
+  database, configuration, and secrets. A later disposable-MariaDB E2E now
+  verifies the paired manual recovery sequence: stop Zelyra, dump the database,
+  back up files, remove both data sets, restore the database, then restore and
+  checksum-check the referenced files. This is not a single archive or a
+  crash-atomic application snapshot; project configuration and secrets remain
+  separate. See the
   [1.2.29 secure upload plan](release-plans/1.2.29-secure-uploads.en.md). Released as
   [`v1.2.29`](https://github.com/sf1976/zelyra/releases/tag/v1.2.29); all
   release gates passed, and Linux/Windows artifacts and checksums were
@@ -508,9 +511,14 @@ security and compatibility gates stated for that milestone.
   new destination-only test account and verifies invalid login, successful
   login, persisted session creation, logout, and session revocation through
   local HTTP and disposable MariaDB. It copies no Laravel credentials or user
-  rows and does not migrate custom registration, tenant-selection, or 2FA
-  flows. The local MariaDB client reports that TLS certificate verification
-  is disabled for this password-authenticated disposable test connection.
+  rows. The importer now recognizes the project's simple required-Boolean
+  `is_approved` guard and emits `auth users { login_enabled: is_approved }`;
+  the E2E proves an unapproved test account is rejected and the same account
+  can sign in after an explicit approval update. The special administrator
+  exception, custom messages, registration, tenant-selection, and 2FA flows
+  are still not transferred. The local MariaDB client reports that TLS
+  certificate verification is disabled for this password-authenticated
+  disposable test connection.
   PHP method recognizer uses the existing lexical source map and balanced code
   braces; regression tests reject method-shaped comments and cover nested
   blocks, typed return declarations, and lookup/update/view patterns that occur
@@ -605,12 +613,23 @@ These milestones are in progress and unreleased. Items with `[~]` are partially 
 
 ### 🧪 [~] Business CRUD completion before 1.3.0
 
-The five invoice/business hurdles reported during the 1.2.30 review are now
-tracked as release work. Tenant scoping for the existing invoice-number
-collision lookup and localization of generated master-detail legends are fixed
-in the 1.2.30 candidate. The first number-series implementation is present on
-the current unreleased branch and remains under release-level verification;
-computed fields and generated uploads remain open:
+The five invoice/business hurdles reported during the 1.2.30 review are all
+explicit release work before 1.3.0. Their implementation is split into small
+releases so each database, compiler, rendering, and security boundary can be
+verified independently. None of the current branch work is a published
+release. The current verified status is:
+
+| Reported hurdle | Current status | Remaining acceptance work |
+| --- | --- | --- |
+| Reusable sequential document numbers | Implemented in the 1.2.31 work: declarative `auto_sequence`, transactional counters, tenant/year scope, and generated CRUD protection from forged values. SQLite now fails schema checking with a source-mapped `E-DB-001`. | Supported-backend/version matrix, retain the SQLite rejection in release tests, legacy invoice compatibility, full release gates. No gapless-number guarantee. |
+| Tenant scope for invoice-number collision checks | The existing invoice-number path and generic sequence allocator both bind the authenticated tenant. MariaDB 11.8 and PostgreSQL 16 integration runs verify independent tenant counters and atomic allocation; CI now exercises both. | Supported-version matrix and full release gates. |
+| Server-computed business fields | Implemented for generated CRUD and validated API POST/PUT/PATCH paths, with dependency/type checks and exact Decimal rounding. CRUD preserves source Decimal text until form validation checks declared storage precision and scale, including normalized MySQL metadata. A partial validated API PATCH now loads omitted values from the existing row, applies tenant scoping, then recomputes derived values before validation and handler execution. | Full backend and AST/MIR/bytecode parity gates; MariaDB/PostgreSQL E2E covers partial PATCH and tenant isolation, and CI runs are pending. |
+| Localized master-detail labels | HTML-escaped locale markers resolve for child-collection legends. Tests cover escaped rendering, project-provided translations, and fallback when a project translation is absent. The invoice tutorial E2E checks every referenced key across its Zelyra source files against both catalogs, plus rendered German home, navigation, and help text. | Preserve locale tests and the tutorial E2E in release gates. |
+| File attachments in generated CRUD | Implemented using checked `FileRef` metadata, private storage, generated upload fields, and authorized downloads. MariaDB HTTP and Chromium E2E cover authenticated upload, same-tenant download, cross-tenant 404, MIME response, and reference redaction. A disposable MariaDB drill also proves paired database/file restore after removing both stores. | Full release gates. The verified procedure requires a stopped server and separate database/file backups; no single archive or crash-atomic snapshot is provided. |
+
+Do not mark this workstream complete until every remaining acceptance item in
+the table and the detailed release plans below passes. In particular, feature
+syntax or a unit test alone does not establish production readiness.
 
 - [~] **1.2.31 — tenant-aware document number series:** The branch now parses
   `auto_sequence("KD-{0001}")` and `auto_sequence("AG-{year}-{0001}")`, adds
@@ -620,28 +639,64 @@ computed fields and generated uploads remain open:
   submitted numbers and edit forms omit generated number fields. Unit coverage
   and a MariaDB integration test cover tenant separation, rollback, existing
   collisions, forged values, yearly formats, and concurrent allocation. The
-  same integration test also passes on PostgreSQL 16. On MariaDB 11.8 and
-  PostgreSQL 16 the managed schema was applied and replanned with no drift.
+  same integration test also passes on PostgreSQL 16. CI now runs it across
+  MariaDB 10.11/11.4/11.8/12.3 and MySQL 8.4, as well as PostgreSQL 16; these
+  matrix runs are pending. On MariaDB 11.8, MySQL 8.4.11, and PostgreSQL 16
+  the managed schema was applied and replanned with no drift.
   MariaDB inspection now distinguishes composite unique keys using the actual
   primary-key constraint. Full release CI, the supported-version matrix,
   tutorial compatibility and publication remain open. No gapless numbering
   guarantee is made.
 - [ ] **1.2.31 remaining — tenant-aware document number series:** Verify the
-  supported version matrix, test SQLite runtime and migration behavior with a
-  stable diagnostic, complete release gates, and audit compatibility with
+  supported version matrix, keep the schema-time `E-DB-001` rejection for
+  SQLite `auto_sequence` covered in the release suite, complete release gates,
+  and audit compatibility with
   legacy `invoice_number` generation. Retain concurrency, rollback, tenant
   isolation, uniqueness and format checks; reject unsupported backends
   explicitly.
-- [ ] **1.2.32 — typed computed business fields:** Add pure, typed,
+- [~] **1.2.32 — typed computed fields and secure CRUD attachments:** Add pure, typed,
   deterministic derived-field expressions for supported scalar/Decimal
   operations. Check dependency graphs and reject cycles, unknown fields,
   effects, and client-supplied writes to derived values. Recompute on the
-  server before persistence for CRUD and supported API writes; any live form
+  server before persistence for generated CRUD writes; any live form
   preview is advisory and must use the same checked expression semantics.
-  Define Decimal scale/rounding, null propagation, edit behavior, and backend
-  support. Test forged values, dependency ordering, errors, exact monetary
-  arithmetic, and create/edit/API parity.
-- [ ] **1.2.33 — FileRef-aware generated CRUD:** Add bounded declarative
+  Decimal scale and rounding are defined; optional inputs remain typed
+  `Option<T>` and require explicit `match` handling, with `None` persisted as a
+  missing value for optional targets. The current implementation checks
+  expression types and dependency
+  cycles, replaces submitted derived values in generated parent/child CRUD,
+  and supports API `POST` validation handlers: computed values are injected as
+  typed handler parameters, client fields are rejected, SQL may bind only the
+  matching server-computed output parameter, and the handler cannot be called
+  from ordinary Zelyra code or selected as a CLI entry point. The persisted API
+  path and CRUD create path both passed isolated MariaDB 11.8 tests. API `PUT`
+  validation handlers also receive recomputed values; SQL updates are accepted
+  only when all computed dependencies and outputs bind matching typed
+  parameters. An isolated MariaDB 11.8 test covers create and update and ignores
+  forged client values. A MariaDB CRUD HTTP integration test covers create,
+  edit, rejected validation, unchanged persistence after rejection, and the
+  recalculated value shown on the error response. Decimal scale and rounding
+  are implemented. User-provided Decimal inputs are no longer normalized before
+  form validation, so excess scale cannot be hidden by rounding. MySQL 8.4.11
+  exact-number HTTP coverage confirms rejection of `Money` input with five
+  fractional digits; schema parsing accepts case- and whitespace-normalized
+  MySQL precision/scale metadata. Validated API `PATCH` also recomputes fields
+  and is covered
+  by unit and isolated MariaDB persistence tests. A PATCH with omitted table
+  fields now reads the existing row by primary key, adds the verified tenant
+  predicate for scoped tables, merges only absent request values, and computes
+  derived fields before validation and handler execution. An invalid partial
+  PATCH leaves the stored row unchanged; the MariaDB E2E then verifies a valid
+  partial update using the stored unit price. A second database test confirms
+  another tenant receives 404 without merged values and that missing tenant
+  context fails closed. Missing rows return 404 and a
+  missing database connection returns 503. Nominal API path parameters of
+  type `Id` are converted to integer runtime values, allowing the full
+  create/PUT/PATCH test to pass on PostgreSQL 16 as well as MariaDB. The test
+  runs on both databases in CI. Broader backend and AST/MIR/bytecode parity
+  checks and full release gates remain open. See
+  `examples/computed_api.zyl`.
+- [~] **FileRef attachments in generated CRUD (1.2.32):** Add bounded declarative
   attachment constraints to schema/CRUD metadata and render safe upload fields
   on create/edit plus authorized download links on details. Reuse existing
   multipart validation, private FileRef storage, checksum validation, tenant
@@ -650,8 +705,30 @@ computed fields and generated uploads remain open:
   replacement, omitted-file preservation, rollback cleanup, cross-tenant
   download denial, MIME/size limits, and generated route behavior. This fills
   the current gap between existing checked standalone File forms and CRUD.
+  Implemented so far: table-column `attachment { max_size, allowed_types }`
+  metadata for `FileRef`, compile-time MIME/size/type checks, generated native
+  upload controls, and list/detail download links that hide the raw reference.
+  Existing upload staging, edit retention/replacement, cleanup after failed
+  actions, tenant/permission checks, and delete-time reference-aware cleanup
+  are reused. Parser/form/route/render tests pass. A disposable MariaDB/HTTP
+  test passed through the real CLI-generated CRUD path: `.env` database
+  resolution, `/new`, multipart persistence, list links without raw references,
+  and authenticated download. Existing upload-route integration tests cover
+  edit preservation/replacement, rollback cleanup, and direct dispatcher checks
+  that a tenant member can download while another tenant receives 404. The
+  tenant CRUD E2E now also uploads through the authenticated generated form,
+  checks the stored tenant, downloads under that tenant, and confirms a request
+  selecting another tenant receives 404. It verifies the PDF content type and
+  that the opaque FileRef is absent from detail HTML. The full disposable-
+  MariaDB flow also passes in headless Chromium with JavaScript disabled,
+  checking the generated upload control, detail link, downloaded PDF bytes,
+  MIME type, and cross-tenant 404. Recovery under the documented stopped-server
+  sequence also passed against disposable MariaDB: both stores were removed,
+  then the database and its checksum-verified file were restored and compared.
+  This is a manual paired procedure, not a single crash-atomic application
+  backup. Full release gates remain open.
 
-See the [business CRUD completion plan](release-plans/1.2.31-1.2.33-business-crud.en.md).
+See the [business CRUD completion plan](release-plans/1.2.31-1.2.32-business-crud.en.md).
 
 ### 🗺️ [ ] Zelyra 1.3.0 — typed MIR and Rust bytecode VM
 

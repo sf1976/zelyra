@@ -2816,6 +2816,13 @@ fn generated_mariadb_business_starter_localizes_and_protects_crud_without_databa
         String::from_utf8_lossy(&scaffold.stderr)
     );
     let source = directory.join("main.zyl");
+    // `serve` now honors project database settings from `.env`. This test is
+    // specifically about static/authenticated routes without a configured DB.
+    fs::write(
+        directory.join(".env"),
+        "# database intentionally unavailable\n",
+    )
+    .unwrap();
     let check = run(&["check", source.to_str().unwrap()]);
     assert!(
         check.status.success(),

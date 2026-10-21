@@ -17,17 +17,19 @@ import json
 import re
 from pathlib import Path
 root = Path("examples/invoice_tutorial")
-source = (root / "main.zyl").read_text()
-gallery = source.split('page "/ui/components" {', 1)[1].split('\npage "/tour" {', 1)[0]
-keys = set(re.findall(r'@i18n:(invoice\.ui\.[A-Za-z0-9_.]+)', gallery))
-keys.update(re.findall(r'data-zelyra-i18n="(invoice\.ui\.[A-Za-z0-9_.]+)"', gallery))
+sources = [*root.glob("*.zyl"), *root.glob("src/*.zyl")]
+keys = set()
+for path in sources:
+    source = path.read_text()
+    keys.update(re.findall(r'@i18n:([A-Za-z0-9_.]+)', source))
+    keys.update(re.findall(r'data-zelyra-i18n="([A-Za-z0-9_.]+)"', source))
 if not keys:
-    raise SystemExit("component gallery has no locale references")
+    raise SystemExit("invoice tutorial has no locale references")
 catalogs = {language: json.loads((root / f"locales/{language}.json").read_text()) for language in ("de", "en")}
 for language, catalog in catalogs.items():
     missing = sorted(keys - catalog.keys())
     if missing:
-        raise SystemExit(f"{language}.json is missing component-galley keys: {missing}")
+        raise SystemExit(f"{language}.json is missing tutorial keys: {missing}")
 if set(catalogs["de"]) != set(catalogs["en"]):
     raise SystemExit("invoice tutorial locale catalogs must have identical keys")
 PY_LOCALES

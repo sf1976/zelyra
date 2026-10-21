@@ -635,8 +635,11 @@ These steps consistently use the directory `address-book`, source file
    zelyra check src/main.zyl
    ~~~
 
-6. Load `DATABASE_URL` into the process and test readiness. `.env` is not
-   automatically loaded by Zelyra:
+6. Test readiness. `zelyra serve`, `doctor`, and project-aware database
+   commands resolve the project `.env` themselves. The process environment
+   takes precedence; otherwise `ZELYRA_DATABASE_MAIN_URL` is preferred over
+   `DATABASE_URL`. For commands that execute Zelyra code directly, load the
+   URL into the process explicitly:
 
    ~~~bash
    set -a
@@ -1198,6 +1201,7 @@ auth users {
     permissions: user_permissions
     roles: user_roles
     role_permissions: role_permissions
+    login_enabled: is_approved
 }
 
 page "/admin" {
@@ -1209,6 +1213,14 @@ page "/admin" {
     }
 }
 ~~~
+
+`login_enabled` is optional. When set, it must name a required Boolean column
+in the user table; only rows whose value is `true` can sign in. Without it,
+the existing `active: Bool` convention remains in effect. The Laravel importer
+emits `login_enabled` only when it finds a matching approval check in the
+statically linked login controller. Project-specific administrator
+exceptions, registration workflows, and two-factor behavior still need
+separate review and, where required, native Zelyra implementation.
 
 The optional `permissions` table contains `user_id` and `permission` for
 direct grants. Role groups are enabled with `roles` and `role_permissions`:
@@ -1890,8 +1902,8 @@ password in diagnostics.
 | wrong port | confused host `3307` with container `3306` | host uses `3307`; a Compose service uses `3306` |
 | MariaDB container not started | Compose error, occupied port, or unhealthy volume | inspect `docker compose ps` and `docker compose logs mariadb` |
 | user granted only for another host | `'zelyra'@'localhost'` is not always `'zelyra'@'127.0.0.1'` | grant the exact host and inspect grants |
-| missing environment variable | `DATABASE_URL` was not exported | load `.env` or set the process variable; Zelyra does not load it itself |
-| `.env` not found | wrong working directory or assumed automatic loader | use `pwd`, `ls -la`, and export the variable explicitly |
+| missing environment variable | the command needs a process-level URL, or no project URL is configured | project-aware `serve`, `doctor`, and database commands read the project `.env`; for direct code execution, load `.env` or set the process variable |
+| `.env` not found | wrong working directory or no project-local environment file | use `pwd`, `ls -la`, then set the required process variable or create the project `.env` |
 | invalid numeric port | URI port is not numeric | use digits such as `3307`; otherwise URL parsing fails |
 | wrong charset | database uses another charset/collation | inspect the database; `db setup` uses `utf8mb4`/`utf8mb4_unicode_ci` |
 | TLS error | unsupported TLS parameters were appended to the URL | use the current URL form; TLS configuration is planned |
@@ -3080,7 +3092,7 @@ table invoices scoped by tenant_id: TenantId {
    ```
    This physically blocks cross-tenant access attacks (such as assigning Tenant A's customer to Tenant B's invoice) at the database layer.
 3. **Tenant-Scoped Uniqueness:** Fields marked `unique within tenant` produce `UNIQUE KEY (tenant_id, customer_number)`. Different tenants can use identical numbering schemes without collisions.
-4. **Optional Relations & Decimals:** Optional relationships (`Customer?`) generate typed `BIGINT NULL`. `Decimal(p, s)` (e.g. `Decimal(12, 2)`) guarantees exact commercial rounding without IEEE 754 floating-point inaccuracies.
+4. **Optional Relations & Decimals:** Optional relationships (`Customer?`) generate typed `BIGINT NULL`. `Decimal(p, s)` (e.g. `Decimal(12, 2)`) is stored without floating-point conversion. Forms reject values exceeding the declared precision or scale; computed fields are calculated exactly before storage and rounded to their target scale.
 
 ## 33. Table Invariants and Validation Rules
 
@@ -3107,6 +3119,37 @@ table invoices scoped by tenant_id: TenantId {
 
 - **Declarative CRUD & Forms:** Prior to committing create or edit writes, Zelyra evaluates all declared invariants atomically. If any condition fails, the write is aborted, and the form renders the message with HTTP status 422.
 - **Typed API Input Validation:** APIs can bind request payloads to tables (`validates`). Validation evaluates table invariants and returns standardized HTTP 422 error contracts before executing the handler.
+
+If a validated table has computed columns, do not declare them as API request
+inputs. Declare only the source fields. Zelyra recalculates computed values
+before table invariants and passes them to the handler as additional typed
+parameters after the declared request inputs, in table-column order. Clients
+cannot select the computed value. For example, a table with `quantity`,
+`unit_price`, and `total: Decimal compute(quantity * unit_price)` can use:
+
+```zelyra
+api POST "/invoice-items" {
+    handler create_item
+    input { quantity: Decimal unit_price: Decimal }
+    validates invoice_items
+    output Result<Decimal, String>
+    errors { 422 ValidationError: String }
+}
+
+fn create_item(quantity: Decimal, unit_price: Decimal, total: Decimal) -> Result<Decimal, String> {
+    // Persist :total through a parameter-bound SQL statement here.
+    return Ok(total)
+}
+```
+
+Handlers that persist the row must use the injected computed parameter, never
+a client-provided value. Missing required source fields remain compile-time
+errors; optional and defaulted source fields follow their table declarations.
+The same checked input and recomputation path is available to validated API
+`PUT` handlers. Their SQL update must bind every computed dependency and output
+to the corresponding typed handler parameter. `examples/computed_api.zyl`
+contains runnable create and update handlers; `PATCH` is not supported by this
+computed-field path yet.
 
 ## 34. Lifecycle Guards, Policies, and Master-Detail CRUD
 
@@ -4455,3 +4498,40 @@ Provides an elevated, modern card layout for master-detail forms with partitione
   font-size: 1rem;
 }
 ```
+
+## FileRef attachments in generated CRUD (1.2.32)
+
+Declare an opaque `FileRef` column with its upload policy to make it available
+as a generated CRUD upload field:
+
+```zelyra
+table contracts {
+    id: Id primary auto
+    title: String(200) required
+    signed_pdf: FileRef? attachment {
+        max_size: "20MB"
+        allowed_types: ["application/pdf"]
+    }
+}
+
+crud Contract -> contracts {}
+```
+
+The full compiler-checked example is `examples/file_ref_crud.zyl`.
+
+The attachment block uses the same checked size and MIME constraints as
+table-backed `File` form fields. Generated create/edit pages render a native
+file input. An omitted file on edit keeps the existing reference; a new upload
+uses the existing private, integrity-checked storage and is published only
+through the normal CSRF-protected CRUD action. Detail and list pages show a
+download link rather than the internal FileRef. Downloads are addressed as
+`/contracts/{id}/files/signed_pdf` and pass through the CRUD permission,
+record, tenant and recipient checks. Raw FileRef values are not accepted as
+ordinary text inputs. FileRef columns cannot be used for CRUD search or
+filtering.
+
+Supported MIME values currently include PDF, PNG and JPEG. The size limit is
+bounded by the existing upload policy (at most 100 MiB per field and the
+existing per-request aggregate limit). Projects using ordinary `FileRef`
+columns without generated CRUD can continue to use explicit checked upload
+forms.

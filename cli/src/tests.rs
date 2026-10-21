@@ -1,6 +1,62 @@
 use super::*;
 
 #[test]
+fn generated_crud_maps_file_ref_attachment_metadata_to_upload_fields() {
+    let program = parse(
+        &lex(r#"
+            table contracts {
+                id: Id primary auto
+                signed_pdf: FileRef? attachment {
+                    max_size: "20MB"
+                    allowed_types: ["application/pdf"]
+                }
+            }
+            crud Contract -> contracts {}
+            fn main() {}
+            "#)
+        .unwrap(),
+    )
+    .unwrap();
+    let schema = zelyra_database::build_schema(&program).unwrap();
+    let route = generated_crud_form(
+        &program,
+        &program.cruds[0],
+        &program.tables[0],
+        &schema,
+        false,
+        CrudGenerationContext {
+            layout_html: None,
+            before_form_html: None,
+            after_form_html: None,
+            field_content_html: HashMap::new(),
+            csrf: CsrfProtection::generate().unwrap(),
+            membership_table: None,
+            audit_table: None,
+            audit_chain: false,
+        },
+    );
+    let field = route
+        .form
+        .fields
+        .iter()
+        .find(|field| field.name == "signed_pdf")
+        .expect("attachment should appear in the generated form");
+    assert_eq!(field.ty, Some(Type::Named("File".into())));
+    assert!(!field.required);
+    assert_eq!(
+        field
+            .file_upload
+            .as_ref()
+            .map(|options| options.max_size_bytes),
+        Some(20_000_000)
+    );
+    assert_eq!(
+        field.file_upload.as_ref().unwrap().allowed_types,
+        ["application/pdf"]
+    );
+}
+
+#[test]
 fn database_web_gate_accepts_any_explicit_database_operation_grant() {
     assert!(database_runtime_capability_granted(None));
     assert!(!database_runtime_capability_granted(Some(&HashSet::new())));
@@ -3034,6 +3090,417 @@ fn evaluates_declared_table_validation_before_api_handler() {
 }
 
 #[test]
+fn api_validation_passes_server_computed_fields_to_handlers_without_request_input() {
+    let program = parse(
+        &lex(r#"
+            table invoice_items {
+                id: Id primary auto
+                quantity: Int required
+                unit_price: Int required
+                total: Int required compute(quantity * unit_price)
+                validate { total >= 0: "Total must not be negative" }
+            }
+            api POST "/invoice-items" {
+                handler create_item
+                input { quantity: Int unit_price: Int }
+                validates invoice_items
+                output Result<Int, String>
+                errors { 422 ValidationError: String }
+            }
+            api PATCH "/invoice-items/{id}" {
+                handler patch_item
+                input { id: Id quantity: Int unit_price: Int }
+                validates invoice_items
+                output Result<Int, String>
+                errors { 422 ValidationError: String }
+            }
+            fn create_item(quantity: Int, unit_price: Int, total: Int) -> Result<Int, String> {
+                return Ok(total)
+            }
+            fn patch_item(id: Id, quantity: Int, unit_price: Int, total: Int) -> Result<Int, String> {
+                return Ok(total)
+            }
+            fn main() { }
+        "#)
+        .unwrap(),
+    )
+    .unwrap();
+    check_apis(&program).expect("computed columns should be injected into the handler contract");
+    zelyra_runtime::check(&program).expect("computed API handler types should be valid");
+
+    let request = zelyra_web::parse_request(
+        "POST /invoice-items HTTP/1.1\r\nContent-Type: application/json\r\n\r\n{\"quantity\":3,\"unit_price\":8,\"total\":999}",
+    )
+    .unwrap();
+    let response = dispatch_api(
+        &program,
+        &program.apis[0],
+        "create_item",
+        &request,
+        &HashMap::new(),
+        None,
+    );
+    assert_eq!(response.status, 200, "{}", response.body);
+    assert_eq!(response.body, "24", "client-supplied total must be ignored");
+
+    let patch = zelyra_web::parse_request(
+        "PATCH /invoice-items/7 HTTP/1.1\r\nContent-Type: application/json\r\n\r\n{\"quantity\":4,\"unit_price\":8,\"total\":999}",
+    )
+    .unwrap();
+    let response = dispatch_api(
+        &program,
+        &program.apis[1],
+        "patch_item",
+        &patch,
+        &HashMap::from([("id".to_owned(), "7".to_owned())]),
+        None,
+    );
+    assert_eq!(response.status, 200, "{}", response.body);
+    assert_eq!(
+        response.body, "32",
+        "PATCH recomputes the derived value and ignores the submitted value"
+    );
+}
+
+#[test]
+fn api_validation_rejects_computed_columns_as_request_inputs() {
+    let program = parse(
+        &lex(r#"
+            table invoice_items {
+                id: Id primary auto
+                quantity: Int required
+                total: Int required compute(quantity * 2)
+                validate { total >= 0: "Total must not be negative" }
+            }
+            api POST "/invoice-items" {
+                handler create_item
+                input { quantity: Int total: Int }
+                validates invoice_items
+                output Int
+                errors { 422 ValidationError: String }
+            }
+            fn create_item(quantity: Int, total: Int) -> Int { return total }
+            fn main() { }
+        "#)
+        .unwrap(),
+    )
+    .unwrap();
+    let errors = check_apis(&program).expect_err("computed fields cannot be request-controlled");
+    assert!(errors.iter().any(|error| error
+        .message
+        .contains("must not accept computed field `total` from request input")));
+}
+
+#[test]
+fn computed_api_handlers_cannot_be_called_outside_the_validated_api_boundary() {
+    let source = r#"
+        table invoice_items {
+            quantity: Int required
+            total: Int required compute(quantity * 2)
+            validate { total >= 0: "Total must not be negative" }
+        }
+        api POST "/invoice-items" {
+            handler create_item
+            input { quantity: Int }
+            validates invoice_items
+            output Result<Int, String>
+            errors { 422 ValidationError: String }
+        }
+        fn create_item(quantity: Int, total: Int) -> Result<Int, String> { return Ok(total) }
+        fn main() { create_item(1, 999) }
+    "#;
+    let program = parse(&lex(source).unwrap()).unwrap();
+    let errors = check_apis(&program)
+        .expect_err("API-generated computed parameters cannot be forged by a source caller");
+    assert!(errors.iter().any(|error| error
+        .message
+        .contains("cannot be called from Zelyra functions")));
+}
+
+#[test]
+#[ignore = "requires ZELYRA_TEST_DATABASE_URL pointing to a disposable MariaDB or PostgreSQL database"]
+fn computed_api_fields_are_recomputed_before_validation_and_database_write() {
+    let source = r#"
+        database main { engine: mariadb }
+        table __TABLE__ {
+            id: Id primary auto
+            quantity: Decimal(10, 3) required
+            unit_price: Decimal(10, 3) required
+            total: Decimal(12, 2) required compute(quantity * unit_price)
+            validate { total > decimal("0"): "Total must be positive" }
+        }
+        api POST "/items" {
+            handler create_item
+            input { quantity: Decimal unit_price: Decimal }
+            validates __TABLE__
+            output Result<Decimal, String>
+            errors { 422 ValidationError: String }
+        }
+        api PUT "/items/{id}" {
+            handler update_item
+            input { id: Id quantity: Decimal unit_price: Decimal }
+            validates __TABLE__
+            output Result<Decimal, String>
+            errors { 422 ValidationError: String }
+        }
+            api PATCH "/items/{id}" {
+                handler update_item
+                input { id: Id quantity: Decimal unit_price: Decimal }
+                validates __TABLE__
+                output Result<Decimal, String>
+                errors { 422 ValidationError: String }
+            }
+        fn create_item(quantity: Decimal, unit_price: Decimal, total: Decimal) -> Result<Decimal, String> uses Database(write) {
+            transaction {
+                sql { INSERT INTO __TABLE__ (quantity, unit_price, total) VALUES (:quantity, :unit_price, :total) }
+            }
+            return Ok(total)
+        }
+        fn update_item(id: Id, quantity: Decimal, unit_price: Decimal, total: Decimal) -> Result<Decimal, String> uses Database(write) {
+            transaction {
+                sql { UPDATE __TABLE__ SET quantity = :quantity, unit_price = :unit_price, total = :total WHERE id = :id }
+            }
+            return Ok(total)
+        }
+        fn main() { }
+    "#;
+    let table_name = format!("zelyra_computed_api_{}", std::process::id());
+    let database_url = env::var("ZELYRA_TEST_DATABASE_URL")
+        .expect("ignored integration test needs a disposable database URL");
+    let engine = if zelyra_database::is_postgres_url(&database_url) {
+        "postgres"
+    } else {
+        "mariadb"
+    };
+    let source = source
+        .replace("__TABLE__", &table_name)
+        .replace("engine: mariadb", &format!("engine: {engine}"));
+    let program = parse(&lex(&source).unwrap()).unwrap();
+    check_apis(&program).expect("computed API contract should type-check");
+    zelyra_runtime::check(&program).expect("computed API handler should type-check");
+    let schema = zelyra_database::build_schema(&program).unwrap();
+    let create_sql = schema.create_sql();
+    zelyra_database::execute_query(&database_url, &create_sql, Vec::new()).unwrap_or_else(
+        |error| panic!("could not create computed API test schema: {error}; SQL: {create_sql}"),
+    );
+
+    let request = zelyra_web::parse_request(
+        "POST /items HTTP/1.1\r\nContent-Type: application/json\r\n\r\n{\"quantity\":3,\"unit_price\":0.385,\"total\":999}",
+    )
+    .unwrap();
+    let response = dispatch_api(
+        &program,
+        &program.apis[0],
+        "create_item",
+        &request,
+        &HashMap::new(),
+        Some(&database_url),
+    );
+    assert_eq!(response.status, 200, "{}", response.body);
+    let body: serde_json::Value = serde_json::from_str(&response.body).unwrap();
+    assert_eq!(body.as_str(), Some("1.16"));
+    let rows = zelyra_database::execute_query(
+        &database_url,
+        &format!("SELECT id, total FROM {table_name}"),
+        Vec::new(),
+    )
+    .unwrap();
+    assert_eq!(rows.rows.len(), 1);
+    assert_eq!(rows.rows[0][1], "1.16");
+    let id = rows.rows[0][0].clone();
+    let update_request = zelyra_web::parse_request(
+        "PUT /items/1 HTTP/1.1\r\nContent-Type: application/json\r\n\r\n{\"quantity\":4,\"unit_price\":0.385,\"total\":999}",
+    )
+    .unwrap();
+    let response = dispatch_api(
+        &program,
+        &program.apis[1],
+        "update_item",
+        &update_request,
+        &HashMap::from([("id".to_owned(), id.clone())]),
+        Some(&database_url),
+    );
+    assert_eq!(response.status, 200, "{}", response.body);
+    let body: serde_json::Value = serde_json::from_str(&response.body).unwrap();
+    assert_eq!(body.as_str(), Some("1.54"));
+    let rows = zelyra_database::execute_query(
+        &database_url,
+        &format!("SELECT total FROM {table_name}"),
+        Vec::new(),
+    )
+    .unwrap();
+    assert_eq!(rows.rows, vec![vec!["1.54".to_owned()]]);
+    let invalid_patch_request = zelyra_web::parse_request(
+        "PATCH /items/1 HTTP/1.1\r\nContent-Type: application/json\r\n\r\n{\"quantity\":-5}",
+    )
+    .unwrap();
+    let invalid_patch_response = dispatch_api(
+        &program,
+        &program.apis[2],
+        "update_item",
+        &invalid_patch_request,
+        &HashMap::from([("id".to_owned(), id.clone())]),
+        Some(&database_url),
+    );
+    assert_eq!(
+        invalid_patch_response.status, 422,
+        "{}",
+        invalid_patch_response.body
+    );
+    let rows = zelyra_database::execute_query(
+        &database_url,
+        &format!("SELECT quantity, unit_price, total FROM {table_name}"),
+        Vec::new(),
+    )
+    .unwrap();
+    assert_eq!(
+        rows.rows,
+        vec![vec![
+            String::from("4.000"),
+            String::from("0.385"),
+            String::from("1.54"),
+        ]]
+    );
+
+    let patch_request = zelyra_web::parse_request(
+        "PATCH /items/1 HTTP/1.1\r\nContent-Type: application/json\r\n\r\n{\"quantity\":5,\"total\":999}",
+    )
+    .unwrap();
+    let response = dispatch_api(
+        &program,
+        &program.apis[2],
+        "update_item",
+        &patch_request,
+        &HashMap::from([("id".to_owned(), id.clone())]),
+        Some(&database_url),
+    );
+    assert_eq!(response.status, 200, "{}", response.body);
+    let body: serde_json::Value = serde_json::from_str(&response.body).unwrap();
+    assert_eq!(body.as_str(), Some("1.93"));
+    let rows = zelyra_database::execute_query(
+        &database_url,
+        &format!("SELECT total FROM {table_name}"),
+        Vec::new(),
+    )
+    .unwrap();
+    assert_eq!(rows.rows, vec![vec!["1.93".to_owned()]]);
+    let rows = zelyra_database::execute_query(
+        &database_url,
+        &format!("SELECT quantity, unit_price, total FROM {table_name}"),
+        Vec::new(),
+    )
+    .unwrap();
+    assert_eq!(
+        rows.rows,
+        vec![vec![
+            String::from("5.000"),
+            String::from("0.385"),
+            String::from("1.93"),
+        ]]
+    );
+    zelyra_database::execute_query(
+        &database_url,
+        &format!("DROP TABLE {table_name}"),
+        Vec::new(),
+    )
+    .unwrap();
+}
+
+#[test]
+#[ignore = "requires ZELYRA_TEST_DATABASE_URL pointing to a disposable MariaDB or PostgreSQL database"]
+fn api_patch_row_merge_is_limited_to_the_verified_tenant() {
+    let database_url = env::var("ZELYRA_TEST_DATABASE_URL")
+        .expect("ignored integration test needs a disposable database URL");
+    let engine = if zelyra_database::is_postgres_url(&database_url) {
+        "postgres"
+    } else {
+        "mariadb"
+    };
+    let source = format!(
+        r#"
+            database main {{ engine: {engine} }}
+            type TenantId = Id
+            table patch_tenant_scope_{pid} scoped by tenant_id: TenantId {{
+                id: Id primary
+                tenant_id: TenantId required
+                label: String required
+            }}
+            fn main() {{}}
+        "#,
+        pid = std::process::id()
+    );
+    let program = parse(&lex(&source).unwrap()).unwrap();
+    let table = &program.tables[0];
+    let schema = zelyra_database::build_schema(&program).unwrap();
+    zelyra_database::execute_query(&database_url, &schema.create_sql(), Vec::new()).unwrap();
+    for (id, tenant_id, label) in [(1, 10, "Northwind"), (2, 11, "Contoso")] {
+        zelyra_database::execute_query(
+            &database_url,
+            &format!(
+                "INSERT INTO {} (id, tenant_id, label) VALUES (:id, :tenant, :label)",
+                table.name
+            ),
+            vec![
+                ("id".into(), QueryValue::Int(id)),
+                ("tenant".into(), QueryValue::Int(tenant_id)),
+                ("label".into(), QueryValue::String(label.into())),
+            ],
+        )
+        .unwrap();
+    }
+
+    let mut foreign_tenant_values =
+        HashMap::from([(String::from("id"), serde_json::Value::from(1))]);
+    assert!(matches!(
+        merge_api_patch_row_values(
+            &program,
+            table,
+            &database_url,
+            Some(11),
+            &mut foreign_tenant_values
+        ),
+        Err(ApiPatchMergeError::NotFound)
+    ));
+    assert_eq!(foreign_tenant_values.len(), 1);
+
+    assert!(matches!(
+        merge_api_patch_row_values(
+            &program,
+            table,
+            &database_url,
+            None,
+            &mut HashMap::from([(String::from("id"), serde_json::Value::from(1))])
+        ),
+        Err(ApiPatchMergeError::BadRequest(_))
+    ));
+
+    let mut matching_tenant_values =
+        HashMap::from([(String::from("id"), serde_json::Value::from(1))]);
+    merge_api_patch_row_values(
+        &program,
+        table,
+        &database_url,
+        Some(10),
+        &mut matching_tenant_values,
+    )
+    .unwrap();
+    assert_eq!(
+        matching_tenant_values.get("label"),
+        Some(&serde_json::Value::from("Northwind"))
+    );
+    assert_eq!(
+        matching_tenant_values.get("tenant_id"),
+        Some(&serde_json::Value::from("10"))
+    );
+    zelyra_database::execute_query(
+        &database_url,
+        &format!("DROP TABLE {}", table.name),
+        Vec::new(),
+    )
+    .unwrap();
+}
+
+#[test]
 fn enforces_scoped_database_effects_in_generated_api_handlers() {
     let program = parse(
         &lex(
@@ -3060,6 +3527,7 @@ fn enforces_scoped_database_effects_in_generated_api_handlers() {
             capability_grants: Some(&no_grants),
             runtime_policy: None,
             table_validation_functions: &[],
+            computed_column_functions: &[],
             verified_tenant_id: None,
         },
     );
@@ -3079,6 +3547,7 @@ fn enforces_scoped_database_effects_in_generated_api_handlers() {
             capability_grants: Some(&read_grant),
             runtime_policy: None,
             table_validation_functions: &[],
+            computed_column_functions: &[],
             verified_tenant_id: None,
         },
     );
@@ -3138,6 +3607,7 @@ fn scoped_api_validation_uses_only_verified_tenant_context() {
         capability_grants: None,
         runtime_policy: None,
         table_validation_functions: &table_validation_functions,
+        computed_column_functions: &[],
         verified_tenant_id,
     };
 
@@ -3214,6 +3684,7 @@ fn project_step_budget_applies_to_executed_api_handlers() {
                 ..RuntimePolicy::default()
             }),
             table_validation_functions: &[],
+            computed_column_functions: &[],
             verified_tenant_id: None,
         },
     );
@@ -3891,6 +4362,32 @@ fn rejects_protected_routes_without_auth_definition() {
 }
 
 #[test]
+fn auth_login_enabled_requires_a_required_boolean_user_column() {
+    let valid = r#"
+        table users {
+            id: Id primary auto
+            email: String(255) required unique
+            password_hash: String(255) required
+            is_approved: Bool required default true
+        }
+        auth users { table: users login_enabled: is_approved }
+        fn main() {}
+    "#;
+    let program = parse(&lex(valid).unwrap()).unwrap();
+    let schema = build_schema(&program).unwrap();
+    assert!(validate_auth("auth.zyl", &program, &schema));
+
+    for field in ["is_approved: Bool?", "is_approved: String(10) required"] {
+        let source = format!(
+            "table users {{ id: Id primary auto email: String(255) required unique password_hash: String(255) required {field} }} auth users {{ table: users login_enabled: is_approved }} fn main() {{}}"
+        );
+        let program = parse(&lex(&source).unwrap()).unwrap();
+        let schema = build_schema(&program).unwrap();
+        assert!(!validate_auth("auth.zyl", &program, &schema));
+    }
+}
+
+#[test]
 fn rejects_scoped_crud_permissions_without_auth_definition() {
     let source = r#"
         table customers {
@@ -3995,6 +4492,20 @@ fn decimal_api_inputs_use_decimal_values_without_float_conversion() {
     let value: Value = serde_json::from_str("0.000000001").unwrap();
     let decoded = api_value_json(&value, &Type::Decimal, &program).unwrap();
     assert_eq!(decoded.output(), "0.000000001");
+}
+
+#[test]
+fn nominal_id_api_inputs_use_integer_runtime_values() {
+    let program = parse(&lex("fn main() {}\n").unwrap()).unwrap();
+    for value in [serde_json::json!(42), serde_json::json!("42")] {
+        assert!(matches!(
+            api_value_json(&value, &Type::Named("Id".into()), &program),
+            Ok(RuntimeValue::Int(42))
+        ));
+    }
+    for value in [serde_json::json!(true), serde_json::json!("not-an-id")] {
+        assert!(api_value_json(&value, &Type::Named("Id".into()), &program).is_err());
+    }
 }
 
 #[test]

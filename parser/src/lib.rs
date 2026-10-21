@@ -623,6 +623,7 @@ impl<'a> Parser<'a> {
         self.expect(TokenKind::LBrace, "opening brace after authentication name")?;
         self.skip_newlines();
         let mut table = None;
+        let mut login_enabled_column = None;
         let mut membership_table = None;
         let mut tenant_owner = None;
         let mut session_table = None;
@@ -660,6 +661,7 @@ impl<'a> Parser<'a> {
                 TokenKind::Ident(name) if name == "reset_rate_limits" => "reset_rate_limits",
                 TokenKind::Ident(name) if name == "memberships" => "memberships",
                 TokenKind::Ident(name) if name == "tenant_owner" => "tenant_owner",
+                TokenKind::Ident(name) if name == "login_enabled" => "login_enabled",
                 TokenKind::ResetRateLimit => "reset_rate_limit",
                 TokenKind::ResetBlockSeconds => "reset_block_seconds",
                 TokenKind::Ident(name) if name == "mfa" => "mfa",
@@ -676,6 +678,14 @@ impl<'a> Parser<'a> {
                 self.expect(TokenKind::Dot, "`.` before tenant owner column")?;
                 let (owner_column, _) = self.ident("tenant owner column")?;
                 tenant_owner = Some((owner_table, owner_column));
+                self.skip_newlines();
+                continue;
+            }
+            if field == "login_enabled" {
+                if login_enabled_column.is_some() {
+                    return self.error("login_enabled may only be declared once");
+                }
+                login_enabled_column = Some(self.ident("login-enabled user column")?.0);
                 self.skip_newlines();
                 continue;
             }
@@ -790,6 +800,7 @@ impl<'a> Parser<'a> {
         Ok(AuthDef {
             name,
             table,
+            login_enabled_column,
             membership_table,
             tenant_owner_table: tenant_owner.as_ref().map(|(table, _)| table.clone()),
             tenant_owner_column: tenant_owner.map(|(_, column)| column),
@@ -2797,6 +2808,8 @@ impl<'a> Parser<'a> {
         let (ty, length, decimal_precision) = self.column_type()?;
         let mut storage_name = None;
         let mut auto_sequence = None;
+        let mut computed = None;
+        let mut attachment = None;
         let mut required = false;
         let mut primary_key = false;
         let mut auto = false;
@@ -2883,6 +2896,92 @@ impl<'a> Parser<'a> {
                     auto_sequence = Some(self.string_value("quoted number-series format")?);
                     self.expect(TokenKind::RParen, "`)` after number-series format")?;
                 }
+                TokenKind::Ident(ref value) if value == "compute" => {
+                    self.advance();
+                    if computed.is_some() {
+                        return self.error("`compute` may be specified only once");
+                    }
+                    self.expect(TokenKind::LParen, "`(` after `compute`")?;
+                    computed = Some(self.expression()?);
+                    self.expect(TokenKind::RParen, "`)` after computed expression")?;
+                }
+                TokenKind::Ident(ref value) if value == "attachment" => {
+                    let option_span = self.current().span;
+                    self.advance();
+                    if attachment.is_some() {
+                        return Err(ParseError {
+                            message: "`attachment` may be specified only once".into(),
+                            span: option_span,
+                        });
+                    }
+                    self.expect(TokenKind::LBrace, "`{` after `attachment`")?;
+                    let mut max_size_bytes = None;
+                    let mut allowed_types = None;
+                    loop {
+                        self.skip_newlines();
+                        if self.at(&TokenKind::RBrace) {
+                            break;
+                        }
+                        match self.current().kind.clone() {
+                            TokenKind::Ident(ref name) if name == "max_size" => {
+                                let span = self.current().span;
+                                self.advance();
+                                if max_size_bytes.is_some() {
+                                    return Err(ParseError {
+                                        message: "duplicate `max_size` in attachment options"
+                                            .into(),
+                                        span,
+                                    });
+                                }
+                                self.expect(TokenKind::Colon, "`:` after max_size")?;
+                                let text =
+                                    self.string_value("maximum attachment size, such as `10MB`")?;
+                                max_size_bytes = Some(parse_file_size(&text).ok_or_else(|| ParseError {
+                                    message: "max_size must be a positive byte size such as `10MB` or `512KiB`".into(),
+                                    span,
+                                })?);
+                            }
+                            TokenKind::Ident(ref name) if name == "allowed_types" => {
+                                let span = self.current().span;
+                                self.advance();
+                                if allowed_types.is_some() {
+                                    return Err(ParseError {
+                                        message: "duplicate `allowed_types` in attachment options"
+                                            .into(),
+                                        span,
+                                    });
+                                }
+                                self.expect(TokenKind::Colon, "`:` after allowed_types")?;
+                                self.expect(TokenKind::LBracket, "`[` before allowed_types")?;
+                                let mut mime_types = Vec::new();
+                                self.skip_newlines();
+                                while !self.at(&TokenKind::RBracket) && !self.at(&TokenKind::Eof) {
+                                    mime_types.push(self.string_value("allowed MIME type")?);
+                                    self.skip_newlines();
+                                    if self.at(&TokenKind::Comma) {
+                                        self.advance();
+                                        self.skip_newlines();
+                                    } else if !self.at(&TokenKind::RBracket) {
+                                        return self
+                                            .error("expected `,` or `]` after allowed MIME type");
+                                    }
+                                }
+                                self.expect(TokenKind::RBracket, "`]` after allowed_types")?;
+                                allowed_types = Some(mime_types);
+                            }
+                            _ => {
+                                return self.error(
+                                    "expected `max_size` or `allowed_types` in attachment options",
+                                )
+                            }
+                        }
+                    }
+                    self.expect(TokenKind::RBrace, "`}` after attachment options")?;
+                    attachment = Some(zelyra_ast::FileUploadOptions {
+                        max_size_bytes: max_size_bytes.unwrap_or(0),
+                        allowed_types: allowed_types.unwrap_or_default(),
+                    });
+                }
                 _ => break,
             }
         }
@@ -2893,6 +2992,8 @@ impl<'a> Parser<'a> {
             storage_name,
             decimal_precision,
             auto_sequence,
+            computed,
+            attachment,
             required,
             primary_key,
             auto,
@@ -5802,6 +5903,37 @@ mod tests {
     }
 
     #[test]
+    fn parses_computed_column_expressions() {
+        let program = parse(
+            &lex("table invoice_items { quantity: Decimal(10, 2) required unit_price: Decimal(12, 2) required total_net: Decimal(12, 2) required compute(quantity * unit_price) }\n").unwrap(),
+        )
+        .expect("computed column expression should parse");
+        let total = &program.tables[0].columns[2];
+        assert!(total.computed.is_some());
+        assert!(
+            total.computed.as_ref().unwrap().span.end > total.computed.as_ref().unwrap().span.start
+        );
+    }
+
+    #[test]
+    fn parses_file_ref_attachment_constraints_on_table_columns() {
+        let program = parse(
+            &lex(r#"table contracts { signed_pdf: FileRef? attachment {
+                    max_size: "20MB"
+                    allowed_types: ["application/pdf"]
+                } }"#)
+            .unwrap(),
+        )
+        .expect("FileRef attachment declaration should parse");
+        let attachment = program.tables[0].columns[0]
+            .attachment
+            .as_ref()
+            .expect("attachment options should be retained in the AST");
+        assert_eq!(attachment.max_size_bytes, 20 * 1_000_000);
+        assert_eq!(attachment.allowed_types, ["application/pdf"]);
+    }
+
+    #[test]
     fn parses_json_columns_as_the_native_json_type() {
         let program = parse(
             &lex("table events { id: Id primary payload: Json required metadata: Json? }\n")
@@ -6064,6 +6196,7 @@ mod tests {
             &lex(r#"auth users {
                     table: users
                     sessions: auth_sessions
+                    login_enabled: is_approved
                     memberships: tenant_memberships
                     tenant_owner: tenants.user_id
                 }
@@ -6077,6 +6210,10 @@ mod tests {
         assert_eq!(
             program.auth[0].membership_table.as_deref(),
             Some("tenant_memberships")
+        );
+        assert_eq!(
+            program.auth[0].login_enabled_column.as_deref(),
+            Some("is_approved")
         );
         assert_eq!(
             program.auth[0].tenant_owner_table.as_deref(),
@@ -6738,6 +6875,7 @@ mod tests {
             r#"auth users { table: users login_rate_limit: 0 per 60 } fn main() { }"#,
             r#"auth users { table: users login_rate_limit: 5 per 0 } fn main() { }"#,
             r#"auth users { table: users login_block_seconds: 86401 } fn main() { }"#,
+            r#"auth users { table: users login_enabled: active login_enabled: approved } fn main() { }"#,
             r#"auth users { table: users login_rate_limit: 5 per 60 login_rate_limit: 3 per 30 } fn main() { }"#,
         ] {
             assert!(parse(&lex(source).unwrap()).is_err(), "accepted {source}");

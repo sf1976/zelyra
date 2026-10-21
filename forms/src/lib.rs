@@ -39,6 +39,39 @@ pub fn check_program(program: &zelyra_ast::Program, schema: &Schema) -> Result<(
                     span: column.span,
                 });
             }
+            if let Some(options) = &column.attachment {
+                if !is_file_ref_type(&column.ty, &program.types) {
+                    errors.push(FormError {
+                        message: format!(
+                            "attachment constraints require a FileRef column (`{}.{}`)",
+                            table.name, column.name
+                        ),
+                        span: column.span,
+                    });
+                } else {
+                    check_file_field(
+                        &FormField {
+                            name: column.name.clone(),
+                            ty: Some(Type::Named("File".into())),
+                            label: None,
+                            placeholder: None,
+                            required: column.required,
+                            min_length: None,
+                            max: None,
+                            min_value: None,
+                            max_value: None,
+                            choices: Vec::new(),
+                            widget: None,
+                            appearance: None,
+                            file_upload: Some(options.clone()),
+                            readonly: false,
+                            span: column.span,
+                        },
+                        true,
+                        &mut errors,
+                    );
+                }
+            }
         }
     }
     for record in &program.records {
@@ -316,17 +349,54 @@ pub fn check_program(program: &zelyra_ast::Program, schema: &Schema) -> Result<(
     for crud in &program.cruds {
         let table = schema.tables.iter().find(|table| table.name == crud.table);
         if let Some(definition) = program.tables.iter().find(|table| table.name == crud.table) {
+            for configured in crud.search.iter().chain(&crud.filters) {
+                if definition
+                    .columns
+                    .iter()
+                    .find(|column| column.name == *configured)
+                    .is_some_and(|column| is_file_ref_type(&column.ty, &program.types))
+                {
+                    errors.push(FormError {
+                        message: format!(
+                            "FileRef column `{configured}` cannot be used as a CRUD search or filter field"
+                        ),
+                        span: definition
+                            .columns
+                            .iter()
+                            .find(|column| column.name == *configured)
+                            .map_or(crud.span, |column| column.span),
+                    });
+                }
+            }
             for column in definition
                 .columns
                 .iter()
                 .filter(|column| is_file_ref_type(&column.ty, &program.types))
             {
+                if column.attachment.is_none() {
+                    errors.push(FormError {
+                        message: format!(
+                            "CRUD `{}` FileRef column `{}` requires `attachment` constraints",
+                            crud.name, column.name
+                        ),
+                        span: column.span,
+                    });
+                }
+            }
+            let total_upload_bytes = definition
+                .columns
+                .iter()
+                .filter_map(|column| column.attachment.as_ref())
+                .fold(0_u64, |total, options| {
+                    total.saturating_add(options.max_size_bytes)
+                });
+            if total_upload_bytes > 255 * 1024 * 1024 {
                 errors.push(FormError {
                     message: format!(
-                        "CRUD `{}` cannot expose FileRef column `{}` as a text field; file-aware CRUD rendering is not implemented",
-                        crud.name, column.name
+                        "aggregate attachment size for CRUD `{}` exceeds the 255 MiB request budget",
+                        crud.name
                     ),
-                    span: column.span,
+                    span: crud.span,
                 });
             }
         }
@@ -598,11 +668,11 @@ pub fn field_value_type(
         {
             Type::Timestamp
         }
-        Some("DECIMAL(19,4)" | "NUMERIC(19,4)") => Type::Named("Money".into()),
-        Some("DECIMAL(20,0)" | "NUMERIC(20,0)") => Type::UInt,
-        Some(value) if value.starts_with("DECIMAL(") || value.starts_with("NUMERIC(") => {
-            Type::Decimal
+        Some(value) if decimal_sql_precision_scale(value) == Some((19, 4)) => {
+            Type::Named("Money".into())
         }
+        Some("DECIMAL(20,0)" | "NUMERIC(20,0)") => Type::UInt,
+        Some(value) if decimal_sql_precision_scale(value).is_some() => Type::Decimal,
         _ => return Some(ty),
     };
     Some(if matches!(ty, Type::Option(_)) {
@@ -789,8 +859,10 @@ fn validate_with_file_values(
             continue;
         }
         let ty = field_value_type(form, table_definition, schema, field);
+        let decimal_storage =
+            schema_column.and_then(|column| decimal_sql_precision_scale(&column.sql_type));
         if let Some(ty) = &ty {
-            if let Some(message) = type_error(ty, value) {
+            if let Some(message) = type_error_for_storage(ty, value, decimal_storage) {
                 errors.push(FieldError {
                     field: field.name.clone(),
                     message: message.into(),
@@ -804,6 +876,7 @@ fn validate_with_file_values(
                 value,
                 field.min_value.as_deref(),
                 field.max_value.as_deref(),
+                decimal_storage.map(|(_, scale)| scale),
             ) {
                 errors.push(FieldError {
                     field: field.name.clone(),
@@ -971,6 +1044,7 @@ fn numeric_bound_error(
     value: &str,
     min: Option<&str>,
     max: Option<&str>,
+    storage_scale: Option<u32>,
 ) -> Option<&'static str> {
     let scalar_ty = match ty {
         Type::Option(inner) => inner.as_ref(),
@@ -995,21 +1069,67 @@ fn numeric_bound_error(
         }
         return None;
     }
-    let scale = numeric_scale(ty);
-    let actual = parse_numeric_bound(ty, value, scale)?;
-    if min
-        .and_then(|bound| parse_numeric_bound(ty, bound, scale))
-        .is_some_and(|bound| actual < bound)
-    {
+    let scale = storage_scale.unwrap_or_else(|| numeric_scale(ty));
+    let parse = |candidate: &str| {
+        if storage_scale.is_some()
+            && (matches!(scalar_ty, Type::Decimal)
+                || matches!(scalar_ty, Type::Named(name) if name == "Money"))
+        {
+            zelyra_ast::decimal::parse_scaled(candidate, scale)
+        } else {
+            parse_numeric_bound(ty, candidate, scale)
+        }
+    };
+    let actual = parse(value)?;
+    if min.and_then(parse).is_some_and(|bound| actual < bound) {
         return Some("value is below the minimum");
     }
-    if max
-        .and_then(|bound| parse_numeric_bound(ty, bound, scale))
-        .is_some_and(|bound| actual > bound)
-    {
+    if max.and_then(parse).is_some_and(|bound| actual > bound) {
         return Some("value exceeds the maximum");
     }
     None
+}
+
+fn decimal_sql_precision_scale(sql_type: &str) -> Option<(u32, u32)> {
+    let normalized = sql_type
+        .split_whitespace()
+        .collect::<String>()
+        .to_ascii_uppercase();
+    let arguments = normalized
+        .strip_prefix("DECIMAL(")
+        .or_else(|| normalized.strip_prefix("NUMERIC("))?
+        .strip_suffix(')')?;
+    let (precision, scale) = arguments.split_once(',')?;
+    let precision = precision.parse::<u32>().ok()?;
+    let scale = scale.parse::<u32>().ok()?;
+    (precision > 0 && scale <= precision && scale <= zelyra_ast::decimal::SCALE_DIGITS)
+        .then_some((precision, scale))
+}
+
+fn type_error_for_storage(
+    ty: &Type,
+    value: &str,
+    precision_scale: Option<(u32, u32)>,
+) -> Option<&'static str> {
+    let scalar_ty = match ty {
+        Type::Option(inner) => inner.as_ref(),
+        other => other,
+    };
+    let Some((precision, scale)) = precision_scale else {
+        return type_error(ty, value);
+    };
+    if !(matches!(scalar_ty, Type::Decimal)
+        || matches!(scalar_ty, Type::Named(name) if name == "Money"))
+    {
+        return type_error(ty, value);
+    }
+    if zelyra_ast::decimal::parse_scaled(value, scale).is_none() {
+        return Some("must fit the declared decimal scale");
+    }
+    let whole = value.strip_prefix('-').unwrap_or(value).split('.').next()?;
+    let significant = whole.trim_start_matches('0');
+    ((precision - scale) < significant.len() as u32)
+        .then_some("exceeds the declared decimal precision")
 }
 
 fn find_column<'a>(
@@ -1463,6 +1583,8 @@ mod tests {
                     storage_name: None,
                     decimal_precision: None,
                     auto_sequence: None,
+                    computed: None,
+                    attachment: None,
                     required: false,
                     primary_key: false,
                     auto: false,
@@ -1561,7 +1683,7 @@ mod tests {
     }
 
     #[test]
-    fn generated_crud_does_not_render_file_refs_as_text_controls() {
+    fn generated_crud_requires_checked_file_ref_attachment_metadata() {
         let program = zelyra_parser::parse(
             &zelyra_lexer::lex(
                 "table documents { id: Id primary auto document: FileRef? } crud Document -> documents {} fn main() {}",
@@ -1571,12 +1693,48 @@ mod tests {
         .unwrap();
         let schema = build_schema(&program).unwrap();
         let errors = check_program(&program, &schema)
-            .expect_err("automatic CRUD cannot expose an opaque FileRef as text yet");
+            .expect_err("generated CRUD requires explicit attachment constraints");
         assert!(errors.iter().any(|error| {
             error
                 .message
-                .contains("cannot expose FileRef column `document` as a text field")
+                .contains("FileRef column `document` requires `attachment`")
         }));
+
+        let configured = zelyra_parser::parse(
+            &zelyra_lexer::lex(
+                r#"table documents { id: Id primary auto document: FileRef? attachment { max_size: "10MB" allowed_types: ["application/pdf"] } } crud Document -> documents {} fn main() {}"#,
+            )
+            .unwrap(),
+        )
+        .unwrap();
+        let schema = build_schema(&configured).unwrap();
+        check_program(&configured, &schema)
+            .expect("FileRef columns with bounded upload policy may use generated CRUD");
+
+        for (source, expected) in [
+            (
+                r#"table documents { id: Id primary auto document: String? attachment { max_size: "1MB" allowed_types: ["application/pdf"] } } crud Document -> documents {} fn main() {}"#,
+                "attachment constraints require a FileRef column",
+            ),
+            (
+                r#"table documents { id: Id primary auto document: FileRef? attachment { allowed_types: ["application/pdf"] } } crud Document -> documents {} fn main() {}"#,
+                "maximum file size",
+            ),
+            (
+                r#"table documents { id: Id primary auto document: FileRef? attachment { max_size: "1MB" allowed_types: ["application/x-msdownload"] } } crud Document -> documents {} fn main() {}"#,
+                "is not supported for file field",
+            ),
+            (
+                r#"table documents { id: Id primary auto document: FileRef? attachment { max_size: "1MB" allowed_types: ["application/pdf"] } } crud Document -> documents { search { document } } fn main() {}"#,
+                "cannot be used as a CRUD search or filter field",
+            ),
+        ] {
+            let invalid = zelyra_parser::parse(&zelyra_lexer::lex(source).unwrap()).unwrap();
+            let schema = build_schema(&invalid).unwrap();
+            let errors = check_program(&invalid, &schema)
+                .expect_err("invalid FileRef attachment declaration must be diagnosed");
+            assert!(errors.iter().any(|error| error.message.contains(expected)));
+        }
     }
 
     #[test]
@@ -1707,6 +1865,98 @@ mod tests {
                 "accepted nonfinite Float: {value}"
             );
         }
+    }
+
+    #[test]
+    fn storage_decimal_scale_is_case_and_whitespace_insensitive_and_enforced() {
+        let mut price_form = form();
+        price_form.table = Some("invoices".into());
+        price_form.fields = vec![field("price", Type::Named("Money".into()), true, None)];
+        for sql_type in ["DECIMAL(19,4)", "decimal (19, 4)", "NUMERIC( 19, 4 )"] {
+            let schema = Schema {
+                database: None,
+                tables: vec![zelyra_database::Table {
+                    name: "invoices".into(),
+                    tenant_scope_column: None,
+                    columns: vec![zelyra_database::Column {
+                        name: "price".into(),
+                        sql_type: sql_type.into(),
+                        nullable: false,
+                        primary_key: false,
+                        auto: false,
+                        unique: false,
+                        default: None,
+                    }],
+                    foreign_keys: Vec::new(),
+                    indexes: Vec::new(),
+                    uniques: Vec::new(),
+                }],
+            };
+            assert!(validate(
+                &price_form,
+                None,
+                Some(&schema),
+                &HashMap::from([("price".into(), "1.00001".into())]),
+            )
+            .errors
+            .iter()
+            .any(|error| error.field == "price"));
+            assert!(validate(
+                &price_form,
+                None,
+                Some(&schema),
+                &HashMap::from([("price".into(), "1.0001".into())]),
+            )
+            .is_valid());
+        }
+
+        let mut decimal_form = form();
+        decimal_form.table = Some("invoices".into());
+        decimal_form.fields = vec![field("amount", Type::Decimal, true, None)];
+        let schema = Schema {
+            database: None,
+            tables: vec![zelyra_database::Table {
+                name: "invoices".into(),
+                tenant_scope_column: None,
+                columns: vec![zelyra_database::Column {
+                    name: "amount".into(),
+                    sql_type: "decimal(12, 2)".into(),
+                    nullable: false,
+                    primary_key: false,
+                    auto: false,
+                    unique: false,
+                    default: None,
+                }],
+                foreign_keys: Vec::new(),
+                indexes: Vec::new(),
+                uniques: Vec::new(),
+            }],
+        };
+        assert!(validate(
+            &decimal_form,
+            None,
+            Some(&schema),
+            &HashMap::from([("amount".into(), "1.001".into())]),
+        )
+        .errors
+        .iter()
+        .any(|error| error.field == "amount"));
+        assert!(validate(
+            &decimal_form,
+            None,
+            Some(&schema),
+            &HashMap::from([("amount".into(), "9999999999.99".into())]),
+        )
+        .is_valid());
+        assert!(validate(
+            &decimal_form,
+            None,
+            Some(&schema),
+            &HashMap::from([("amount".into(), "10000000000.00".into())]),
+        )
+        .errors
+        .iter()
+        .any(|error| error.field == "amount"));
     }
 
     #[test]
@@ -1965,6 +2215,8 @@ mod tests {
                 storage_name: None,
                 decimal_precision: None,
                 auto_sequence: None,
+                computed: None,
+                attachment: None,
                 required: true,
                 primary_key: false,
                 auto: false,

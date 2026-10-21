@@ -7935,6 +7935,30 @@ fn validate_auth(path: &str, program: &zelyra_ast::Program, schema: &Schema) -> 
                 valid = false;
             }
         }
+        if let Some(enabled_column) = auth.login_enabled_column.as_deref() {
+            match table
+                .columns
+                .iter()
+                .find(|column| column.name == enabled_column)
+            {
+                Some(column)
+                    if !column.nullable
+                        && (column.sql_type.to_ascii_uppercase().contains("BOOL")
+                            || column.sql_type.to_ascii_uppercase().contains("TINYINT")) => {}
+                _ => {
+                    diagnostic_with_span(
+                        path,
+                        "E-AUTH-004",
+                        &format!(
+                            "authentication login_enabled column `{}.{enabled_column}` must be a required boolean",
+                            auth.table
+                        ),
+                        auth.span,
+                    );
+                    valid = false;
+                }
+            }
+        }
         if let Some(membership_table_name) = &auth.membership_table {
             if membership_table_name == &auth.table
                 || auth.session_table.as_ref() == Some(membership_table_name)
@@ -10361,6 +10385,23 @@ fn serve_command(mut args: impl Iterator<Item = String>) -> ExitCode {
         Ok(project) => project.program,
         Err(()) => return ExitCode::from(1),
     };
+    let project_root = Path::new(&path)
+        .parent()
+        .filter(|parent| !parent.as_os_str().is_empty())
+        .unwrap_or_else(|| Path::new("."));
+    let database_url = match database_url_for_project(
+        project_root,
+        program
+            .databases
+            .first()
+            .map(|database| database.name.as_str()),
+    ) {
+        Ok(database_url) => database_url,
+        Err(error) => {
+            diagnostic(&path, "E-ENV-001", &error, 1, 1);
+            return ExitCode::from(1);
+        }
+    };
     if let Some(reserved_path) = project_uses_reserved_ui_asset_route(&program) {
         diagnostic(
             &path,
@@ -10553,6 +10594,7 @@ fn serve_command(mut args: impl Iterator<Item = String>) -> ExitCode {
         };
         Some(AuthRoute {
             table: auth.table.clone(),
+            login_enabled_column: auth.login_enabled_column.clone(),
             membership_table: auth.membership_table.clone(),
             tenant_owner_table: auth.tenant_owner_table.clone(),
             tenant_owner_column: auth.tenant_owner_column.clone(),
@@ -10591,7 +10633,6 @@ fn serve_command(mut args: impl Iterator<Item = String>) -> ExitCode {
         .is_some_and(|auth| auth.reset_tokens_table.is_some())
     {
         let auth = auth_route.as_ref().expect("reset route was detected");
-        let database_url = database_url_from_program(&program);
         let reset_table = auth
             .reset_tokens_table
             .as_deref()
@@ -10795,6 +10836,12 @@ fn serve_command(mut args: impl Iterator<Item = String>) -> ExitCode {
                 .clone()
                 .unwrap_or_else(|| zelyra_web::localized_identifier(ui_language, &crud.name)),
             table: crud.table.clone(),
+            file_columns: table
+                .columns
+                .iter()
+                .filter(|column| column.attachment.is_some())
+                .map(|column| column.name.clone())
+                .collect(),
             tenant_column: crud
                 .tenant_column
                 .as_deref()
@@ -10924,8 +10971,8 @@ fn serve_command(mut args: impl Iterator<Item = String>) -> ExitCode {
     let database_capability_granted =
         database_runtime_capability_granted(capability_grants.as_ref());
     if database_capability_granted {
-        if let Some(url) = database_url_from_program(&program) {
-            if let Err(error) = zelyra_database::validate_decimal_storage(&url, &schema) {
+        if let Some(url) = database_url.as_deref() {
+            if let Err(error) = zelyra_database::validate_decimal_storage(url, &schema) {
                 let span = decimal_storage_error_span(&program, &error.to_string());
                 diagnostic_with_span(&path, "E-DB-PRECISION", &error.to_string(), span);
                 return ExitCode::from(1);
@@ -10933,8 +10980,8 @@ fn serve_command(mut args: impl Iterator<Item = String>) -> ExitCode {
         }
     }
     if database_capability_granted {
-        if let Some(url) = database_url_from_program(&program) {
-            if let Err(error) = zelyra_database::validate_temporal_storage(&url, &schema) {
+        if let Some(url) = database_url.as_deref() {
+            if let Err(error) = zelyra_database::validate_temporal_storage(url, &schema) {
                 let span = decimal_storage_error_span(&program, &error.to_string());
                 diagnostic_with_span(&path, "E-DB-TEMPORAL", &error.to_string(), span);
                 return ExitCode::from(1);
@@ -11066,10 +11113,6 @@ fn serve_command(mut args: impl Iterator<Item = String>) -> ExitCode {
     if used_fallback {
         println!("note: {address} is already in use; using free port {actual_address}");
     }
-    let project_root = std::path::Path::new(&path)
-        .parent()
-        .filter(|parent| !parent.as_os_str().is_empty())
-        .unwrap_or_else(|| std::path::Path::new("."));
     let module_settings_store = match packages::PackageGraph::load(project_root) {
         Ok(Some(graph))
             if graph
@@ -11089,7 +11132,7 @@ fn serve_command(mut args: impl Iterator<Item = String>) -> ExitCode {
         }
     };
     println!("Zelyra server listening on http://{actual_address}");
-    let app = WebApp::with_database_url(routes, form_routes, database_url_from_program(&program))
+    let app = WebApp::with_database_url(routes, form_routes, database_url)
         .with_validation_program(program)
         .with_runtime_security(capability_grants, runtime_policy)
         .with_ui_settings(ui_language, ui_level)
@@ -11228,7 +11271,7 @@ fn generated_crud_form(
                     ty: Some(column.ty.clone()),
                     label: None,
                     placeholder: None,
-                    required: column.required,
+                    required: column.required && column.computed.is_none(),
                     min_length: None,
                     max: None,
                     min_value: None,
@@ -11237,7 +11280,7 @@ fn generated_crud_form(
                     widget: None,
                     appearance: None,
                     file_upload: None,
-                    readonly: false,
+                    readonly: column.computed.is_some(),
                     span: column.span,
                 })
                 .collect();
@@ -11274,6 +11317,7 @@ fn generated_crud_form(
         })
         .filter(|column| {
             column.auto_sequence.is_some()
+                || column.computed.is_some()
                 || configured_fields
                     .is_none_or(|fields| fields.iter().any(|name| name == &column.name))
         })
@@ -11288,14 +11332,17 @@ fn generated_crud_form(
             let generated_number_series = !edit && column.auto_sequence.is_some();
             zelyra_ast::FormField {
                 name: column.name.clone(),
-                ty: None,
+                ty: column
+                    .attachment
+                    .as_ref()
+                    .map(|_| Type::Named("File".into())),
                 label: generated_invoice_number.then(|| "@i18n:invoice.number.label".into()),
                 placeholder: generated_invoice_number
                     .then(|| "@i18n:invoice.number.auto_hint".into())
                     .or_else(|| {
                         generated_number_series.then(|| "@i18n:number.series.auto_hint".into())
                     }),
-                required: false,
+                required: column.attachment.is_some() && column.required,
                 min_length: None,
                 max: None,
                 min_value: None,
@@ -11303,8 +11350,11 @@ fn generated_crud_form(
                 choices: Vec::new(),
                 widget: None,
                 appearance: None,
-                file_upload: None,
-                readonly: generated_invoice_number || generated_number_series,
+                file_upload: column.attachment.clone(),
+                readonly: column.attachment.is_none()
+                    && (generated_invoice_number
+                        || generated_number_series
+                        || column.computed.is_some()),
                 span: column.span,
             }
         })
@@ -11590,8 +11640,11 @@ fn generated_api_routes(
     runtime_policy: Option<&RuntimePolicy>,
 ) -> Vec<ApiRoute> {
     let database_url = database_url_from_program(program);
-    let (lowered_program, table_validation_functions) =
+    let (mut lowered_program, table_validation_functions) =
         zelyra_ast::lower_table_validation_functions(program);
+    let (computed_functions, computed_column_functions) =
+        zelyra_ast::build_computed_column_functions(&lowered_program);
+    lowered_program.functions.extend(computed_functions);
     program
         .apis
         .iter()
@@ -11600,6 +11653,7 @@ fn generated_api_routes(
             let api = api.clone();
             let program = lowered_program.clone();
             let table_validation_functions = table_validation_functions.clone();
+            let computed_column_functions = computed_column_functions.clone();
             let database_url = database_url.clone();
             let capability_grants = capability_grants.cloned();
             let runtime_policy = runtime_policy.cloned();
@@ -11633,6 +11687,7 @@ fn generated_api_routes(
                             capability_grants: capability_grants.as_ref(),
                             runtime_policy: runtime_policy.as_ref(),
                             table_validation_functions: &table_validation_functions,
+                            computed_column_functions: &computed_column_functions,
                             verified_tenant_id,
                         },
                     )
@@ -11667,8 +11722,32 @@ fn dispatch_api(
     path_params: &HashMap<String, String>,
     database_url: Option<&str>,
 ) -> Response {
-    let (lowered_program, table_validation_functions) =
+    dispatch_api_with_tenant(
+        program,
+        api,
+        handler,
+        request,
+        path_params,
+        database_url,
+        None,
+    )
+}
+
+#[cfg(test)]
+fn dispatch_api_with_tenant(
+    program: &zelyra_ast::Program,
+    api: &zelyra_ast::ApiDef,
+    handler: &str,
+    request: &zelyra_web::Request,
+    path_params: &HashMap<String, String>,
+    database_url: Option<&str>,
+    verified_tenant_id: Option<i64>,
+) -> Response {
+    let (mut lowered_program, table_validation_functions) =
         zelyra_ast::lower_table_validation_functions(program);
+    let (computed_functions, computed_column_functions) =
+        zelyra_ast::build_computed_column_functions(&lowered_program);
+    lowered_program.functions.extend(computed_functions);
     dispatch_api_with_capabilities(
         &lowered_program,
         api,
@@ -11680,7 +11759,8 @@ fn dispatch_api(
             capability_grants: None,
             runtime_policy: None,
             table_validation_functions: &table_validation_functions,
-            verified_tenant_id: None,
+            computed_column_functions: &computed_column_functions,
+            verified_tenant_id,
         },
     )
 }
@@ -11691,6 +11771,7 @@ struct ApiRuntimeContext<'a> {
     capability_grants: Option<&'a HashSet<String>>,
     runtime_policy: Option<&'a RuntimePolicy>,
     table_validation_functions: &'a [zelyra_ast::TableValidationFunction],
+    computed_column_functions: &'a [zelyra_ast::ComputedColumnFunction],
     verified_tenant_id: Option<i64>,
 }
 
@@ -11769,6 +11850,62 @@ fn dispatch_api_with_capabilities(
     for (name, value) in path_params {
         values.insert(name.clone(), serde_json::Value::String(value.clone()));
     }
+    if api.method == "PATCH" {
+        if let Some(table_name) = &api.validates_table {
+            let Some(table) = program
+                .tables
+                .iter()
+                .find(|table| table.name == *table_name)
+            else {
+                return api_error_response(
+                    500,
+                    "InternalServerError",
+                    "validated API table is missing",
+                );
+            };
+            let missing_validated_input = api.input.iter().any(|field| {
+                table
+                    .columns
+                    .iter()
+                    .any(|column| column.name == field.name && column.computed.is_none())
+                    && !values.contains_key(&field.name)
+            });
+            if missing_validated_input {
+                let Some(database_url) = context.database_url else {
+                    return api_error_response(
+                        503,
+                        "ServiceUnavailable",
+                        "PATCH validation needs the existing database row when fields are omitted",
+                    );
+                };
+                match merge_api_patch_row_values(
+                    program,
+                    table,
+                    database_url,
+                    context.verified_tenant_id,
+                    &mut values,
+                ) {
+                    Ok(()) => {}
+                    Err(ApiPatchMergeError::BadRequest(message)) => {
+                        return api_error_response(400, "BadRequest", &message);
+                    }
+                    Err(ApiPatchMergeError::NotFound) => {
+                        return api_error_response(404, "NotFound", "record not found");
+                    }
+                    Err(ApiPatchMergeError::Database(error)) => {
+                        eprintln!(
+                            "zelyra: could not load a row for partial API validation: {error}"
+                        );
+                        return api_error_response(
+                            500,
+                            "InternalServerError",
+                            "could not load the existing record for PATCH validation",
+                        );
+                    }
+                }
+            }
+        }
+    }
     let mut arguments = Vec::new();
     for field in &api.input {
         let Some(value) = values.get(&field.name) else {
@@ -11787,6 +11924,84 @@ fn dispatch_api_with_capabilities(
             Err(error) => return api_error_response(400, "BadRequest", &error),
         }
     }
+    let mut computed_api_values = HashMap::new();
+    if let Some(table_name) = &api.validates_table {
+        let Some(table) = program
+            .tables
+            .iter()
+            .find(|table| table.name == *table_name)
+        else {
+            return api_error_response(
+                500,
+                "InternalServerError",
+                "validated API table is missing",
+            );
+        };
+        let mut table_values = HashMap::new();
+        for column in table
+            .columns
+            .iter()
+            .filter(|column| column.computed.is_none())
+        {
+            if let Some(value) = values.get(&column.name) {
+                let scalar = match value {
+                    serde_json::Value::Null => Some(String::new()),
+                    serde_json::Value::String(value) => Some(value.clone()),
+                    serde_json::Value::Number(value) => Some(value.to_string()),
+                    serde_json::Value::Bool(value) => Some(value.to_string()),
+                    _ => None,
+                };
+                if let Some(value) = scalar {
+                    table_values.insert(column.name.clone(), value);
+                }
+            }
+        }
+        if let Some(column) = trusted_tenant_column {
+            table_values.insert(
+                column.name.clone(),
+                context
+                    .verified_tenant_id
+                    .expect("checked above")
+                    .to_string(),
+            );
+        }
+        if table.columns.iter().any(|column| column.computed.is_some()) {
+            if let Err(error) = zelyra_web::evaluate_computed_columns_for_api(
+                program,
+                context.computed_column_functions,
+                table_name,
+                &mut table_values,
+            ) {
+                return api_error_response(400, "BadRequest", &error);
+            }
+            for column in table
+                .columns
+                .iter()
+                .filter(|column| column.computed.is_some())
+            {
+                let Some(value) = table_values.get(&column.name) else {
+                    return api_error_response(
+                        500,
+                        "InternalServerError",
+                        "computed API field was not produced",
+                    );
+                };
+                let json = if matches!(column.ty, Type::Option(_)) && value.is_empty() {
+                    serde_json::Value::Null
+                } else {
+                    serde_json::Value::String(value.clone())
+                };
+                let runtime_value = match api_value_json(&json, &column.ty, program) {
+                    Ok(value) => value,
+                    Err(error) => {
+                        return api_error_response(500, "InternalServerError", &error);
+                    }
+                };
+                computed_api_values.insert(column.name.clone(), runtime_value.clone());
+                arguments.push(runtime_value);
+            }
+        }
+    }
     if trusted_tenant_column.is_some() {
         arguments.push(RuntimeValue::Int(
             context.verified_tenant_id.expect("checked above"),
@@ -11799,6 +12014,11 @@ fn dispatch_api_with_capabilities(
             .zip(&arguments)
             .map(|(field, value)| (field.name.clone(), value.clone()))
             .collect::<HashMap<_, _>>();
+        submitted.extend(
+            computed_api_values
+                .iter()
+                .map(|(name, value)| (name.clone(), value.clone())),
+        );
         if let (Some(column), Some(tenant_id)) = (trusted_tenant_column, context.verified_tenant_id)
         {
             submitted.insert(column.name.clone(), RuntimeValue::Int(tenant_id));
@@ -11849,6 +12069,159 @@ fn dispatch_api_with_capabilities(
     }
 }
 
+#[derive(Debug)]
+enum ApiPatchMergeError {
+    BadRequest(String),
+    NotFound,
+    Database(String),
+}
+
+fn merge_api_patch_row_values(
+    program: &zelyra_ast::Program,
+    table: &zelyra_ast::TableDef,
+    database_url: &str,
+    verified_tenant_id: Option<i64>,
+    values: &mut HashMap<String, serde_json::Value>,
+) -> Result<(), ApiPatchMergeError> {
+    let Some(primary_key) = table.columns.iter().find(|column| column.primary_key) else {
+        return Err(ApiPatchMergeError::BadRequest(
+            "validated PATCH table has no declared primary key".into(),
+        ));
+    };
+    let Some(id) = values.get(&primary_key.name) else {
+        return Err(ApiPatchMergeError::BadRequest(format!(
+            "PATCH path must provide primary key `{}`",
+            primary_key.name
+        )));
+    };
+    let id_value = if let Some(id) = id.as_i64() {
+        QueryValue::Int(id)
+    } else if let Some(id) = id.as_str() {
+        if let Ok(id) = id.parse::<i64>() {
+            QueryValue::Int(id)
+        } else {
+            QueryValue::String(id.to_owned())
+        }
+    } else {
+        return Err(ApiPatchMergeError::BadRequest(format!(
+            "PATCH primary key `{}` must be a scalar",
+            primary_key.name
+        )));
+    };
+
+    let is_postgres = zelyra_database::is_postgres_url(database_url);
+    let selected_columns = table
+        .columns
+        .iter()
+        .filter(|column| column.computed.is_none())
+        .collect::<Vec<_>>();
+    let select_list = selected_columns
+        .iter()
+        .map(|column| {
+            let storage_name = column.storage_name.as_deref().unwrap_or(&column.name);
+            quote_ident(storage_name, is_postgres)
+        })
+        .collect::<Vec<_>>()
+        .join(", ");
+    let table_name = quote_ident(&table.name, is_postgres);
+    let primary_key_name = primary_key
+        .storage_name
+        .as_deref()
+        .unwrap_or(&primary_key.name);
+    let mut predicates = vec![format!(
+        "{} = :zelyra_patch_id",
+        quote_ident(primary_key_name, is_postgres)
+    )];
+    let mut parameters = vec![("zelyra_patch_id".into(), id_value)];
+    if let Some(scope) = &table.tenant_scope {
+        let Some(tenant_id) = verified_tenant_id else {
+            return Err(ApiPatchMergeError::BadRequest(
+                "verified tenant context is required for scoped PATCH validation".into(),
+            ));
+        };
+        let Some(tenant_column) = table
+            .columns
+            .iter()
+            .find(|column| column.name == scope.column)
+        else {
+            return Err(ApiPatchMergeError::BadRequest(
+                "validated PATCH table has no tenant scope column".into(),
+            ));
+        };
+        let tenant_storage = tenant_column
+            .storage_name
+            .as_deref()
+            .unwrap_or(&tenant_column.name);
+        predicates.push(format!(
+            "{} = :zelyra_patch_tenant",
+            quote_ident(tenant_storage, is_postgres)
+        ));
+        parameters.push(("zelyra_patch_tenant".into(), QueryValue::Int(tenant_id)));
+    }
+    let sql = format!(
+        "SELECT {select_list} FROM {table_name} WHERE {} LIMIT 1",
+        predicates.join(" AND ")
+    );
+    let result = zelyra_database::execute_query(database_url, &sql, parameters)
+        .map_err(|error| ApiPatchMergeError::Database(error.message))?;
+    let Some(row) = result.rows.first() else {
+        return Err(ApiPatchMergeError::NotFound);
+    };
+    for (index, column) in selected_columns.iter().enumerate() {
+        if values.contains_key(&column.name) {
+            continue;
+        }
+        let Some(raw) = row.get(index) else {
+            return Err(ApiPatchMergeError::Database(
+                "database returned an incomplete row for PATCH validation".into(),
+            ));
+        };
+        let is_null = result
+            .nulls
+            .first()
+            .and_then(|nulls| nulls.get(index))
+            .copied()
+            .unwrap_or(false);
+        let value = if is_null {
+            serde_json::Value::Null
+        } else if api_type_uses_json_storage(&column.ty, program, &mut HashSet::new()) {
+            serde_json::from_str(raw).unwrap_or_else(|_| serde_json::Value::String(raw.clone()))
+        } else {
+            serde_json::Value::String(raw.clone())
+        };
+        values.insert(column.name.clone(), value);
+    }
+    Ok(())
+}
+
+fn api_type_uses_json_storage(
+    ty: &Type,
+    program: &zelyra_ast::Program,
+    seen: &mut HashSet<String>,
+) -> bool {
+    match ty {
+        Type::Option(inner) => api_type_uses_json_storage(inner, program, seen),
+        Type::Array(_) => true,
+        Type::Map(_, _) | Type::Applied { .. } => true,
+        Type::Named(name) => {
+            if program.records.iter().any(|record| record.name == *name)
+                || program
+                    .enums
+                    .iter()
+                    .any(|definition| definition.name == *name)
+            {
+                true
+            } else if let Some(definition) = program.types.iter().find(|item| item.name == *name) {
+                seen.insert(name.clone())
+                    && api_type_uses_json_storage(&definition.target, program, seen)
+            } else {
+                false
+            }
+        }
+        _ => false,
+    }
+}
+
 fn api_result_response(api: &zelyra_ast::ApiDef, value: &RuntimeValue) -> Response {
     if let RuntimeValue::Result(Err(error)) = value {
         let error_name = match &**error {
@@ -11892,6 +12265,13 @@ fn api_value_json(
         )?))));
     }
     if let Type::Named(name) = ty {
+        if name == "Id" {
+            return value
+                .as_i64()
+                .or_else(|| value.as_str().and_then(|value| value.parse::<i64>().ok()))
+                .map(RuntimeValue::Int)
+                .ok_or_else(|| format!("invalid Id JSON value `{value}`"));
+        }
         if let Some(definition) = program
             .types
             .iter()

@@ -692,8 +692,11 @@ Die folgenden Schritte verwenden überall dieselben Werte: das Verzeichnis
    zelyra check src/main.zyl
    ~~~
 
-6. Die URL in die Prozessumgebung laden und die Verbindung testen. `.env` wird
-   von Zelyra nicht automatisch geladen:
+6. Die Verbindung testen. `zelyra serve`, `doctor` und projektbezogene
+   Datenbankbefehle lesen die Projekt-`.env` selbst. Prozessvariablen haben
+   Vorrang; andernfalls wird `ZELYRA_DATABASE_MAIN_URL` vor `DATABASE_URL`
+   verwendet. Für Befehle, die Zelyra-Code direkt ausführen, die URL weiterhin
+   ausdrücklich in die Prozessumgebung laden:
 
    ~~~bash
    set -a
@@ -1304,6 +1307,7 @@ auth users {
     permissions: user_permissions
     roles: user_roles
     role_permissions: role_permissions
+    login_enabled: is_approved
 }
 
 page "/admin" {
@@ -1315,6 +1319,15 @@ page "/admin" {
     }
 }
 ~~~
+
+`login_enabled` ist optional. Wenn es angegeben ist, muss es auf eine
+erforderliche Bool-Spalte der Benutzertabelle zeigen; nur Datensätze mit dem
+Wert `true` können sich anmelden. Ohne diese Angabe bleibt die bestehende
+Konvention `active: Bool` erhalten. Der Laravel-Importer setzt
+`login_enabled` nur, wenn er eine passende Freigabeprüfung statisch im
+verknüpften Login-Controller erkennt. Projektspezifische Admin-Ausnahmen,
+Registrierungsabläufe und Zwei-Faktor-Logik müssen weiterhin separat geprüft
+und gegebenenfalls als Zelyra-Funktion umgesetzt werden.
 
 Die optionale Tabelle `permissions` enthält `user_id` und `permission` für
 direkte Vergaben. Rollengruppen werden mit `roles` und `role_permissions`
@@ -2020,8 +2033,8 @@ Gib niemals `DATABASE_URL` oder ein Passwort in eine Diagnoseausgabe aus.
 | falscher Port | außen `3307` mit innen `3306` verwechselt | Host nutzt `3307`, ein Compose-Service nutzt `3306` |
 | MariaDB-Container nicht gestartet | Compose-Fehler, belegter Port oder ungesundes Volume | `docker compose ps` und `docker compose logs mariadb` prüfen |
 | Benutzer nur für anderen Host freigegeben | `'zelyra'@'localhost'` ist nicht immer `'zelyra'@'127.0.0.1'` | Benutzer exakt für den verwendeten Host anlegen und Grants kontrollieren |
-| fehlende Umgebungsvariable | `DATABASE_URL` wurde nicht exportiert | `.env` laden oder Variable für den Prozess setzen; Zelyra lädt sie nicht selbst |
-| `.env` wird nicht gefunden | falsches Arbeitsverzeichnis oder Annahme eines automatischen Loaders | `pwd`, `ls -la`; im Projektstamm arbeiten und Variable explizit exportieren |
+| fehlende Umgebungsvariable | der Befehl braucht eine Prozessvariable oder es ist keine Projekt-URL gesetzt | projektbezogenes `serve`, `doctor` und Datenbankbefehle lesen die Projekt-`.env`; für direkte Codeausführung `.env` laden oder Prozessvariable setzen |
+| `.env` wird nicht gefunden | falsches Arbeitsverzeichnis oder keine Projekt-Umgebungsdatei | `pwd`, `ls -la`; benötigte Prozessvariable setzen oder Projekt-`.env` anlegen |
 | ungültiger Zahlenwert beim Port | Portteil der URI ist kein gültiger MariaDB-Port | Ziffern verwenden, zum Beispiel `3307`; die URL wird ansonsten abgelehnt |
 | falscher Zeichensatz | Datenbank mit anderem Charset/Kollation angelegt | Datenbankdefinition prüfen; `db setup` nutzt `utf8mb4`/`utf8mb4_unicode_ci` |
 | TLS-Fehler | TLS-Parameter wurden an die URL angehängt, werden aber nicht unterstützt | aktuelle CLI-URL ohne TLS-Query-Option nutzen; TLS-Konfiguration ist geplant |
@@ -3260,7 +3273,7 @@ table invoices scoped by tenant_id: TenantId {
    ```
    Dadurch ist ein Cross-Tenant-Angriff (z. B. Zuweisen eines Kunden von Mandant A zu einer Rechnung von Mandant B) auf physischer Datenbankebene unmöglich.
 3. **Mandantenbezogene Eindeutigkeit:** Mit `unique within tenant` deklarierte Felder erzeugen `UNIQUE KEY (tenant_id, customer_number)`. Unterschiedliche Mandanten können dieselbe Belegnummer führen, innerhalb eines Mandanten sind Duplikate ausgeschlossen.
-4. **Optionale Relationen und kaufmännische Dezimalzahlen:** Optionale Verknüpfungen (`Customer?`) erzeugen typsicher `BIGINT NULL`. `Decimal(p, s)` (z. B. `Decimal(12, 2)`) garantiert exakte kaufmännische Rundung ohne Gleitkomma-Ungenauigkeiten.
+4. **Optionale Relationen und kaufmännische Dezimalzahlen:** Optionale Verknüpfungen (`Customer?`) erzeugen typsicher `BIGINT NULL`. `Decimal(p, s)` (z. B. `Decimal(12, 2)`) wird ohne Gleitkomma-Ungenauigkeit gespeichert. Formulare weisen Werte ab, die die deklarierte Präzision oder Skala überschreiten; berechnete Felder werden vor dem Speichern exakt berechnet und auf ihre Zielskala gerundet.
 
 ## 33. Tabelleninvarianten und Validierungsregeln
 
@@ -3287,6 +3300,16 @@ table invoices scoped by tenant_id: TenantId {
 
 - **Deklaratives CRUD und Formulare:** Vor jedem Schreibvorgang (Create/Edit) evaluiert Zelyra die Invarianten atomar. Werden Invarianten verletzt, wird der Schreibvorgang verhindert und das Formular liefert die deklarierte Fehlermeldung mit HTTP-Status 422.
 - **Typisierte API-Eingabeprüfung:** APIs können Request-Bodies an Tabellen binden (`validates`). Die Validierung liefert standardisierte HTTP-422-Fehlerverträge, bevor der Handler ausgeführt wird.
+
+Tabellen mit berechneten Spalten dürfen diese Spalten nicht als API-Eingaben
+deklarieren. Zelyra berechnet sie serverseitig aus den typisierten Eingaben neu,
+prüft danach die Tabelleninvarianten und übergibt die Ergebnisse als zusätzliche
+Handlerparameter in Tabellenspaltenreihenfolge. Das gilt für geprüfte API-POST-
+und -PUT-Routen. Ein Update muss alle Berechnungsabhängigkeiten und Ergebnisse
+an die gleichnamigen typisierten Parameter binden. Manipulierte Werte aus dem
+Request werden nicht verwendet. `examples/computed_api.zyl` enthält ein
+compilergeprüftes Create-/Update-Beispiel. Für diesen Berechnungspfad ist API-
+PATCH noch nicht unterstützt.
 
 ## 34. Lifecycle-Guards, Policies und Master-Detail-CRUD
 
@@ -4635,3 +4658,42 @@ Dieses Rezept gestaltet Belegformulare mit geteilten Kopfdaten, strukturierter P
   font-size: 1rem;
 }
 ```
+
+## FileRef-Anhänge im generierten CRUD (1.2.32)
+
+Eine undurchsichtige `FileRef`-Spalte wird mit ihrer Upload-Richtlinie als
+generiertes CRUD-Dateifeld verwendet:
+
+```zelyra
+table contracts {
+    id: Id primary auto
+    title: String(200) required
+    signed_pdf: FileRef? attachment {
+        max_size: "20MB"
+        allowed_types: ["application/pdf"]
+    }
+}
+
+crud Contract -> contracts {}
+```
+
+Das vollständige, compilergeprüfte Beispiel liegt in
+`examples/file_ref_crud.zyl`.
+
+Der `attachment`-Block nutzt dieselbe geprüfte Größen- und MIME-Richtlinie wie
+tabellengebundene `File`-Formularfelder. Generierte Anlegen-/Bearbeiten-Seiten
+zeigen ein natives Datei-Eingabefeld. Wird beim Bearbeiten keine neue Datei
+gesendet, bleibt die bestehende Referenz erhalten. Ein neuer Upload verwendet
+den vorhandenen privaten, integritätsgeprüften Speicher und wird erst über die
+normale CSRF-geschützte CRUD-Aktion veröffentlicht. Listen und Detailseiten
+zeigen einen Download-Link statt der internen FileRef. Downloads laufen über
+`/contracts/{id}/files/signed_pdf` und durchlaufen CRUD-Rechte, Datensatz-,
+Mandanten- und Empfängerprüfung. Rohe FileRef-Werte werden nicht als normale
+Textfelder akzeptiert. FileRef-Spalten können nicht für CRUD-Suche oder Filter
+verwendet werden.
+
+Unterstützte MIME-Typen sind derzeit PDF, PNG und JPEG. Die Größe ist durch die
+vorhandene Upload-Richtlinie begrenzt (höchstens 100 MiB pro Feld sowie das
+bestehende Request-Gesamtlimit). Projekte mit gewöhnlichen `FileRef`-Spalten
+ohne generiertes CRUD können weiterhin explizite, geprüfte Upload-Formulare
+verwenden.

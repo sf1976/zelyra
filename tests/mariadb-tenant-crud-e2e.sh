@@ -23,8 +23,12 @@ owner_created_title="Owner-created invoice ${suffix}"
 edited_title="Edited invoice ${suffix}"
 rollback_title="Rollback blocked ${suffix}"
 rollback_trigger="zelyra_tenant_fail_${suffix}"
+tenant_document_title="Tenant 20 document ${suffix}"
 temp_dir="$(mktemp -d "${TMPDIR:-/tmp}/zelyra-mariadb-tenant-e2e.XXXXXX")"
+project_file="${temp_dir}/tenant_crud.zyl"
 server_pid=""
+
+cp "${repo_dir}/examples/tenant_crud.zyl" "${project_file}"
 
 if [[ "${database_url}" == mariadb://* ]]; then
     database_parts="${database_url#mariadb://}"
@@ -62,6 +66,7 @@ cleanup() {
 client --batch --skip-column-names <<SQL >/dev/null 2>&1 || true
 DROP TRIGGER IF EXISTS ${rollback_trigger};
 DELETE FROM tenant_invoice_action_log WHERE invoice_id IN (SELECT id FROM invoices WHERE title IN ('${tenant_a_title}', '${tenant_b_title}', '${owner_action_title}', '${created_title}', '${owner_created_title}', '${edited_title}', '${rollback_title}'));
+DELETE FROM tenant_documents WHERE title = '${tenant_document_title}';
 DELETE FROM invoices WHERE title IN ('${tenant_a_title}', '${tenant_b_title}', '${owner_action_title}', '${created_title}', '${owner_created_title}', '${edited_title}', '${rollback_title}');
 DELETE FROM auth_audit_log WHERE actor_user_id IN (SELECT id FROM users WHERE email IN ('${email}', '${permissionless_email}', '${membershipless_email}', '${owner_email}'));
 DELETE FROM user_permissions WHERE user_id IN (SELECT id FROM users WHERE email IN ('${email}', '${permissionless_email}', '${membershipless_email}', '${owner_email}'));
@@ -106,7 +111,7 @@ INSERT INTO tenant_user (user_id, tenant_id, role)
 VALUES (@user_id, 10, 'owner'), (@user_id, 20, 'employee'), (@permissionless_user_id, 10, 'employee');
 INSERT INTO tenants (user_id, name) VALUES (@owner_user_id, '${owner_tenant_name}');
 INSERT INTO user_permissions (user_id, permission)
-VALUES (@user_id, 'invoices.view'), (@user_id, 'invoices.action'), (@membershipless_user_id, 'invoices.view'), (@owner_user_id, 'invoices.view');
+VALUES (@user_id, 'invoices.view'), (@user_id, 'invoices.action'), (@user_id, 'documents.view'), (@membershipless_user_id, 'invoices.view'), (@owner_user_id, 'invoices.view');
 INSERT INTO invoices (tenant_id, title)
 VALUES (10, '${tenant_a_title}'), (20, '${tenant_b_title}');
 INSERT INTO invoices (tenant_id, title)
@@ -137,6 +142,56 @@ login_status="$(curl --silent --show-error --output "${temp_dir}/login-response.
     --data-urlencode "_zelyra_csrf=${csrf}" --data-urlencode "email=${email}" \
     --data-urlencode "password=${password}" "${base_url}/login")"
 [[ "${login_status}" == "303" ]]
+
+echo "[2a/12] checking authenticated tenant-scoped attachment downloads over HTTP"
+document_form_status="$(curl --silent --show-error --output "${temp_dir}/document-form.html" \
+    --write-out '%{http_code}' --cookie "${cookie}" \
+    "${base_url}/tenant_documents/new?tenant_id=20")"
+echo "tenant document form HTTP ${document_form_status}"
+[[ "${document_form_status}" == "200" ]]
+document_csrf="$(sed -n 's/.*name="_zelyra_csrf" value="\([^"]*\)".*/\1/p' "${temp_dir}/document-form.html")"
+[[ -n "${document_csrf}" ]]
+printf '%%PDF-1.7\nZelyra tenant attachment test\n' >"${temp_dir}/tenant-document.pdf"
+document_create_status="$(curl --silent --show-error --output "${temp_dir}/document-create.html" \
+    --write-out '%{http_code}' --header "Origin: ${base_url}" --cookie "${cookie}" \
+    --form-string "_zelyra_csrf=${document_csrf}" \
+    --form-string "title=${tenant_document_title}" \
+    --form "attachment=@${temp_dir}/tenant-document.pdf;type=application/pdf" \
+    "${base_url}/tenant_documents/new?tenant_id=20")"
+echo "tenant document create HTTP ${document_create_status}"
+[[ "${document_create_status}" == "303" ]]
+tenant_document_id="$(client --batch --skip-column-names -e "SELECT id FROM tenant_documents WHERE title = '${tenant_document_title}' AND tenant_id = 20")"
+[[ -n "${tenant_document_id}" ]]
+document_detail_status="$(curl --silent --show-error --output "${temp_dir}/document-detail.html" \
+    --write-out '%{http_code}' --cookie "${cookie}" \
+    "${base_url}/tenant_documents/${tenant_document_id}?tenant_id=20")"
+echo "tenant document detail HTTP ${document_detail_status}"
+[[ "${document_detail_status}" == "200" ]]
+grep -Fq "/tenant_documents/${tenant_document_id}/files/attachment?tenant_id=20" "${temp_dir}/document-detail.html"
+document_reference="$(client --batch --skip-column-names -e "SELECT attachment FROM tenant_documents WHERE id = ${tenant_document_id}")"
+! grep -Fq "${document_reference}" "${temp_dir}/document-detail.html"
+document_download_status="$(curl --silent --show-error --output "${temp_dir}/downloaded-document.pdf" \
+    --dump-header "${temp_dir}/document-download-headers.txt" \
+    --write-out '%{http_code}' --cookie "${cookie}" \
+    "${base_url}/tenant_documents/${tenant_document_id}/files/attachment?tenant_id=20")"
+echo "same-tenant attachment download HTTP ${document_download_status}"
+[[ "${document_download_status}" == "200" ]]
+grep -iq '^Content-Type: application/pdf' "${temp_dir}/document-download-headers.txt"
+cmp "${temp_dir}/tenant-document.pdf" "${temp_dir}/downloaded-document.pdf"
+cross_tenant_document_download_status="$(curl --silent --show-error --output "${temp_dir}/cross-tenant-document.html" \
+    --write-out '%{http_code}' --cookie "${cookie}" \
+    "${base_url}/tenant_documents/${tenant_document_id}/files/attachment?tenant_id=10")"
+echo "cross-tenant attachment download HTTP ${cross_tenant_document_download_status}"
+[[ "${cross_tenant_document_download_status}" == "404" ]]
+if [[ "${ZELYRA_TENANT_FILE_BROWSER_E2E:-0}" == "1" ]]; then
+    echo "[2b/12] checking attachment UI and download in headless Chromium without JavaScript"
+    ZELYRA_TENANT_BROWSER_URL="${base_url}" \
+    ZELYRA_TENANT_BROWSER_EMAIL="${email}" \
+    ZELYRA_TENANT_BROWSER_PASSWORD="${password}" \
+    ZELYRA_TENANT_BROWSER_DOCUMENT_ID="${tenant_document_id}" \
+    ZELYRA_TENANT_BROWSER_FILE="${temp_dir}/tenant-document.pdf" \
+        node "${repo_dir}/editor/tests/tenant-file-download-browser-e2e.mjs"
+fi
 
 echo "[3/12] requiring explicit selection for a multi-tenant user"
 ambiguous_status="$(curl --silent --show-error --output "${temp_dir}/ambiguous.html" \

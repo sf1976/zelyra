@@ -189,6 +189,20 @@ jobs:
         run: |
           cargo build -p zelyra-cli
           python3 scripts/check_release_metadata.py --binary target/debug/zelyra
+      - name: Verify computed API PATCH merges omitted fields safely
+        run: |
+          ZELYRA_TEST_DATABASE_URL=mariadb://root:root@127.0.0.1:3306/zelyra_ci \
+            cargo test --locked -p zelyra-web number_series_allocator_is_atomic_and_scoped_per_tenant -- --ignored --nocapture
+          ZELYRA_TEST_DATABASE_URL=postgresql://zelyra_ci:zelyra_ci@127.0.0.1:5432/zelyra_ci \
+            cargo test --locked -p zelyra-web number_series_allocator_is_atomic_and_scoped_per_tenant -- --ignored --nocapture
+          ZELYRA_TEST_DATABASE_URL=mariadb://root:root@127.0.0.1:3306/zelyra_ci \
+            cargo test --locked -p zelyra-cli computed_api_fields_are_recomputed_before_validation_and_database_write -- --ignored --nocapture
+          ZELYRA_TEST_DATABASE_URL=mariadb://root:root@127.0.0.1:3306/zelyra_ci \
+            cargo test --locked -p zelyra-cli api_patch_row_merge_is_limited_to_the_verified_tenant -- --ignored --nocapture
+          ZELYRA_TEST_DATABASE_URL=postgresql://zelyra_ci:zelyra_ci@127.0.0.1:5432/zelyra_ci \
+            cargo test --locked -p zelyra-cli computed_api_fields_are_recomputed_before_validation_and_database_write -- --ignored --nocapture
+          ZELYRA_TEST_DATABASE_URL=postgresql://zelyra_ci:zelyra_ci@127.0.0.1:5432/zelyra_ci \
+            cargo test --locked -p zelyra-cli api_patch_row_merge_is_limited_to_the_verified_tenant -- --ignored --nocapture
       - name: Verify language console transaction sandbox
         env:
           ZELYRA_BIN: target/debug/zelyra
@@ -492,6 +506,7 @@ jobs:
         env:
           DATABASE_URL: mariadb://root:root@127.0.0.1:3306/zelyra_ci
           ZELYRA_BIN: target/debug/zelyra
+          ZELYRA_TENANT_FILE_BROWSER_E2E: '1'
         run: ./tests/mariadb-tenant-crud-e2e.sh
       - name: Run authenticated tenant-scoped API validation integration test
         env:
@@ -618,6 +633,10 @@ jobs:
           esac
           echo "Testing MariaDB ${server_version}"
           docker image inspect "mariadb:${expected_version}" --format '{{json .RepoDigests}}'
+      - name: Verify transactional tenant number series on this MariaDB version
+        env:
+          ZELYRA_TEST_DATABASE_URL: mariadb://root:root@127.0.0.1:3306/zelyra_ci
+        run: cargo test --locked -p zelyra-web number_series_allocator_is_atomic_and_scoped_per_tenant -- --ignored --nocapture
       - name: Exercise Zelyra Studio against this MariaDB version
         env:
           ZELYRA_STUDIO_E2E_BACKEND: mariadb
@@ -718,3 +737,7 @@ jobs:
           python3 ./tests/temporal-sql-e2e.py
           python3 ./tests/typed-sql-results-e2e.py
           python3 ./tests/null-edit-snapshots-e2e.py
+      - name: Verify transactional tenant number series on MySQL
+        env:
+          ZELYRA_TEST_DATABASE_URL: mysql://root:root@127.0.0.1:3306/zelyra_ci
+        run: cargo test --locked -p zelyra-web number_series_allocator_is_atomic_and_scoped_per_tenant -- --ignored --nocapture

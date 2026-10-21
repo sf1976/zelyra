@@ -420,11 +420,743 @@ pub fn check_program(program: &zelyra_ast::Program, schema: &Schema) -> Result<(
             tableview.span,
         ));
     }
+    check_computed_column_sql_writes(program, &mut errors);
     if errors.is_empty() {
         Ok(())
     } else {
         Err(errors)
     }
+}
+
+fn check_computed_column_sql_writes(program: &zelyra_ast::Program, errors: &mut Vec<SqlError>) {
+    let known_tables = program
+        .tables
+        .iter()
+        .map(|table| table.name.clone())
+        .collect::<Vec<_>>();
+    let computed_mappings = zelyra_ast::build_computed_column_functions(program).1;
+    let dependencies = program
+        .tables
+        .iter()
+        .filter_map(|table| {
+            let mut affected = table
+                .columns
+                .iter()
+                .filter(|column| column.computed.is_some())
+                .map(|column| column.name.to_ascii_lowercase())
+                .collect::<HashSet<_>>();
+            for mapping in computed_mappings.iter().filter(|mapping| {
+                program
+                    .tables
+                    .get(mapping.table_index)
+                    .is_some_and(|item| item.name == table.name)
+            }) {
+                affected.extend(
+                    mapping
+                        .input_columns
+                        .iter()
+                        .map(|name| name.to_ascii_lowercase()),
+                );
+            }
+            (!affected.is_empty()).then(|| (table.name.clone(), affected))
+        })
+        .collect::<HashMap<_, _>>();
+    let computed_fields = program
+        .tables
+        .iter()
+        .filter_map(|table| {
+            let fields = table
+                .columns
+                .iter()
+                .filter(|column| column.computed.is_some())
+                .map(|column| column.name.to_ascii_lowercase())
+                .collect::<HashSet<_>>();
+            (!fields.is_empty()).then(|| (table.name.clone(), fields))
+        })
+        .collect::<HashMap<_, _>>();
+
+    fn check_query_writes(
+        query: &str,
+        span: Span,
+        known_tables: &[String],
+        dependencies: &HashMap<String, HashSet<String>>,
+        computed_fields: &HashMap<String, HashSet<String>>,
+        api_insert_table: Option<&str>,
+        errors: &mut Vec<SqlError>,
+    ) {
+        let (command, accesses) = analyze_table_access(query, known_tables);
+        if !matches!(command, Some("INSERT" | "UPDATE")) {
+            return;
+        }
+        let tokens = tokenize(query);
+        for access in accesses.iter().filter(|access| {
+            matches!(
+                access.mode,
+                SqlAccessMode::Write | SqlAccessMode::ReadWrite | SqlAccessMode::Unknown
+            ) && dependencies.contains_key(&access.table)
+        }) {
+            let affected = dependencies.get(&access.table).expect("filtered above");
+            let writes = if command == Some("INSERT") {
+                None
+            } else {
+                update_assignment_columns(&tokens)
+            };
+            let safe_api_insert = command == Some("INSERT")
+                && api_insert_table == Some(access.table.as_str())
+                && computed_fields
+                    .get(&access.table)
+                    .is_some_and(|fields| insert_binds_computed_fields(&tokens, fields));
+            let safe_api_update = command == Some("UPDATE")
+                && api_insert_table == Some(access.table.as_str())
+                && update_binds_computed_dependencies(&tokens, &access.table, affected);
+            let reason = match writes {
+                None if command == Some("INSERT") && safe_api_insert => None,
+                None if command == Some("INSERT") => Some(
+                    "INSERT cannot derive computed columns outside the checked CRUD recomputation path",
+                ),
+                None => Some("SQL update target is ambiguous for computed-column safety"),
+                Some(columns)
+                    if columns.iter().any(|column| affected.contains(column))
+                        && safe_api_update =>
+                {
+                    None
+                }
+                Some(columns) if columns.iter().any(|column| affected.contains(column)) => Some(
+                    "SQL cannot modify a computed column or one of its inputs; use the checked CRUD recomputation path",
+                ),
+                Some(_) => None,
+            };
+            if let Some(reason) = reason {
+                errors.push(sql_error(
+                    span,
+                    format!("{reason} on table `{}`", access.table),
+                ));
+            }
+        }
+    }
+
+    fn visit_expr(
+        expression: &Expr,
+        known_tables: &[String],
+        dependencies: &HashMap<String, HashSet<String>>,
+        computed_fields: &HashMap<String, HashSet<String>>,
+        api_insert_table: Option<&str>,
+        errors: &mut Vec<SqlError>,
+    ) {
+        match &expression.kind {
+            ExprKind::Sql { query, .. } => check_query_writes(
+                query,
+                expression.span,
+                known_tables,
+                dependencies,
+                computed_fields,
+                api_insert_table,
+                errors,
+            ),
+            ExprKind::Array(values) => {
+                for value in values {
+                    visit_expr(
+                        value,
+                        known_tables,
+                        dependencies,
+                        computed_fields,
+                        api_insert_table,
+                        errors,
+                    );
+                }
+            }
+            ExprKind::Map(entries) => {
+                for (key, value) in entries {
+                    visit_expr(
+                        key,
+                        known_tables,
+                        dependencies,
+                        computed_fields,
+                        api_insert_table,
+                        errors,
+                    );
+                    visit_expr(
+                        value,
+                        known_tables,
+                        dependencies,
+                        computed_fields,
+                        api_insert_table,
+                        errors,
+                    );
+                }
+            }
+            ExprKind::Record { fields, .. } => {
+                for (_, value) in fields {
+                    visit_expr(
+                        value,
+                        known_tables,
+                        dependencies,
+                        computed_fields,
+                        api_insert_table,
+                        errors,
+                    );
+                }
+            }
+            ExprKind::Lambda { body, .. } => visit_expr(
+                body,
+                known_tables,
+                dependencies,
+                computed_fields,
+                api_insert_table,
+                errors,
+            ),
+            ExprKind::Index { target, index } => {
+                visit_expr(
+                    target,
+                    known_tables,
+                    dependencies,
+                    computed_fields,
+                    api_insert_table,
+                    errors,
+                );
+                visit_expr(
+                    index,
+                    known_tables,
+                    dependencies,
+                    computed_fields,
+                    api_insert_table,
+                    errors,
+                );
+            }
+            ExprKind::Field { target, .. }
+            | ExprKind::Unary { expr: target, .. }
+            | ExprKind::Await(target) => visit_expr(
+                target,
+                known_tables,
+                dependencies,
+                computed_fields,
+                api_insert_table,
+                errors,
+            ),
+            ExprKind::Call { args, .. } => {
+                for argument in args {
+                    visit_expr(
+                        argument,
+                        known_tables,
+                        dependencies,
+                        computed_fields,
+                        api_insert_table,
+                        errors,
+                    );
+                }
+            }
+            ExprKind::Binary { left, right, .. } => {
+                visit_expr(
+                    left,
+                    known_tables,
+                    dependencies,
+                    computed_fields,
+                    api_insert_table,
+                    errors,
+                );
+                visit_expr(
+                    right,
+                    known_tables,
+                    dependencies,
+                    computed_fields,
+                    api_insert_table,
+                    errors,
+                );
+            }
+            ExprKind::Match { value, arms } => {
+                visit_expr(
+                    value,
+                    known_tables,
+                    dependencies,
+                    computed_fields,
+                    api_insert_table,
+                    errors,
+                );
+                for arm in arms {
+                    if let Some(guard) = &arm.guard {
+                        visit_expr(
+                            guard,
+                            known_tables,
+                            dependencies,
+                            computed_fields,
+                            api_insert_table,
+                            errors,
+                        );
+                    }
+                    visit_expr(
+                        &arm.value,
+                        known_tables,
+                        dependencies,
+                        computed_fields,
+                        api_insert_table,
+                        errors,
+                    );
+                }
+            }
+            ExprKind::Int(_)
+            | ExprKind::UInt(_)
+            | ExprKind::Float(_)
+            | ExprKind::Bool(_)
+            | ExprKind::String(_)
+            | ExprKind::Char(_)
+            | ExprKind::FunctionValue(_)
+            | ExprKind::Variable(_) => {}
+        }
+    }
+
+    fn visit_block(
+        block: &Block,
+        known_tables: &[String],
+        dependencies: &HashMap<String, HashSet<String>>,
+        computed_fields: &HashMap<String, HashSet<String>>,
+        api_insert_table: Option<&str>,
+        errors: &mut Vec<SqlError>,
+    ) {
+        for statement in &block.statements {
+            match statement {
+                Stmt::Let { value, .. }
+                | Stmt::BindOrAssign { value, .. }
+                | Stmt::TupleBindOrAssign { value, .. } => visit_expr(
+                    value,
+                    known_tables,
+                    dependencies,
+                    computed_fields,
+                    api_insert_table,
+                    errors,
+                ),
+                Stmt::ArrayIndexAssign { index, value, .. } => {
+                    visit_expr(
+                        index,
+                        known_tables,
+                        dependencies,
+                        computed_fields,
+                        api_insert_table,
+                        errors,
+                    );
+                    visit_expr(
+                        value,
+                        known_tables,
+                        dependencies,
+                        computed_fields,
+                        api_insert_table,
+                        errors,
+                    );
+                }
+                Stmt::Expr(expression) => visit_expr(
+                    expression,
+                    known_tables,
+                    dependencies,
+                    computed_fields,
+                    api_insert_table,
+                    errors,
+                ),
+                Stmt::Return {
+                    value: Some(value), ..
+                } => visit_expr(
+                    value,
+                    known_tables,
+                    dependencies,
+                    computed_fields,
+                    api_insert_table,
+                    errors,
+                ),
+                Stmt::If {
+                    condition,
+                    then_block,
+                    else_block,
+                    ..
+                } => {
+                    visit_expr(
+                        condition,
+                        known_tables,
+                        dependencies,
+                        computed_fields,
+                        api_insert_table,
+                        errors,
+                    );
+                    visit_block(
+                        then_block,
+                        known_tables,
+                        dependencies,
+                        computed_fields,
+                        api_insert_table,
+                        errors,
+                    );
+                    if let Some(block) = else_block {
+                        visit_block(
+                            block,
+                            known_tables,
+                            dependencies,
+                            computed_fields,
+                            api_insert_table,
+                            errors,
+                        );
+                    }
+                }
+                Stmt::While {
+                    condition,
+                    invariants,
+                    body,
+                    ..
+                } => {
+                    visit_expr(
+                        condition,
+                        known_tables,
+                        dependencies,
+                        computed_fields,
+                        api_insert_table,
+                        errors,
+                    );
+                    for invariant in invariants {
+                        visit_expr(
+                            invariant,
+                            known_tables,
+                            dependencies,
+                            computed_fields,
+                            api_insert_table,
+                            errors,
+                        );
+                    }
+                    visit_block(
+                        body,
+                        known_tables,
+                        dependencies,
+                        computed_fields,
+                        api_insert_table,
+                        errors,
+                    );
+                }
+                Stmt::For { iterable, body, .. } => {
+                    visit_expr(
+                        iterable,
+                        known_tables,
+                        dependencies,
+                        computed_fields,
+                        api_insert_table,
+                        errors,
+                    );
+                    visit_block(
+                        body,
+                        known_tables,
+                        dependencies,
+                        computed_fields,
+                        api_insert_table,
+                        errors,
+                    );
+                }
+                Stmt::Loop {
+                    invariants, body, ..
+                } => {
+                    for invariant in invariants {
+                        visit_expr(
+                            invariant,
+                            known_tables,
+                            dependencies,
+                            computed_fields,
+                            api_insert_table,
+                            errors,
+                        );
+                    }
+                    visit_block(
+                        body,
+                        known_tables,
+                        dependencies,
+                        computed_fields,
+                        api_insert_table,
+                        errors,
+                    );
+                }
+                Stmt::Match { value, arms, .. } => {
+                    visit_expr(
+                        value,
+                        known_tables,
+                        dependencies,
+                        computed_fields,
+                        api_insert_table,
+                        errors,
+                    );
+                    for arm in arms {
+                        visit_block(
+                            &arm.body,
+                            known_tables,
+                            dependencies,
+                            computed_fields,
+                            api_insert_table,
+                            errors,
+                        );
+                    }
+                }
+                Stmt::Transaction { body, .. } | Stmt::Parallel { body, .. } => visit_block(
+                    body,
+                    known_tables,
+                    dependencies,
+                    computed_fields,
+                    api_insert_table,
+                    errors,
+                ),
+                Stmt::Return { value: None, .. } | Stmt::Break { .. } | Stmt::Continue { .. } => {}
+            }
+        }
+    }
+
+    for function in &program.functions {
+        let api_insert_table = program.apis.iter().find_map(|api| {
+            (api.handler.as_deref() == Some(function.name.as_str()))
+                .then_some(api.validates_table.as_deref())
+                .flatten()
+        });
+        visit_block(
+            &function.body,
+            &known_tables,
+            &dependencies,
+            &computed_fields,
+            api_insert_table,
+            errors,
+        );
+    }
+    for form in &program.forms {
+        for action in &form.actions {
+            visit_block(
+                &Block {
+                    statements: action.statements.clone(),
+                    span: action.span,
+                },
+                &known_tables,
+                &dependencies,
+                &computed_fields,
+                None,
+                errors,
+            );
+        }
+    }
+    for crud in &program.cruds {
+        for action in &crud.actions {
+            visit_block(
+                &Block {
+                    statements: action.statements.clone(),
+                    span: action.span,
+                },
+                &known_tables,
+                &dependencies,
+                &computed_fields,
+                None,
+                errors,
+            );
+        }
+    }
+    for page in &program.pages {
+        for data in &page.data {
+            check_query_writes(
+                &data.query,
+                data.span,
+                &known_tables,
+                &dependencies,
+                &computed_fields,
+                None,
+                errors,
+            );
+        }
+    }
+}
+
+fn insert_binds_computed_fields(tokens: &[SqlToken], computed_fields: &HashSet<String>) -> bool {
+    if !matches!(tokens.first(), Some(SqlToken::Word(word)) if word.eq_ignore_ascii_case("INSERT"))
+        || computed_fields.is_empty()
+    {
+        return false;
+    }
+    let Some(into_index) = tokens.iter().position(
+        |token| matches!(token, SqlToken::Word(word) if word.eq_ignore_ascii_case("INTO")),
+    ) else {
+        return false;
+    };
+    let Some(open_columns) = tokens[into_index + 1..]
+        .iter()
+        .position(|token| matches!(token, SqlToken::OpenParen))
+        .map(|relative| into_index + 1 + relative)
+    else {
+        return false;
+    };
+    let Some(close_columns) = tokens[open_columns + 1..]
+        .iter()
+        .position(|token| matches!(token, SqlToken::CloseParen))
+        .map(|relative| open_columns + 1 + relative)
+    else {
+        return false;
+    };
+    let columns = tokens[open_columns + 1..close_columns]
+        .iter()
+        .filter_map(|token| match token {
+            SqlToken::Word(name) => Some(name.to_ascii_lowercase()),
+            _ => None,
+        })
+        .collect::<Vec<_>>();
+    if computed_fields
+        .iter()
+        .any(|field| !columns.iter().any(|column| column == field))
+    {
+        return false;
+    }
+    let Some(values_index) = tokens[close_columns + 1..]
+        .iter()
+        .position(
+            |token| matches!(token, SqlToken::Word(word) if word.eq_ignore_ascii_case("VALUES")),
+        )
+        .map(|relative| close_columns + 1 + relative)
+    else {
+        return false;
+    };
+    let Some(SqlToken::OpenParen) = tokens.get(values_index + 1) else {
+        return false;
+    };
+    let mut values = Vec::<Vec<SqlToken>>::new();
+    let mut current = Vec::new();
+    let mut depth = 0_i32;
+    let mut closed = false;
+    for token in &tokens[values_index + 2..] {
+        match token {
+            SqlToken::OpenParen => {
+                depth += 1;
+                current.push(token.clone());
+            }
+            SqlToken::CloseParen if depth == 0 => {
+                values.push(std::mem::take(&mut current));
+                closed = true;
+                break;
+            }
+            SqlToken::CloseParen => {
+                depth -= 1;
+                current.push(token.clone());
+            }
+            SqlToken::Comma if depth == 0 => values.push(std::mem::take(&mut current)),
+            _ => current.push(token.clone()),
+        }
+    }
+    if !closed || values.len() != columns.len() {
+        return false;
+    }
+    computed_fields.iter().all(|field| {
+        let Some(index) = columns.iter().position(|column| column == field) else {
+            return false;
+        };
+        matches!(values.get(index).map(Vec::as_slice), Some([SqlToken::Parameter(name)]) if name.eq_ignore_ascii_case(field))
+    })
+}
+
+fn update_binds_computed_dependencies(
+    tokens: &[SqlToken],
+    expected_table: &str,
+    affected_columns: &HashSet<String>,
+) -> bool {
+    if !matches!(tokens.first(), Some(SqlToken::Word(word)) if word.eq_ignore_ascii_case("UPDATE"))
+        || !matches!(tokens.get(1), Some(SqlToken::Word(table)) if table.eq_ignore_ascii_case(expected_table))
+        || affected_columns.is_empty()
+    {
+        return false;
+    }
+    let Some(set_index) = tokens.iter().position(
+        |token| matches!(token, SqlToken::Word(word) if word.eq_ignore_ascii_case("SET")),
+    ) else {
+        return false;
+    };
+    let mut assignments = HashMap::<String, Vec<SqlToken>>::new();
+    let mut segment = Vec::new();
+    let mut depth = 0_i32;
+    let mut segments = Vec::new();
+    for token in &tokens[set_index + 1..] {
+        match token {
+            SqlToken::OpenParen => depth += 1,
+            SqlToken::CloseParen => depth -= 1,
+            SqlToken::Comma if depth == 0 => {
+                segments.push(std::mem::take(&mut segment));
+                continue;
+            }
+            SqlToken::Word(word)
+                if depth == 0
+                    && ["WHERE", "RETURNING", "ORDER", "LIMIT"]
+                        .iter()
+                        .any(|term| word.eq_ignore_ascii_case(term)) =>
+            {
+                break
+            }
+            _ => {}
+        }
+        segment.push(token.clone());
+    }
+    if !segment.is_empty() {
+        segments.push(segment);
+    }
+    for segment in segments {
+        let Some(equal) = segment
+            .iter()
+            .position(|token| matches!(token, SqlToken::Operator))
+        else {
+            return false;
+        };
+        let Some(SqlToken::Word(column)) = segment.get(equal.wrapping_sub(1)) else {
+            return false;
+        };
+        let column = column.to_ascii_lowercase();
+        if assignments
+            .insert(column, segment[equal + 1..].to_vec())
+            .is_some()
+        {
+            return false;
+        }
+    }
+    affected_columns.iter().all(|column| {
+        matches!(assignments.get(column).map(Vec::as_slice), Some([SqlToken::Parameter(name)]) if name.eq_ignore_ascii_case(column))
+    })
+}
+
+fn update_assignment_columns(tokens: &[SqlToken]) -> Option<HashSet<String>> {
+    tokens.first().and_then(|token| match token {
+        SqlToken::Word(command) if command.eq_ignore_ascii_case("UPDATE") => Some(()),
+        _ => None,
+    })?;
+    let set_index = tokens.iter().position(
+        |token| matches!(token, SqlToken::Word(word) if word.eq_ignore_ascii_case("SET")),
+    )?;
+    let mut columns = HashSet::new();
+    let mut assignment = Vec::new();
+    let mut depth = 0_i32;
+    let mut segments = Vec::new();
+    for token in &tokens[set_index + 1..] {
+        match token {
+            SqlToken::OpenParen => depth += 1,
+            SqlToken::CloseParen => depth -= 1,
+            SqlToken::Comma if depth == 0 => {
+                segments.push(std::mem::take(&mut assignment));
+                continue;
+            }
+            SqlToken::Word(word)
+                if depth == 0
+                    && ["WHERE", "RETURNING", "ORDER", "LIMIT"]
+                        .iter()
+                        .any(|term| word.eq_ignore_ascii_case(term)) =>
+            {
+                break
+            }
+            _ => {}
+        }
+        assignment.push(token.clone());
+    }
+    if !assignment.is_empty() {
+        segments.push(assignment);
+    }
+    for segment in segments {
+        let equal = segment
+            .iter()
+            .position(|token| matches!(token, SqlToken::Operator))?;
+        let target = &segment[..equal];
+        let name = match target {
+            [SqlToken::Word(column)] => column,
+            [SqlToken::Word(_table), SqlToken::Dot, SqlToken::Word(column)] => column,
+            _ => return None,
+        };
+        columns.insert(name.to_ascii_lowercase());
+    }
+    Some(columns)
 }
 
 fn check_block(
@@ -1392,14 +2124,16 @@ fn tokenize(query: &str) -> Vec<SqlToken> {
         }
         if byte == b'`' || byte == b'[' {
             let closing_quote = if byte == b'`' { b'`' } else { b']' };
+            let content_start = index + 1;
             index += 1;
             while index < bytes.len() && bytes[index] != closing_quote {
                 index += 1;
             }
+            let content_end = index;
             if index < bytes.len() {
                 index += 1;
             }
-            tokens.push(SqlToken::String);
+            tokens.push(SqlToken::Word(query[content_start..content_end].to_owned()));
             continue;
         }
         if byte.is_ascii_digit() {
@@ -1463,6 +2197,124 @@ mod tests {
         .unwrap())
         .unwrap();
         build_schema(&program).unwrap()
+    }
+
+    #[test]
+    fn computed_columns_reject_raw_inserts_and_updates_to_inputs_or_outputs() {
+        let source = r#"
+            table invoice_items {
+                id: Id primary auto
+                quantity: Int required
+                unit_price: Int required
+                total: Int required compute(quantity * unit_price)
+                memo: String?
+            }
+            fn raw_insert() uses Database(write) {
+                transaction { sql { INSERT INTO invoice_items (quantity, unit_price, total) VALUES (1, 20, 20) } }
+            }
+            fn raw_input_update() uses Database(write) {
+                transaction { sql { UPDATE invoice_items SET quantity = 2 WHERE id = 1 } }
+            }
+            fn raw_output_update() uses Database(write) {
+                transaction { sql { UPDATE `invoice_items` SET `total` = 20 WHERE id = 1 } }
+            }
+            fn safe_memo_update() uses Database(write) {
+                transaction { sql { UPDATE invoice_items SET memo = 'ok' WHERE id = 1 } }
+            }
+            fn main() {}
+        "#;
+        let program = parse(&lex(source).unwrap()).unwrap();
+        let schema = build_schema(&program).unwrap();
+        let errors = check_program(&program, &schema)
+            .expect_err("ordinary SQL must not bypass computed-field recalculation");
+        assert_eq!(errors.len(), 3, "unexpected SQL diagnostics: {errors:?}");
+        assert!(errors
+            .iter()
+            .all(|error| error.message.contains("computed")));
+    }
+
+    #[test]
+    fn computed_columns_allow_only_validated_api_inserts_bound_to_server_fields() {
+        let source = r#"
+            table invoice_items {
+                id: Id primary auto
+                quantity: Int required
+                unit_price: Int required
+                total: Int required compute(quantity * unit_price)
+                validate { total >= 0: "Total must be nonnegative" }
+            }
+            api POST "/invoice-items" {
+                handler create_item
+                input { quantity: Int unit_price: Int }
+                validates invoice_items
+                output Result<Int, String>
+                errors { 422 ValidationError: String }
+            }
+            fn create_item(quantity: Int, unit_price: Int, total: Int) -> Result<Int, String> uses Database(write) {
+                transaction {
+                    sql { INSERT INTO invoice_items (quantity, unit_price, total) VALUES (:quantity, :unit_price, :total) }
+                }
+                return Ok(total)
+            }
+            fn main() {}
+        "#;
+        let program = parse(&lex(source).unwrap()).unwrap();
+        let schema = build_schema(&program).unwrap();
+        check_program(&program, &schema)
+            .expect("API-validated SQL may persist its server-computed output parameter");
+
+        let forged = source.replace(":total)", ":quantity)");
+        let program = parse(&lex(&forged).unwrap()).unwrap();
+        let schema = build_schema(&program).unwrap();
+        let errors = check_program(&program, &schema)
+            .expect_err("computed output must bind the matching server-computed parameter");
+        assert!(errors
+            .iter()
+            .any(|error| error.message.contains("computed")));
+    }
+
+    #[test]
+    fn computed_columns_allow_only_api_updates_with_all_inputs_and_server_output() {
+        let source = r#"
+            table invoice_items {
+                id: Id primary auto
+                quantity: Int required
+                unit_price: Int required
+                total: Int required compute(quantity * unit_price)
+            }
+            api PUT "/invoice-items/{id}" {
+                handler update_item
+                input { id: Id quantity: Int unit_price: Int }
+                validates invoice_items
+                output Result<Int, String>
+            }
+            fn update_item(id: Id, quantity: Int, unit_price: Int, total: Int) -> Result<Int, String> uses Database(write) {
+                transaction {
+                    sql { UPDATE invoice_items SET quantity = :quantity, unit_price = :unit_price, total = :total WHERE id = :id }
+                }
+                return Ok(total)
+            }
+            fn main() {}
+        "#;
+        let program = parse(&lex(source).unwrap()).unwrap();
+        let schema = build_schema(&program).unwrap();
+        check_program(&program, &schema)
+            .expect("validated API updates may persist recomputed inputs and outputs");
+
+        for unsafe_update in [
+            "UPDATE invoice_items SET quantity = :quantity, unit_price = :unit_price, total = 999 WHERE id = :id",
+            "UPDATE invoice_items SET quantity = :quantity, total = :total WHERE id = :id",
+        ] {
+            let unsafe_source = source.replace(
+                "UPDATE invoice_items SET quantity = :quantity, unit_price = :unit_price, total = :total WHERE id = :id",
+                unsafe_update,
+            );
+            let program = parse(&lex(&unsafe_source).unwrap()).unwrap();
+            let schema = build_schema(&program).unwrap();
+            let errors = check_program(&program, &schema)
+                .expect_err("updates must bind every computed dependency and result");
+            assert!(errors.iter().any(|error| error.message.contains("computed")));
+        }
     }
 
     #[test]
@@ -1610,18 +2462,19 @@ mod tests {
             }]
         );
 
-        for query in [
-            "SELECT id FROM \"invoices\"",
-            "SELECT id FROM `invoices`",
-            "SELECT id FROM [invoices]",
+        for (query, table, mode) in [
+            ("SELECT id FROM \"invoices\"", "", SqlAccessMode::Unknown),
+            ("SELECT id FROM `invoices`", "invoices", SqlAccessMode::Read),
+            ("SELECT id FROM [invoices]", "invoices", SqlAccessMode::Read),
         ] {
             let (_, accesses) = analyze_table_access(query, &["invoices".to_owned()]);
             assert_eq!(
                 accesses,
                 vec![SqlTableAccess {
-                    table: String::new(),
-                    mode: SqlAccessMode::Unknown
-                }]
+                    table: table.into(),
+                    mode
+                }],
+                "query: {query}"
             );
         }
     }

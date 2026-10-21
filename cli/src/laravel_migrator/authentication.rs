@@ -1,5 +1,10 @@
+use super::PhpSourceMap;
 use serde_json::Value;
-use std::collections::BTreeSet;
+use std::{
+    collections::BTreeSet,
+    fs,
+    path::{Component, Path},
+};
 
 /// Evidence that a Laravel application declares and connects a conventional
 /// login page, POST handler, and controller action. This is deliberately a
@@ -7,8 +12,72 @@ use std::collections::BTreeSet;
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(super) struct LoginEvidence {
     pub(super) controller_file: String,
+    pub(super) login_action_method: String,
     pub(super) view_file: String,
     pub(super) route_file: String,
+}
+
+/// Recognize only a narrow local approval guard in the statically linked
+/// login action. This does not claim equivalent messages, admin exceptions,
+/// registration, or MFA behavior.
+pub(super) fn detect_login_enabled_column(root: &Path, evidence: &LoginEvidence) -> Option<String> {
+    let relative = Path::new(&evidence.controller_file);
+    if relative
+        .components()
+        .any(|component| !matches!(component, Component::Normal(_)))
+    {
+        return None;
+    }
+    let root = root.canonicalize().ok()?;
+    let source_path = root.join(relative).canonicalize().ok()?;
+    if !source_path.starts_with(&root) || !source_path.is_file() {
+        return None;
+    }
+    let source = fs::read_to_string(source_path).ok()?;
+    let source_map = PhpSourceMap::new(&source);
+    let code = String::from_utf8(
+        source
+            .bytes()
+            .enumerate()
+            .map(|(offset, byte)| {
+                if source_map.is_code(offset) || byte == b'\n' {
+                    byte
+                } else {
+                    b' '
+                }
+            })
+            .collect(),
+    )
+    .ok()?;
+    let method_pattern = regex::Regex::new(&format!(
+        r"\bfunction\s+{}\s*\([^)]*\)[^{{}}]*\{{",
+        regex::escape(&evidence.login_action_method)
+    ))
+    .ok()?;
+    let method_start = method_pattern.find(&code)?;
+    let open_brace = method_start.end().checked_sub(1)?;
+    let mut depth = 0usize;
+    let mut method_end = None;
+    for (offset, byte) in code.bytes().enumerate().skip(open_brace) {
+        match byte {
+            b'{' => depth += 1,
+            b'}' => {
+                depth = depth.checked_sub(1)?;
+                if depth == 0 {
+                    method_end = Some(offset + 1);
+                    break;
+                }
+            }
+            _ => {}
+        }
+    }
+    let method = &code[method_start.start()..method_end?];
+    let guard = regex::Regex::new(
+        r"(?s)if\s*\(\s*!\s*\$user\s*->\s*([A-Za-z_][A-Za-z0-9_]*)\s*&&.{0,500}?ValidationException::withMessages",
+    )
+    .ok()?;
+    let captures = guard.captures(method)?;
+    Some(captures.get(1)?.as_str().to_owned())
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
@@ -105,6 +174,13 @@ pub(super) fn detect_login_module(report: &Value) -> Option<LoginEvidence> {
         return None;
     }
     let show_login_action = get_route["to"]["name"].as_str()?;
+    let login_action_method = post_route["to"]["name"].as_str()?.split_once('@')?.1;
+    if !login_action_method
+        .bytes()
+        .all(|byte| byte.is_ascii_alphanumeric() || byte == b'_')
+    {
+        return None;
+    }
     let view_edge = edges.iter().find(|edge| {
         edge["kind"] == "controller_view"
             && edge["status"] == "resolved"
@@ -115,6 +191,7 @@ pub(super) fn detect_login_module(report: &Value) -> Option<LoginEvidence> {
 
     Some(LoginEvidence {
         controller_file: controller_file.to_owned(),
+        login_action_method: login_action_method.to_owned(),
         view_file: view_edge["to"]["file"].as_str()?.to_owned(),
         route_file: get_route["from"]["file"].as_str()?.to_owned(),
     })
@@ -129,6 +206,7 @@ pub(super) fn render_native_auth_module(
     session_table: &str,
     tenant_mapping: &TenantAuthMapping,
     tenant_tables: &[Value],
+    login_enabled_column: Option<&str>,
 ) -> Result<String, String> {
     if !is_identifier(session_table) {
         return Err("generated authentication session table name is invalid".into());
@@ -189,6 +267,18 @@ pub(super) fn render_native_auth_module(
             return Err("users table contains both `password` and `password_hash`; review the identity mapping".into());
         }
     }
+    if let Some(column) = login_enabled_column {
+        let required_boolean = source.lines().any(|line| {
+            line.trim()
+                .strip_prefix(&format!("{column}:"))
+                .is_some_and(|declaration| declaration.trim_start().starts_with("Bool required"))
+        });
+        if !required_boolean {
+            return Err(format!(
+                "login approval column `{column}` is not a required boolean in the generated users table"
+            ));
+        }
+    }
 
     let mut output = String::from(
         "# Native Zelyra authentication model projected from a statically linked Laravel login module.\n# User records and credentials are not copied. Imported password hashes must be reset or deliberately converted before accounts can authenticate.\n\n",
@@ -224,6 +314,9 @@ pub(super) fn render_native_auth_module(
         tenant_mapping.owner_column.as_deref(),
     ) {
         output.push_str(&format!("    tenant_owner: {owner_table}.{owner_column}\n"));
+    }
+    if let Some(column) = login_enabled_column {
+        output.push_str(&format!("    login_enabled: {column}\n"));
     }
     output.push_str("}\n");
     Ok(output)
@@ -280,6 +373,63 @@ mod tests {
     }
 
     #[test]
+    fn detects_only_a_source_backed_boolean_login_approval_guard() {
+        let root = std::env::temp_dir().join(format!(
+            "zelyra-login-approval-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        let controller = root.join("app/Http/Controllers/Auth/AuthController.php");
+        std::fs::create_dir_all(controller.parent().unwrap()).unwrap();
+        std::fs::write(
+            &controller,
+            "public function login(Request $request) { if (!$user->is_approved && strcasecmp($user->email, ADMIN_EMAIL) !== 0) { throw ValidationException::withMessages([]); } }",
+        )
+        .unwrap();
+        let evidence = LoginEvidence {
+            controller_file: "app/Http/Controllers/Auth/AuthController.php".into(),
+            login_action_method: "login".into(),
+            view_file: "resources/views/auth/login.blade.php".into(),
+            route_file: "routes/web.php".into(),
+        };
+        assert_eq!(
+            detect_login_enabled_column(&root, &evidence).as_deref(),
+            Some("is_approved")
+        );
+        std::fs::remove_dir_all(&root).unwrap();
+    }
+
+    #[test]
+    fn does_not_infer_approval_from_comments_or_string_literals() {
+        let root = std::env::temp_dir().join(format!(
+            "zelyra-login-approval-decoy-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        let controller = root.join("app/AuthController.php");
+        std::fs::create_dir_all(controller.parent().unwrap()).unwrap();
+        std::fs::write(
+            &controller,
+            "public function login() { } public function register() { if (!$user->is_approved && true) { ValidationException::withMessages([]); } }",
+        )
+        .unwrap();
+        let evidence = LoginEvidence {
+            controller_file: "app/AuthController.php".into(),
+            login_action_method: "login".into(),
+            view_file: "resources/views/auth/login.blade.php".into(),
+            route_file: "routes/web.php".into(),
+        };
+        assert_eq!(detect_login_enabled_column(&root, &evidence), None);
+        std::fs::remove_dir_all(&root).unwrap();
+    }
+
+    #[test]
     fn projects_password_and_discards_laravel_remember_token() {
         let source = "table users {\n    id: Id primary auto\n    email: String(255) required unique\n    password: String(255) required\n    remember_token: String(100)?\n}";
         let generated = render_native_auth_module(
@@ -287,6 +437,7 @@ mod tests {
             "zelyra_auth_sessions",
             &TenantAuthMapping::default(),
             &[],
+            None,
         )
         .unwrap();
         assert!(generated.contains("password_hash: String(255) required"));
@@ -294,6 +445,28 @@ mod tests {
         assert!(!generated.contains("remember_token"));
         assert!(generated
             .contains("auth users {\n    table: users\n    sessions: zelyra_auth_sessions"));
+    }
+
+    #[test]
+    fn imports_approval_guard_only_when_the_boolean_user_field_is_present() {
+        let source = "table users {\n    id: Id primary auto\n    email: String(255) required unique\n    password: String(255) required\n    is_approved: Bool required default true\n}";
+        let generated = render_native_auth_module(
+            &users_candidate(source),
+            "zelyra_auth_sessions",
+            &TenantAuthMapping::default(),
+            &[],
+            Some("is_approved"),
+        )
+        .unwrap();
+        assert!(generated.contains("login_enabled: is_approved"));
+        assert!(render_native_auth_module(
+            &users_candidate(&source.replace("is_approved: Bool", "is_approved: String")),
+            "zelyra_auth_sessions",
+            &TenantAuthMapping::default(),
+            &[],
+            Some("is_approved"),
+        )
+        .is_err());
     }
 
     #[test]
@@ -308,6 +481,7 @@ mod tests {
                 "auth_sessions",
                 &TenantAuthMapping::default(),
                 &[],
+                None,
             )
             .is_err());
         }
@@ -347,6 +521,7 @@ mod tests {
             "zelyra_auth_sessions",
             &detect_tenant_auth_mapping(&candidates),
             &candidates[0..2],
+            None,
         )
         .unwrap();
         assert!(generated.contains("memberships: tenant_user"));

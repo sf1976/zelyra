@@ -156,15 +156,32 @@ server_pid=""
 [[ ! -e "${tenant_dir}/${locked_ref}" ]]
 [[ ! -e "${tenant_dir}/${locked_ref}.meta" ]]
 
-# The file-storage backup is separate from a database dump. Verify it includes
-# the referenced bytes, rejects corruption before publishing any file, and
-# restores the opaque reference without overwriting live storage.
+# Exercise the documented quiesced application recovery sequence: take the
+# database dump and verified file snapshot while the Zelyra server is stopped,
+# restore the database first, and then restore its referenced private files.
+# This does not make the two independent snapshots crash-atomic.
 backup_directory="${project_dir}/upload-backup"
+database_backup="${project_dir}/application-database.sql"
+database_backup_partial="${database_backup}.partial"
+docker exec --env MYSQL_PWD "${container_name}" mariadb-dump \
+    --user=root --single-transaction --skip-lock-tables --no-tablespaces \
+    "${database_name}" >"${database_backup_partial}"
+chmod 600 "${database_backup_partial}"
+mv -- "${database_backup_partial}" "${database_backup}"
+[[ -s "${database_backup}" && "$(stat -c '%a' "${database_backup}")" == "600" ]]
 "${zelyra_bin}" files backup "${project_dir}/main.zyl" --output "${backup_directory}" >"${project_dir}/backup.log"
 grep -F 'Backed up 1 managed upload' "${project_dir}/backup.log" >/dev/null
 grep -F 'Database contents are not included' "${project_dir}/backup.log" >/dev/null
 cp "${tenant_dir}/${referenced_ref}" "${project_dir}/expected-upload.pdf"
 rm -rf -- "${project_dir}/storage/zelyra/tenants"
+docker exec --env MYSQL_PWD "${container_name}" mariadb --user=root \
+    --execute="DROP DATABASE \`${database_name}\`; CREATE DATABASE \`${database_name}\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;"
+docker exec --interactive --env MYSQL_PWD "${container_name}" mariadb \
+    --user=root "${database_name}" <"${database_backup}"
+restored_file_ref="$(docker exec --env MYSQL_PWD "${container_name}" mariadb \
+    --user=root "${database_name}" --batch --skip-column-names \
+    --execute='SELECT file FROM upload_record WHERE id=1')"
+[[ "${restored_file_ref}" == "${referenced_ref}" ]]
 "${zelyra_bin}" files restore "${project_dir}/main.zyl" --from "${backup_directory}" --apply >/dev/null
 cmp "${project_dir}/expected-upload.pdf" "${tenant_dir}/${referenced_ref}"
 

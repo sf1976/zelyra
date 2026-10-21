@@ -172,6 +172,217 @@ pub struct TableValidationFunction {
     pub function_name: String,
 }
 
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ComputedColumnFunction {
+    pub table_index: usize,
+    pub column_index: usize,
+    pub function_name: String,
+    pub input_columns: Vec<String>,
+}
+
+/// Expands declared computed fields into ordinary private functions so the
+/// normal type and effect checker validates their expressions.
+pub fn build_computed_column_functions(
+    program: &Program,
+) -> (Vec<Function>, Vec<ComputedColumnFunction>) {
+    let mut names = program
+        .functions
+        .iter()
+        .map(|function| function.name.clone())
+        .collect::<std::collections::HashSet<_>>();
+    let mut functions = Vec::new();
+    let mut mappings = Vec::new();
+    for (table_index, table) in program.tables.iter().enumerate() {
+        for (column_index, column) in table.columns.iter().enumerate() {
+            let Some(expression) = &column.computed else {
+                continue;
+            };
+            let base_name = format!("__zelyra_computed_{table_index}_{column_index}");
+            let mut function_name = base_name.clone();
+            let mut suffix = 0usize;
+            while !names.insert(function_name.clone()) {
+                suffix += 1;
+                function_name = format!("{base_name}_{suffix}");
+            }
+            let referenced_names = computed_expression_names(expression);
+            let input_columns = table
+                .columns
+                .iter()
+                .filter(|candidate| {
+                    !candidate.auto && referenced_names.contains(candidate.name.as_str())
+                })
+                .map(|candidate| candidate.name.clone())
+                .collect::<Vec<_>>();
+            functions.push(Function {
+                name: function_name.clone(),
+                is_public: false,
+                type_params: Vec::new(),
+                params: table
+                    .columns
+                    .iter()
+                    .filter(|candidate| input_columns.contains(&candidate.name))
+                    .map(|candidate| Param {
+                        name: candidate.name.clone(),
+                        ty: candidate.ty.clone(),
+                        span: candidate.span,
+                    })
+                    .collect(),
+                return_type: Some(column.ty.clone()),
+                capabilities: Vec::new(),
+                requires: Vec::new(),
+                ensures: Vec::new(),
+                body: Block {
+                    statements: vec![Stmt::Return {
+                        value: Some(expression.clone()),
+                        span: expression.span,
+                    }],
+                    span: expression.span,
+                },
+                span: expression.span,
+            });
+            mappings.push(ComputedColumnFunction {
+                table_index,
+                column_index,
+                function_name,
+                input_columns,
+            });
+        }
+    }
+    (functions, mappings)
+}
+
+/// Finds dependency cycles among computed columns. A computed column may
+/// depend on ordinary inputs and on earlier computed columns, but not on
+/// itself or a cycle of other computed columns.
+pub fn computed_column_dependency_cycles(program: &Program) -> Vec<(Span, String)> {
+    let (_, mappings) = build_computed_column_functions(program);
+    let mut cycles = Vec::new();
+    for (table_index, table) in program.tables.iter().enumerate() {
+        let computed = mappings
+            .iter()
+            .filter(|mapping| mapping.table_index == table_index)
+            .map(|mapping| (mapping.column_index, mapping))
+            .collect::<std::collections::HashMap<_, _>>();
+        let mut states = vec![0_u8; table.columns.len()];
+        let mut stack = Vec::new();
+        fn visit(
+            index: usize,
+            table: &TableDef,
+            computed: &std::collections::HashMap<usize, &ComputedColumnFunction>,
+            states: &mut [u8],
+            stack: &mut Vec<usize>,
+            cycles: &mut Vec<(Span, String)>,
+        ) {
+            if states[index] == 2 {
+                return;
+            }
+            if states[index] == 1 {
+                let start = stack
+                    .iter()
+                    .position(|candidate| *candidate == index)
+                    .unwrap_or(0);
+                let names = stack[start..]
+                    .iter()
+                    .filter_map(|column| table.columns.get(*column))
+                    .map(|column| column.name.as_str())
+                    .chain(table.columns.get(index).map(|column| column.name.as_str()))
+                    .collect::<Vec<_>>()
+                    .join(" -> ");
+                cycles.push((table.columns[index].span, names));
+                return;
+            }
+            states[index] = 1;
+            stack.push(index);
+            if let Some(mapping) = computed.get(&index) {
+                for dependency in &mapping.input_columns {
+                    if let Some(dependency_index) = table
+                        .columns
+                        .iter()
+                        .position(|column| column.name == *dependency)
+                        .filter(|dependency_index| computed.contains_key(dependency_index))
+                    {
+                        visit(dependency_index, table, computed, states, stack, cycles);
+                    }
+                }
+            }
+            stack.pop();
+            states[index] = 2;
+        }
+        for index in computed.keys().copied() {
+            visit(
+                index,
+                table,
+                &computed,
+                &mut states,
+                &mut stack,
+                &mut cycles,
+            );
+        }
+    }
+    cycles
+}
+
+fn computed_expression_names(expression: &Expr) -> std::collections::HashSet<&str> {
+    fn visit<'a>(expression: &'a Expr, names: &mut std::collections::HashSet<&'a str>) {
+        match &expression.kind {
+            ExprKind::Variable(name) => {
+                names.insert(name);
+            }
+            ExprKind::Array(items) => {
+                for item in items {
+                    visit(item, names);
+                }
+            }
+            ExprKind::Map(entries) => {
+                for (key, value) in entries {
+                    visit(key, names);
+                    visit(value, names);
+                }
+            }
+            ExprKind::Record { fields, .. } => {
+                for (_, value) in fields {
+                    visit(value, names);
+                }
+            }
+            ExprKind::Lambda { .. } | ExprKind::FunctionValue(_) => {}
+            ExprKind::Index { target, index } => {
+                visit(target, names);
+                visit(index, names);
+            }
+            ExprKind::Field { target, .. } => visit(target, names),
+            ExprKind::Call { args, .. } => {
+                for argument in args {
+                    visit(argument, names);
+                }
+            }
+            ExprKind::Unary { expr, .. } | ExprKind::Await(expr) => visit(expr, names),
+            ExprKind::Binary { left, right, .. } => {
+                visit(left, names);
+                visit(right, names);
+            }
+            ExprKind::Match { value, arms } => {
+                visit(value, names);
+                for arm in arms {
+                    if let Some(guard) = &arm.guard {
+                        visit(guard, names);
+                    }
+                    visit(&arm.value, names);
+                }
+            }
+            ExprKind::Sql { .. }
+            | ExprKind::Int(_)
+            | ExprKind::UInt(_)
+            | ExprKind::Float(_)
+            | ExprKind::Bool(_)
+            | ExprKind::String(_)
+            | ExprKind::Char(_) => {}
+        }
+    }
+    let mut names = std::collections::HashSet::new();
+    visit(expression, &mut names);
+    names
+}
+
 /// Expands table validation expressions to ordinary private Boolean functions
 /// so the compiler's normal scope, type, effect, and diagnostic checks remain
 /// authoritative. Returns the lowered program and the stable mapping needed
@@ -1001,6 +1212,9 @@ pub struct CrudErrorViewDef {
 pub struct AuthDef {
     pub name: String,
     pub table: String,
+    /// Optional required boolean user column. When configured, only users
+    /// whose value is true may complete password authentication.
+    pub login_enabled_column: Option<String>,
     /// Optional table with `(user_id, tenant_id)` membership rows and an
     /// optional `active` Boolean column (when present, only active rows count).
     pub membership_table: Option<String>,
@@ -1132,6 +1346,11 @@ pub struct ColumnDef {
     /// transactionally allocated counter and `{year}` is the UTC year.
     /// Allocated values are monotonic but intentionally not gapless.
     pub auto_sequence: Option<String>,
+    /// Candidate expression for a server-derived column. The compiler checks
+    /// its field scope and result type; mutation-path evaluation is separate.
+    pub computed: Option<Expr>,
+    /// Upload constraints for an opaque FileRef column exposed by generated CRUD.
+    pub attachment: Option<FileUploadOptions>,
     pub required: bool,
     pub primary_key: bool,
     pub auto: bool,

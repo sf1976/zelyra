@@ -1,0 +1,48 @@
+database main { engine: mariadb }
+
+table invoice_items {
+    id: Id primary auto
+    quantity: Decimal(10, 3) required
+    unit_price: Decimal(10, 3) required
+    total: Decimal(12, 2) required compute(quantity * unit_price)
+    validate { total > decimal("0"): "Total must be positive" }
+}
+
+api POST "/invoice-items" {
+    handler create_item
+    input { quantity: Decimal unit_price: Decimal }
+    validates invoice_items
+    output Result<Decimal, String>
+    errors { 422 ValidationError: String }
+}
+
+api PUT "/invoice-items/{id}" {
+    handler update_item
+    input { id: Id quantity: Decimal unit_price: Decimal }
+    validates invoice_items
+    output Result<Decimal, String>
+    errors { 422 ValidationError: String }
+}
+
+fn create_item(quantity: Decimal, unit_price: Decimal, total: Decimal) -> Result<Decimal, String> uses Database(write) {
+    transaction {
+        sql {
+            INSERT INTO invoice_items (quantity, unit_price, total)
+            VALUES (:quantity, :unit_price, :total)
+        }
+    }
+    return Ok(total)
+}
+
+fn update_item(id: Id, quantity: Decimal, unit_price: Decimal, total: Decimal) -> Result<Decimal, String> uses Database(write) {
+    transaction {
+        sql {
+            UPDATE invoice_items
+            SET quantity = :quantity, unit_price = :unit_price, total = :total
+            WHERE id = :id
+        }
+    }
+    return Ok(total)
+}
+
+fn main() {}

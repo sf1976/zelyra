@@ -494,6 +494,37 @@ fn check_program(
     for function in &validation_functions {
         checker.check_function(function);
     }
+    let (computed_functions, _) = zelyra_ast::build_computed_column_functions(program);
+    for function in &computed_functions {
+        checker.check_function(function);
+    }
+    for (span, cycle) in zelyra_ast::computed_column_dependency_cycles(program) {
+        checker.errors.push(TypeError {
+            code: "E-COMPUTE-001",
+            message: format!("computed column dependency cycle: {cycle}"),
+            span,
+        });
+    }
+    for table in &program.tables {
+        for column in &table.columns {
+            if column.computed.is_some()
+                && (column.auto
+                    || column.auto_sequence.is_some()
+                    || column.primary_key
+                    || column.default.is_some()
+                    || column.references.is_some())
+            {
+                checker.errors.push(TypeError {
+                    code: "E-COMPUTE-002",
+                    message: format!(
+                        "computed column `{}.{}` cannot also declare auto, auto_sequence, primary, default, or references",
+                        table.name, column.name
+                    ),
+                    span: column.span,
+                });
+            }
+        }
+    }
     let (crud_policy_functions, _) = zelyra_ast::build_crud_policy_functions(program);
     for function in &crud_policy_functions {
         checker.check_function(function);

@@ -486,11 +486,13 @@ abgeschlossen.
   Bereinigung. Das Upload-POST-E2E sendet den erfolgreichen Multipart-Upload
   über eine echte lokale HTTP-Verbindung und prüft Verweis und Dateibytes;
   zusätzlich prüft es die Bereinigung nach Datenbank-Rollback. Das
-  Dateispeicher-Backup schließt Datenbank,
-  Projektkonfiguration und Geheimnisse ausdrücklich aus. Ein koordiniertes
-  vollständiges Anwendungsbackup bleibt ein separates Folgepaket; die
-  Datenbank muss separat und bei gestopptem Zelyra gesichert/wiederhergestellt
-  werden.
+  Dateispeicher-Backup schließt Datenbank, Projektkonfiguration und Geheimnisse
+  ausdrücklich aus. Ein späterer Wegwerf-MariaDB-E2E prüft nun den manuellen
+  kombinierten Wiederherstellungsablauf: Zelyra stoppen, Datenbank dumpen,
+  Dateien sichern, beide Bestände entfernen, Datenbank wiederherstellen und
+  danach referenzierte Dateien mit Prüfsummenprüfung zurückspielen. Das ist
+  weder ein einzelnes Archiv noch ein absturzatomisches Anwendungsbackup;
+  Konfiguration und Geheimnisse bleiben separat.
   Siehe den [Plan für sichere Uploads 1.2.29](release-plans/1.2.29-secure-uploads.de.md).
   Veröffentlicht als [`v1.2.29`](https://github.com/sf1976/zelyra/releases/tag/v1.2.29);
   alle Release-Gates bestanden, Linux-/Windows-Artefakte und Prüfsummen
@@ -559,11 +561,16 @@ abgeschlossen.
   kleinen CI-Fixture und `/opt/siedelmann-laravel/app` werden ausschließlich
   neue Testbenutzer in einer Wegwerf-Zieldatenbank angelegt und ungültiger
   Login, erfolgreicher Login, persistente Sitzung, Logout und Sitzungswiderruf
-  über lokales HTTP und MariaDB geprüft. Laravel-Zugangsdaten oder
-  Benutzerzeilen werden nicht kopiert; eigene Registrierungs-,
-  Mandantenauswahl- oder 2FA-Abläufe werden nicht migriert. Der lokale
-  MariaDB-Client weist darauf hin, dass bei dieser passwortgeschützten
-  Wegwerfverbindung die TLS-Zertifikatsprüfung deaktiviert ist.
+  über lokales HTTP und MariaDB geprüft. Der Importer erkennt jetzt außerdem
+  die einfache erforderliche Bool-Freigabe `is_approved` und erzeugt
+  `auth users { login_enabled: is_approved }`; das E2E weist ein nicht
+  freigegebenes Testkonto ab und lässt dasselbe Konto nach einer expliziten
+  Freigabe anmelden. Laravels Sonderausnahme für den Hauptadministrator,
+  individuelle Meldungen, Registrierung, Mandantenauswahl und 2FA werden
+  weiterhin nicht übernommen. Laravel-Zugangsdaten oder Benutzerzeilen werden
+  nicht kopiert. Der lokale MariaDB-Client weist darauf hin, dass bei dieser
+  passwortgeschützten Wegwerfverbindung die TLS-Zertifikatsprüfung deaktiviert
+  ist.
   PHP-Methodenerkennung nutzt jetzt die vorhandene lexikalische Quellpositionskarte
   und ausbalancierte Codeklammern; Regressionstests weisen
   methodenähnliche Kommentare zurück und decken verschachtelte Blöcke sowie
@@ -659,12 +666,24 @@ Diese Meilensteine sind in Arbeit und noch nicht veröffentlicht. Bereits teilwe
 
 ### 🧪 [~] Geschäfts-CRUD vor 1.3.0 abschließen
 
-Die fünf im 1.2.30-Review gemeldeten Hürden für Geschäftsbelege sind jetzt
-Release-Arbeit. Die Mandantenfilterung der bestehenden Rechnungsnummern-
-Kollisionssuche und die Lokalisierung generierter Master-Detail-Legenden sind
-im 1.2.30-Kandidaten korrigiert. Der erste Nummernkreis-Baustein ist im
-aktuellen unveröffentlichten Branch implementiert und wird noch releaseweit
-geprüft; berechnete Felder und generierte Uploads sind weiterhin offen:
+Alle fünf im 1.2.30-Review gemeldeten Hürden für Geschäftsbelege sind
+verbindliche Release-Arbeit vor 1.3.0. Die Implementierung ist auf kleine
+Releases verteilt, damit Datenbank-, Compiler-, Rendering- und Sicherheits-
+Grenzen unabhängig geprüft werden können. Nichts davon ist bereits als
+aktueller Branch-Stand veröffentlicht. Der derzeit verifizierte Stand:
+
+| Gemeldete Hürde | Aktueller Stand | Verbleibende Abnahme |
+| --- | --- | --- |
+| Wiederverwendbare fortlaufende Belegnummern | In der 1.2.31-Arbeit implementiert: deklaratives `auto_sequence`, transaktionale Zähler, Mandanten-/Jahresbereich und Schutz generierter CRUD-Routen vor gefälschten Eingaben. SQLite wird bei der Schema-Prüfung quellpositioniert mit `E-DB-001` abgewiesen. | Unterstützte Backend-/Versionsmatrix, SQLite-Ablehnung in Release-Tests behalten, Kompatibilität mit alter Rechnungsnummernvergabe sowie vollständige Release-Gates. Lückenlosigkeit wird nicht garantiert. |
+| Mandantenfilter der Rechnungsnummern-Kollisionssuche | Der bisherige Rechnungsnummernpfad und der generische Zähler binden den authentifizierten Mandanten. Integrationsläufe auf MariaDB 11.8 und PostgreSQL 16 prüfen getrennte Zähler und atomare Vergabe; beide laufen jetzt in CI. | Unterstützte Versionsmatrix und vollständige Release-Gates. |
+| Serverseitig berechnete Geschäftsfelder | Für generiertes CRUD und geprüfte API-POST-/PUT-/PATCH-Pfade implementiert, einschließlich Abhängigkeits-/Typprüfung und exakter Decimal-Rundung. Ein teilweises geprüftes API-PATCH lädt ausgelassene Werte aus dem bestehenden Datensatz, beachtet den Mandantenscope und berechnet abgeleitete Werte vor Validierung und Handler neu. | Vollständige Backend- sowie AST-/MIR-/Bytecode-Paritätsabnahme; das MariaDB-E2E für Teil-PATCH bestand lokal, CI wird auf MariaDB und PostgreSQL erweitert. |
+| Lokalisierte Master-Detail-Beschriftungen | HTML-escaped Locale-Marker werden für Kindlisten-Legenden aufgelöst. Tests prüfen Escaping, projektseitige Übersetzungen und den Fallback ohne projektspezifischen Eintrag. Das Invoice-Tutorial-E2E prüft jeden referenzierten Schlüssel aus den Zelyra-Quelldateien gegen beide Locale-Kataloge sowie gerenderte deutsche Startseite, Navigation und Hilfetexte. | Locale-Tests und Tutorial-E2E in den Release-Gates behalten. |
+| Datei-Anhänge im generierten CRUD | Mit geprüften `FileRef`-Metadaten, privatem Speicher, generierten Uploadfeldern und autorisierten Downloads implementiert. MariaDB-HTTP- und Chromium-E2E prüfen authentifizierten Upload, Download im eigenen Mandanten, fremdmandantige 404-Antwort, MIME-Typ und geschützte Referenz. Ein Wegwerf-MariaDB-Drill prüft außerdem das gemeinsame Wiederherstellen von Datenbank und Dateien. | Vollständige Release-Gates. Geprüft ist ein manueller Ablauf bei gestopptem Server mit separaten Sicherungen; ein einzelnes Archiv oder absturzatomisches Anwendungsbackup gibt es nicht. |
+
+Dieser Arbeitsbereich ist erst abgeschlossen, wenn alle verbleibenden
+Abnahmen aus der Tabelle und den detaillierten Release-Plänen darunter
+bestanden sind. Sprachsyntax oder ein einzelner Unit-Test belegen für sich
+keine Produktionsreife.
 
 - [~] **1.2.31 — mandantenbezogene Belegnummernkreise:** Der Branch parst
   `auto_sequence("KD-{0001}")` und `auto_sequence("AG-{year}-{0001}")`, nimmt
@@ -675,30 +694,57 @@ geprüft; berechnete Felder und generierte Uploads sind weiterhin offen:
   lassen generierte Nummern aus. Unit-Tests und ein MariaDB-Integrationstest
   prüfen Mandantentrennung, Rollback, Altwert-Kollisionen, gefälschte Eingaben
   und parallele Vergabe. Derselbe Integrationstest läuft auch mit PostgreSQL
-  16. Auf MariaDB 11.8 und PostgreSQL 16 wurde das verwaltete Schema außerdem
+  16. CI testet den Zähler außerdem mit MariaDB 10.11/11.4/11.8/12.3, MySQL
+  8.4 und PostgreSQL 16; diese Matrixläufe stehen noch aus. Auf MariaDB 11.8,
+  MySQL 8.4.11 und PostgreSQL 16 wurde das verwaltete Schema außerdem
   jeweils angewendet und danach ohne Drift erneut geplant. Der
   MariaDB-Inspektor unterscheidet zusammengesetzte Unique-Schlüssel jetzt
   anhand der echten Primärschlüssel-Constraint. Die vollständige Release-CI,
   Versionsmatrix, Tutorial-Kompatibilität und Veröffentlichung sind noch
   offen. Eine lückenlose Vergabe wird nicht garantiert.
 - [ ] **1.2.31 Rest — mandantenbezogene Belegnummernkreise:** PostgreSQL
-  zusätzlich auf der unterstützten Versionsmatrix prüfen, Laufzeit- und
-  Migrationsverhalten für SQLite mit stabilem Diagnosecode prüfen, Release-
-  Gates abschließen und die Kompatibilität mit der bisherigen
+  zusätzlich auf der unterstützten Versionsmatrix prüfen, die stabile
+  Schema-Prüfung mit `E-DB-001` für SQLite-`auto_sequence` in der Release-Suite
+  abdecken, Release-Gates abschließen und die Kompatibilität mit der bisherigen
   `invoice_number`-Vergabe prüfen. Konkurrenz, Rollback, Mandantentrennung,
   Eindeutigkeit und Formatprüfung bleiben erforderlich; nicht unterstützte
   Backends müssen ausdrücklich abgewiesen werden.
-- [ ] **1.2.32 — typisierte berechnete Geschäftsfelder:** Reine, typisierte
+- [~] **1.2.32 — berechnete Geschäftsfelder und sichere CRUD-Anhänge:** Reine, typisierte
   und deterministische Ausdrücke für abgeleitete Felder ergänzen, einschließlich
   unterstützter skalarer und Decimal-Operationen. Abhängigkeitsgraphen prüfen;
   Zyklen, unbekannte Felder, Effects und Schreibversuche auf berechnete Werte
-  abweisen. CRUD und unterstützte API-Schreibvorgänge berechnen Werte
-  serverseitig vor dem Speichern neu. Eine Live-Formularvorschau ist nur
-  unverbindlich und muss dieselbe geprüfte Ausdruckssemantik verwenden.
-  Decimal-Skala/Rundung, Nullfortpflanzung, Edit-Verhalten und Backendumfang
-  festlegen. Tests prüfen manipulierte Eingaben, Reihenfolge, Fehler, exakte
-  Geldrechnung sowie Create/Edit/API-Parität.
-- [ ] **1.2.33 — FileRef-Unterstützung im generierten CRUD:** Begrenzte,
+  abweisen. Die Implementierung berechnet Werte in generierten CRUD-Formularen
+  serverseitig neu, normalisiert Decimal-Skalen und weist rohe SQL-Schreibpfade
+  zurück, die die Berechnung umgehen würden. API-POST- und -PUT-Validierung
+  unterstützt berechnete Felder als zusätzliche typisierte Handlerparameter;
+  Clientfelder werden nicht als API-Eingabe zugelassen. SQL-Updates sind nur
+  zulässig, wenn alle berechneten Abhängigkeiten und Ergebnisse an passende
+  typisierte Parameter gebunden sind. Ein isolierter MariaDB-11.8-Test deckt
+  Create und Update ab und bestätigt, dass gefälschte Clientwerte ignoriert
+  werden. Solche Handler sind aus normalem Zelyra-Code nicht aufrufbar und
+  lassen sich nicht als CLI-Einstieg ausführen. Ein MariaDB-CRUD-HTTP-Test
+  deckt Anlegen, Bearbeiten, abgewiesene Validierung, unveränderte Speicherung
+  nach dem Fehler und den neu berechneten Wert in der Fehlerantwort ab. Optionale
+  Eingaben bleiben typisierte `Option<T>` und müssen mit `match` behandelt
+  werden; `None` wird bei optionalen Zielfeldern als fehlender Wert gespeichert.
+  Benutzereingaben vom Typ Decimal bleiben bis zur Formularprüfung unverändert;
+  dadurch kann Rundung keine überzähligen Nachkommastellen verbergen. Der
+  Exact-Number-HTTP-Test gegen MySQL 8.4.11 bestätigt, dass `Money` mit fünf
+  Nachkommastellen abgewiesen wird. Die Präzisions-/Skalenanalyse erkennt auch
+  abweichende Großschreibung und Leerzeichen in MySQL-Metadaten.
+  Validierte API-`PATCH`-Handler berechnen Felder ebenfalls neu. Fehlende
+  Tabellenfelder werden aus dem vorhandenen Datensatz ergänzt; mandantenfähige
+  Lesezugriffe sind auf den bestätigten Mandanten begrenzt. Ungültige
+  Teilupdates lassen den Datensatz unverändert, fehlende Datensätze liefern
+  404 und fehlende Datenbankverbindungen 503. Nominale API-Pfadparameter vom
+  Typ `Id` werden in Integer-Runtimewerte konvertiert; damit besteht der
+  vollständige Create-/PUT-/PATCH-Test unter PostgreSQL 16 und MariaDB. Ein
+  zweiter Datenbanktest bestätigt 404 für einen fremden Mandanten und ein
+  sicheres Abbrechen ohne bestätigten Mandantenkontext. Beide Tests laufen in
+  CI für MariaDB und PostgreSQL. Weitere Backend- und
+  AST/MIR/Bytecode-Parität sowie vollständige Release-Prüfungen sind noch
+  offen. Beispiel: `examples/computed_api.zyl`.
+- [~] **FileRef-Anhänge im generierten CRUD (1.2.32):** Begrenzte,
   deklarative Anhangsregeln für Schema und CRUD ergänzen und sichere
   Uploadfelder auf Create/Edit sowie geschützte Download-Links auf Details
   erzeugen. Bestehende Multipart-Prüfung, privaten FileRef-Speicher,
@@ -708,8 +754,32 @@ geprüft; berechnete Felder und generierte Uploads sind weiterhin offen:
   Erhalt bei fehlender neuer Datei, Rollback-Bereinigung, verweigerte fremde
   Downloads, MIME-/Größenlimits und generierte Routen. Damit wird die aktuelle
   Lücke zwischen geprüften eigenständigen File-Forms und CRUD geschlossen.
+  Bisher umgesetzt: Tabellenmetadaten
+  `attachment { max_size, allowed_types }` für `FileRef`, Compile-Time-Prüfung
+  von MIME-Typ, Größe und Spaltentyp, generierte native Uploadfelder sowie
+  Downloadlinks auf Listen- und Detailseiten ohne rohe Referenzwerte. Vorhandene
+  Upload-Staging-, Edit-Erhalt-/Ersetzungs- und Fehlerbereinigung, Mandanten-/
+  Rechteprüfung sowie referenzbewusste Bereinigung beim Löschen werden genutzt.
+  Parser-, Formular-, Routengenerator- und Render-Tests bestehen. Ein echter
+  Wegwerf-MariaDB-/HTTP-Test bestand über den CLI-generierten CRUD-Pfad:
+  `.env`-Datenbankauflösung, `/new`, Multipart-Speicherung, Listenlink ohne
+  rohe Referenz und authentifizierter Download. Ein vorhandener Upload-
+  Integrationstest deckt Edit-Erhalt/Ersetzung, Rollback-Bereinigung sowie
+  direkte Dispatcher-Prüfungen ab. Der Mandanten-CRUD-E2E lädt nun zusätzlich
+  ein Dokument über das authentifizierte generierte Formular hoch, prüft den
+  gespeicherten Mandanten, lädt die Datei im selben Mandanten herunter und
+  bestätigt 404 bei Auswahl eines anderen Mandanten. Der Test prüft außerdem
+  den PDF-Content-Type und dass die opake FileRef nicht im Detail-HTML erscheint.
+  Der vollständige MariaDB-Mandanten-CRUD-E2E wird zusätzlich in headless
+  Chromium ohne JavaScript ausgeführt; Upload-Control, Detail-Link, PDF-Bytes,
+  MIME-Typ und 404 im fremden Mandanten bestehen. Datenbank-/Datei-
+  Wiederherstellung besteht nun ebenfalls als Wegwerf-MariaDB-Drill: Dump und
+  Dateisnapshot sichern, beide Bestände entfernen, Datenbank zuerst
+  wiederherstellen, danach die referenzierte Datei mit Prüfsumme prüfen. Es
+  bleibt ein manueller Ablauf bei gestopptem Server und kein absturzatomisches
+  Gesamtarchiv. Vollständige Release-Gates bleiben offen.
 
-Siehe den [Plan zum Abschluss des Geschäfts-CRUD](release-plans/1.2.31-1.2.33-business-crud.de.md).
+Siehe den [Plan zum Abschluss des Geschäfts-CRUD](release-plans/1.2.31-1.2.32-business-crud.de.md).
 
 ### 🗺️ [ ] Zelyra 1.3.0 — typisierte MIR und Rust-Bytecode-VM
 

@@ -156,6 +156,13 @@ pub fn build_schema(program: &Program) -> Result<Schema, Vec<SchemaError>> {
                 });
                 continue;
             }
+            if definition.auto_sequence.is_some() && backend == Backend::Sqlite {
+                errors.push(SchemaError {
+                    message: "auto_sequence is not supported by the SQLite backend; use MariaDB or PostgreSQL".into(),
+                    span: definition.span,
+                });
+                continue;
+            }
             if let Some(format) = definition.auto_sequence.as_deref() {
                 if resolved_sequence_format(format).is_none() {
                     errors.push(SchemaError {
@@ -6917,6 +6924,23 @@ mod tests {
         .unwrap();
         let errors = build_schema(&program).unwrap_err();
         assert!(errors[0].message.contains("only on String columns"));
+    }
+
+    #[test]
+    fn sqlite_number_series_fail_schema_check_with_a_stable_diagnostic() {
+        let program = parse(
+            &lex(
+                "database main { engine: sqlite } table customers { id: Id primary auto customer_number: String required auto_sequence(\"KD-{0001}\") }",
+            )
+            .unwrap(),
+        )
+        .unwrap();
+        let errors = build_schema(&program)
+            .expect_err("SQLite cannot provide the transactional number-series allocator");
+        assert_eq!(errors.len(), 1);
+        assert!(errors[0].message.contains("auto_sequence is not supported"));
+        assert!(errors[0].message.contains("SQLite backend"));
+        assert!(errors[0].span.end > errors[0].span.start);
     }
 
     #[test]

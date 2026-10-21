@@ -1,6 +1,6 @@
 use zelyra_lexer::lex;
 use zelyra_parser::parse;
-use zelyra_runtime::{check, execute};
+use zelyra_runtime::{check, check_capabilities, execute};
 
 fn run(source: &str) -> Vec<String> {
     let program =
@@ -48,6 +48,90 @@ fn reports_unknown_variables() {
     assert!(errors
         .iter()
         .any(|error| error.message.contains("unknown variable `missing`")));
+}
+
+#[test]
+fn type_checks_computed_table_columns_against_their_field_scope() {
+    let program = parse(
+        &lex("table items { quantity: Int price: Int total: Int compute(quantity * price) } fn main() {}")
+            .unwrap(),
+    )
+    .unwrap();
+    check(&program).expect("computed expression should resolve and match the column type");
+}
+
+#[test]
+fn rejects_unknown_fields_in_computed_table_columns() {
+    let program = parse(
+        &lex("table items { quantity: Int total: Int compute(quantity * missing) } fn main() {}")
+            .unwrap(),
+    )
+    .unwrap();
+    let errors = check(&program).expect_err("unknown computed input must fail type checking");
+    assert!(errors
+        .iter()
+        .any(|error| error.message.contains("unknown variable `missing`")));
+}
+
+#[test]
+fn rejects_computed_table_columns_with_an_incompatible_result_type() {
+    let program = parse(
+        &lex("table items { quantity: Int label: String compute(quantity * 2) } fn main() {}")
+            .unwrap(),
+    )
+    .unwrap();
+    let errors = check(&program).expect_err("computed result must match its declared type");
+    assert!(
+        errors
+            .iter()
+            .any(|error| error.message.contains("expected `String`")),
+        "unexpected diagnostics: {errors:?}"
+    );
+}
+
+#[test]
+fn rejects_effectful_functions_in_computed_table_columns() {
+    let program = parse(
+        &lex(r#"
+        table assets {
+            path: String required
+            contents: String required compute(read_text(path))
+        }
+        fn main() {}
+    "#)
+        .expect("lexing should succeed"),
+    );
+    let program = program.expect("the computed column syntax should parse");
+    check(&program).expect("the expression is type correct before effect checking");
+    let errors = check_capabilities(&program)
+        .expect_err("computed fields must not perform filesystem effects");
+    assert!(errors
+        .iter()
+        .any(|error| error.message.contains("read_text") || error.message.contains("capability")));
+}
+
+#[test]
+fn rejects_cycles_in_computed_table_columns() {
+    let program = parse(
+        &lex("table items { first: Int compute(second + 1) second: Int compute(first + 1) } fn main() {}")
+            .unwrap(),
+    )
+    .unwrap();
+    let errors = check(&program).expect_err("computed dependency cycles must fail statically");
+    assert!(errors.iter().any(|error| {
+        error.code == "E-COMPUTE-001" && error.message.contains("dependency cycle")
+    }));
+}
+
+#[test]
+fn rejects_computed_columns_that_also_declare_defaults_or_identity_generation() {
+    let program = parse(
+        &lex("table items { id: Int primary auto total: Int default 0 compute(id + 1) } fn main() {}")
+            .unwrap(),
+    )
+    .unwrap();
+    let errors = check(&program).expect_err("computed columns cannot declare competing writers");
+    assert!(errors.iter().any(|error| error.code == "E-COMPUTE-002"));
 }
 
 #[test]
