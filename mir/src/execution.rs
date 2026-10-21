@@ -524,6 +524,7 @@ fn bind_iterator_value(
 fn instruction_span(program: &MirProgram, instruction: &MirInstruction) -> Span {
     match instruction {
         MirInstruction::IteratorInit { span, .. }
+        | MirInstruction::SourceStep { span }
         | MirInstruction::MatchInit { span, .. }
         | MirInstruction::Let { span, .. }
         | MirInstruction::Assign { span, .. }
@@ -576,15 +577,28 @@ impl Machine<'_> {
                 .map(|binding| {
                     let mut child = self.parallel_child();
                     let mut child_locals = locals.clone();
+                    let body =
+                        self.program
+                            .expressions
+                            .get(binding.value.0)
+                            .and_then(|expression| match &expression.kind {
+                                MirExpressionKind::Await(body) => Some(*body),
+                                _ => None,
+                            });
                     std::thread::Builder::new()
                         .name("zelyra-mir-parallel".into())
                         .stack_size(stack_size)
                         .spawn_scoped(scope, move || {
-                            let result = child.expression(
-                                binding.value,
-                                &mut child_locals,
-                                depth,
-                                binding.span,
+                            let result = body.map_or_else(
+                                || {
+                                    Err(runtime_error(
+                                        binding.span,
+                                        "MIR parallel binding lost its checked await expression",
+                                    ))
+                                },
+                                |body| {
+                                    child.expression(body, &mut child_locals, depth, binding.span)
+                                },
                             );
                             result
                                 .map(|value| (binding.local, value))
@@ -801,6 +815,9 @@ impl Machine<'_> {
                     message: format!("MIR control flow reached missing block {}", block.0),
                     span: function.span,
                 })?;
+                if let Some(loop_span) = basic_block.loop_span {
+                    self.tick(loop_span)?;
+                }
                 if !basic_block.loop_invariants.is_empty() {
                     self.check_loop_invariants(
                         &basic_block.loop_invariants,
@@ -811,8 +828,15 @@ impl Machine<'_> {
                     )?;
                 }
                 for instruction in &basic_block.instructions {
-                    self.tick(instruction_span(self.program, instruction))?;
+                    if !matches!(
+                        instruction,
+                        MirInstruction::SourceStep { .. }
+                            | MirInstruction::LoopInvariantCheck { .. }
+                    ) {
+                        self.tick(instruction_span(self.program, instruction))?;
+                    }
                     match instruction {
+                        MirInstruction::SourceStep { span } => self.tick(*span)?,
                         MirInstruction::Let {
                             local, value, span, ..
                         } => {
@@ -1026,7 +1050,6 @@ impl Machine<'_> {
                     }
                 }
 
-                self.tick(basic_block.span)?;
                 match basic_block
                     .terminator
                     .as_ref()
@@ -2691,7 +2714,6 @@ impl Machine<'_> {
         })?;
         let mut queries = Vec::with_capacity(operation_ids.len());
         for operation_id in operation_ids {
-            self.tick(span)?;
             let expression = self
                 .program
                 .expressions

@@ -272,6 +272,11 @@ pub struct MirLoopInvariant {
 
 #[derive(Clone, Debug)]
 pub enum MirInstruction {
+    /// Charge one source-level statement step at a control-flow boundary that
+    /// does not otherwise have a corresponding MIR instruction.
+    SourceStep {
+        span: Span,
+    },
     IteratorInit {
         iterator: IteratorId,
         source: MirIteratorSource,
@@ -784,6 +789,7 @@ pub fn verify(program: &MirProgram) -> Result<(), Vec<MirError>> {
             }
             for instruction in &block.instructions {
                 let expression = match instruction {
+                    MirInstruction::SourceStep { .. } => None,
                     MirInstruction::IteratorInit { source, .. } => {
                         match source {
                             MirIteratorSource::Collection(expression) => {
@@ -1692,7 +1698,8 @@ fn verify_instruction_types(
         }
         MirInstruction::IteratorInit { .. }
         | MirInstruction::MatchInit { .. }
-        | MirInstruction::Evaluate(_) => {}
+        | MirInstruction::Evaluate(_)
+        | MirInstruction::SourceStep { .. } => {}
     }
 }
 
@@ -2582,6 +2589,12 @@ impl FunctionBuilder<'_> {
                 Some(block)
             }
             HirStmt::Return { value, .. } => {
+                self.emit(
+                    block,
+                    MirInstruction::SourceStep {
+                        span: stmt_span(statement),
+                    },
+                );
                 let value = value.as_ref().and_then(|expression| {
                     let id = self.program.expression(expression)?;
                     let is_contextual_constructor = matches!(
@@ -2629,6 +2642,7 @@ impl FunctionBuilder<'_> {
                 else_block,
                 span,
             } => {
+                self.emit(block, MirInstruction::SourceStep { span: *span });
                 let Some(condition) = self.program.expression(condition) else {
                     return Some(block);
                 };
@@ -2671,6 +2685,7 @@ impl FunctionBuilder<'_> {
                 body,
                 span,
             } => {
+                self.emit(block, MirInstruction::SourceStep { span: *span });
                 let condition_id = self.block(condition.span);
                 let body_id = self.block(body.span);
                 let exit_id = self.block(*span);
@@ -2767,6 +2782,7 @@ impl FunctionBuilder<'_> {
                 );
                 let header_id = self.block(*span);
                 let body_id = self.block(body.span);
+                self.blocks[body_id.0].loop_span = Some(*span);
                 let exit_id = self.block(*span);
                 self.terminate(block, MirTerminator::Goto(header_id));
                 let mut bindings = vec![MirIteratorBinding {
@@ -2867,6 +2883,7 @@ impl FunctionBuilder<'_> {
                 body,
                 span,
             } => {
+                self.emit(block, MirInstruction::SourceStep { span: *span });
                 let body_id = self.block(body.span);
                 let exit_id = self.block(*span);
                 self.terminate(block, MirTerminator::Goto(body_id));
@@ -2907,6 +2924,7 @@ impl FunctionBuilder<'_> {
 
     fn loop_jump(&mut self, block: BlockId, is_break: bool, span: Span) -> Option<BlockId> {
         if let Some(target) = self.loop_targets.last().cloned() {
+            self.emit(block, MirInstruction::SourceStep { span });
             if !target.invariants.is_empty() {
                 self.emit(
                     block,

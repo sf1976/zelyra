@@ -1,4 +1,4 @@
-# Experimental Zelyra Bytecode v25
+# Experimental Zelyra Bytecode v27
 
 `zelyra-mir::bytecode` provides the first executable bytecode backend for
 already type-checked and verified MIR. The AST interpreter remains the reference implementation and the normal
@@ -202,9 +202,15 @@ function arguments, return values, capability declarations, and host grants.
 
 ## Format and safety limits
 
-`BYTECODE_VERSION` identifies version `25` of a deterministic binary format.
-Version 25 adds the verified mutable-array pop instruction and typed structural
-array/tuple/Option/Result equality operations.
+Bytecode v27 stores source-step spans on the following instruction where possible, avoiding a separate VM dispatch for the common case. Serial execution uses a local counter and switches to the shared atomic counter for parallel branches. VM opcode count no longer defines the language-level fuel unit. The tested statement, expression, while-loop, collection-loop, match, and if-expression boundaries match AST and MIR, including failure spans. Calls and function pre/postconditions are also covered by a separate budget sweep. SQL-only transaction batches and parallel `await` bindings have their own boundary sweeps; the former verifies no database host batch starts when the budget is exhausted. Mixed-effect transactions, parallel host effects, and other source constructs still need broader boundary coverage. The VM also imposes a separate 10,000,000-op execution ceiling for
+malformed or hand-built artifacts.
+
+`BYTECODE_VERSION` identifies version `27` of a deterministic binary format.
+Version 27 embeds source-step locations in instruction metadata and retains a
+standalone Step operation for adjacent source charges. Version 26 introduced
+explicit source-step markers. Version 25 added the verified mutable-array
+pop instruction and typed structural array/tuple/Option/Result equality
+operations.
 Version 24 serializes tenant-scoped table names. The verifier and VM reject raw
 SQL against those tables; database execution also requires this list to match
 the schema derived from the checked project. Typed tenant queries are not yet

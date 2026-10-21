@@ -1,4 +1,4 @@
-# Experimentelles Zelyra-Bytecode v25
+# Experimentelles Zelyra-Bytecode v27
 
 `zelyra-mir::bytecode` bietet das erste ausführbare Bytecode-Backend für
 bereits typgeprüfte und verifizierte MIR. Der AST-Interpreter bleibt die Referenzimplementierung und das normale
@@ -234,9 +234,19 @@ Hostfreigaben.
 
 ## Format- und Sicherheitsgrenzen
 
-`BYTECODE_VERSION` bezeichnet Version `25` des deterministischen Binärformats.
-Version 25 ergänzt die verifizierte mutable Array-Pop-Instruktion und die
-typisierten strukturellen Array-/Tuple-/Option-/Result-Gleichheitsoperationen.
+Bytecode v27 speichert Quellschrittpositionen nach Möglichkeit direkt an der folgenden Instruktion und vermeidet so einen eigenen VM-Durchlauf für den Normalfall. Serielle Ausführung nutzt einen lokalen Zähler und wechselt für parallele Zweige auf den gemeinsam genutzten atomaren Zähler. VM-Befehle bestimmen nicht mehr die Sprachschritt-Einheit. Die getesteten Grenzen für Anweisungen, Ausdrücke, While-/Collections-
+Schleifen, Match und If-Ausdrücke stimmen einschließlich Fehlerpositionen
+zwischen AST und MIR überein; Aufrufe und Funktionsvor-/Nachbedingungen sind
+durch weitere Budgetläufe abgedeckt. Reine SQL-Transaktionsblöcke und parallele `await`-Bindings haben eigene Grenzwertläufe; der SQL-Test prüft außerdem, dass bei erschöpftem Budget kein Datenbank-Host-Batch startet. Gemischte Transaktionseffekte, parallele Hosteffekte und weitere Sprachkonstrukte benötigen noch umfassendere Grenzwerttests. Für
+fehlerhafte oder handgebaute Artefakte begrenzt die VM die Ausführung zusätzlich
+auf 10.000.000 Befehle.
+
+`BYTECODE_VERSION` bezeichnet Version `27` des deterministischen Binärformats.
+Version 27 bettet Quellschrittpositionen in Instruktionsmetadaten ein und
+behält für aufeinanderfolgende Quellschritte eine separate Step-Operation bei.
+Version 26 führte explizite Quellschrittmarkierungen ein. Version 25 ergänzte die
+verifizierte mutable Array-Pop-Instruktion und typisierte strukturelle
+Array-/Tuple-/Option-/Result-Gleichheitsoperationen.
 Version 24 serialisiert die Namen tenant-gescopter Tabellen. Verifier und VM
 weisen rohes SQL auf solchen Tabellen ab; bei Datenbankausführung muss diese
 Liste mit dem aus dem geprüften Projekt stammenden Schema übereinstimmen.
