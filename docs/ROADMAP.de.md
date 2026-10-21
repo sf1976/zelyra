@@ -630,18 +630,16 @@ abgeschlossen.
   `public/`-Assets und begrenztes stdin für erlaubnislistengeprüfte Prozesse
   (`run_process_piped`) sind bereits auf `main` vorhanden.
   `run_process_piped` führt für sich allein weder Zelyra-Quelltext aus noch
-  stellt es eine Web-Sandbox bereit. Typisierte erfolgreiche API-Antworten sind
-  auf dem aktiven, noch nicht zusammengeführten Branch als `ApiResponse<T>` mit
-  Status-/Content-Type-Deklarationen, geprüften Headern, OpenAPI- und
-  TypeScript-Client-Unterstützung umgesetzt. `HttpResult<T>` beschreibt weiter
-  Antworten ausgehender HTTP-Aufrufe. Parametrisierte `view`-Props bleiben
-  offen; Seiten können aber bereits benannte Layout-Slots für individuelle
-  Head-Inhalte bereitstellen. Projektkataloge `locales/de.json` und
+  stellt es eine Web-Sandbox bereit. Typisierte API-Erfolgsantworten sind auf
+  `main` als `ApiResponse<T>` umgesetzt; `HttpResult<T>` beschreibt weiter
+  Antworten ausgehender HTTP-Aufrufe. Typisierte `view`-Props und Übergaben aus
+  `page` sind Gegenstand dieses Branches. Benannte Layout-Slots für individuelle
+  Head-Inhalte funktionieren bereits. Projektkataloge `locales/de.json` und
   `locales/en.json` sowie `data-zelyra-i18n`-/`@i18n:`-Marker lokalisieren
-  benutzerdefinierte Seitentexte bereits. Ein typisierter Ausdruck
-  `t("key")` und deklarative Locale-Routengruppen fehlen noch. Sicheres
-  CommonMark/GFM-Rendering bleibt offen. Statisches Asset-Serving ist bereits
-  vorhanden und keine offene Lücke.
+  benutzerdefinierte Seitentexte; der typisierte Ausdruck `t("key")` und
+  deklarative Locale-Routengruppen bleiben offen und werden separat bearbeitet.
+  Sicheres CommonMark/GFM-Rendering bleibt offen. Statisches Asset-Serving ist
+  bereits vorhanden und keine offene Lücke.
 
 **Nach 1.3.0 oder bei ausdrücklicher Neubewertung:** Ein natives AOT-Backend
 bleibt optional und hängt von Benchmarks ab. Kein offener Punkt entfällt stillschweigend: Arbeit, deren
@@ -1205,7 +1203,10 @@ werden. Details stehen im [Projektlayout-Arbeitsplan](release-plans/1.3.0-projec
   Pagination, APIs, OpenAPI und TypeScript-Client-Erzeugung.
 - [~] Wiederverwendbare Web-Views: benannte Layouts, Seitenkomposition, ein
   validierter Content-Slot und typisierte selbstschließende Komponenten mit
-  Properties sind verfügbar. Benannte Slots mit Fallback-Inhalt, CRUD-View-
+  Properties sind verfügbar. Views können ebenfalls typisierte Properties
+  deklarieren; Seiten übergeben statisch geprüfte Literale oder Werte aus dem
+  Seitenscope, etwa für Titel und Meta-Inhalte. Optionale Properties sind in
+  CRUD- und TableView-Layouts zulässig. Benannte Slots mit Fallback-Inhalt, CRUD-View-
   Überschreibungen und ressourcenspezifische Inhalte für benannte CRUD-Layout-
   Slots sind verfügbar. Statische Slot-Markups dürfen geprüfte Komponenten
   verwenden; datensatzgebundene Slot-Inhalte bleiben offen. Projektlokale
