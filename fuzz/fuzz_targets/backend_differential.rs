@@ -12,6 +12,19 @@ const LIMITS: ExecutionLimits = ExecutionLimits {
 
 fn generated_program(input: &[u8]) -> String {
     let bytes = if input.is_empty() { &[0][..] } else { input };
+    let sample = |index: usize| {
+        i64::from(bytes.get(index).copied().unwrap_or(0) % 21) - 10
+    };
+    match bytes[0] % 5 {
+        1 => generated_tuple_program(sample(1), sample(2), sample(3)),
+        2 => generated_record_update_program(sample(1), sample(2)),
+        3 => generated_pipeline_program(sample(1), sample(2), sample(3)),
+        4 => generated_match_program(sample(1), sample(2)),
+        _ => generated_mutable_array_program(bytes),
+    }
+}
+
+fn generated_mutable_array_program(bytes: &[u8]) -> String {
     let initial_count = usize::from(bytes[0] % 8) + 1;
     let mut values = (0..initial_count)
         .map(|index| i64::from(bytes.get(index + 1).copied().unwrap_or(0) % 101) - 50)
@@ -51,6 +64,30 @@ fn generated_program(input: &[u8]) -> String {
     }
     format!(
         "fn main() -> Int {{\n mutable values: Int[] = [{initial}]\n {statements}\n mutable total = 0\n for value in values {{ total += value }}\n return total\n}}"
+    )
+}
+
+fn generated_tuple_program(first: i64, second: i64, third: i64) -> String {
+    format!(
+        "fn main() -> Int {{\n    (left, right) = ({first}, {second})\n    selected = if left > right {{ left }} else {{ right }}\n    return left + right + selected + {third}\n}}"
+    )
+}
+
+fn generated_record_update_program(original: i64, replacement: i64) -> String {
+    format!(
+        "struct Box<T> {{ value: T }}\nfn main() -> Int {{\n    old = Box<Int> {{ value: {original} }}\n    updated = Box<Int> {{ ..old, value: {replacement} }}\n    return updated.value\n}}"
+    )
+}
+
+fn generated_pipeline_program(first: i64, second: i64, third: i64) -> String {
+    format!(
+        "fn main() -> Int {{\n    values = [{first}, {second}, {third}] |> filter(|item| item > 0) |> map(|item| item * 2)\n    mutable total = 0\n    for item in values {{\n        total = total + item\n    }}\n    return total\n}}"
+    )
+}
+
+fn generated_match_program(value: i64, adjustment: i64) -> String {
+    format!(
+        "enum Outcome {{ Value(Int) Empty }}\nfn main() -> Int {{\n    outcome = Outcome::Value({value})\n    return match outcome {{\n        Outcome::Value(item) if item > 0 => item + {adjustment}\n        Outcome::Value(item) => item - {adjustment}\n        Outcome::Empty => 0\n    }}\n}}"
     )
 }
 
