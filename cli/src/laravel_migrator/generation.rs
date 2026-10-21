@@ -5,7 +5,13 @@ use std::ops::Range;
 use std::path::Path;
 use zelyra_ast::{ReferentialAction, TextStorage};
 
-type ParsedSchemaColumns = (Vec<Column>, Vec<Vec<String>>, Vec<Vec<String>>, Vec<String>);
+type ParsedSchemaColumns = (
+    Vec<Column>,
+    Vec<Vec<String>>,
+    Vec<Vec<String>>,
+    Vec<String>,
+    Option<String>,
+);
 type ParsedSqlType = (
     String,
     Option<u32>,
@@ -634,7 +640,7 @@ fn parse_sql_create_body(source: &str, table: &str) -> Result<ParsedSchemaColumn
             "deployment SQL table must declare exactly one supported primary-key column".into(),
         );
     }
-    Ok((columns, indexes, uniques, notes))
+    Ok((columns, indexes, uniques, notes, None))
 }
 
 fn apply_sql_foreign_constraint(
@@ -752,6 +758,9 @@ struct Alteration {
     indexes: Vec<Vec<String>>,
     uniques: Vec<Vec<String>>,
     backend_review_notes: Vec<String>,
+    /// Set only when a single `if (!Schema::hasColumn(...))` block contains
+    /// the entire statically parsed alteration callback.
+    whole_callback_if_missing: Option<String>,
 }
 
 #[derive(Clone)]
@@ -861,7 +870,7 @@ impl SchemaAnalyzer {
                     allow_external_index_columns: false,
                 },
             ) {
-                Ok((columns, indexes, uniques, backend_review_notes)) => {
+                Ok((columns, indexes, uniques, backend_review_notes, _)) => {
                     self.candidates.push(Candidate {
                         table: table.into(),
                         file: file.into(),
@@ -945,7 +954,13 @@ impl SchemaAnalyzer {
                     allow_external_index_columns: true,
                 },
             ) {
-                Ok((columns, indexes, uniques, mut backend_review_notes)) => {
+                Ok((
+                    columns,
+                    indexes,
+                    uniques,
+                    mut backend_review_notes,
+                    whole_callback_if_missing,
+                )) => {
                     match outer_has_column_guard_notes(
                         source,
                         &source_map,
@@ -971,6 +986,7 @@ impl SchemaAnalyzer {
                         indexes,
                         uniques,
                         backend_review_notes,
+                        whole_callback_if_missing,
                     })
                 }
                 Err(reason) => self.alteration_rejected.push(Rejected {
@@ -1022,7 +1038,13 @@ impl SchemaAnalyzer {
                     allow_external_index_columns: true,
                 },
             ) {
-                Ok((columns, indexes, uniques, mut backend_review_notes)) => {
+                Ok((
+                    columns,
+                    indexes,
+                    uniques,
+                    mut backend_review_notes,
+                    whole_callback_if_missing,
+                )) => {
                     match outer_has_column_guard_notes(
                         source,
                         &source_map,
@@ -1048,6 +1070,7 @@ impl SchemaAnalyzer {
                         indexes,
                         uniques,
                         backend_review_notes,
+                        whole_callback_if_missing,
                     });
                 }
                 Err(reason) => self.alteration_rejected.push(Rejected {
@@ -1125,7 +1148,7 @@ impl SchemaAnalyzer {
                 continue;
             };
             match parse_sql_create_body(&source[open + 1..close], table) {
-                Ok((columns, indexes, uniques, backend_review_notes)) => {
+                Ok((columns, indexes, uniques, backend_review_notes, _)) => {
                     self.candidates.push(Candidate {
                         table: table.into(),
                         file: file.into(),
@@ -1245,6 +1268,7 @@ impl SchemaAnalyzer {
                         "Column `{}` comes from a custom deployment SQL ALTER TABLE statement; review idempotence and backend equivalence.",
                         capture.get(2).map_or("<unknown>", |value| value.as_str())
                     )],
+                    whole_callback_if_missing: None,
                 }),
                 Err(reason) => self.alteration_rejected.push(Rejected {
                     table: table.into(),
@@ -1477,6 +1501,30 @@ impl SchemaAnalyzer {
             let mut merged = unique[candidate_index].clone();
             let mut error = None;
             for alteration in &alterations {
+                if alteration
+                    .whole_callback_if_missing
+                    .as_ref()
+                    .is_some_and(|guarded| {
+                        merged
+                            .columns
+                            .iter()
+                            .any(|existing| existing.source_name == *guarded)
+                    })
+                {
+                    let guarded = alteration
+                        .whole_callback_if_missing
+                        .as_deref()
+                        .expect("whole-callback guard checked above");
+                    merged.backend_review_notes.push(format!(
+                        "Laravel `Schema::table` callback in `{}` is guarded by `!Schema::hasColumn('{table_name}', '{guarded}')`; a previous migration statically declares the column, so this entire callback is skipped when replaying the migrations in order.",
+                        alteration.file
+                    ));
+                    merged.source_migrations.push(MigrationSource {
+                        file: alteration.file.clone(),
+                        span: alteration.span,
+                    });
+                    continue;
+                }
                 if let Some(column) = alteration.columns.iter().find(|column| {
                     merged.columns.iter().any(|existing| {
                         existing.source_name == column.source_name || existing.name == column.name
@@ -2398,7 +2446,7 @@ fn parse_columns(
 
     for expanded_source in foreach_expansions {
         let expanded_source_map = PhpSourceMap::new(&expanded_source);
-        let (extra_columns, extra_indexes, extra_uniques, extra_notes) = parse_columns(
+        let (extra_columns, extra_indexes, extra_uniques, extra_notes, _) = parse_columns(
             &expanded_source,
             ParseColumnsOptions {
                 body_offset: 0,
@@ -2439,6 +2487,18 @@ fn parse_columns(
             ));
         }
     }
+    let whole_callback_if_missing = if !require_primary_key && guards.len() == 1 {
+        let (range, _, _, guarded_column) = &guards[0];
+        let only_guarded_code = body.bytes().enumerate().all(|(offset, byte)| {
+            !source_map.is_code(body_offset + offset)
+                || byte.is_ascii_whitespace()
+                || byte == b';'
+                || range.contains(&offset)
+        });
+        only_guarded_code.then(|| guarded_column.clone())
+    } else {
+        None
+    };
     for (range, open_brace, guarded_table, guarded_column) in guards {
         if guarded_table != table_name {
             return Err(format!(
@@ -2600,7 +2660,13 @@ fn parse_columns(
                 .collect()
         })
         .collect();
-    Ok((columns, indexes, uniques, backend_review_notes))
+    Ok((
+        columns,
+        indexes,
+        uniques,
+        backend_review_notes,
+        whole_callback_if_missing,
+    ))
 }
 
 fn push_column(
@@ -4507,6 +4573,89 @@ return new class extends Migration {
         let plan = dynamic_guard.finish();
         assert_eq!(plan["generated_table_count"], 0);
         assert!(!plan["rejected"].as_array().unwrap().is_empty());
+    }
+
+    #[test]
+    fn skips_a_wholly_guarded_alteration_when_an_earlier_migration_added_its_guard_column() {
+        let mut analyzer = SchemaAnalyzer::default();
+        analyzer.scan(
+            "database/migrations/001_add_signature.php",
+            "<?php Schema::create('quotes', function ($table) { $table->id(); }); Schema::table('quotes', function ($table) { $table->text('signature_data')->nullable(); });",
+        );
+        analyzer.scan(
+            "database/migrations/002_add_quote_signature_metadata.php",
+            "<?php Schema::table('quotes', function ($table) { if (!Schema::hasColumn('quotes', 'signature_data')) { $table->longText('signature_data')->nullable(); $table->dateTime('signed_at')->nullable(); $table->string('signed_by_name')->nullable(); } });",
+        );
+
+        let plan = analyzer.finish();
+        assert_eq!(plan["generated_table_count"], 1, "{plan}");
+        let quote = &plan["candidates"][0];
+        let columns = quote["columns"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|column| column["source_column_name"].as_str().unwrap())
+            .collect::<Vec<_>>();
+        assert_eq!(columns, ["id", "signature_data"]);
+        assert!(plan["rejected"].as_array().unwrap().is_empty(), "{plan}");
+        assert!(quote["backend_review_notes"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|note| note
+                .as_str()
+                .unwrap()
+                .contains("a previous migration statically declares the column")));
+    }
+
+    #[test]
+    fn applies_a_wholly_guarded_alteration_when_its_guard_column_is_absent() {
+        let mut analyzer = SchemaAnalyzer::default();
+        analyzer.scan(
+            "database/migrations/001_create_quotes.php",
+            "<?php Schema::create('quotes', function ($table) { $table->id(); });",
+        );
+        analyzer.scan(
+            "database/migrations/002_add_quote_signature_metadata.php",
+            "<?php Schema::table('quotes', function ($table) { if (!Schema::hasColumn('quotes', 'signature_data')) { $table->longText('signature_data')->nullable(); $table->dateTime('signed_at')->nullable(); } });",
+        );
+
+        let plan = analyzer.finish();
+        assert_eq!(plan["generated_table_count"], 1, "{plan}");
+        let quote = &plan["candidates"][0];
+        let columns = quote["columns"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|column| column["source_column_name"].as_str().unwrap())
+            .collect::<Vec<_>>();
+        assert_eq!(columns, ["id", "signature_data", "signed_at"]);
+        assert!(plan["rejected"].as_array().unwrap().is_empty(), "{plan}");
+    }
+
+    #[test]
+    fn does_not_treat_a_mixed_guarded_and_unguarded_callback_as_a_whole_guard() {
+        let mut analyzer = SchemaAnalyzer::default();
+        analyzer.scan(
+            "database/migrations/001_add_signature.php",
+            "<?php Schema::create('quotes', function ($table) { $table->id(); }); Schema::table('quotes', function ($table) { $table->text('signature_data')->nullable(); });",
+        );
+        analyzer.scan(
+            "database/migrations/002_mixed_quote_changes.php",
+            "<?php Schema::table('quotes', function ($table) { if (!Schema::hasColumn('quotes', 'signature_data')) { $table->longText('signature_data')->nullable(); $table->dateTime('signed_at')->nullable(); } $table->string('review_note')->nullable(); });",
+        );
+
+        let plan = analyzer.finish();
+        assert_eq!(plan["generated_table_count"], 1, "{plan}");
+        assert_eq!(
+            plan["candidates"][0]["columns"].as_array().unwrap().len(),
+            2
+        );
+        assert!(plan["rejected"].as_array().unwrap().iter().any(|entry| {
+            entry["reason"]
+                .as_str()
+                .is_some_and(|reason| reason.contains("duplicate column `signature_data`"))
+        }));
     }
 
     #[test]

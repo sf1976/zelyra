@@ -650,6 +650,17 @@ Zelyra-Module; nicht migrierte Anwendungsbereiche müssen ausdrücklich sichtbar
 bleiben. Laravel oder eine allgemeine PHP-Übersetzung werden nicht
 nachgebaut. Der begrenzte Plan steht im verlinkten 1.2.27-Arbeitsplan.
 
+### 1.2.34 — geordnete, vollständig geschützte Migrations-Callbacks
+
+Die aktuelle Importer-Härtung überspringt einen `Schema::table`-Callback
+statisch nur dann, wenn sein gesamter unterstützter Inhalt aus genau einer
+`if (!Schema::hasColumn(...))`-Bedingung besteht und eine frühere Migration
+dieselbe Spalte bereits deklariert hat. Gemischte oder nicht unterstützte
+Callbacks bleiben bei der bisherigen vorsichtigen manuellen Prüfung. Das
+verbessert die Schema-Rekonstruktion für das Abnahmeprojekt; übersprungene
+Felder werden dadurch nicht importiert und Laravel-Parität wird nicht
+behauptet.
+
 ## Aktive Architektur-Meilensteine (1.1.5 bis 1.3.0)
 
 Diese Meilensteine sind in Arbeit und noch nicht veröffentlicht. Bereits teilweise umgesetzte Punkte sind mit `[~]` markiert; offene Teilziele bleiben ausdrücklich stehen. Einträge veröffentlichter Versionen bleiben historische Nachweise.
