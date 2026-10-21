@@ -576,18 +576,20 @@ security and compatibility gates stated for that milestone.
   verified Bytecode, not native machine-code generation.
 
 - [~] **1.3.0 — confirmed web/compiler gaps:** SQL-loaded `Option<Record>` page
-  data, dynamic page content types, static `public/` assets, and bounded
-  `run_process_piped` stdin for allowlisted processes are already implemented
-  on `main`. Typed successful API response contracts are implemented on an
-  active, unmerged feature branch as `ApiResponse<T>`; `HttpResult<T>` continues
-  to describe responses received by outbound HTTP calls. Parameterized view
-  properties and safe CommonMark/GFM rendering remain active work. The Markdown
-  branch now has a bounded runtime renderer that escapes raw HTML and restricts
-  link schemes, typed
-  `render_markdown(String) -> String`, a content-only `{render_markdown:field}`
-  template form, and PDF-view integration with positive/negative tests. This
-  does not provide a general raw-HTML escape hatch. It still needs full package
-  checks and release review.
+  data, dynamic `page content_type`, static `public/` assets, and bounded
+  `run_process_piped` stdin for allowlisted processes are implemented on `main`.
+  `run_process_piped` does not itself execute Zelyra source or provide a web
+  sandbox. Typed successful API responses are implemented on `main` as
+  `ApiResponse<T>` with status/content-type declarations, checked headers,
+  OpenAPI, and TypeScript-client support. `HttpResult<T>` still describes
+  responses from outbound HTTP calls. Parameterized `view` props remain open,
+  although pages can provide named layout slots for page-specific head
+  content. Project `locales/de.json` and `locales/en.json` catalogs plus
+  `data-zelyra-i18n`/`@i18n:` markers already localize custom page text; a
+  typed `t("key")` expression and declarative locale-route grouping remain
+  open. Safe CommonMark/GFM rendering is the subject of this branch and still
+  needs complete verification. Static asset serving is already present and
+  is not an open gap.
 
 **Post-1.3.0 or explicitly reprioritized:** a native AOT backend is optional
 and depends on benchmark evidence. No open task is silently dropped: work that cannot meet its release

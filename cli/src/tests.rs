@@ -3119,6 +3119,130 @@ fn dispatches_json_api_input_to_a_typed_handler() {
 }
 
 #[test]
+fn dispatches_typed_api_responses_with_status_headers_and_structured_bodies() {
+    let program = parse(
+        &lex(r#"
+            struct Customer { id: Int name: String }
+            api POST "/customers" { handler create output ApiResponse<Customer> responses { 201 "application/json" } }
+            fn create() -> ApiResponse<Customer> {
+                return api_response(201, ["Cache-Control: no-store", "Content-Type: application/json"], Customer { id: 42 name: "Anna" })
+            }
+            fn main() { }
+        "#)
+        .unwrap(),
+    )
+    .unwrap();
+    check(&program).unwrap();
+    check_apis(&program).unwrap();
+    let api = &program.apis[0];
+    let request =
+        zelyra_web::parse_request("POST /customers HTTP/1.1\r\nHost: localhost\r\n\r\n").unwrap();
+    let response = dispatch_api(&program, api, "create", &request, &HashMap::new(), None);
+    assert_eq!(response.status, 201);
+    assert_eq!(response.content_type, "application/json");
+    assert_eq!(
+        response.headers,
+        [("Cache-Control".into(), "no-store".into())]
+    );
+    let body: serde_json::Value = serde_json::from_str(&response.body).unwrap();
+    assert_eq!(body, serde_json::json!({"id": 42, "name": "Anna"}));
+    let openapi = docs::format_openapi(&program);
+    assert!(openapi.contains("\"201\""));
+    assert!(openapi.contains("application/json"));
+    let client = docs::format_typescript_client(&program);
+    assert!(client.contains("Promise<ApiResponse<Customer>>"));
+}
+
+#[test]
+fn dispatches_typed_api_text_response_without_json_quoting() {
+    let program = parse(
+        &lex(r#"
+            api GET "/feed.xml" { handler feed output ApiResponse<String> responses { 200 "application/xml; charset=utf-8" } }
+            fn feed() -> ApiResponse<String> {
+                return api_response(200, ["Content-Type: application/xml; charset=utf-8"], "<feed><item>1</item></feed>")
+            }
+            fn main() { }
+        "#)
+        .unwrap(),
+    )
+    .unwrap();
+    check(&program).unwrap();
+    check_apis(&program).unwrap();
+    let request =
+        zelyra_web::parse_request("GET /feed.xml HTTP/1.1\r\nHost: localhost\r\n\r\n").unwrap();
+    let response = dispatch_api(
+        &program,
+        &program.apis[0],
+        "feed",
+        &request,
+        &HashMap::new(),
+        None,
+    );
+    assert_eq!(response.status, 200);
+    assert_eq!(response.content_type, "application/xml; charset=utf-8");
+    assert_eq!(response.body, "<feed><item>1</item></feed>");
+}
+
+#[test]
+fn typed_api_response_contracts_reject_missing_mismatched_and_duplicate_declarations() {
+    for (source, expected) in [
+        (
+            r#"api GET "/x" { handler get output ApiResponse<String> } fn get() -> ApiResponse<String> { return api_response(200, [], "ok") } fn main() {}"#,
+            "requires a `responses` block",
+        ),
+        (
+            r#"api GET "/x" { handler get output String responses { 200 "application/json" } } fn get() -> String { return "ok" } fn main() {}"#,
+            "require output `ApiResponse<T>`",
+        ),
+        (
+            r#"api GET "/x" { handler get output ApiResponse<String> responses { 200 "text/html" } } fn get() -> ApiResponse<String> { return api_response(200, [], "ok") } fn main() {}"#,
+            "non-executable",
+        ),
+    ] {
+        let program = parse(&lex(source).unwrap()).unwrap();
+        let errors = check_apis(&program).expect_err("invalid response contract must fail");
+        assert!(
+            errors.iter().any(|error| error.message.contains(expected)),
+            "expected diagnostic containing {expected:?}, got {errors:?}"
+        );
+    }
+
+    let duplicate = parse(
+        &lex(r#"api GET "/x" { handler get output ApiResponse<String> responses { 200 "application/json" 200 "text/plain" } } fn get() -> ApiResponse<String> { return api_response(200, [], "ok") } fn main() {}"#).unwrap(),
+    )
+    .unwrap();
+    assert!(check_apis(&duplicate).unwrap_err().iter().any(|error| error
+        .message
+        .contains("duplicate API successful response status")));
+}
+
+#[test]
+fn typed_api_response_cannot_return_an_undeclared_status() {
+    let program = parse(
+        &lex(r#"
+            api GET "/x" { handler get output ApiResponse<String> responses { 200 "text/plain" } }
+            fn get() -> ApiResponse<String> { return api_response(201, [], "created") }
+            fn main() {}
+        "#)
+        .unwrap(),
+    )
+    .unwrap();
+    check(&program).unwrap();
+    check_apis(&program).unwrap();
+    let request = zelyra_web::parse_request("GET /x HTTP/1.1\r\nHost: localhost\r\n\r\n").unwrap();
+    let response = dispatch_api(
+        &program,
+        &program.apis[0],
+        "get",
+        &request,
+        &HashMap::new(),
+        None,
+    );
+    assert_eq!(response.status, 500);
+    assert!(response.body.contains("ApiResponse status is not declared"));
+}
+
+#[test]
 fn evaluates_declared_table_validation_before_api_handler() {
     let program = parse(
         &lex(r#"

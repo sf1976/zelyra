@@ -18,6 +18,7 @@ zeroize.workspace = true
 sha2.workspace = true
 pulldown-cmark.workspace = true
 url.workspace = true
+mime.workspace = true
 
 [[bench]]
 name = "mutable_arrays"

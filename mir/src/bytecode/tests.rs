@@ -7912,6 +7912,30 @@ fn bytecode_verifier_rejects_invalid_embedded_source_step_spans() {
 }
 
 #[test]
+fn api_response_constructor_matches_ast_mir_and_bytecode() {
+    let source = r#"
+fn response() -> ApiResponse<String> {
+    return api_response(201, ["Cache-Control: no-store"], "created")
+}
+fn main() {}
+"#;
+    let ast = parse(&lex(source).unwrap()).unwrap();
+    zelyra_runtime::check(&ast).unwrap();
+    let mir = crate::lower(&ast).unwrap();
+    let bytecode = compile(&mir, "response").unwrap();
+    let ast_value = zelyra_runtime::execute_function(&ast, "response", Vec::new(), None).unwrap();
+    let mir_value =
+        execution::execute_function(&mir, "response", Vec::new(), ExecutionLimits::default())
+            .unwrap()
+            .value;
+    let bytecode_value = execute(&bytecode, Vec::new(), ExecutionLimits::default())
+        .unwrap()
+        .value;
+    assert_eq!(ast_value, mir_value);
+    assert_eq!(ast_value, bytecode_value);
+}
+
+#[test]
 fn piped_process_result_executes_consistently_in_bytecode_and_ast() {
     let source = "fn run() -> String uses Process { return run_process_piped(\"/usr/bin/cat\", [\"-\"], \"hello from stdin\", 1000).stdout } fn main() {}";
     let ast = parse(&lex(source).unwrap()).unwrap();

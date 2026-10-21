@@ -12317,7 +12317,126 @@ fn api_result_response(api: &zelyra_ast::ApiDef, value: &RuntimeValue) -> Respon
             &format!("unmapped API error `{error_name}`"),
         );
     }
+    let value = match value {
+        RuntimeValue::Result(Ok(success)) => &**success,
+        other => other,
+    };
+    if let RuntimeValue::Object {
+        type_name, fields, ..
+    } = value
+    {
+        if type_name == "ApiResponse" {
+            return api_explicit_response(api, fields);
+        }
+    }
     Response::json(200, api_json_value(value))
+}
+
+fn api_explicit_response(
+    api: &zelyra_ast::ApiDef,
+    fields: &HashMap<String, RuntimeValue>,
+) -> Response {
+    let status = match fields.get("status") {
+        Some(RuntimeValue::Int(status)) if (200..=299).contains(status) => *status as u16,
+        _ => return api_error_response(500, "InternalServerError", "invalid ApiResponse status"),
+    };
+    let Some(response_contract) = api
+        .responses
+        .iter()
+        .find(|response| response.status == status)
+    else {
+        return api_error_response(
+            500,
+            "InternalServerError",
+            "ApiResponse status is not declared for this route",
+        );
+    };
+    let Some(RuntimeValue::Array(headers)) = fields.get("headers") else {
+        return api_error_response(500, "InternalServerError", "invalid ApiResponse headers");
+    };
+    let Some(body) = fields.get("body") else {
+        return api_error_response(500, "InternalServerError", "ApiResponse body is missing");
+    };
+    let mut content_type = response_contract.content_type.clone();
+    let mut response_headers = Vec::new();
+    for header in headers {
+        let RuntimeValue::String(header) = header else {
+            return api_error_response(500, "InternalServerError", "invalid ApiResponse header");
+        };
+        let Some((name, value)) = header.split_once(':') else {
+            return api_error_response(500, "InternalServerError", "invalid ApiResponse header");
+        };
+        let name = name.trim();
+        let value = value.trim();
+        if name.eq_ignore_ascii_case("content-type") {
+            if zelyra_web::validate_page_content_type(value).is_err()
+                || value.parse::<mime::Mime>().ok()
+                    != response_contract.content_type.parse::<mime::Mime>().ok()
+            {
+                return api_error_response(
+                    500,
+                    "InternalServerError",
+                    "invalid ApiResponse Content-Type",
+                );
+            }
+            let media_type = value.split(';').next().unwrap_or_default().trim();
+            if media_type.eq_ignore_ascii_case("text/html")
+                || media_type.eq_ignore_ascii_case("text/javascript")
+                || media_type.eq_ignore_ascii_case("application/javascript")
+            {
+                return api_error_response(
+                    500,
+                    "InternalServerError",
+                    "ApiResponse cannot return executable markup or script content",
+                );
+            }
+            content_type = value.to_owned();
+        } else {
+            response_headers.push((name.to_owned(), value.to_owned()));
+        }
+    }
+    let media_type = content_type.split(';').next().unwrap_or_default().trim();
+    let raw_text = media_type.eq_ignore_ascii_case("text/plain")
+        || media_type.eq_ignore_ascii_case("text/csv")
+        || media_type.eq_ignore_ascii_case("application/xml")
+        || media_type.eq_ignore_ascii_case("text/xml")
+        || media_type.ends_with("+xml");
+    let body = if raw_text {
+        let RuntimeValue::String(body) = body else {
+            return api_error_response(
+                500,
+                "InternalServerError",
+                "non-JSON ApiResponse bodies must be String",
+            );
+        };
+        body.clone()
+    } else if media_type.eq_ignore_ascii_case("application/json") || media_type.ends_with("+json") {
+        api_json_value(body)
+    } else {
+        return api_error_response(
+            500,
+            "InternalServerError",
+            "unsupported ApiResponse Content-Type",
+        );
+    };
+    if matches!(status, 204 | 304) && !body.is_empty() && body != "null" {
+        return api_error_response(
+            500,
+            "InternalServerError",
+            "bodyless ApiResponse status must not include a body",
+        );
+    }
+    let mut response = Response::json(
+        status,
+        if matches!(status, 204 | 304) {
+            ""
+        } else {
+            &body
+        },
+    );
+    response.content_type = content_type;
+    response.headers = response_headers;
+    response
 }
 
 fn api_value_json(
