@@ -1622,6 +1622,7 @@ impl<'a> Parser<'a> {
         self.expect(TokenKind::LBrace, "`{` after page path")?;
         let mut html = None;
         let mut view = None;
+        let mut view_props = Vec::new();
         let mut content_type = None;
         let mut inputs = Vec::new();
         let mut page_size = None;
@@ -1653,6 +1654,24 @@ impl<'a> Parser<'a> {
                 self.advance();
                 self.expect(TokenKind::Colon, "`:` after `view`")?;
                 view = Some(self.ident("view name")?.0);
+                if self.at(&TokenKind::LParen) {
+                    self.advance();
+                    self.skip_newlines();
+                    while !self.at(&TokenKind::RParen) && !self.at(&TokenKind::Eof) {
+                        let (name, span) = self.ident("view property name")?;
+                        self.expect(TokenKind::Colon, "`:` after view property name")?;
+                        let value = self.page_view_property_value()?;
+                        view_props.push(PageViewProp { name, value, span });
+                        self.skip_newlines();
+                        if self.at(&TokenKind::Comma) {
+                            self.advance();
+                            self.skip_newlines();
+                        } else if !self.at(&TokenKind::RParen) {
+                            return self.error("expected `,` between view properties");
+                        }
+                    }
+                    self.expect(TokenKind::RParen, "`)` after view properties")?;
+                }
             } else if matches!(&self.current().kind, TokenKind::Ident(name) if name == "content_type")
             {
                 self.advance();
@@ -1758,6 +1777,7 @@ impl<'a> Parser<'a> {
             path,
             html,
             view,
+            view_props,
             content_type,
             inputs,
             page_size,
@@ -1793,10 +1813,31 @@ impl<'a> Parser<'a> {
         let start = self.expect(TokenKind::View, "`view`")?;
         let (name, _) = self.ident("view name")?;
         self.expect(TokenKind::LBrace, "`{` after view name")?;
+        let mut props = Vec::new();
         let mut html = None;
         self.skip_newlines();
         while !self.at(&TokenKind::RBrace) && !self.at(&TokenKind::Eof) {
-            if self.at(&TokenKind::Html) {
+            if self.at(&TokenKind::Props) {
+                self.advance();
+                self.expect(TokenKind::LBrace, "`{` after `props`")?;
+                self.skip_newlines();
+                while !self.at(&TokenKind::RBrace) && !self.at(&TokenKind::Eof) {
+                    let (prop_name, prop_span) = self.ident("view property name")?;
+                    self.expect(TokenKind::Colon, "`:` after view property name")?;
+                    let ty = self.type_name()?;
+                    props.push(ComponentProp {
+                        name: prop_name,
+                        ty,
+                        span: prop_span,
+                    });
+                    self.skip_newlines();
+                    if self.at(&TokenKind::Comma) {
+                        self.advance();
+                        self.skip_newlines();
+                    }
+                }
+                self.expect(TokenKind::RBrace, "`}` after view properties")?;
+            } else if self.at(&TokenKind::Html) {
                 self.advance();
                 self.expect(TokenKind::LBrace, "`{` after `html`")?;
                 let body = match self.current().kind.clone() {
@@ -1809,7 +1850,7 @@ impl<'a> Parser<'a> {
                 self.expect(TokenKind::RBrace, "`}` after HTML body")?;
                 html = Some(body);
             } else {
-                return self.error("expected `html` in view definition");
+                return self.error("expected `props` or `html` in view definition");
             }
             self.skip_newlines();
         }
@@ -1820,9 +1861,23 @@ impl<'a> Parser<'a> {
         Ok(ViewDef {
             name,
             is_public,
+            props,
             html,
             span: start.join(end),
         })
+    }
+
+    fn page_view_property_value(&mut self) -> Result<String, ParseError> {
+        let value = match self.current().kind.clone() {
+            TokenKind::String(value) | TokenKind::StringTemplate { value, .. } => value,
+            TokenKind::Int(value) => value.to_string(),
+            TokenKind::True => "true".into(),
+            TokenKind::False => "false".into(),
+            TokenKind::Ident(value) => value,
+            _ => return self.error("expected a literal or template expression for view property"),
+        };
+        self.advance();
+        Ok(value)
     }
 
     fn tableview_definition(&mut self) -> Result<TableViewDef, ParseError> {
@@ -5699,6 +5754,25 @@ mod tests {
             program.components[0].props[1].ty,
             Type::Option(Box::new(Type::Int))
         );
+    }
+
+    #[test]
+    fn parses_typed_view_properties_and_page_arguments() {
+        let source = r#"
+            view AppShell {
+                props { title: String description: String? }
+                html { <title>{title}</title><meta content="{description}" /><slot /> }
+            }
+            page "/handbook" {
+                view: AppShell(title: "Zelyra Handbook", description: "Compiler reference")
+                html { <h1>Handbook</h1> }
+            }
+        "#;
+        let program = parse(&lex(source).unwrap()).unwrap();
+        assert_eq!(program.views[0].props.len(), 2);
+        assert_eq!(program.views[0].props[0].name, "title");
+        assert_eq!(program.pages[0].view_props.len(), 2);
+        assert_eq!(program.pages[0].view_props[0].value, "Zelyra Handbook");
     }
 
     #[test]

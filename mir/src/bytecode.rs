@@ -39,7 +39,7 @@ pub use format::{decode, decode_with_limits, encode, encode_with_limits, Bytecod
 mod compiler;
 pub use compiler::compile;
 
-pub const BYTECODE_VERSION: u16 = 27;
+pub const BYTECODE_VERSION: u16 = 28;
 const MAX_BYTECODE_OPERATIONS_PER_EXECUTION: usize = 10_000_000;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

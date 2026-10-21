@@ -511,6 +511,8 @@ pub struct PageDef {
     pub path: String,
     pub html: String,
     pub view: Option<String>,
+    /// Literal or template-expression arguments supplied to the page layout.
+    pub view_props: Vec<PageViewProp>,
     pub content_type: Option<String>,
     pub inputs: Vec<PageInputDef>,
     pub page_size: Option<u32>,
@@ -520,6 +522,13 @@ pub struct PageDef {
     pub data: Vec<PageDataDef>,
     pub requires_auth: bool,
     pub permissions: Vec<String>,
+    pub span: Span,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct PageViewProp {
+    pub name: String,
+    pub value: String,
     pub span: Span,
 }
 
@@ -542,6 +551,7 @@ pub struct PageDataDef {
 pub struct ViewDef {
     pub name: String,
     pub is_public: bool,
+    pub props: Vec<ComponentProp>,
     pub html: String,
     pub span: Span,
 }

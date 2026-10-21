@@ -1086,6 +1086,9 @@ compatibility behavior before changing syntax. See the detailed
   APIs, OpenAPI, and TypeScript client generation.
 - [~] Reusable web views: named layouts, page composition, a validated content
   slot, and typed self-closing components with properties are available.
+  Views also declare typed properties, and pages pass statically checked
+  literal or page-scope values for shared layout data such as titles and meta
+  content. Optional properties may be used by CRUD and TableView layouts.
   Named slots with fallback content, CRUD view overrides, and per-resource
   content for named CRUD-layout slots are available. Static slot markup may
   use checked components; record-bound custom slot content remains open.
