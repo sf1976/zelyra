@@ -450,6 +450,7 @@ fn computed_field_evaluation_preserves_decimal_input_for_storage_validation() {
         path: None,
         post_only: false,
         verify: None,
+        public_token: None,
         fields: vec![
             zelyra_ast::FormField {
                 name: "amount".into(),
@@ -1113,6 +1114,7 @@ fn form_route() -> FormRoute {
             path: None,
             post_only: false,
             verify: None,
+            public_token: None,
             fields: vec![zelyra_ast::FormField {
                 name: "name".into(),
                 ty: Some(Type::String),

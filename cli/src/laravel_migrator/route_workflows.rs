@@ -82,7 +82,7 @@ pub(super) fn generate(
         .chain(route_candidates["routes"].as_array().into_iter().flatten())
         .collect::<Vec<_>>();
     let hash_column = compiled_regex(
-        r"(?m)^\s*token_hash\s*:\s*String\(64\)",
+        r"(?m)^\s*token_hash\s*:\s*String\(64\)\s+required\s+unique\s*$",
         "unsubscribe token hash schema column pattern",
     );
     let timestamp_column = compiled_regex(
@@ -110,13 +110,7 @@ pub(super) fn generate(
             .find(|candidate| candidate["table"].as_str() == Some(table))?
             .get("candidate_source")?
             .as_str()?;
-        // Public token flows have no authenticated tenant context. Do not
-        // emit raw SQL against a tenant-scoped table: the compiler correctly
-        // rejects that access, and bypassing it would cross the declared
-        // tenant boundary. Keep the route as an unresolved migration finding.
-        if schema.contains("scoped by tenant_id:") {
-            continue;
-        }
+        let tenant_scoped = schema.contains("scoped by tenant_id:");
         let has_hash_column = hash_column.is_match(schema);
         let has_timestamp_column = timestamp_column.is_match(schema);
         if !has_hash_column || !has_timestamp_column {
@@ -182,19 +176,41 @@ pub(super) fn generate(
             } else {
                 ""
             };
+            let views_import = if translated_success_component.is_some() {
+                "import \"src/imported_views.zyl\" as imported_views\n"
+            } else {
+                ""
+            };
             let layout_binding = if has_shared_layout {
                 "    view: ImportedAppShell\n"
             } else {
                 ""
             };
+            let public_token_declaration = if tenant_scoped {
+                "    public_token {\n        hash_field: token_hash\n        timestamp_field: unsubscribed_at\n    }\n"
+            } else {
+                ""
+            };
+            let verify_declaration = if tenant_scoped {
+                String::new()
+            } else {
+                format!(
+                    "    verify sql<Int[]> {{\n        SELECT id FROM {table} WHERE token_hash = SHA2(:{token_name}, 256)\n    }}\n"
+                )
+            };
+            let legacy_action_sql = if tenant_scoped {
+                String::new()
+            } else {
+                format!(
+                    "        sql<Int[]> {{\n            SELECT id FROM {table} WHERE token_hash = SHA2(:{token_name}, 256)\n        }}\n        sql {{\n            UPDATE {table} SET unsubscribed_at = COALESCE(unsubscribed_at, CURRENT_TIMESTAMP) WHERE token_hash = SHA2(:{token_name}, 256)\n        }}\n"
+                )
+            };
             let generated = format!(
-                "import \"src/imported_schema.zyl\" as imported_schema\n{layout_import}\n\
+                "import \"src/imported_schema.zyl\" as imported_schema\n{layout_import}{views_import}\n\
                  // Generated from a statically verified Laravel token-unsubscribe workflow. Review the source mapping report before deployment.\n\
                  form {form_name} -> {table} {{\n\
                      route: {path_literal}\n\
-                     verify sql<Int[]> {{\n\
-                         SELECT id FROM {table} WHERE token_hash = SHA2(:{token_name}, 256)\n\
-                     }}\n\
+                     {public_token_declaration}{verify_declaration}\
                      action unsubscribe {{\n\
                          require_match\n\
                          label: {submit_literal}\n\
@@ -205,12 +221,7 @@ pub(super) fn generate(
                          }}\n\
                          success {success_message}\n\
                          redirect {success_path_literal}\n\
-                         sql<Int[]> {{\n\
-                             SELECT id FROM {table} WHERE token_hash = SHA2(:{token_name}, 256)\n\
-                         }}\n\
-                         sql {{\n\
-                             UPDATE {table} SET unsubscribed_at = COALESCE(unsubscribed_at, CURRENT_TIMESTAMP) WHERE token_hash = SHA2(:{token_name}, 256)\n\
-                         }}\n\
+                         {legacy_action_sql}\
                      }}\n\
                  }}\n\
                  page {success_path_literal} {{\n\
@@ -228,13 +239,21 @@ pub(super) fn generate(
                 success_page_markup = success_page_markup,
             );
             let report = json!({
-                "status": "generated_checked_token_unsubscribe_module",
+                "status": if tenant_scoped {
+                    "generated_scoped_public_token_unsubscribe_module"
+                } else {
+                    "generated_checked_token_unsubscribe_module"
+                },
                 "module": "src/imported_public_unsubscribe.zyl",
                 "source_controller": controller_file,
                 "source_table": table,
                 "source_route": path,
                 "route_parameter": token_name,
-                "verification": "sha256-token-hash-read-before-render-and-write",
+                "verification": if tenant_scoped {
+                    "sha256-token-hash-resolves-globally-unique-row-and-tenant"
+                } else {
+                    "sha256-token-hash-read-before-render-and-write"
+                },
                 "write_semantics": "idempotent-unsubscribed-at-coalesce-current-timestamp",
                 "csrf": "native-zelyra-form-csrf",
                 "shared_layout": if has_shared_layout { Some("ImportedAppShell") } else { None::<&str> },
@@ -616,7 +635,7 @@ class PublicUnsubscribeController {
         });
         let schema = vec![json!({
             "table": "suppressions",
-            "candidate_source": "table suppressions {\n    id: Id primary auto\n    token_hash: String(64) required\n    unsubscribed_at: Timestamp?\n}"
+            "candidate_source": "table suppressions {\n    id: Id primary auto\n    token_hash: String(64) required unique\n    unsubscribed_at: Timestamp?\n}"
         })];
         let result = generate(&root, &candidates, &schema, true, &Value::Null)
             .expect("supported shape generated");
@@ -641,9 +660,22 @@ class PublicUnsubscribeController {
         assert!(generate(&root, &candidates, &incomplete_schema, true, &Value::Null).is_none());
         let tenant_schema = vec![json!({
             "table": "suppressions",
-            "candidate_source": "type TenantId = Id\ntable suppressions scoped by tenant_id: TenantId {\n    id: Id primary auto\n    tenant_id: TenantId required references tenants\n    token_hash: String(64) required\n    unsubscribed_at: Timestamp?\n}"
+            "candidate_source": "type TenantId = Id\ntable suppressions scoped by tenant_id: TenantId {\n    id: Id primary auto\n    tenant_id: TenantId required references tenants\n    token_hash: String(64) required unique\n    unsubscribed_at: Timestamp?\n}"
         })];
-        assert!(generate(&root, &candidates, &tenant_schema, true, &Value::Null).is_none());
+        let tenant_result = generate(&root, &candidates, &tenant_schema, true, &Value::Null)
+            .expect("scoped public token form uses the dedicated safe runtime path");
+        assert!(tenant_result.source.contains("public_token {"));
+        assert!(tenant_result.source.contains("hash_field: token_hash"));
+        assert!(!tenant_result.source.contains("UPDATE suppressions"));
+        assert_eq!(
+            tenant_result.report["status"],
+            "generated_scoped_public_token_unsubscribe_module"
+        );
+        let scoped_non_unique = vec![json!({
+            "table": "suppressions",
+            "candidate_source": "type TenantId = Id\ntable suppressions scoped by tenant_id: TenantId {\n    id: Id primary auto\n    tenant_id: TenantId required references tenants\n    token_hash: String(64) required unique within tenant\n    unsubscribed_at: Timestamp?\n}"
+        })];
+        assert!(generate(&root, &candidates, &scoped_non_unique, true, &Value::Null).is_none());
         fs::remove_dir_all(root).unwrap();
     }
 
@@ -676,7 +708,7 @@ class PublicUnsubscribeController {
         ]});
         let schema = vec![json!({
             "table": "suppressions",
-            "candidate_source": "table suppressions {\n    id: Id primary auto\n    token_hash: String(64) required\n    unsubscribed_at: Timestamp?\n}"
+            "candidate_source": "table suppressions {\n    id: Id primary auto\n    token_hash: String(64) required unique\n    unsubscribed_at: Timestamp?\n}"
         })];
         let generated = generate(&root, &candidates, &schema, false, &Value::Null)
             .expect("supported workflow is still generated without a shell");
@@ -717,7 +749,7 @@ class PublicUnsubscribeController {
         ]});
         let schema = vec![json!({
             "table": "suppressions",
-            "candidate_source": "table suppressions {\n    id: Id primary auto\n    token_hash: String(64) required\n    unsubscribed_at: Timestamp?\n}"
+            "candidate_source": "table suppressions {\n    id: Id primary auto\n    token_hash: String(64) required unique\n    unsubscribed_at: Timestamp?\n}"
         })];
         let translations = json!({"translations": [{
             "source_file": "resources/views/public/done.blade.php",

@@ -37,6 +37,7 @@ fuzz_target!(|input: &[u8]| {
             path: None,
             post_only: false,
             verify: None,
+            public_token: None,
             fields: vec![field],
             actions: Vec::new(),
             span: Span::default(),

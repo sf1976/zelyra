@@ -637,8 +637,20 @@ pub struct FormDef {
     pub post_only: bool,
     /// Optional read query checked on GET before any form is rendered.
     pub verify: Option<Expr>,
+    /// Explicit bearer-token form for a single tenant-owned row. The runtime
+    /// derives the row and tenant scope from a globally unique token hash.
+    pub public_token: Option<PublicTokenFormDef>,
     pub fields: Vec<FormField>,
     pub actions: Vec<FormAction>,
+    pub span: Span,
+}
+
+#[derive(Clone, Debug)]
+pub struct PublicTokenFormDef {
+    /// Globally unique SHA-256 hex digest column stored by the target table.
+    pub hash_field: String,
+    /// Nullable timestamp field set once by the generated action.
+    pub timestamp_field: String,
     pub span: Span,
 }
 

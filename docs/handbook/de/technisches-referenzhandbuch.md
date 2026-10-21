@@ -1137,6 +1137,43 @@ GET und muss ihre Daten selbst prüfen. Deshalb darf ein solches Formular kein
 der isolierte Datenbank-/Browserablauf in
 [`tests/mariadb-form-route-e2e.sh`](../../tests/mariadb-form-route-e2e.sh).
 
+Für einen öffentlichen Bearer-Link auf eine mandantengebundene Zeile gibt es
+zusätzlich die eng begrenzte `public_token`-Deklaration. Der Token wird als
+SHA-256-Hash in einer `String(64) required unique`-Spalte gespeichert; die
+Route selbst enthält nur den Klartext-Token. Zelyra löst den Hash intern zu
+genau einer Zeile auf und aktualisiert ausschließlich deren Primär- und
+Mandantenschlüssel. Eine nur innerhalb eines Mandanten eindeutige Hashspalte
+ist dafür unzulässig. Die Bestätigungsaktion darf keine eigenen SQL- oder
+Handler-Anweisungen enthalten:
+
+~~~zelyra
+form PublicUnsubscribe -> suppressions {
+    route: "/unsubscribe/{token}"
+    public_token {
+        hash_field: token_hash
+        timestamp_field: unsubscribed_at
+    }
+    action unsubscribe {
+        require_match
+        label: "Abmelden"
+        confirm_page {
+            title: "Abmeldung bestätigen"
+            message: "Möchtest du diese E-Mails abbestellen?"
+            submit: "Abmelden"
+        }
+        success "Abmeldung gespeichert"
+        redirect "/unsubscribe/done"
+    }
+}
+~~~
+
+Das Ziel muss eine Tabelle mit `scoped by` sein; `timestamp_field` muss
+`Timestamp?` sein. GET prüft den Token vor dem Rendern. POST prüft CSRF und
+führt die idempotente Zeitstempeländerung transaktional aus. Tokenantworten
+einschließlich Fehlern tragen `Cache-Control: no-store`. Dieses Primitive
+enthält keine frei definierbare CRUD-Aktion und kann nur die deklarierte
+Zeitstempelspalte setzen.
+
 Eine Aktion:
 
 ~~~zelyra

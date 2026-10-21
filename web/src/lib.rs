@@ -3,6 +3,7 @@ use argon2::{Argon2, PasswordHash, PasswordHasher, PasswordVerifier};
 use blake2::{Blake2s256, Digest};
 use rand_core::{OsRng, RngCore};
 use ring::hmac;
+use sha2::Sha256;
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::fmt;
 use std::fs;
@@ -6565,7 +6566,7 @@ fn dispatch_form_with_language(
         .actions
         .first()
         .and_then(|action| action.confirm_page.as_ref());
-    let verified_token_route = form.form.verify.is_some();
+    let verified_token_route = form.form.verify.is_some() || form.form.public_token.is_some();
     if request.method == "GET" {
         if let Some(verify) = &form.form.verify {
             let Some(database_url) = database_url else {
@@ -6582,6 +6583,24 @@ fn dispatch_form_with_language(
                 Ok(result) if !result.rows.is_empty() => {}
                 Ok(_) => return Response::html(404, "<h1>404 Not Found</h1>"),
                 Err(_) => return Response::html(503, "<h1>503 Service Unavailable</h1>"),
+            }
+        }
+        if form.form.public_token.is_some() {
+            let Some(database_url) = database_url else {
+                return Response::html(503, "<h1>503 Service Unavailable</h1>")
+                    .with_header("Cache-Control", "no-store");
+            };
+            match public_token_record(form, path_params, database_url) {
+                Ok(Some(_)) => {}
+                Ok(None) => {
+                    return Response::html(404, "<h1>404 Not Found</h1>")
+                        .with_header("Cache-Control", "no-store")
+                }
+                Err(error) => {
+                    eprintln!("zelyra web: public token lookup failed: {error}");
+                    return Response::html(503, "<h1>503 Service Unavailable</h1>")
+                        .with_header("Cache-Control", "no-store");
+                }
             }
         }
         if let Some(confirmation_view) = confirmation_view {
@@ -6766,7 +6785,42 @@ fn dispatch_form_with_language(
         &form.csrf,
         input.get("_zelyra_csrf").map(String::as_str),
     ) {
-        return Response::html(403, "<h1>403 Forbidden</h1><p>Invalid CSRF token.</p>");
+        let response = Response::html(403, "<h1>403 Forbidden</h1><p>Invalid CSRF token.</p>");
+        return if form.form.public_token.is_some() {
+            response.with_header("Cache-Control", "no-store")
+        } else {
+            response
+        };
+    }
+    if form.form.public_token.is_some() {
+        if !multipart_parts.is_empty() {
+            return Response::html(400, "<h1>400 Bad Request</h1>")
+                .with_header("Cache-Control", "no-store");
+        }
+        let Some(database_url) = database_url else {
+            return Response::html(503, "<h1>503 Service Unavailable</h1>")
+                .with_header("Cache-Control", "no-store");
+        };
+        let Some(action) = form.form.actions.first() else {
+            return Response::html(500, "<h1>500 Internal Server Error</h1>")
+                .with_header("Cache-Control", "no-store");
+        };
+        return match execute_public_token_form(form, path_params, database_url) {
+            Ok(true) => {
+                let mut redirect = action.redirect.as_deref().unwrap_or("/").to_owned();
+                if let Some(success) = action_success_message(action) {
+                    redirect = append_query_parameter(&redirect, "zelyra_success", success);
+                }
+                Response::redirect(redirect).with_header("Cache-Control", "no-store")
+            }
+            Ok(false) => Response::html(404, "<h1>404 Not Found</h1>")
+                .with_header("Cache-Control", "no-store"),
+            Err(error) => {
+                eprintln!("zelyra web: public token action failed: {error}");
+                Response::html(503, "<h1>503 Service Unavailable</h1>")
+                    .with_header("Cache-Control", "no-store")
+            }
+        };
     }
     let mut values = input;
     values.remove("_zelyra_csrf");
@@ -7420,6 +7474,205 @@ fn is_crud_child_input_name(child: &CrudChildFormRoute, name: &str) -> bool {
         })
 }
 
+#[derive(Clone, Debug)]
+struct PublicTokenTarget {
+    table: String,
+    id_column: String,
+    tenant_column: String,
+    hash_column: String,
+    timestamp_column: String,
+    path_parameter: String,
+}
+
+fn public_token_target(form: &FormRoute) -> Result<PublicTokenTarget, String> {
+    let token = form
+        .form
+        .public_token
+        .as_ref()
+        .ok_or_else(|| "public token form metadata is missing".to_owned())?;
+    let table = form
+        .table
+        .as_ref()
+        .ok_or_else(|| "public token form has no table".to_owned())?;
+    let tenant_column = table
+        .tenant_scope
+        .as_ref()
+        .map(|scope| scope.column.as_str())
+        .ok_or_else(|| "public token table is not tenant-scoped".to_owned())?;
+    let schema_table = form
+        .schema
+        .as_ref()
+        .and_then(|schema| {
+            schema
+                .tables
+                .iter()
+                .find(|candidate| candidate.name == table.name)
+        })
+        .ok_or_else(|| "public token table is missing from the checked schema".to_owned())?;
+    let storage_column = |logical: &str| -> Result<String, String> {
+        let definition = table
+            .columns
+            .iter()
+            .find(|column| column.name == logical)
+            .ok_or_else(|| format!("public token field `{logical}` is missing"))?;
+        let mapped = definition
+            .storage_name
+            .as_deref()
+            .unwrap_or(definition.name.as_str());
+        schema_table
+            .columns
+            .iter()
+            .find(|column| column.name == mapped)
+            .map(|column| column.name.clone())
+            .ok_or_else(|| {
+                format!("public token field `{logical}` is absent from the checked schema")
+            })
+    };
+    let id = table
+        .columns
+        .iter()
+        .find(|column| column.primary_key)
+        .ok_or_else(|| "public token table has no declared primary key".to_owned())?;
+    let route = form
+        .form
+        .path
+        .as_deref()
+        .ok_or_else(|| "public token form has no explicit path".to_owned())?;
+    let (_, remainder) = route
+        .split_once('{')
+        .ok_or_else(|| "public token form path has no token parameter".to_owned())?;
+    let (path_parameter, _) = remainder
+        .split_once('}')
+        .ok_or_else(|| "public token form path is malformed".to_owned())?;
+    Ok(PublicTokenTarget {
+        table: table.name.clone(),
+        id_column: storage_column(&id.name)?,
+        tenant_column: storage_column(tenant_column)?,
+        hash_column: storage_column(&token.hash_field)?,
+        timestamp_column: storage_column(&token.timestamp_field)?,
+        path_parameter: path_parameter.to_owned(),
+    })
+}
+
+fn public_token_digest(
+    path_params: &HashMap<String, String>,
+    target: &PublicTokenTarget,
+) -> Option<String> {
+    let token = path_params.get(&target.path_parameter)?;
+    Some(format!("{:x}", Sha256::digest(token.as_bytes())))
+}
+
+fn public_token_select_query(
+    target: &PublicTokenTarget,
+    token_hash: String,
+    is_postgres: bool,
+    for_update: bool,
+) -> zelyra_database::Query {
+    let mut sql = format!(
+        "SELECT {}, {} FROM {} WHERE {} = :zelyra_public_token_hash",
+        quote_ident(&target.id_column, is_postgres),
+        quote_ident(&target.tenant_column, is_postgres),
+        quote_ident(&target.table, is_postgres),
+        quote_ident(&target.hash_column, is_postgres),
+    );
+    if for_update {
+        sql.push_str(" FOR UPDATE");
+    }
+    zelyra_database::Query {
+        sql,
+        params: vec![(
+            "zelyra_public_token_hash".into(),
+            QueryValue::String(token_hash),
+        )],
+    }
+}
+
+fn parse_public_token_row(
+    result: &zelyra_database::QueryResult,
+) -> Result<Option<(i64, i64)>, String> {
+    match result.rows.as_slice() {
+        [] => Ok(None),
+        [row] if row.len() >= 2 => {
+            let id = row[0]
+                .parse::<i64>()
+                .map_err(|_| "public token primary key is not an integer".to_owned())?;
+            let tenant = row[1]
+                .parse::<i64>()
+                .map_err(|_| "public token tenant key is not an integer".to_owned())?;
+            Ok(Some((id, tenant)))
+        }
+        [_] => Err("public token lookup returned an incomplete row".into()),
+        _ => Err("public token hash did not identify a single row".into()),
+    }
+}
+
+fn public_token_record(
+    form: &FormRoute,
+    path_params: &HashMap<String, String>,
+    database_url: &str,
+) -> Result<Option<(i64, i64)>, String> {
+    let target = public_token_target(form)?;
+    let Some(token_hash) = public_token_digest(path_params, &target) else {
+        return Ok(None);
+    };
+    let is_postgres = zelyra_database::is_postgres_url(database_url);
+    let query = public_token_select_query(&target, token_hash, is_postgres, false);
+    let result = zelyra_database::execute_read_only_query(database_url, &query.sql, query.params)
+        .map_err(|error| error.to_string())?;
+    parse_public_token_row(&result)
+}
+
+fn execute_public_token_form(
+    form: &FormRoute,
+    path_params: &HashMap<String, String>,
+    database_url: &str,
+) -> Result<bool, String> {
+    if !database_url.starts_with("mysql://")
+        && !database_url.starts_with("mariadb://")
+        && !zelyra_database::is_postgres_url(database_url)
+    {
+        return Err("public token updates require MariaDB/MySQL or PostgreSQL".into());
+    }
+    let target = public_token_target(form)?;
+    let Some(token_hash) = public_token_digest(path_params, &target) else {
+        return Ok(false);
+    };
+    let is_postgres = zelyra_database::is_postgres_url(database_url);
+    zelyra_database::with_decision_transaction(database_url, |transaction| {
+        let select = public_token_select_query(&target, token_hash.clone(), is_postgres, true);
+        let Some((id, tenant_id)) = parse_public_token_row(&transaction.execute(&select)?)
+            .map_err(|message| zelyra_database::DatabaseError { message })?
+        else {
+            return Ok(false);
+        };
+        let update = zelyra_database::Query {
+            sql: format!(
+                "UPDATE {} SET {} = COALESCE({}, CURRENT_TIMESTAMP) WHERE {} = :zelyra_public_record_id AND {} = :zelyra_public_tenant_id AND {} = :zelyra_public_token_hash",
+                quote_ident(&target.table, is_postgres),
+                quote_ident(&target.timestamp_column, is_postgres),
+                quote_ident(&target.timestamp_column, is_postgres),
+                quote_ident(&target.id_column, is_postgres),
+                quote_ident(&target.tenant_column, is_postgres),
+                quote_ident(&target.hash_column, is_postgres),
+            ),
+            params: vec![
+                ("zelyra_public_record_id".into(), QueryValue::Int(id)),
+                (
+                    "zelyra_public_tenant_id".into(),
+                    QueryValue::Int(tenant_id),
+                ),
+                (
+                    "zelyra_public_token_hash".into(),
+                    QueryValue::String(token_hash),
+                ),
+            ],
+        };
+        transaction.execute(&update)?;
+        Ok(true)
+    })
+    .map_err(|error| error.to_string())
+}
+
 fn form_with_path_params(form: &FormRoute, path_params: &HashMap<String, String>) -> FormRoute {
     let mut rendered_form = form.clone();
     for (name, value) in path_params {
@@ -7502,6 +7755,7 @@ fn crud_child_route(parent: &FormRoute, child: &CrudChildFormRoute) -> FormRoute
         path: None,
         post_only: false,
         verify: None,
+        public_token: None,
         fields: child.fields.clone(),
         actions: Vec::new(),
         span: child.definition.span,
