@@ -851,6 +851,41 @@ page "/customers" {
 }
 ~~~
 
+### Wiederverwendbare Views mit typisierten Eigenschaften
+
+Ein `view` kann typisierte Eigenschaften für Seitentitel, Beschreibungen und
+weitere gemeinsame Layoutdaten deklarieren. Jede Seite übergibt ihre Werte an
+der `view`-Angabe; optionale Eigenschaften dürfen ausgelassen werden:
+
+~~~zelyra
+view SiteShell {
+    props { title: String description: String? }
+    html {
+        <html>
+            <head>
+                <title>{title}</title>
+                <meta name="description" content="{description}" />
+                <slot name="head" />
+            </head>
+            <body><main><slot /></main></body>
+        </html>
+    }
+}
+
+page "/handbuch" {
+    view: SiteShell(title: "Zelyra Handbuch", description: "Technische Referenz")
+    html { <h1>Handbuch</h1> }
+}
+~~~
+
+Die View-Eigenschaften werden vor der Slot-Komposition typgeprüft; fehlende,
+unbekannte oder unpassende Werte erzeugen `E-VIEW-039`. Dynamische Werte können
+aus typisierten Seitenparametern oder `load`-Daten stammen, beispielsweise
+`title: "{page_title}"`; die Ausgabe bleibt HTML-escaped. Ein optionaler
+View-Parameter kann auch in einem CRUD- oder TableView-Layout verwendet werden
+und wird dort leer gelassen. Erforderliche View-Parameter sind auf Seiten
+verbindlich und für CRUD-/TableView-Layouts nicht zulässig.
+
 Seiten antworten standardmäßig mit `text/html; charset=utf-8`. Für XML-Feeds
 und vergleichbare Textantworten kann ein geprüfter Medientyp angegeben werden:
 
