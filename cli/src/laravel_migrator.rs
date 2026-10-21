@@ -709,7 +709,7 @@ fn generate_scaffold(
         } else {
             0
         };
-        let (generated_static_view_source, view_translation_report) = if table_scoped {
+        let (generated_static_view_source, mut view_translation_report) = if table_scoped {
             (
                 None,
                 json!({
@@ -770,7 +770,47 @@ fn generate_scaffold(
             &route_candidates,
             &included_tables,
             generated_layout_count > 0,
+            &view_translation_report,
         );
+        if let Some(workflow) = &generated_route_workflow {
+            if let Some(success_component) = workflow.report["success_view_component"].as_str() {
+                if let Some(success_view) = workflow.report["success_view"].as_str() {
+                    let source_file = format!(
+                        "resources/views/{}.blade.php",
+                        success_view.replace('.', "/")
+                    );
+                    if let Some(translations) =
+                        view_translation_report["translations"].as_array_mut()
+                    {
+                        for translation in translations.iter_mut().filter(|translation| {
+                            translation["source_file"].as_str() == Some(source_file.as_str())
+                        }) {
+                            translation["route_wiring"] =
+                                json!("generated_public_unsubscribe_success_page");
+                            translation["wired_component"] = json!(success_component);
+                        }
+                    }
+                    if let Some(source_files) = source_file_plan.as_array_mut() {
+                        for source_file_entry in source_files
+                            .iter_mut()
+                            .filter(|entry| entry["file"].as_str() == Some(source_file.as_str()))
+                        {
+                            source_file_entry["translation_status"] =
+                                json!("translated_static_presentation_and_route_wired");
+                            if let Some(outputs) =
+                                source_file_entry["translated_outputs"].as_array_mut()
+                            {
+                                for output in outputs {
+                                    output["route_wired"] = json!(true);
+                                    output["wired_to_module"] =
+                                        json!("src/imported_public_unsubscribe.zyl");
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
         if let Some(workflow) = &generated_route_workflow {
             let source_route = workflow.report["source_route"].as_str();
             let source_controller = workflow.report["source_controller"].as_str();
@@ -1064,7 +1104,9 @@ fn generate_scaffold(
             "layout_slot_bindings_wired_to_views": false,
             "view_translations": view_translation_report,
             "view_translation_module": if generated_view_component_count > 0 { Some("src/imported_views.zyl") } else { None::<&str> },
-            "view_components_wired_to_routes": false,
+            "view_components_wired_to_routes": generated_route_workflow
+                .as_ref()
+                .is_some_and(|workflow| workflow.report["success_view_component"].is_string()),
             "asset_copy": asset_copy_report.clone(),
             "authentication": authentication_selection,
             "validation_forms_wired_to_routes": false,
@@ -1279,7 +1321,7 @@ fn generate_scaffold(
         write_new_file(
             &staging.join("README.md"),
             &format!(
-                "# Zelyra migration scaffold\n\nThis is a separate, compiler-checkable starting point. It contains no copied Laravel PHP, configuration, secrets, personal records, or production data. It includes {generated_table_count} schema declaration candidate(s) from a restricted static migration subset; these declarations do not apply database changes and must be reviewed. It also contains {generated_business_count} pure model projection helper(s) translated from a narrow static PHP subset in `src/imported_business.zyl`, imported from `main.zyl` through Zelyra's normal module system. These helpers do not include model casts, call sites, authorization, or surrounding workflows; review their assumptions and wire them explicitly. It contains {generated_service_count} narrow pure service helper(s) in `src/imported_services.zyl`, imported through the normal module system. Their statically resolved callers are listed, but their controller/service workflows are not automatically rewired. It contains {generated_enum_adapter_count} typed adapters for literal Laravel enum values in `src/imported_enums.zyl`. They map stored strings to Zelyra enum variants and back, but do not add database constraints or wire application call sites; parse every value read from storage and validate writes explicitly. It contains {generated_validation_form_count} standalone form declaration candidate(s) from a strict subset of literal Laravel validation rules in `src/imported_forms.zyl`. This file is deliberately not imported by `main.zyl`, so the suggestions do not create endpoints until explicitly included and reviewed. They are not connected to Laravel routes or handlers and do not perform Laravel validation or persistence; omitted rules and fields are recorded in `GENERATION_SELECTION.json`. Laravel command and scheduler metadata is listed in `MIGRATION_TASKS.md`; PHP handlers are not imported. Every statically inventoried PHP source file and its proposed migration disposition is listed in `MIGRATION_FILES.md` and `SOURCE_FILE_PLAN.json`; entries are not claims that behavior was translated. `ROUTE_CANDIDATES.json` separates statically resolved routes from conventionally named resource controllers and routes that merely consume the selected model; neither means a route was generated. Blade URL, asset, and shared-layout references are recorded in `VIEW_LINKS.json`; `VIEW_LAYOUTS.md` maps each `@extends` consumer and its `@section` values to the layout's `@yield` slots. Zelyra already provides reusable named `view` layouts. When a shared Blade layout is found, the scaffold emits the Zelyra starter `view ImportedAppShell` in `src/imported_layouts.zyl` and imports that module; each translated page can bind it with `view: ImportedAppShell`. The shared frame is therefore reusable immediately, while original navigation/auth behavior and Blade page bodies still require review and translation. Two strict standalone notice shapes may also be emitted as presentation components in `src/imported_views.zyl`: a static confirmation and a module notice with one escaped `String` property. Inspect `VIEW_TRANSLATIONS.md` and `VIEW_TRANSLATIONS.json`. Neither emits a Laravel route, handler, or dynamic workflow. Referenced public assets are copied into the generated `public/` tree when they are regular files within the configured size limits; `ASSET_COPY.md` and `ASSET_COPY.json` list copied and skipped assets. URLs remain origin-relative, and host filesystem paths are never emitted as application URLs. The complete schema selection and added relation dependencies are listed in `GENERATION_SELECTION.json`; the migration report remains the full-project analysis.\n\nStart with `zelyra check main.zyl`, then review `MIGRATION_REPORT.md`, `MIGRATION_TODO.md`, `MIGRATION_TASKS.md`, `MIGRATION_FILES.md`, `VIEW_LINKS.json`, `VIEW_LAYOUTS.md`, `VIEW_TRANSLATIONS.md`, `VIEW_TRANSLATIONS.json`, `ASSET_COPY.md`, `ASSET_COPY.json`, `SOURCE_FILE_PLAN.json`, `ROUTE_CANDIDATES.json`, and `GENERATION_SELECTION.json` before connecting or changing a database.\n",
+                "# Zelyra migration scaffold\n\nThis is a separate, compiler-checkable starting point. It contains no copied Laravel PHP, configuration, secrets, personal records, or production data. It includes {generated_table_count} schema declaration candidate(s) from a restricted static migration subset; these declarations do not apply database changes and must be reviewed. It also contains {generated_business_count} pure model projection helper(s) translated from a narrow static PHP subset in `src/imported_business.zyl`, imported from `main.zyl` through Zelyra's normal module system. These helpers do not include model casts, call sites, authorization, or surrounding workflows; review their assumptions and wire them explicitly. It contains {generated_service_count} narrow pure service helper(s) in `src/imported_services.zyl`, imported through the normal module system. Their statically resolved callers are listed, but their controller/service workflows are not automatically rewired. It contains {generated_enum_adapter_count} typed adapters for literal Laravel enum values in `src/imported_enums.zyl`. They map stored strings to Zelyra enum variants and back, but do not add database constraints or wire application call sites; parse every value read from storage and validate writes explicitly. It contains {generated_validation_form_count} standalone form declaration candidate(s) from a strict subset of literal Laravel validation rules in `src/imported_forms.zyl`. This file is deliberately not imported by `main.zyl`, so the suggestions do not create endpoints until explicitly included and reviewed. They are not connected to Laravel routes or handlers and do not perform Laravel validation or persistence; omitted rules and fields are recorded in `GENERATION_SELECTION.json`. Laravel command and scheduler metadata is listed in `MIGRATION_TASKS.md`; PHP handlers are not imported. Every statically inventoried PHP source file and its proposed migration disposition is listed in `MIGRATION_FILES.md` and `SOURCE_FILE_PLAN.json`; entries are not claims that behavior was translated. `ROUTE_CANDIDATES.json` separates statically resolved routes from conventionally named resource controllers and routes that merely consume the selected model; neither means a route was generated. Blade URL, asset, and shared-layout references are recorded in `VIEW_LINKS.json`; `VIEW_LAYOUTS.md` maps each `@extends` consumer and its `@section` values to the layout's `@yield` slots. Zelyra already provides reusable named `view` layouts. When a shared Blade layout is found, the scaffold emits the Zelyra starter `view ImportedAppShell` in `src/imported_layouts.zyl` and imports that module; each translated page can bind it with `view: ImportedAppShell`. The shared frame is therefore reusable immediately, while original navigation/auth behavior and Blade page bodies still require review and translation. Two strict standalone notice shapes may also be emitted as presentation components in `src/imported_views.zyl`: a static confirmation and a module notice with one escaped `String` property. Inspect `VIEW_TRANSLATIONS.md` and `VIEW_TRANSLATIONS.json`. Components alone do not create routes; the narrowly verified public unsubscribe workflow can reuse its translated success component, and the reports mark that exact wiring when generated. No general Laravel route or dynamic-view translation is implied. Referenced public assets are copied into the generated `public/` tree when they are regular files within the configured size limits; `ASSET_COPY.md` and `ASSET_COPY.json` list copied and skipped assets. URLs remain origin-relative, and host filesystem paths are never emitted as application URLs. The complete schema selection and added relation dependencies are listed in `GENERATION_SELECTION.json`; the migration report remains the full-project analysis.\n\nStart with `zelyra check main.zyl`, then review `MIGRATION_REPORT.md`, `MIGRATION_TODO.md`, `MIGRATION_TASKS.md`, `MIGRATION_FILES.md`, `VIEW_LINKS.json`, `VIEW_LAYOUTS.md`, `VIEW_TRANSLATIONS.md`, `VIEW_TRANSLATIONS.json`, `ASSET_COPY.md`, `ASSET_COPY.json`, `SOURCE_FILE_PLAN.json`, `ROUTE_CANDIDATES.json`, and `GENERATION_SELECTION.json` before connecting or changing a database.\n",
                 generated_validation_form_count = generated_validation_form_count
             ),
         )?;
@@ -1392,7 +1434,7 @@ fn generate_scaffold(
         );
         let _ = writeln!(
             todo,
-            "## Bounded standalone Blade notice translation\n\nThe scaffold generated {generated_view_component_count} presentation component(s) in `src/imported_views.zyl` from two strict standalone notice shapes: a static confirmation and a module notice with one escaped `String` property. Review `VIEW_TRANSLATIONS.md` and `VIEW_TRANSLATIONS.json`. Generated components are imported from `main.zyl`; they have no generated route, handler, dynamic document title, or persistence behavior. Other dynamic Blade templates remain untranslated. Map component names to their Blade sources in `VIEW_TRANSLATIONS.json`; implement route/handler behavior separately before replacing a Laravel response.\n"
+            "## Bounded standalone Blade notice translation\n\nThe scaffold generated {generated_view_component_count} presentation component(s) in `src/imported_views.zyl` from two strict standalone notice shapes: a static confirmation and a module notice with one escaped `String` property. Review `VIEW_TRANSLATIONS.md` and `VIEW_TRANSLATIONS.json`. Generated components are imported from `main.zyl`. Components alone do not create routes; the narrowly verified public unsubscribe workflow can reuse its translated success component, and the reports mark that exact wiring when generated. No general Laravel route, handler, dynamic document title, or persistence behavior is implied. Other dynamic Blade templates remain untranslated.\n"
         );
         todo.push_str(
             "## Review and apply schema changes\n\nThe generated declarations describe a reviewed target schema; scaffold generation never connects to or changes a database. For an existing database, use Zelyra's schema planner instead of `zelyra db setup`. First complete the source review and configure the intended target through the project's normal database configuration without committing credentials. Then run `zelyra check main.zyl` and `zelyra db plan main.zyl --format json`. Review the plan's backend, schema fingerprints, SQL steps, preflight checks, risk classifications, and unsupported changes; a plan is a preview and does not reserve the database or back up data. Take and verify an independent backup before applying changes. Apply only the reviewed plan with `zelyra db apply main.zyl --plan-id <plan-id>`; add `--allow-risky` or `--allow-destructive` only when the reviewed plan requires that explicit approval. Confirm the result with `zelyra db history main.zyl` and `zelyra db inspect main.zyl`.\n\nThis imports neither Laravel data migrations nor `down()` behavior. Zelyra applies SQL generated from its checked schema diff; editing SQL printed in a plan does not change what `db apply` executes. Unsupported Laravel DDL, triggers, data transformations, and hand-written SQL need a separately designed and reviewed migration procedure. MariaDB DDL can leave earlier steps applied if a later step fails; inspect the live schema and generate a fresh plan before recovery.\n\n",
