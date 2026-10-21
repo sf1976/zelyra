@@ -295,6 +295,51 @@ fn compile_source(source: &str, entry: &str) -> (MirProgram, BytecodeProgram) {
 }
 
 #[test]
+fn backend_differential_regression_covers_tuples_records_pipelines_and_match() {
+    let cases = [
+        (
+            "tuple destructuring and if expression",
+            "fn main() -> Int {\n    (left, right) = (7, -3)\n    selected = if left > right { left } else { right }\n    return left + right + selected\n}",
+            Value::Int(11),
+        ),
+        (
+            "generic record copy update",
+            "struct Box<T> { value: T }\nfn main() -> Int {\n    old = Box<Int> { value: 7 }\n    updated = Box<Int> { ..old, value: -3 }\n    return updated.value\n}",
+            Value::Int(-3),
+        ),
+        (
+            "capturing lambda collection pipeline",
+            "fn main() -> Int {\n    factor = 2\n    values = [-3, 1, 4] |> filter(|item| item > 0) |> map(|item| item * factor)\n    mutable total = 0\n    for item in values {\n        total = total + item\n    }\n    return total\n}",
+            Value::Int(10),
+        ),
+        (
+            "enum payload with guarded match expression",
+            "enum Outcome { Value(Int) Empty }\nfn main() -> Int {\n    outcome = Outcome::Value(7)\n    return match outcome {\n        Outcome::Value(item) if item > 0 => item + 2\n        Outcome::Value(item) => item - 2\n        Outcome::Empty => 0\n    }\n}",
+            Value::Int(9),
+        ),
+    ];
+
+    for (name, source, expected_value) in cases {
+        let ast = parse(&lex(source).unwrap_or_else(|error| panic!("{name}: {error:?}")))
+            .unwrap_or_else(|error| panic!("{name}: {error:?}"));
+        let (mir, bytecode) = compile_source(source, "main");
+        let ast_result = zelyra_runtime::execute_function(&ast, "main", Vec::new(), None)
+            .unwrap_or_else(|error| panic!("AST {name}: {}", error.message));
+        let mir_result =
+            execution::execute_function(&mir, "main", Vec::new(), ExecutionLimits::default())
+                .unwrap_or_else(|error| panic!("MIR {name}: {}", error.message));
+        let decoded = decode(&encode(&bytecode).expect("bytecode encodes"))
+            .expect("encoded bytecode verifies after decoding");
+        let bytecode_result = execute(&decoded, Vec::new(), ExecutionLimits::default())
+            .unwrap_or_else(|error| panic!("bytecode {name}: {}", error.message));
+
+        assert_eq!(ast_result, expected_value, "AST {name}");
+        assert_eq!(mir_result.value, expected_value, "MIR {name}");
+        assert_eq!(bytecode_result.value, expected_value, "bytecode {name}");
+    }
+}
+
+#[test]
 fn tenant_scope_metadata_roundtrips_and_bytecode_verifier_blocks_raw_sql() {
     let source = parse(
         &lex("type TenantId = Id table invoices scoped by tenant_id: TenantId { id: Id primary auto tenant_id: TenantId required } fn main() {}").unwrap(),
