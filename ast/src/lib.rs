@@ -1357,6 +1357,9 @@ pub struct ColumnDef {
     pub name: String,
     pub ty: Type,
     pub length: Option<u32>,
+    /// Optional text storage capacity override. This affects physical schema
+    /// storage only; the source-language value remains String.
+    pub text_storage: Option<TextStorage>,
     /// Optional explicit database column name; useful when a relation column
     /// does not follow Zelyra's default `<field>_id` naming convention.
     pub storage_name: Option<String>,
@@ -1384,6 +1387,13 @@ pub struct ColumnDef {
     pub references: Option<String>,
     pub on_delete: Option<ReferentialAction>,
     pub span: Span,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum TextStorage {
+    Text,
+    MediumText,
+    LongText,
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]

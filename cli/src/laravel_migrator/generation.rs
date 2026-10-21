@@ -3,10 +3,16 @@ use serde_json::{json, Value};
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::ops::Range;
 use std::path::Path;
-use zelyra_ast::ReferentialAction;
+use zelyra_ast::{ReferentialAction, TextStorage};
 
 type ParsedSchemaColumns = (Vec<Column>, Vec<Vec<String>>, Vec<Vec<String>>, Vec<String>);
-type ParsedSqlType = (String, Option<u32>, Option<(u32, u32)>, String);
+type ParsedSqlType = (
+    String,
+    Option<u32>,
+    Option<(u32, u32)>,
+    Option<TextStorage>,
+    String,
+);
 type ColumnSignature = (String, String, Option<u32>, Option<(u32, u32)>, bool);
 
 struct ParseColumnsOptions<'a> {
@@ -355,7 +361,8 @@ fn parse_sql_column(source: &str) -> Result<Column, String> {
         ));
     }
 
-    let (ty, length, decimal_precision, laravel_method) = parse_sql_type(&upper_type, unsigned)?;
+    let (ty, length, decimal_precision, text_storage, laravel_method) =
+        parse_sql_type(&upper_type, unsigned)?;
     if default.is_some() && is_sensitive_schema_column(&name) {
         return Err(format!(
             "deployment SQL default for sensitive column `{name}` is not exported; review it manually"
@@ -386,6 +393,7 @@ fn parse_sql_column(source: &str) -> Result<Column, String> {
         laravel_method,
         ty: final_type,
         length,
+        text_storage,
         storage_name: None,
         decimal_precision,
         enum_values: None,
@@ -414,6 +422,7 @@ fn parse_sql_type(raw: &str, unsigned: bool) -> Result<ParsedSqlType, String> {
     }
     let mut length = None;
     let mut precision = None;
+    let mut text_storage = None;
     let ty = match base {
         "BIGINT" => {
             if unsigned {
@@ -454,7 +463,18 @@ fn parse_sql_type(raw: &str, unsigned: bool) -> Result<ParsedSqlType, String> {
             length = Some(value);
             "String"
         }
-        "TEXT" | "MEDIUMTEXT" | "LONGTEXT" if !unsigned => "String",
+        "TEXT" if !unsigned => {
+            text_storage = Some(TextStorage::Text);
+            "String"
+        }
+        "MEDIUMTEXT" if !unsigned => {
+            text_storage = Some(TextStorage::MediumText);
+            "String"
+        }
+        "LONGTEXT" if !unsigned => {
+            text_storage = Some(TextStorage::LongText);
+            "String"
+        }
         "JSON" if !unsigned && args.is_none() => "Json",
         "DATE" if !unsigned && args.is_none() => "Date",
         "DATETIME" | "TIMESTAMP" if !unsigned => "Timestamp",
@@ -484,7 +504,7 @@ fn parse_sql_type(raw: &str, unsigned: bool) -> Result<ParsedSqlType, String> {
         }
     };
     let method = format!("raw SQL: {raw}{}", if unsigned { " UNSIGNED" } else { "" });
-    Ok((ty.into(), length, precision, method))
+    Ok((ty.into(), length, precision, text_storage, method))
 }
 
 fn parse_sql_identifier_list(source: &str) -> Result<Vec<String>, String> {
@@ -688,6 +708,7 @@ struct Column {
     laravel_method: String,
     ty: String,
     length: Option<u32>,
+    text_storage: Option<TextStorage>,
     storage_name: Option<String>,
     decimal_precision: Option<(u32, u32)>,
     enum_values: Option<Vec<String>>,
@@ -1774,6 +1795,7 @@ impl SchemaAnalyzer {
                         "relation_status": if column.unresolved_relation.is_some() { "target_unavailable_emitted_as_unsigned_id" } else if column.references_table.is_some() { "scalar_id_reference" } else if column.relation_table.is_some() { "resolved" } else { "not_a_foreign_key" },
                         "mapping_review": mapping_review_note(&column.laravel_method),
                         "length": column.length,
+                        "text_storage": column.text_storage.map(text_storage_name),
                         "allowed_values": column.enum_values,
                         "decimal_precision": column.decimal_precision.map(|(precision, scale)| json!({ "precision": precision, "scale": scale })),
                         "nullable": column.nullable,
@@ -2188,6 +2210,7 @@ fn parse_columns(
                         laravel_method: "timestamps".into(),
                         ty: "Timestamp".into(),
                         length: None,
+                        text_storage: None,
                         storage_name: None,
                         decimal_precision: None,
                         enum_values: None,
@@ -2233,6 +2256,12 @@ fn parse_columns(
         } else {
             let (name, ty, length, precision, primary) = column_signature(method, args)?;
             (name, ty, length, precision, primary, None)
+        };
+        let text_storage = match method {
+            "text" => Some(TextStorage::Text),
+            "mediumText" => Some(TextStorage::MediumText),
+            "longText" => Some(TextStorage::LongText),
+            _ => None,
         };
         let modifiers = parse_modifiers(
             modifiers,
@@ -2345,6 +2374,7 @@ fn parse_columns(
             laravel_method: method.into(),
             ty,
             length,
+            text_storage,
             storage_name,
             decimal_precision,
             enum_values,
@@ -2684,8 +2714,9 @@ fn mapping_review_note(method: &str) -> &'static str {
         "enum" => "Mapped to String(max allowed-value length) plus a typed enum adapter. The database allowed-value constraint is not preserved; callers must explicitly decode before using the typed value and validate before writing.",
         "uuid" => "Mapped to String(36); Zelyra does not enforce UUID syntax, and PostgreSQL UUID storage semantics may differ. Review backend DDL and validation before use.",
         "json" | "jsonb" => "Mapped to Json; verify the target backend's JSON storage, validation, and query semantics against the original Laravel schema.",
-        "mediumText" => "Mapped to unbounded Zelyra String/TEXT syntax; MariaDB MEDIUMTEXT capacity (about 16 MiB) exceeds target TEXT, so compare actual backend limits and data sizes before using.",
-        "longText" => "Mapped to unbounded Zelyra String/TEXT syntax; MariaDB LONGTEXT capacity can exceed target TEXT, so compare actual backend limits and data sizes before using.",
+        "text" => "The String value uses each backend's native TEXT type; maximum value sizes differ by backend.",
+        "mediumText" => "The String value uses Zelyra `text_storage medium`; MariaDB MEDIUMTEXT capacity is preserved. PostgreSQL and SQLite use their native TEXT type, whose actual size limit is backend-specific.",
+        "longText" => "The String value uses Zelyra `text_storage long`; MariaDB LONGTEXT capacity is preserved. PostgreSQL and SQLite use their native TEXT type and have lower maximum value sizes than MariaDB LONGTEXT, so review data sizes before changing backends.",
         "rememberToken" => "Laravel defines remember_token as nullable VARCHAR(100); verify the target backend DDL.",
         "id" => "Laravel incrementing IDs may be unsigned; compare target-backend DDL with Zelyra Id.",
         "integer" | "mediumInteger" | "smallInteger" | "tinyInteger" => {
@@ -3324,6 +3355,14 @@ fn is_decimal_literal(value: &str) -> bool {
         && parts.next().is_none()
 }
 
+fn text_storage_name(storage: TextStorage) -> &'static str {
+    match storage {
+        TextStorage::Text => "text",
+        TextStorage::MediumText => "medium",
+        TextStorage::LongText => "long",
+    }
+}
+
 fn render_table(candidate: &Candidate) -> String {
     let tenant_scope = candidate.columns.iter().find(|column| {
         column.name == "tenant_id"
@@ -3360,6 +3399,9 @@ fn render_table(candidate: &Candidate) -> String {
         }
         if let Some(storage_name) = &column.storage_name {
             attributes.push(format!("storage_name {storage_name:?}"));
+        }
+        if let Some(text_storage) = column.text_storage {
+            attributes.push(format!("text_storage {}", text_storage_name(text_storage)));
         }
         if let Some(default) = &column.default {
             attributes.push(default.clone());
@@ -3578,7 +3620,7 @@ mod tests {
     }
 
     #[test]
-    fn maps_large_text_columns_as_reviewed_strings_with_capacity_warnings() {
+    fn preserves_large_text_storage_capacity_in_generated_zelyra_columns() {
         let mut analyzer = SchemaAnalyzer::default();
         analyzer.scan(
             "database/migrations/create_notes.php",
@@ -3589,22 +3631,24 @@ mod tests {
         let summary = &plan["candidates"][0]["columns"][1];
         assert_eq!(summary["laravel_blueprint_method"], "mediumText");
         assert_eq!(summary["zelyra_type"], "String");
+        assert_eq!(summary["text_storage"], "medium");
         assert!(summary["mapping_review"]
             .as_str()
             .unwrap()
-            .contains("MEDIUMTEXT capacity (about 16 MiB)"));
+            .contains("MEDIUMTEXT capacity is preserved"));
         let body = &plan["candidates"][0]["columns"][2];
         assert_eq!(body["laravel_blueprint_method"], "longText");
         assert_eq!(body["zelyra_type"], "String");
+        assert_eq!(body["text_storage"], "long");
         assert_eq!(body["nullable"], true);
         assert!(body["mapping_review"]
             .as_str()
             .unwrap()
-            .contains("LONGTEXT capacity can exceed target TEXT"));
+            .contains("LONGTEXT capacity is preserved"));
         assert!(plan["candidate_source"]
             .as_str()
             .unwrap()
-            .contains("body: String?"));
+            .contains("body: String? text_storage long"));
         assert_eq!(
             plan["semantic_parity"],
             "not_proven_requires_backend_review"

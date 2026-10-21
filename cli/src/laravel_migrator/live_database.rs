@@ -710,7 +710,11 @@ fn expected_mariadb_type(column: &Value) -> Option<String> {
             _ => return None,
         },
         "Bool" => "BOOLEAN".into(),
-        "String" => length.map_or_else(|| "TEXT".into(), |length| format!("VARCHAR({length})")),
+        "String" => match column["text_storage"].as_str() {
+            Some("medium") => "MEDIUMTEXT".into(),
+            Some("long") => "LONGTEXT".into(),
+            _ => length.map_or_else(|| "TEXT".into(), |length| format!("VARCHAR({length})")),
+        },
         "Json" => "JSON".into(),
         "Char" => "CHAR(1)".into(),
         "Bytes" => "BLOB".into(),

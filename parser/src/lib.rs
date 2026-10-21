@@ -2909,6 +2909,7 @@ impl<'a> Parser<'a> {
         let (name, span) = self.field_ident("column name")?;
         self.expect(TokenKind::Colon, "`:` after column name")?;
         let (ty, length, decimal_precision) = self.column_type()?;
+        let mut text_storage = None;
         let mut storage_name = None;
         let mut auto_sequence = None;
         let mut computed = None;
@@ -2989,6 +2990,29 @@ impl<'a> Parser<'a> {
                         return self.error("`storage_name` may be specified only once");
                     }
                     storage_name = Some(self.string_value("quoted database storage name")?);
+                }
+                TokenKind::Ident(ref value) if value == "text_storage" => {
+                    let option_span = self.current().span;
+                    self.advance();
+                    if text_storage.is_some() {
+                        return Err(ParseError {
+                            message: "`text_storage` may be specified only once".into(),
+                            span: option_span,
+                        });
+                    }
+                    let (storage, storage_span) =
+                        self.ident("`text`, `medium`, or `long` text storage")?;
+                    text_storage = Some(match storage.as_str() {
+                        "text" => zelyra_ast::TextStorage::Text,
+                        "medium" => zelyra_ast::TextStorage::MediumText,
+                        "long" => zelyra_ast::TextStorage::LongText,
+                        _ => {
+                            return Err(ParseError {
+                                message: "text_storage must be `text`, `medium`, or `long`".into(),
+                                span: storage_span,
+                            })
+                        }
+                    });
                 }
                 TokenKind::Ident(ref value) if value == "auto_sequence" => {
                     self.advance();
@@ -3092,6 +3116,7 @@ impl<'a> Parser<'a> {
             name,
             ty,
             length,
+            text_storage,
             storage_name,
             decimal_precision,
             auto_sequence,
@@ -6015,6 +6040,32 @@ mod tests {
             program.tables[0].columns[2].ty,
             Type::Option(Box::new(Type::Decimal))
         );
+    }
+
+    #[test]
+    fn parses_string_storage_capacity_without_changing_the_string_type() {
+        let program = parse(
+            &lex("table notes { plain: String text_storage text summary: String text_storage medium body: String? text_storage long }")
+                .unwrap(),
+        )
+        .unwrap();
+        let columns = &program.tables[0].columns;
+        assert_eq!(columns[0].ty, Type::String);
+        assert_eq!(columns[0].text_storage, Some(TextStorage::Text));
+        assert_eq!(columns[1].ty, Type::String);
+        assert_eq!(columns[1].text_storage, Some(TextStorage::MediumText));
+        assert_eq!(columns[2].ty, Type::Option(Box::new(Type::String)));
+        assert_eq!(columns[2].text_storage, Some(TextStorage::LongText));
+    }
+
+    #[test]
+    fn rejects_invalid_or_duplicate_text_storage_modifiers() {
+        for source in [
+            "table notes { body: String text_storage huge }",
+            "table notes { body: String text_storage medium text_storage long }",
+        ] {
+            assert!(parse(&lex(source).unwrap()).is_err(), "accepted {source}");
+        }
     }
 
     #[test]
