@@ -74,7 +74,7 @@ pub(super) type TransactionalQuery<'services> = dyn FnMut(&zelyra_database::Quer
 /// Parallel workers share this context instead of cloning all declarations.
 pub(super) struct ProgramContext<'program> {
     pub(super) functions: HashMap<String, &'program Function>,
-    pub(super) view_definitions: HashMap<String, ViewDef>,
+    pub(super) view_definitions: HashMap<String, &'program ViewDef>,
     pub(super) storage_schema: Result<zelyra_database::Schema, Vec<zelyra_database::SchemaError>>,
     pub(super) scoped_tables: Vec<String>,
     pub(super) record_definitions: HashMap<String, RecordDef>,
@@ -112,7 +112,7 @@ impl<'program> ProgramContext<'program> {
             view_definitions: program
                 .views
                 .iter()
-                .map(|view| (view.name.clone(), view.clone()))
+                .map(|view| (view.name.clone(), view))
                 .collect(),
             storage_schema: zelyra_database::build_schema(program),
             scoped_tables: program

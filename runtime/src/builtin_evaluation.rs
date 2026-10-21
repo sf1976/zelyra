@@ -133,16 +133,15 @@ impl<'program, 'services> Interpreter<'program, 'services> {
                     ));
                 }
             };
-            let view = self
-                .program_context
+            let program_context = Arc::clone(&self.program_context);
+            let view = program_context
                 .view_definitions
                 .get(&view_name)
-                .cloned()
                 .ok_or_else(|| {
                     self.runtime_error(args[0].span, format!("unknown PDF view `{view_name}`"))
                 })?;
             let data = self.eval(&args[1], env)?;
-            render_pdf_view(&view, &data)
+            render_pdf_view(view, &data)
                 .map(Value::Bytes)
                 .map_err(|error| self.runtime_error(span, error))
         } else if name == "print" {
