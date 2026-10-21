@@ -1,5 +1,24 @@
 ## Unreleased
 
+## 1.2.35 — 2026-10-21
+
+- Preserve Laravel's unsigned integer storage widths in imported schemas with
+  the checked `unsigned_storage` modifier. MariaDB emits the exact native
+  `UNSIGNED` width, and read-only schema inspection retains signedness and
+  compares integer widths without treating legacy display widths as distinct.
+  Zelyra value types are unchanged; PostgreSQL and SQLite use `NUMERIC(20,0)`
+  for ordinary `UInt` fields and retain compatible native key types for
+  auto-increment IDs and relations. Signed Laravel widths and full schema
+  parity remain open. / Importierte Laravel-Schemas erhalten Breiten
+  vorzeichenloser Integer über den geprüften Modifikator `unsigned_storage`.
+  MariaDB erzeugt die exakte native `UNSIGNED`-Breite; die nur lesende
+  Schemainspektion erhält Vorzeichen und vergleicht Integerbreiten, ohne alte
+  Anzeigebreiten als andere Typen zu behandeln. Zelyra-Werttypen bleiben
+  unverändert; PostgreSQL und SQLite verwenden für gewöhnliche `UInt`-Felder
+  `NUMERIC(20,0)` und behalten für Auto-Increment-IDs und Relationen passende
+  native Schlüsseltypen. Vorzeichenbehaftete Laravel-Breiten und vollständige
+  Schemengleichheit bleiben offen.
+
 ## 1.2.34 — 2026-10-21
 
 - Add the allowlist- and `Process`-capability-gated `run_process_piped` host
