@@ -1868,7 +1868,7 @@ fn main() {}
 }
 
 #[test]
-fn source_step_budget_boundaries_match_collection_loops_and_matches() {
+fn source_step_budget_boundaries_match_collection_loops_and_guarded_matches() {
     let source = r#"
 fn run() -> Int {
     mutable total = 0
@@ -1876,7 +1876,7 @@ fn run() -> Int {
         total = total + item
     }
     return match total {
-        6 => if total > 0 { total } else { 0 }
+        value if value == 6 => if value > 0 { value } else { 0 }
         _ => 0
     }
 }
