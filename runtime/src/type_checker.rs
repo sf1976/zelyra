@@ -94,8 +94,10 @@ fn check_program(
         "Duration",
         "Unit",
         "HttpResponse",
+        "ApiResponse",
         "HttpError",
         "HttpResult",
+        "ProcessResult",
     ]
     .into_iter()
     .map(String::from)
@@ -131,7 +133,7 @@ fn check_program(
     // Schema scalar domains also work in function/decoder annotations. Keep
     // existing explicit definitions authoritative rather than reserving names.
     known_types.extend(["Money", "Email", "Url", "Uuid", "FileRef"].map(String::from));
-    let generic_arities = program
+    let mut generic_arities = program
         .records
         .iter()
         .map(|record| (record.name.clone(), record.type_params.len()))
@@ -142,6 +144,7 @@ fn check_program(
                 .map(|definition| (definition.name.clone(), definition.type_params.len())),
         )
         .collect::<HashMap<_, _>>();
+    generic_arities.insert("ApiResponse".into(), 1);
     for table in &program.tables {
         known_types.insert(table.name.clone());
         if let Some(singular) = singular_table_type(&table.name) {

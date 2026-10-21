@@ -8,6 +8,33 @@ use zelyra_lexer::lex;
 use zelyra_parser::parse;
 
 #[test]
+fn api_response_value_rejects_header_injection_and_server_control_headers() {
+    let response = api_response_value(
+        201,
+        vec!["Cache-Control: no-store".into()],
+        Value::String("created".into()),
+    )
+    .unwrap();
+    assert_eq!(
+        response.ty(),
+        Type::Applied {
+            name: "ApiResponse".into(),
+            args: vec![Type::String],
+        }
+    );
+    for headers in [
+        vec!["Cache-Control: safe\r\nSet-Cookie: stolen=1".into()],
+        vec!["Content-Length: 10".into()],
+        vec!["Set-Cookie: session=unsafe".into()],
+        vec!["X-Unreviewed: value".into()],
+        vec!["Location: //evil.example/path".into()],
+    ] {
+        assert!(api_response_value(201, headers, Value::String("x".into())).is_err());
+    }
+    assert!(api_response_value(404, Vec::new(), Value::String("x".into())).is_err());
+}
+
+#[test]
 fn shared_execution_limits_define_defaults_caps_and_worker_stack_budget() {
     assert_eq!(effective_function_call_depth(None), 20);
     assert_eq!(effective_function_call_depth(Some(37)), 37);
@@ -3233,7 +3260,7 @@ fn injected_network_host_receives_only_policy_checked_requests() {
         .message
         .contains("headers exceed the 65536 byte limit"));
     assert_eq!(oversized_headers.calls.load(Ordering::Relaxed), 1);
-    assert_eq!(HOST_SERVICES_API_VERSION, 7);
+    assert_eq!(HOST_SERVICES_API_VERSION, 8);
 }
 
 #[test]
@@ -3757,6 +3784,44 @@ fn runs_allowlisted_process_without_a_shell() {
     )
     .unwrap();
     assert_eq!(output, Value::String("hello".into()));
+}
+
+#[test]
+fn runs_allowlisted_piped_process_and_returns_structured_result() {
+    let source = "fn run() -> ProcessResult uses Process { return run_process_piped(\"/usr/bin/cat\", [\"-\"], \"piped input\", 1000) } fn main() {}";
+    let program = parse(&lex(source).unwrap()).unwrap();
+    check(&program).unwrap();
+    check_capabilities(&program).unwrap();
+    let grants = HashSet::from(["Process".to_owned()]);
+    let policy = RuntimePolicy {
+        process: Some(ProcessPolicy {
+            allowed_commands: vec!["/usr/bin/cat".into()],
+            timeout_ms: 2_000,
+            max_output_bytes: 100,
+        }),
+        ..RuntimePolicy::default()
+    };
+    let output = execute_function_with_capabilities_and_policies(
+        &program,
+        "run",
+        Vec::new(),
+        None,
+        Some(&grants),
+        Some(&policy),
+    )
+    .unwrap();
+    assert_eq!(
+        output,
+        Value::Object {
+            type_name: "ProcessResult".into(),
+            type_args: Vec::new(),
+            fields: HashMap::from([
+                ("exit_code".into(), Value::Int(0)),
+                ("stdout".into(), Value::String("piped input".into())),
+                ("stderr".into(), Value::String(String::new())),
+            ]),
+        }
+    );
 }
 
 #[test]
@@ -4299,7 +4364,7 @@ fn injected_host_services_drive_clock_environment_and_random_builtins() {
     assert!(invalid_time
         .message
         .contains("outside years 0001 through 9999"));
-    assert_eq!(HOST_SERVICES_API_VERSION, 7);
+    assert_eq!(HOST_SERVICES_API_VERSION, 8);
 }
 
 #[test]

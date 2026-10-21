@@ -322,7 +322,8 @@ Die eingebaute Zelyra-Standardbibliothek umfasst Funktionen für Mathematik, Tex
   - `http_json<Req, Res>(method: String, url: String, headers: String[], body: Req?) -> Res`: Sendet eine HTTP-Anfrage und dekodiert eine erfolgreiche JSON-Antwort.
   - `http_result<Req, Res>(method: String, url: String, headers: String[], body: Req?) -> HttpResult<Res>`: Liefert typisierte HTTP-Ergebnisse einschließlich Statuscode und Headern.
 - `uses Process`:
-  - `run_process(command: String, args: String[]) -> ProcessResult`: Startet einen explizit freigegebenen Prozess ohne Shell.
+  - `run_process(command: String, args: String[]) -> String`: Startet einen explizit freigegebenen Prozess ohne Shell und gibt stdout bei Exit-Code 0 zurück.
+  - `run_process_piped(command: String, args: String[], stdin: String, timeout_ms: Int) -> ProcessResult`: Übergibt begrenzten Text über stdin und liefert `exit_code`, `stdout` und `stderr`; der Prozess muss in der Projekt-Policy erlaubt sein. Die effektive Zeitgrenze ist der kleinere Wert aus Argument und Policy.
 - `uses Database`:
   - `sql<T[]> { SELECT ... }`: Führt typisierte relationale Abfragen mit parametrisierten Platzhaltern aus.
   - `transaction { ... }`: Fasst mehrere Schreib- und Leseabfragen in einer atomaren Datenbanktransaktion zusammen.

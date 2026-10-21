@@ -1892,6 +1892,82 @@ fn composes_a_page_inside_its_named_view() {
 }
 
 #[test]
+fn composes_typed_view_properties_into_page_metadata_and_escapes_values() {
+    let source = r#"
+        view SiteShell {
+            props { title: String description: String? }
+            html {
+                <html><head><title>{title}</title><meta name="description" content="{description}" /></head>
+                <body><slot /></body></html>
+            }
+        }
+        page "/handbook" {
+            view: SiteShell(title: "Zelyra & Business", description: "Types < security")
+            html { <h1>Handbook</h1> }
+        }
+    "#;
+    let program = parse(&lex(source).unwrap()).unwrap();
+    assert!(validate_views("view-props.zyl", &program));
+    let html = compose_page_view(&program, &program.pages[0]);
+    assert!(html.contains("<title>Zelyra &amp; Business</title>"));
+    assert!(html.contains("content=\"Types &lt; security\""));
+    assert!(html.contains("<h1>Handbook</h1>"));
+    let body_start = html.find("<body>").expect("view body opening tag");
+    let page_content = html
+        .find("<h1>Handbook</h1>")
+        .expect("page content remains in the view body");
+    let body_end = html.find("</body>").expect("view body closing tag");
+    assert!(
+        body_start < page_content && page_content < body_end,
+        "composed layout lost its slot structure: {html}"
+    );
+    assert!(
+        !html.contains("<slot"),
+        "composed layout kept an unresolved slot: {html}"
+    );
+    assert!(!html.contains("{title}"));
+    assert!(!html.contains("{description}"));
+}
+
+#[test]
+fn rejects_missing_unknown_and_incompatible_page_view_properties() {
+    for source in [
+        r#"view Shell { props { title: String } html { <title>{title}</title><slot /> } }
+            page "/" { view: Shell html { <p>Home</p> } }"#,
+        r#"view Shell { props { title: String } html { <title>{title}</title><slot /> } }
+            page "/" { view: Shell(title: "Home", extra: "x") html { <p>Home</p> } }"#,
+        r#"view Shell { props { title: Int } html { <title>{title}</title><slot /> } }
+            page "/" { view: Shell(title: "Home") html { <p>Home</p> } }"#,
+    ] {
+        let program = parse(&lex(source).unwrap()).unwrap();
+        assert!(!validate_views("invalid-view-props.zyl", &program));
+    }
+}
+
+#[test]
+fn checks_dynamic_view_properties_against_page_inputs() {
+    let source = r#"
+        view SiteShell {
+            props { title: String }
+            html { <html><head><title>{title}</title></head><body><slot /></body></html> }
+        }
+        page "/handbook" {
+            input { page_title: String }
+            view: SiteShell(title: "{page_title}")
+            html { <h1>Handbook</h1> }
+        }
+    "#;
+    let program = parse(&lex(source).unwrap()).unwrap();
+    assert!(validate_views("dynamic-view-props.zyl", &program));
+    let html = compose_page_view(&program, &program.pages[0]);
+    assert!(html.contains("<title>{page_title}</title>"));
+
+    let incompatible = source.replace("page_title: String", "page_title: Int");
+    let program = parse(&lex(&incompatible).unwrap()).unwrap();
+    assert!(!validate_views("dynamic-view-props.zyl", &program));
+}
+
+#[test]
 fn composes_default_component_slots_and_nested_components() {
     let source = r#"
         component Panel {
@@ -3085,6 +3161,130 @@ fn dispatches_json_api_input_to_a_typed_handler() {
     assert_eq!(response.status, 200);
     assert_eq!(response.content_type, "application/json; charset=utf-8");
     assert_eq!(response.body, "42");
+}
+
+#[test]
+fn dispatches_typed_api_responses_with_status_headers_and_structured_bodies() {
+    let program = parse(
+        &lex(r#"
+            struct Customer { id: Int name: String }
+            api POST "/customers" { handler create output ApiResponse<Customer> responses { 201 "application/json" } }
+            fn create() -> ApiResponse<Customer> {
+                return api_response(201, ["Cache-Control: no-store", "Content-Type: application/json"], Customer { id: 42 name: "Anna" })
+            }
+            fn main() { }
+        "#)
+        .unwrap(),
+    )
+    .unwrap();
+    check(&program).unwrap();
+    check_apis(&program).unwrap();
+    let api = &program.apis[0];
+    let request =
+        zelyra_web::parse_request("POST /customers HTTP/1.1\r\nHost: localhost\r\n\r\n").unwrap();
+    let response = dispatch_api(&program, api, "create", &request, &HashMap::new(), None);
+    assert_eq!(response.status, 201);
+    assert_eq!(response.content_type, "application/json");
+    assert_eq!(
+        response.headers,
+        [("Cache-Control".into(), "no-store".into())]
+    );
+    let body: serde_json::Value = serde_json::from_str(&response.body).unwrap();
+    assert_eq!(body, serde_json::json!({"id": 42, "name": "Anna"}));
+    let openapi = docs::format_openapi(&program);
+    assert!(openapi.contains("\"201\""));
+    assert!(openapi.contains("application/json"));
+    let client = docs::format_typescript_client(&program);
+    assert!(client.contains("Promise<ApiResponse<Customer>>"));
+}
+
+#[test]
+fn dispatches_typed_api_text_response_without_json_quoting() {
+    let program = parse(
+        &lex(r#"
+            api GET "/feed.xml" { handler feed output ApiResponse<String> responses { 200 "application/xml; charset=utf-8" } }
+            fn feed() -> ApiResponse<String> {
+                return api_response(200, ["Content-Type: application/xml; charset=utf-8"], "<feed><item>1</item></feed>")
+            }
+            fn main() { }
+        "#)
+        .unwrap(),
+    )
+    .unwrap();
+    check(&program).unwrap();
+    check_apis(&program).unwrap();
+    let request =
+        zelyra_web::parse_request("GET /feed.xml HTTP/1.1\r\nHost: localhost\r\n\r\n").unwrap();
+    let response = dispatch_api(
+        &program,
+        &program.apis[0],
+        "feed",
+        &request,
+        &HashMap::new(),
+        None,
+    );
+    assert_eq!(response.status, 200);
+    assert_eq!(response.content_type, "application/xml; charset=utf-8");
+    assert_eq!(response.body, "<feed><item>1</item></feed>");
+}
+
+#[test]
+fn typed_api_response_contracts_reject_missing_mismatched_and_duplicate_declarations() {
+    for (source, expected) in [
+        (
+            r#"api GET "/x" { handler get output ApiResponse<String> } fn get() -> ApiResponse<String> { return api_response(200, [], "ok") } fn main() {}"#,
+            "requires a `responses` block",
+        ),
+        (
+            r#"api GET "/x" { handler get output String responses { 200 "application/json" } } fn get() -> String { return "ok" } fn main() {}"#,
+            "require output `ApiResponse<T>`",
+        ),
+        (
+            r#"api GET "/x" { handler get output ApiResponse<String> responses { 200 "text/html" } } fn get() -> ApiResponse<String> { return api_response(200, [], "ok") } fn main() {}"#,
+            "non-executable",
+        ),
+    ] {
+        let program = parse(&lex(source).unwrap()).unwrap();
+        let errors = check_apis(&program).expect_err("invalid response contract must fail");
+        assert!(
+            errors.iter().any(|error| error.message.contains(expected)),
+            "expected diagnostic containing {expected:?}, got {errors:?}"
+        );
+    }
+
+    let duplicate = parse(
+        &lex(r#"api GET "/x" { handler get output ApiResponse<String> responses { 200 "application/json" 200 "text/plain" } } fn get() -> ApiResponse<String> { return api_response(200, [], "ok") } fn main() {}"#).unwrap(),
+    )
+    .unwrap();
+    assert!(check_apis(&duplicate).unwrap_err().iter().any(|error| error
+        .message
+        .contains("duplicate API successful response status")));
+}
+
+#[test]
+fn typed_api_response_cannot_return_an_undeclared_status() {
+    let program = parse(
+        &lex(r#"
+            api GET "/x" { handler get output ApiResponse<String> responses { 200 "text/plain" } }
+            fn get() -> ApiResponse<String> { return api_response(201, [], "created") }
+            fn main() {}
+        "#)
+        .unwrap(),
+    )
+    .unwrap();
+    check(&program).unwrap();
+    check_apis(&program).unwrap();
+    let request = zelyra_web::parse_request("GET /x HTTP/1.1\r\nHost: localhost\r\n\r\n").unwrap();
+    let response = dispatch_api(
+        &program,
+        &program.apis[0],
+        "get",
+        &request,
+        &HashMap::new(),
+        None,
+    );
+    assert_eq!(response.status, 500);
+    assert!(response.body.contains("ApiResponse status is not declared"));
 }
 
 #[test]

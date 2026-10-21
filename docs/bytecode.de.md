@@ -82,7 +82,11 @@ Unterstützte HostServices-Effekte sind `Clock` (`now()`), `Environment`
 `run_process(command, arguments)`. Der Prozessaufruf benötigt eine deklarierte
 und ausdrücklich freigegebene `Process`-Capability sowie eine Runtime-Policy
 mit exakt erlaubtem Befehl, positivem Timeout und Ausgabelimit. Der Host startet
-den Befehl mit getrennten Argumenten und ohne Shell. Dateisystem-Built-ins umfassen Lesen
+den Befehl mit getrennten Argumenten und ohne Shell.
+`run_process_piped(command, arguments, stdin, timeout_ms)` wird ebenfalls
+unterstützt und liefert `ProcessResult { exit_code, stdout, stderr }`; das
+Timeout wird durch die Projekt-Policy gedeckelt, stdin und Ausgaben sind
+begrenzt. Dateisystem-Built-ins umfassen Lesen
 mit `read_text(path)` und `read_text_result(path)`, Metadaten mit
 `file_exists(path)`, `dir_exists(path)` und `file_size(path)` sowie
 Verzeichnislisten mit `list_dir(path)` und Schreibzugriffe nur innerhalb der

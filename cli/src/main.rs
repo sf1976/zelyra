@@ -1929,6 +1929,33 @@ fn validate_views(path: &str, program: &zelyra_ast::Program) -> bool {
             );
             valid = false;
         }
+        let mut prop_names = HashSet::new();
+        for prop in &view.props {
+            if !prop_names.insert(prop.name.as_str()) {
+                diagnostic_with_span(
+                    path,
+                    "E-VIEW-005",
+                    &format!("duplicate property `{}` in view `{}`", prop.name, view.name),
+                    prop.span,
+                );
+                valid = false;
+            }
+        }
+        let view_bindings = view
+            .props
+            .iter()
+            .map(|prop| (prop.name.clone(), prop.ty.clone()))
+            .collect::<HashMap<_, _>>();
+        if !view.props.is_empty() {
+            valid &= validate_template_expressions(
+                path,
+                &view.html,
+                program,
+                &view_bindings,
+                view.span.line,
+                view.span.column,
+            );
+        }
         let slots = match view_template_slot_invocations(&view.html) {
             Ok(slots) => slots,
             Err(message) => {
@@ -1997,7 +2024,33 @@ fn validate_views(path: &str, program: &zelyra_ast::Program) -> bool {
                 );
                 valid = false;
             }
+            let bindings = page_template_bindings(
+                &page.path,
+                &page.data,
+                &page.inputs,
+                page.page_size,
+                !page.sort.is_empty(),
+                !page.search.is_empty(),
+                &page.filters,
+            );
+            valid &= validate_view_properties(
+                path,
+                program,
+                view,
+                &page.view_props,
+                &bindings,
+                page.span,
+            );
         } else {
+            if !page.view_props.is_empty() {
+                diagnostic_with_span(
+                    path,
+                    "E-VIEW-039",
+                    "page view properties require a `view: ...` declaration",
+                    page.span,
+                );
+                valid = false;
+            }
             match page_layout_slot_invocations(&page.html) {
                 Ok(slots) if !slots.is_empty() => {
                     diagnostic(
@@ -2026,6 +2079,19 @@ fn validate_views(path: &str, program: &zelyra_ast::Program) -> bool {
     for crud in &program.cruds {
         if let Some(layout) = &crud.layout {
             if let Some(view) = program.views.iter().find(|view| view.name == *layout) {
+                if view
+                    .props
+                    .iter()
+                    .any(|prop| !matches!(prop.ty, Type::Option(_)))
+                {
+                    diagnostic_with_span(
+                        path,
+                        "E-VIEW-039",
+                        &format!("view layout `{layout}` has required properties; CRUD layouts can only use optional view properties"),
+                        crud.span,
+                    );
+                    valid = false;
+                }
                 if let Err((slot_index, message)) =
                     validate_crud_layout_slots(view, &crud.layout_slots)
                 {
@@ -2076,7 +2142,21 @@ fn validate_views(path: &str, program: &zelyra_ast::Program) -> bool {
     }
     for tableview in &program.tableviews {
         if let Some(layout) = &tableview.layout {
-            if !program.views.iter().any(|view| view.name == *layout) {
+            if let Some(view) = program.views.iter().find(|view| view.name == *layout) {
+                if view
+                    .props
+                    .iter()
+                    .any(|prop| !matches!(prop.ty, Type::Option(_)))
+                {
+                    diagnostic_with_span(
+                        path,
+                        "E-VIEW-039",
+                        &format!("view layout `{layout}` has required properties; TableView layouts can only use optional view properties"),
+                        tableview.span,
+                    );
+                    valid = false;
+                }
+            } else {
                 diagnostic(
                     path,
                     "E-VIEW-030",
@@ -2089,6 +2169,74 @@ fn validate_views(path: &str, program: &zelyra_ast::Program) -> bool {
                 );
                 valid = false;
             }
+        }
+    }
+    valid
+}
+
+fn validate_view_properties(
+    path: &str,
+    program: &zelyra_ast::Program,
+    view: &zelyra_ast::ViewDef,
+    supplied: &[zelyra_ast::PageViewProp],
+    bindings: &HashMap<String, Type>,
+    fallback_span: zelyra_ast::Span,
+) -> bool {
+    let mut valid = true;
+    let mut supplied_names = HashSet::new();
+    for value in supplied {
+        if !supplied_names.insert(value.name.as_str()) {
+            diagnostic_with_span(
+                path,
+                "E-VIEW-039",
+                &format!("view property `{}` is supplied more than once", value.name),
+                value.span,
+            );
+            valid = false;
+            continue;
+        }
+        let Some(prop) = view.props.iter().find(|prop| prop.name == value.name) else {
+            diagnostic_with_span(
+                path,
+                "E-VIEW-039",
+                &format!("view `{}` has no property `{}`", view.name, value.name),
+                value.span,
+            );
+            valid = false;
+            continue;
+        };
+        let dynamic_type_error = value
+            .value
+            .strip_prefix('{')
+            .and_then(|value| value.strip_suffix('}'))
+            .map(str::trim)
+            .and_then(|expression| resolve_template_type(expression, bindings, program).ok())
+            .filter(|actual| !template_type_compatible(&prop.ty, actual));
+        if dynamic_type_error.is_some() || !component_prop_accepts(program, prop, &value.value) {
+            diagnostic_with_span(
+                path,
+                "E-VIEW-039",
+                &format!(
+                    "value `{}` is incompatible with view property `{}` of type {}",
+                    value.value, prop.name, prop.ty
+                ),
+                value.span,
+            );
+            valid = false;
+        }
+    }
+    for prop in &view.props {
+        if !matches!(prop.ty, Type::Option(_)) && !supplied_names.contains(prop.name.as_str()) {
+            diagnostic_with_span(
+                path,
+                "E-VIEW-039",
+                &format!(
+                    "page using view `{}` is missing required property `{}`",
+                    view.name, prop.name
+                ),
+                fallback_span,
+            );
+            valid = false;
         }
     }
     valid
@@ -3920,7 +4068,22 @@ fn validate_component_template(
     column: usize,
     bindings: &HashMap<String, Type>,
 ) -> bool {
-    let mut valid = validate_template_expressions(path, html, program, bindings, line, column);
+    validate_component_template_with_expression_check(
+        path, program, html, line, column, bindings, true,
+    )
+}
+
+fn validate_component_template_with_expression_check(
+    path: &str,
+    program: &zelyra_ast::Program,
+    html: &str,
+    line: usize,
+    column: usize,
+    bindings: &HashMap<String, Type>,
+    check_expressions: bool,
+) -> bool {
+    let mut valid = !check_expressions
+        || validate_template_expressions(path, html, program, bindings, line, column);
     let invocations = match component_invocations(html) {
         Ok(invocations) => invocations,
         Err(message) => {
@@ -4145,6 +4308,22 @@ fn validate_components(path: &str, program: &zelyra_ast::Program) -> bool {
                 .collect(),
         );
     }
+    for view in &program.views {
+        let bindings = view
+            .props
+            .iter()
+            .map(|prop| (prop.name.clone(), prop.ty.clone()))
+            .collect::<HashMap<_, _>>();
+        valid &= validate_component_template_with_expression_check(
+            path,
+            program,
+            &view.html,
+            view.span.line,
+            view.span.column,
+            &bindings,
+            false,
+        );
+    }
     for page in &program.pages {
         let bindings = page_template_bindings(
             &page.path,
@@ -4163,18 +4342,6 @@ fn validate_components(path: &str, program: &zelyra_ast::Program) -> bool {
             page.span.column,
             &bindings,
         );
-        if let Some(view_name) = &page.view {
-            if let Some(view) = program.views.iter().find(|view| view.name == *view_name) {
-                valid &= validate_component_template(
-                    path,
-                    program,
-                    &view.html,
-                    view.span.line,
-                    view.span.column,
-                    &bindings,
-                );
-            }
-        }
     }
     for crud in &program.cruds {
         if let Some(table) = program.tables.iter().find(|table| table.name == crud.table) {
@@ -12277,7 +12444,126 @@ fn api_result_response(api: &zelyra_ast::ApiDef, value: &RuntimeValue) -> Respon
             &format!("unmapped API error `{error_name}`"),
         );
     }
+    let value = match value {
+        RuntimeValue::Result(Ok(success)) => &**success,
+        other => other,
+    };
+    if let RuntimeValue::Object {
+        type_name, fields, ..
+    } = value
+    {
+        if type_name == "ApiResponse" {
+            return api_explicit_response(api, fields);
+        }
+    }
     Response::json(200, api_json_value(value))
+}
+
+fn api_explicit_response(
+    api: &zelyra_ast::ApiDef,
+    fields: &HashMap<String, RuntimeValue>,
+) -> Response {
+    let status = match fields.get("status") {
+        Some(RuntimeValue::Int(status)) if (200..=299).contains(status) => *status as u16,
+        _ => return api_error_response(500, "InternalServerError", "invalid ApiResponse status"),
+    };
+    let Some(response_contract) = api
+        .responses
+        .iter()
+        .find(|response| response.status == status)
+    else {
+        return api_error_response(
+            500,
+            "InternalServerError",
+            "ApiResponse status is not declared for this route",
+        );
+    };
+    let Some(RuntimeValue::Array(headers)) = fields.get("headers") else {
+        return api_error_response(500, "InternalServerError", "invalid ApiResponse headers");
+    };
+    let Some(body) = fields.get("body") else {
+        return api_error_response(500, "InternalServerError", "ApiResponse body is missing");
+    };
+    let mut content_type = response_contract.content_type.clone();
+    let mut response_headers = Vec::new();
+    for header in headers {
+        let RuntimeValue::String(header) = header else {
+            return api_error_response(500, "InternalServerError", "invalid ApiResponse header");
+        };
+        let Some((name, value)) = header.split_once(':') else {
+            return api_error_response(500, "InternalServerError", "invalid ApiResponse header");
+        };
+        let name = name.trim();
+        let value = value.trim();
+        if name.eq_ignore_ascii_case("content-type") {
+            if zelyra_web::validate_page_content_type(value).is_err()
+                || value.parse::<mime::Mime>().ok()
+                    != response_contract.content_type.parse::<mime::Mime>().ok()
+            {
+                return api_error_response(
+                    500,
+                    "InternalServerError",
+                    "invalid ApiResponse Content-Type",
+                );
+            }
+            let media_type = value.split(';').next().unwrap_or_default().trim();
+            if media_type.eq_ignore_ascii_case("text/html")
+                || media_type.eq_ignore_ascii_case("text/javascript")
+                || media_type.eq_ignore_ascii_case("application/javascript")
+            {
+                return api_error_response(
+                    500,
+                    "InternalServerError",
+                    "ApiResponse cannot return executable markup or script content",
+                );
+            }
+            content_type = value.to_owned();
+        } else {
+            response_headers.push((name.to_owned(), value.to_owned()));
+        }
+    }
+    let media_type = content_type.split(';').next().unwrap_or_default().trim();
+    let raw_text = media_type.eq_ignore_ascii_case("text/plain")
+        || media_type.eq_ignore_ascii_case("text/csv")
+        || media_type.eq_ignore_ascii_case("application/xml")
+        || media_type.eq_ignore_ascii_case("text/xml")
+        || media_type.ends_with("+xml");
+    let body = if raw_text {
+        let RuntimeValue::String(body) = body else {
+            return api_error_response(
+                500,
+                "InternalServerError",
+                "non-JSON ApiResponse bodies must be String",
+            );
+        };
+        body.clone()
+    } else if media_type.eq_ignore_ascii_case("application/json") || media_type.ends_with("+json") {
+        api_json_value(body)
+    } else {
+        return api_error_response(
+            500,
+            "InternalServerError",
+            "unsupported ApiResponse Content-Type",
+        );
+    };
+    if matches!(status, 204 | 304) && !body.is_empty() && body != "null" {
+        return api_error_response(
+            500,
+            "InternalServerError",
+            "bodyless ApiResponse status must not include a body",
+        );
+    }
+    let mut response = Response::json(
+        status,
+        if matches!(status, 204 | 304) {
+            ""
+        } else {
+            &body
+        },
+    );
+    response.content_type = content_type;
+    response.headers = response_headers;
+    response
 }
 
 fn api_value_json(
@@ -12779,7 +13065,13 @@ const CRUD_LAYOUT_CONTENT_MARKER: &str = "\u{0}ZELYRA_CRUD_CONTENT\u{0}";
 fn compose_view_html(program: &zelyra_ast::Program, view_name: &str, content: &str) -> String {
     let (default_body, named_slots) =
         split_view_content(content).expect("page view slots are validated before route generation");
-    compose_view_parts(program, view_name, &default_body, &named_slots)
+    compose_view_parts_with_props(
+        program,
+        view_name,
+        &default_body,
+        &named_slots,
+        &HashMap::new(),
+    )
 }
 
 fn compose_view_parts(
@@ -12788,6 +13080,22 @@ fn compose_view_parts(
     default_body: &str,
     named_slots: &HashMap<String, String>,
 ) -> String {
+    compose_view_parts_with_props(
+        program,
+        view_name,
+        default_body,
+        named_slots,
+        &HashMap::new(),
+    )
+}
+
+fn compose_view_parts_with_props(
+    program: &zelyra_ast::Program,
+    view_name: &str,
+    default_body: &str,
+    named_slots: &HashMap<String, String>,
+    supplied_props: &HashMap<String, String>,
+) -> String {
     let view = program
         .views
         .iter()
@@ -12795,26 +13103,57 @@ fn compose_view_parts(
         .expect("page and CRUD views are validated before route generation");
     let slots = view_template_slot_invocations(&view.html).expect("view slots are validated");
     let mut composed = view.html.clone();
-    for slot in slots.into_iter().rev() {
-        let replacement = slot
-            .name
-            .as_deref()
-            .and_then(|name| named_slots.get(name))
-            .map_or_else(
-                || match slot.name {
-                    Some(_) => slot.body.as_deref().unwrap_or(""),
-                    None => default_body,
-                },
-                String::as_str,
-            );
-        composed.replace_range(slot.start..slot.end, replacement);
+    let mut replacements = Vec::with_capacity(slots.len());
+    for (index, slot) in slots.iter().enumerate().rev() {
+        let supplied = slot.name.as_deref().and_then(|name| named_slots.get(name));
+        let replacement = supplied.map_or_else(
+            || match slot.name {
+                Some(_) => slot.body.as_deref().unwrap_or(""),
+                None => default_body,
+            },
+            String::as_str,
+        );
+        let mut replacement = replacement.to_owned();
+        if supplied.is_none() && slot.name.is_some() {
+            replacement = view.props.iter().fold(replacement, |html, prop| {
+                match supplied_props.get(&prop.name) {
+                    Some(value) => render_component_property(html, prop, value),
+                    None => remove_component_property(html, &prop.name),
+                }
+            });
+        }
+        let marker = format!("\0ZELYRA_VIEW_SLOT_{index:08}\0");
+        composed.replace_range(slot.start..slot.end, &marker);
+        replacements.push((marker, replacement));
+    }
+    composed = view.props.iter().fold(composed, |html, prop| {
+        match supplied_props.get(&prop.name) {
+            Some(value) => render_component_property(html, prop, value),
+            None => remove_component_property(html, &prop.name),
+        }
+    });
+    for (marker, replacement) in replacements {
+        composed = composed.replace(&marker, &replacement);
     }
     expand_view_components(program, composed)
 }
 
 fn compose_page_view(program: &zelyra_ast::Program, page: &zelyra_ast::PageDef) -> String {
     if let Some(view_name) = page.view.as_deref() {
-        compose_view_html(program, view_name, &page.html)
+        let (default_body, named_slots) = split_view_content(&page.html)
+            .expect("page view slots are validated before route generation");
+        let supplied_props = page
+            .view_props
+            .iter()
+            .map(|prop| (prop.name.clone(), prop.value.clone()))
+            .collect::<HashMap<_, _>>();
+        compose_view_parts_with_props(
+            program,
+            view_name,
+            &default_body,
+            &named_slots,
+            &supplied_props,
+        )
     } else {
         expand_view_components(program, page.html.clone())
     }

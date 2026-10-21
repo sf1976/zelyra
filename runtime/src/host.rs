@@ -14,7 +14,7 @@ use std::{
 };
 
 /// Semantic API version for the host-service contract (not a native ABI).
-pub const HOST_SERVICES_API_VERSION: u32 = 7;
+pub const HOST_SERVICES_API_VERSION: u32 = 8;
 
 /// Metadata returned by an injected filesystem provider.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -30,6 +30,14 @@ pub struct HostHttpResponse {
     pub status: u16,
     pub headers: Vec<(String, String)>,
     pub body: Vec<u8>,
+}
+
+/// Bounded output from an explicitly authorized child process.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct HostProcessResult {
+    pub exit_code: i32,
+    pub stdout: String,
+    pub stderr: String,
 }
 
 /// Host-provided primitives shared by execution backends.
@@ -91,6 +99,18 @@ pub trait HostServices: Send + Sync {
         _max_output_bytes: usize,
     ) -> Result<String, String> {
         Err("process execution is unavailable in this host".into())
+    }
+
+    /// Run an explicitly authorized process with bounded UTF-8 stdin/stdout/stderr.
+    fn run_process_piped(
+        &self,
+        _command: &str,
+        _arguments: &[String],
+        _stdin: &str,
+        _timeout_ms: u64,
+        _max_output_bytes: usize,
+    ) -> Result<HostProcessResult, String> {
+        Err("piped process execution is unavailable in this host".into())
     }
 
     /// Canonicalize a candidate path before runtime root-containment checks.
@@ -342,6 +362,17 @@ impl HostServices for SystemHostServices {
         run_system_process(command, arguments, timeout_ms, max_output_bytes)
     }
 
+    fn run_process_piped(
+        &self,
+        command: &str,
+        arguments: &[String],
+        stdin: &str,
+        timeout_ms: u64,
+        max_output_bytes: usize,
+    ) -> Result<HostProcessResult, String> {
+        run_system_process_piped(command, arguments, stdin, timeout_ms, max_output_bytes)
+    }
+
     fn canonicalize_path(
         &self,
         path: &Path,
@@ -543,6 +574,116 @@ fn run_system_process(
     String::from_utf8(stdout).map_err(|_| "process stdout is not valid UTF-8".into())
 }
 
+fn run_system_process_piped(
+    command: &str,
+    arguments: &[String],
+    input: &str,
+    timeout_ms: u64,
+    max_output_bytes: usize,
+) -> Result<HostProcessResult, String> {
+    if command.is_empty() || command.contains(['\r', '\n']) {
+        return Err("run_process_piped received an invalid command".into());
+    }
+    if timeout_ms == 0 || max_output_bytes == 0 {
+        return Err("process policy requires positive timeout and output limits".into());
+    }
+    if input.len() > max_output_bytes {
+        return Err(format!(
+            "process stdin exceeds the {max_output_bytes} byte input limit"
+        ));
+    }
+    let mut child = Command::new(command)
+        .args(arguments)
+        .env_clear()
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .map_err(|error| format!("process start failed for `{command}`: {error}"))?;
+    let stdin = child
+        .stdin
+        .take()
+        .ok_or_else(|| "process stdin pipe was unavailable".to_owned())?;
+    let stdout = child
+        .stdout
+        .take()
+        .ok_or_else(|| "process stdout pipe was unavailable".to_owned())?;
+    let stderr = child
+        .stderr
+        .take()
+        .ok_or_else(|| "process stderr pipe was unavailable".to_owned())?;
+    let output_limit = u64::try_from(max_output_bytes)
+        .unwrap_or(u64::MAX)
+        .saturating_add(1);
+    let input = input.as_bytes().to_vec();
+    let stdin_writer = thread::spawn(move || {
+        let mut stdin = stdin;
+        stdin.write_all(&input).map_err(|error| error.to_string())
+    });
+    let stdout_reader = thread::spawn(move || {
+        let mut output = Vec::new();
+        stdout
+            .take(output_limit)
+            .read_to_end(&mut output)
+            .map(|_| output)
+    });
+    let stderr_reader = thread::spawn(move || {
+        let mut output = Vec::new();
+        stderr
+            .take(output_limit)
+            .read_to_end(&mut output)
+            .map(|_| output)
+    });
+    let deadline = Instant::now() + Duration::from_millis(timeout_ms);
+    let mut timed_out = false;
+    let status = loop {
+        match child.try_wait() {
+            Ok(Some(status)) => break status,
+            Ok(None) if Instant::now() >= deadline => {
+                timed_out = true;
+                let _ = child.kill();
+                break child
+                    .wait()
+                    .map_err(|error| format!("process termination failed: {error}"))?;
+            }
+            Ok(None) => thread::sleep(Duration::from_millis(5)),
+            Err(error) => {
+                let _ = child.kill();
+                let _ = child.wait();
+                return Err(format!("process status failed: {error}"));
+            }
+        }
+    };
+    let _ = stdin_writer.join();
+    let stdout = stdout_reader
+        .join()
+        .map_err(|_| "process stdout reader terminated unexpectedly".to_owned())?
+        .map_err(|error| format!("process stdout read failed: {error}"))?;
+    let stderr = stderr_reader
+        .join()
+        .map_err(|_| "process stderr reader terminated unexpectedly".to_owned())?
+        .map_err(|error| format!("process stderr read failed: {error}"))?;
+    if timed_out {
+        return Err(format!(
+            "process `{command}` exceeded the {timeout_ms} ms timeout"
+        ));
+    }
+    if stdout.len() > max_output_bytes || stderr.len() > max_output_bytes {
+        return Err(format!(
+            "process `{command}` exceeded the {max_output_bytes} byte output limit"
+        ));
+    }
+    let stdout =
+        String::from_utf8(stdout).map_err(|_| "process stdout is not valid UTF-8".to_owned())?;
+    let stderr =
+        String::from_utf8(stderr).map_err(|_| "process stderr is not valid UTF-8".to_owned())?;
+    Ok(HostProcessResult {
+        exit_code: status.code().unwrap_or(-1),
+        stdout,
+        stderr,
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -557,6 +698,25 @@ mod tests {
             .run_process("/usr/bin/printf", &["longer".into()], 1_000, 2)
             .unwrap_err();
         assert!(error.contains("output limit"));
+    }
+
+    #[test]
+    fn system_piped_process_returns_stdin_stdout_and_exit_code() {
+        let result = SystemHostServices
+            .run_process_piped("/usr/bin/cat", &[], "stdin text", 1_000, 32)
+            .unwrap();
+        assert_eq!(result.exit_code, 0);
+        assert_eq!(result.stdout, "stdin text");
+        assert_eq!(result.stderr, "");
+        let failed = SystemHostServices
+            .run_process_piped("/usr/bin/false", &[], "", 1_000, 32)
+            .unwrap();
+        assert_ne!(failed.exit_code, 0);
+        assert!(failed.stdout.is_empty());
+        assert!(SystemHostServices
+            .run_process_piped("/usr/bin/cat", &[], "too long", 1_000, 2)
+            .unwrap_err()
+            .contains("stdin"));
     }
 
     #[test]

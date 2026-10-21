@@ -663,7 +663,7 @@ pub fn builtin_capability_requirements(name: &str) -> &'static [(&'static str, &
             ("Database(write)", "transactional mail queue write"),
         ],
         "mail_deliver" => &[("Email", "email delivery")],
-        "run_process" => &[("Process", "process execution")],
+        "run_process" | "run_process_piped" => &[("Process", "process execution")],
         "read_text" | "read_text_result" | "file_exists" | "dir_exists" | "file_size"
         | "list_dir" => &[("FileSystem", "file-system read access")],
         "write_text"

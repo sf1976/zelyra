@@ -1968,6 +1968,29 @@ impl Checker<'_> {
                     self.expect_type(&Type::Int, &minimum, args[0].span);
                     self.expect_type(&Type::Int, &maximum, args[1].span);
                     Type::Int
+                } else if name == "api_response" {
+                    if args.len() != 3 || type_args.len() > 1 {
+                        self.error(
+                            expr.span,
+                            "api_response expects status, String[] headers, body, and at most one body type argument",
+                        );
+                        return Type::Unknown;
+                    }
+                    let status = self.check_expr(&args[0], scopes);
+                    let headers = self.check_expr(&args[1], scopes);
+                    let body = if let Some(expected) = type_args.first() {
+                        self.check_type(expected, expr.span);
+                        self.check_expr_expected(&args[2], scopes, Some(expected))
+                    } else {
+                        self.check_expr(&args[2], scopes)
+                    };
+                    self.expect_type(&Type::Int, &status, args[0].span);
+                    self.expect_type(&Type::Array(Box::new(Type::String)), &headers, args[1].span);
+                    let body = type_args.first().cloned().unwrap_or(body);
+                    Type::Applied {
+                        name: "ApiResponse".into(),
+                        args: vec![body],
+                    }
                 } else if name == "http_get" {
                     if args.len() != 1 {
                         self.error(expr.span, "http_get expects exactly one String URL");
@@ -2427,6 +2450,27 @@ impl Checker<'_> {
                         args[1].span,
                     );
                     Type::String
+                } else if name == "run_process_piped" {
+                    if args.len() != 4 {
+                        self.error(
+                            expr.span,
+                            "run_process_piped expects command, arguments, stdin, and timeout_ms",
+                        );
+                        return Type::Unknown;
+                    }
+                    let command = self.check_expr(&args[0], scopes);
+                    let arguments = self.check_expr(&args[1], scopes);
+                    let stdin = self.check_expr(&args[2], scopes);
+                    let timeout_ms = self.check_expr(&args[3], scopes);
+                    self.expect_type(&Type::String, &command, args[0].span);
+                    self.expect_type(
+                        &Type::Array(Box::new(Type::String)),
+                        &arguments,
+                        args[1].span,
+                    );
+                    self.expect_type(&Type::String, &stdin, args[2].span);
+                    self.expect_type(&Type::Int, &timeout_ms, args[3].span);
+                    Type::Named("ProcessResult".into())
                 } else if name == "read_text" {
                     if args.len() != 1 {
                         self.error(expr.span, "read_text expects exactly one String path");
@@ -2869,6 +2913,16 @@ impl Checker<'_> {
     }
 
     fn record_field_type(&self, ty: &Type, field: &str) -> Option<Type> {
+        if let Type::Applied { name, args } = ty {
+            if name == "ApiResponse" && args.len() == 1 {
+                return match field {
+                    "status" => Some(Type::Int),
+                    "headers" => Some(Type::Array(Box::new(Type::String))),
+                    "body" => args.first().cloned(),
+                    _ => None,
+                };
+            }
+        }
         if let Type::HttpResult(response) = ty {
             return match field {
                 "status" => Some(Type::Int),
@@ -2917,6 +2971,13 @@ impl Checker<'_> {
                 "status" => Some(Type::Int),
                 "headers" => Some(Type::Array(Box::new(Type::String))),
                 "body" => Some(Type::String),
+                _ => None,
+            };
+        }
+        if name == "ProcessResult" {
+            return match field {
+                "exit_code" => Some(Type::Int),
+                "stdout" | "stderr" => Some(Type::String),
                 _ => None,
             };
         }

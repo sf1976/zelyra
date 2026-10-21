@@ -70,6 +70,54 @@ impl<'program, 'services> Interpreter<'program, 'services> {
         ) {
             return self.eval_language_value_builtin(name, args, env, span);
         }
+        if name == "api_response" {
+            if args.len() != 3 || type_args.len() > 1 {
+                return Err(self.runtime_error(
+                    span,
+                    "api_response expects status, String[] headers, body, and at most one body type argument",
+                ));
+            }
+            let status = self.eval(&args[0], env)?;
+            let headers = self.eval(&args[1], env)?;
+            let body = self.eval(&args[2], env)?;
+            let Value::Int(status) = status else {
+                return Err(self.runtime_error(args[0].span, "api_response status must be Int"));
+            };
+            let Value::Array(headers) = headers else {
+                return Err(
+                    self.runtime_error(args[1].span, "api_response headers must be String[]")
+                );
+            };
+            let mut header_values = Vec::with_capacity(headers.len());
+            for header in headers {
+                let Value::String(header) = header else {
+                    return Err(
+                        self.runtime_error(args[1].span, "api_response headers must be String[]")
+                    );
+                };
+                header_values.push(header);
+            }
+            let body_type = type_args.first().cloned().unwrap_or_else(|| body.ty());
+            if body.ty() != body_type {
+                return Err(self.runtime_error(
+                    args[2].span,
+                    "api_response body does not match its declared type argument",
+                ));
+            }
+            let response = api_response_value(status, header_values, body)
+                .map_err(|message| self.runtime_error(span, message))?;
+            if response.ty()
+                != (Type::Applied {
+                    name: "ApiResponse".into(),
+                    args: vec![body_type],
+                })
+            {
+                return Err(
+                    self.runtime_error(span, "api_response produced an invalid response type")
+                );
+            }
+            return Ok(response);
+        }
         if name == "render_pdf" {
             if args.len() != 2 || !type_args.is_empty() {
                 return Err(self
@@ -1491,6 +1539,66 @@ impl<'program, 'services> Interpreter<'program, 'services> {
             }
             self.run_process(&command, &argument_strings, span)
                 .map(Value::String)
+        } else if name == "run_process_piped" {
+            if args.len() != 4 {
+                return Err(self.runtime_error(
+                    span,
+                    "run_process_piped expects command, arguments, stdin, and timeout_ms",
+                ));
+            }
+            self.require_runtime_capability("Process", "process execution", span)?;
+            let command = self.eval(&args[0], env)?;
+            let arguments = self.eval(&args[1], env)?;
+            let stdin = self.eval(&args[2], env)?;
+            let timeout_ms = self.eval(&args[3], env)?;
+            let Value::String(command) = command else {
+                return Err(
+                    self.runtime_error(args[0].span, "run_process_piped expects a String command")
+                );
+            };
+            let Value::Array(arguments) = arguments else {
+                return Err(self
+                    .runtime_error(args[1].span, "run_process_piped expects String[] arguments"));
+            };
+            let mut argument_strings = Vec::with_capacity(arguments.len());
+            for argument in arguments {
+                let Value::String(argument) = argument else {
+                    return Err(self.runtime_error(
+                        args[1].span,
+                        "run_process_piped expects String[] arguments",
+                    ));
+                };
+                argument_strings.push(argument);
+            }
+            let Value::String(stdin) = stdin else {
+                return Err(
+                    self.runtime_error(args[2].span, "run_process_piped expects String stdin")
+                );
+            };
+            let Value::Int(timeout_ms) = timeout_ms else {
+                return Err(
+                    self.runtime_error(args[3].span, "run_process_piped expects Int timeout_ms")
+                );
+            };
+            let timeout_ms = u64::try_from(timeout_ms)
+                .ok()
+                .filter(|timeout_ms| *timeout_ms > 0)
+                .ok_or_else(|| {
+                    self.runtime_error(
+                        args[3].span,
+                        "run_process_piped timeout_ms must be positive",
+                    )
+                })?;
+            self.run_process_piped(&command, &argument_strings, &stdin, timeout_ms, span)
+                .map(|result| Value::Object {
+                    type_name: "ProcessResult".into(),
+                    type_args: Vec::new(),
+                    fields: HashMap::from([
+                        ("exit_code".into(), Value::Int(i64::from(result.exit_code))),
+                        ("stdout".into(), Value::String(result.stdout)),
+                        ("stderr".into(), Value::String(result.stderr)),
+                    ]),
+                })
         } else {
             Err(self.runtime_error(span, format!("unknown function `{name}`")))
         }

@@ -3,8 +3,10 @@
 The Zelyra runtime can obtain selected operating-system services through an
 injected interface. This is a versioned Rust API for embedding code, not a
 stable native ABI or plugin contract. `HOST_SERVICES_API_VERSION` is currently
-`7`; version 2 added injectable process execution, version 3 filesystem
-services, version 4 database services, and version 5 console input, version 6 HTTP transport, and version 7 mail delivery.
+`8`; version 2 added injectable process execution, version 3 filesystem
+services, version 4 database services, version 5 console input, version 6 HTTP
+transport, version 7 mail delivery, and version 8 bounded process stdin and
+structured output.
 
 ## Supported services
 
@@ -59,6 +61,11 @@ services, version 4 database services, and version 5 console input, version 6 HT
   limits before calling the host. The system implementation avoids a shell,
   clears the process environment, bounds stdout/stderr capture, and terminates
   timed-out processes.
+- `run_process_piped(command, arguments, stdin, timeout_ms, max_output_bytes)`
+  for the typed `run_process_piped` builtin. It applies the same exact command
+  allowlist, bounds stdin and each output stream, caps the requested timeout at
+  the project policy, returns the process exit code and UTF-8 output, and never
+  invokes a shell. Hosts that do not implement this method reject the call.
 - Filesystem services for path canonicalization, metadata, text reads/writes,
   exclusive and atomic writes, append, copy, rename, delete, and directory
   listing. After host canonicalization, the runtime still checks that the path

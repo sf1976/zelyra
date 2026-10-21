@@ -851,6 +851,41 @@ page "/customers" {
 }
 ~~~
 
+### Wiederverwendbare Views mit typisierten Eigenschaften
+
+Ein `view` kann typisierte Eigenschaften für Seitentitel, Beschreibungen und
+weitere gemeinsame Layoutdaten deklarieren. Jede Seite übergibt ihre Werte an
+der `view`-Angabe; optionale Eigenschaften dürfen ausgelassen werden:
+
+~~~zelyra
+view SiteShell {
+    props { title: String description: String? }
+    html {
+        <html>
+            <head>
+                <title>{title}</title>
+                <meta name="description" content="{description}" />
+                <slot name="head" />
+            </head>
+            <body><main><slot /></main></body>
+        </html>
+    }
+}
+
+page "/handbuch" {
+    view: SiteShell(title: "Zelyra Handbuch", description: "Technische Referenz")
+    html { <h1>Handbuch</h1> }
+}
+~~~
+
+Die View-Eigenschaften werden vor der Slot-Komposition typgeprüft; fehlende,
+unbekannte oder unpassende Werte erzeugen `E-VIEW-039`. Dynamische Werte können
+aus typisierten Seitenparametern oder `load`-Daten stammen, beispielsweise
+`title: "{page_title}"`; die Ausgabe bleibt HTML-escaped. Ein optionaler
+View-Parameter kann auch in einem CRUD- oder TableView-Layout verwendet werden
+und wird dort leer gelassen. Erforderliche View-Parameter sind auf Seiten
+verbindlich und für CRUD-/TableView-Layouts nicht zulässig.
+
 Seiten antworten standardmäßig mit `text/html; charset=utf-8`. Für XML-Feeds
 und vergleichbare Textantworten kann ein geprüfter Medientyp angegeben werden:
 
@@ -1472,6 +1507,40 @@ serverseitig an der Aktion geprüft werden. Der Browser ist kreativ, besonders
 wenn man ihm vertraut.
 
 ### API-Eingaben und sichere Antwort-Defaults
+
+#### Typisierte erfolgreiche API-Antworten
+
+Standard-API-Handler liefern weiterhin ihren deklarierten JSON-Ausgabetyp.
+Wenn ein Endpunkt einen erfolgreichen HTTP-Status oder einen anderen
+zulässigen Medientyp benötigt, deklariert er die erlaubten Antworten und gibt
+`ApiResponse<T>` zurück:
+
+```zelyra
+api GET "/feed.xml" {
+    handler feed
+    output ApiResponse<String>
+    responses { 200 "application/xml; charset=utf-8" }
+}
+
+fn feed() -> ApiResponse<String> {
+    return api_response(
+        200,
+        ["Content-Type: application/xml; charset=utf-8"],
+        "<feed/>"
+    )
+}
+```
+
+`responses` ist eine Allowlist erfolgreicher Statuscodes (200–299) samt
+Content-Type. Der zur Laufzeit gelieferte Status muss darin stehen. Ein
+abweichender Status führt zu einer internen Serverantwort und wird nicht
+durchgereicht. Für nicht-JSON-Antworten sind derzeit `text/plain`, `text/csv`
+und XML-Medientypen mit einem `String`-Body zugelassen. HTML und JavaScript
+sind ausgeschlossen. Antwortheader werden geprüft; unter anderem sind
+hop-by-hop-, `Content-Length`- und Cookie-Header nicht setzbar. API-Fehler
+bleiben im bestehenden `errors`-Vertrag und werden nicht als erfolgreiche
+`ApiResponse` modelliert. Die Verträge erscheinen in OpenAPI und im generierten
+TypeScript-Client.
 
 API-Bodies für Methoden außer `GET` und `DELETE` dürfen aktuell
 `application/json` oder `application/x-www-form-urlencoded` verwenden.

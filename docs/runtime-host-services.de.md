@@ -3,9 +3,10 @@
 Zelyras Runtime kann ausgewählte Betriebssystemdienste über eine injizierte
 Schnittstelle beziehen. Der Vertrag ist als versionierte Rust-API für
 Embedding-Code gedacht, nicht als stabiler nativer ABI- oder Pluginvertrag.
-`HOST_SERVICES_API_VERSION` steht auf `7`. Version 2 ergänzte injizierbare
-Prozessausführung, Version 3 Dateisystemdienste, Version 4 Datenbankdienste und
-Version 5 Konsoleneingabe, Version 6 HTTP-Transport und Version 7 Mailzustellung.
+`HOST_SERVICES_API_VERSION` steht auf `8`. Version 2 ergänzte injizierbare
+Prozessausführung, Version 3 Dateisystemdienste, Version 4 Datenbankdienste,
+Version 5 Konsoleneingabe, Version 6 HTTP-Transport, Version 7 Mailzustellung
+und Version 8 begrenztes Prozess-stdin mit strukturierter Ausgabe.
 
 ## Unterstützte Dienste
 
@@ -63,6 +64,12 @@ Version 5 Konsoleneingabe, Version 6 HTTP-Transport und Version 7 Mailzustellung
   Grenzen, bevor sie den Host aufruft. Die Systemimplementierung verwendet
   keine Shell, leert die Prozessumgebung, erfasst stdout/stderr begrenzt und
   beendet Zeitüberschreitungen.
+- `run_process_piped(command, arguments, stdin, timeout_ms, max_output_bytes)`
+  für das typisierte Built-in `run_process_piped`. Es verwendet dieselbe exakte
+  Befehls-Allowlist, begrenzt stdin und beide Ausgabeströme, deckelt das
+  gewünschte Timeout auf die Projekt-Policy und liefert Exit-Code sowie
+  UTF-8-Ausgaben. Es startet keine Shell. Hosts ohne diese Implementierung
+  weisen den Aufruf ausdrücklich ab.
 - Dateisystemdienste für Pfadkanonisierung, Metadaten, Text lesen/schreiben,
   exklusives und atomares Schreiben, Anhängen, Kopieren, Umbenennen, Löschen
   und Verzeichnislisten. Die Runtime prüft nach der hostseitigen

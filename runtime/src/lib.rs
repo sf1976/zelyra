@@ -11,7 +11,8 @@ use zelyra_ast::temporal::{
 use zelyra_ast::*;
 
 pub use host::{
-    HostFileMetadata, HostHttpResponse, HostServices, SystemHostServices, HOST_SERVICES_API_VERSION,
+    HostFileMetadata, HostHttpResponse, HostProcessResult, HostServices, SystemHostServices,
+    HOST_SERVICES_API_VERSION,
 };
 
 const BASE64_CHARS: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
@@ -704,6 +705,94 @@ pub fn http_response_value_from_host(response: HostHttpResponse) -> Result<Value
     })
 }
 
+/// Build the typed response envelope used by API handlers. Header names and
+/// values are checked here so AST, MIR, and Bytecode reject injection and
+/// hop-by-hop headers consistently before a response reaches the web server.
+pub fn api_response_value(status: i64, headers: Vec<String>, body: Value) -> Result<Value, String> {
+    if !(200..=299).contains(&status) {
+        return Err("api_response status must be between 200 and 299; use the API `errors` contract for failures".into());
+    }
+    let mut checked_headers = Vec::with_capacity(headers.len());
+    let mut content_types = 0usize;
+    for header in headers {
+        let Some((name, value)) = header.split_once(':') else {
+            return Err("api_response header must use `Name: value` format".into());
+        };
+        let name = name.trim();
+        let value = value.trim();
+        if name.is_empty()
+            || !name
+                .bytes()
+                .all(|byte| byte.is_ascii_alphanumeric() || b"!#$%&'*+-.^_`|~".contains(&byte))
+            || value
+                .bytes()
+                .any(|byte| byte.is_ascii_control() && byte != b'\t')
+        {
+            return Err("api_response contains an invalid header name or value".into());
+        }
+        if [
+            "content-length",
+            "transfer-encoding",
+            "connection",
+            "keep-alive",
+            "trailer",
+            "upgrade",
+            "set-cookie",
+        ]
+        .iter()
+        .any(|forbidden| name.eq_ignore_ascii_case(forbidden))
+        {
+            return Err(
+                "api_response cannot set a hop-by-hop, content-length, or cookie header".into(),
+            );
+        }
+        if !name.eq_ignore_ascii_case("content-type")
+            && ![
+                "cache-control",
+                "content-disposition",
+                "content-language",
+                "etag",
+                "last-modified",
+                "link",
+                "location",
+                "retry-after",
+                "vary",
+                "x-request-id",
+            ]
+            .iter()
+            .any(|allowed| name.eq_ignore_ascii_case(allowed))
+        {
+            return Err(format!(
+                "api_response header `{name}` is not in the supported response header allowlist"
+            ));
+        }
+        if name.eq_ignore_ascii_case("location")
+            && (!value.starts_with('/')
+                || value.starts_with("//")
+                || value.contains('\\')
+                || value.chars().any(char::is_control))
+        {
+            return Err("api_response Location must be a same-origin absolute path".into());
+        }
+        if name.eq_ignore_ascii_case("content-type") {
+            content_types += 1;
+            if content_types > 1 {
+                return Err("api_response may set Content-Type only once".into());
+            }
+        }
+        checked_headers.push(Value::String(format!("{name}: {value}")));
+    }
+    Ok(Value::Object {
+        type_name: "ApiResponse".into(),
+        type_args: vec![body.ty()],
+        fields: HashMap::from([
+            ("status".into(), Value::Int(status)),
+            ("headers".into(), Value::Array(checked_headers)),
+            ("body".into(), body),
+        ]),
+    })
+}
+
 /// Deliver one already-created outbox event through the configured host.
 ///
 /// This shared policy boundary keeps AST and MIR execution consistent. The
@@ -753,6 +842,45 @@ pub fn run_process_with_host_services(
         command,
         arguments,
         policy.timeout_ms,
+        policy.max_output_bytes,
+    )
+}
+
+/// Run one explicitly allowlisted process with bounded stdin and output.
+pub fn run_process_piped_with_host_services(
+    command: &str,
+    arguments: &[String],
+    stdin: &str,
+    timeout_ms: u64,
+    policy: Option<&ProcessPolicy>,
+    host_services: &dyn HostServices,
+) -> Result<HostProcessResult, String> {
+    let policy = policy
+        .ok_or_else(|| "process execution denied: no process policy is configured".to_owned())?;
+    if command.is_empty() || command.contains(['\r', '\n']) {
+        return Err("run_process_piped received an invalid command".into());
+    }
+    if !policy
+        .allowed_commands
+        .iter()
+        .any(|allowed| allowed == command)
+    {
+        return Err(format!("process execution denied for command `{command}`"));
+    }
+    if timeout_ms == 0 || policy.timeout_ms == 0 || policy.max_output_bytes == 0 {
+        return Err("process policy requires positive timeout and output limits".into());
+    }
+    if stdin.len() > policy.max_output_bytes {
+        return Err(format!(
+            "process stdin exceeds the {} byte input limit",
+            policy.max_output_bytes
+        ));
+    }
+    host_services.run_process_piped(
+        command,
+        arguments,
+        stdin,
+        timeout_ms.min(policy.timeout_ms),
         policy.max_output_bytes,
     )
 }
@@ -981,6 +1109,7 @@ fn is_runtime_builtin(name: &str) -> bool {
         "print"
             | "assert"
             | "render_pdf"
+            | "api_response"
             | "len"
             | "range"
             | "array_replace_result"
@@ -1127,6 +1256,7 @@ fn is_runtime_builtin(name: &str) -> bool {
             | "http_json"
             | "http_result"
             | "run_process"
+            | "run_process_piped"
             | "read_text"
             | "read_text_result"
             | "write_text"

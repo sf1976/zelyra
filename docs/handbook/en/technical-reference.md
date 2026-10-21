@@ -786,6 +786,40 @@ page "/customers" {
 }
 ~~~
 
+### Reusable views with typed properties
+
+A `view` can declare typed properties for page titles, descriptions, and other
+shared layout data. Each page supplies its values in the `view` declaration;
+optional properties may be omitted:
+
+~~~zelyra
+view SiteShell {
+    props { title: String description: String? }
+    html {
+        <html>
+            <head>
+                <title>{title}</title>
+                <meta name="description" content="{description}" />
+                <slot name="head" />
+            </head>
+            <body><main><slot /></main></body>
+        </html>
+    }
+}
+
+page "/handbook" {
+    view: SiteShell(title: "Zelyra Handbook", description: "Technical reference")
+    html { <h1>Handbook</h1> }
+}
+~~~
+
+View properties are type-checked before slot composition; missing, unknown, or
+incompatible values produce `E-VIEW-039`. Dynamic values may come from typed
+route parameters or `load` data, for example `title: "{page_title}"`; output
+remains HTML-escaped. Optional view properties may also be used in CRUD or
+TableView layouts and are left empty there. Required view properties are
+mandatory on pages and are not allowed in CRUD/TableView layouts.
+
 Pages return `text/html; charset=utf-8` by default. A page can declare another
 validated media type for XML feeds and similar text responses:
 
@@ -1356,6 +1390,37 @@ A hidden button is not a security boundary. Authorization must be enforced on
 the server-side action. Browsers become remarkably creative when trusted.
 
 ### API input and secure response defaults
+
+#### Typed successful API responses
+
+API handlers continue to return their declared JSON output type by default.
+When an endpoint needs a successful HTTP status or another supported media
+type, declare the allowed responses and return `ApiResponse<T>`:
+
+```zelyra
+api GET "/feed.xml" {
+    handler feed
+    output ApiResponse<String>
+    responses { 200 "application/xml; charset=utf-8" }
+}
+
+fn feed() -> ApiResponse<String> {
+    return api_response(
+        200,
+        ["Content-Type: application/xml; charset=utf-8"],
+        "<feed/>"
+    )
+}
+```
+
+`responses` is an allowlist of successful status codes (200–299) and media
+types. The runtime status must be declared. An undeclared status becomes an
+internal server response. Currently supported non-JSON responses are
+`text/plain`, `text/csv`, and XML media types with a `String` body. HTML and
+JavaScript are excluded. Response headers are validated; hop-by-hop,
+`Content-Length`, and cookie headers cannot be set. API errors remain described
+by the existing `errors` contract rather than `ApiResponse`. The response
+contracts are included in OpenAPI and the generated TypeScript client.
 
 API request bodies for methods other than `GET` and `DELETE` may currently use
 `application/json` or `application/x-www-form-urlencoded`. Unsupported media

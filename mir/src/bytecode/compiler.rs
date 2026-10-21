@@ -2079,6 +2079,34 @@ impl FunctionCompiler<'_> {
                         span,
                     )]
                 })?;
+                if type_name == "ProcessResult" {
+                    let result_type = match field.as_str() {
+                        "exit_code" => Type::Int,
+                        "stdout" | "stderr" => Type::String,
+                        _ => {
+                            return Err(vec![bytecode_error(
+                                format!("typed MIR record `ProcessResult` has no field `{field}`"),
+                                span,
+                            )]);
+                        }
+                    };
+                    if !type_args.is_empty() || expression_type != result_type {
+                        return Err(vec![bytecode_error(
+                            "typed MIR ProcessResult field has a mismatched result type",
+                            span,
+                        )]);
+                    }
+                    self.expression(target, active)?;
+                    self.emit(
+                        BytecodeOp::GetField {
+                            record_type: target_type,
+                            field,
+                            result_type,
+                        },
+                        span,
+                    );
+                    return Ok(());
+                }
                 let record = self
                     .program
                     .records
@@ -2533,6 +2561,55 @@ impl FunctionCompiler<'_> {
                 type_args,
                 args,
                 ..
+            } if name == "api_response" => {
+                if args.len() != 3 || type_args.len() > 1 {
+                    return Err(vec![bytecode_error(
+                        "api_response expects status, headers, and body",
+                        span,
+                    )]);
+                }
+                let body_type = self.expression_type(args[2], span)?;
+                if type_args
+                    .first()
+                    .is_some_and(|expected| expected != &body_type)
+                {
+                    return Err(vec![bytecode_error(
+                        "api_response body does not match its type argument",
+                        span,
+                    )]);
+                }
+                let expected_type = Type::Applied {
+                    name: "ApiResponse".into(),
+                    args: vec![type_args.first().cloned().unwrap_or(body_type)],
+                };
+                if expression_type != expected_type
+                    || self.expression_type(args[0], span)? != Type::Int
+                    || self.expression_type(args[1], span)? != Type::Array(Box::new(Type::String))
+                {
+                    return Err(vec![bytecode_error(
+                        "api_response has invalid argument or result types",
+                        span,
+                    )]);
+                }
+                for argument in &args {
+                    self.expression(*argument, active)?;
+                }
+                self.emit(
+                    BytecodeOp::Builtin {
+                        name,
+                        arguments: args.len(),
+                        type_arguments: type_args,
+                        result_type: expression_type,
+                    },
+                    span,
+                )
+            }
+            MirExpressionKind::Call {
+                name,
+                function: None,
+                type_args,
+                args,
+                ..
             } if matches!(
                 name.as_str(),
                 "now"
@@ -2556,6 +2633,7 @@ impl FunctionCompiler<'_> {
                     | "copy_file_new_result"
                     | "rename_file_result"
                     | "run_process"
+                    | "run_process_piped"
                     | "http_get"
                     | "http_request"
                     | "http_json"
@@ -2679,6 +2757,16 @@ impl FunctionCompiler<'_> {
                     {
                         Type::String
                     }
+                    "run_process_piped"
+                        if args.len() == 4
+                            && self.expression_type(args[0], span)? == Type::String
+                            && self.expression_type(args[1], span)?
+                                == Type::Array(Box::new(Type::String))
+                            && self.expression_type(args[2], span)? == Type::String
+                            && self.expression_type(args[3], span)? == Type::Int =>
+                    {
+                        Type::Named("ProcessResult".into())
+                    }
                     "now" => {
                         return Err(vec![bytecode_error("now expects no arguments", span)]);
                     }
@@ -2735,6 +2823,12 @@ impl FunctionCompiler<'_> {
                     "run_process" => {
                         return Err(vec![bytecode_error(
                             "run_process expects a String command and String[] arguments",
+                            span,
+                        )])
+                    }
+                    "run_process_piped" => {
+                        return Err(vec![bytecode_error(
+                            "run_process_piped expects command, arguments, stdin, and timeout_ms",
                             span,
                         )])
                     }
