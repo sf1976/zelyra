@@ -630,16 +630,18 @@ abgeschlossen.
   `public/`-Assets und begrenztes stdin für erlaubnislistengeprüfte Prozesse
   (`run_process_piped`) sind bereits auf `main` vorhanden.
   `run_process_piped` führt für sich allein weder Zelyra-Quelltext aus noch
-  stellt es eine Web-Sandbox bereit. Typisierte API-Erfolgsantworten sind auf
-  `main` als `ApiResponse<T>` umgesetzt; `HttpResult<T>` beschreibt weiter
-  Antworten ausgehender HTTP-Aufrufe. Typisierte `view`-Props und Übergaben aus
-  `page` sind Gegenstand dieses Branches. Benannte Layout-Slots für individuelle
-  Head-Inhalte funktionieren bereits. Projektkataloge `locales/de.json` und
-  `locales/en.json` sowie `data-zelyra-i18n`-/`@i18n:`-Marker lokalisieren
-  benutzerdefinierte Seitentexte; der typisierte Ausdruck `t("key")` und
-  deklarative Locale-Routengruppen bleiben offen und werden separat bearbeitet.
-  Sicheres CommonMark/GFM-Rendering bleibt offen. Statisches Asset-Serving ist
-  bereits vorhanden und keine offene Lücke.
+- [~] **1.3.0 — umgesetzte Web-/Compilerfunktionen und offene Punkte:**
+  SQL-geladene `Option<Record>`-Seitendaten, dynamisches `page content_type`,
+  statische `public/`-Assets, begrenztes `run_process_piped`, typisierte
+  erfolgreiche API-Antworten über `ApiResponse<T>` und typisierte Eigenschaften
+  wiederverwendbarer `view`-Layouts sind auf `main` umgesetzt. Piped
+  Prozesseingabe führt für sich allein keinen Zelyra-Quelltext aus und stellt
+  keine Web-Sandbox bereit. Geprüfte statische Locale-Referenzen und
+  `/{locale}/...`-Routenauswahl liegen in PR #155. Sicheres, begrenztes
+  CommonMark/GFM-Rendering ist in diesem Branch implementiert; die vollständige
+  CI-Prüfung steht noch aus. `HttpResult<T>` bleibt der Ergebnistyp für
+  ausgehende HTTP-Aufrufe. Übersetzungsaufrufe in beliebigen Ausdrücken,
+  Markdown-Inhaltsverzeichnisse, Pluralregeln und Codehervorhebung bleiben offen.
 
 **Nach 1.3.0 oder bei ausdrücklicher Neubewertung:** Ein natives AOT-Backend
 bleibt optional und hängt von Benchmarks ab. Kein offener Punkt entfällt stillschweigend: Arbeit, deren

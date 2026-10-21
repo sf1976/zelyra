@@ -579,15 +579,17 @@ security and compatibility gates stated for that milestone.
   data, dynamic `page content_type`, static `public/` assets, and bounded
   `run_process_piped` stdin for allowlisted processes are implemented on `main`.
   `run_process_piped` does not itself execute Zelyra source or provide a web
-  sandbox. Typed API success responses are implemented on `main` as
-  `ApiResponse<T>`; `HttpResult<T>` continues to model responses received from
-  outbound HTTP calls. Typed `view` props and passing values from `page` are the
-  subject of this branch. Named layout slots for page-specific head content
-  already work. Project `locales/de.json` and `locales/en.json` catalogs plus
-  `data-zelyra-i18n`/`@i18n:` markers localize custom page text; a typed
-  `t("key")` expression and declarative locale-route grouping remain open and
-  are handled separately. Safe CommonMark/GFM rendering remains open. Static
-  asset serving is already present and is not an open gap.
+- [~] **1.3.0 — verified web/compiler features and remaining gaps:** SQL-loaded
+  `Option<Record>` page data, dynamic `page content_type`, static `public/`
+  assets, bounded `run_process_piped`, typed successful API responses via
+  `ApiResponse<T>`, and typed properties for reusable `view` layouts are
+  implemented on `main`. Piped process input does not itself execute Zelyra
+  source or provide a web sandbox. Checked static locale references and
+  `/{locale}/...` route selection are in PR #155. Safe bounded CommonMark/GFM
+  rendering is implemented on this branch and awaits full CI verification.
+  `HttpResult<T>` remains the result type for outbound HTTP calls. Typed
+  translation calls in arbitrary expressions, Markdown table-of-contents
+  generation, plural rules, and code highlighting remain open.
 
 **Post-1.3.0 or explicitly reprioritized:** a native AOT backend is optional
 and depends on benchmark evidence. No open task is silently dropped: work that cannot meet its release

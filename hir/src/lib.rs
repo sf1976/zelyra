@@ -980,6 +980,7 @@ impl<'a> Resolver<'a> {
                             | "http_json"
                             | "http_result"
                             | "mail_queue"
+                            | "render_markdown"
                             | "render_pdf"
                             | "mail_deliver"
                             | "run_process"
