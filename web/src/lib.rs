@@ -15213,8 +15213,29 @@ fn render_interpolations(
             return rendered;
         };
         let name = &after_open[..close];
+        let markdown_source = name.strip_prefix("render_markdown:");
         let url_encoded = name.starts_with("url_encode:");
         let lookup_name = name.strip_prefix("url_encode:").unwrap_or(name);
+        if let Some(markdown_source) = markdown_source {
+            if let Some(source) = params
+                .get(markdown_source)
+                .or_else(|| data.get(markdown_source))
+            {
+                match zelyra_runtime::render_markdown(source) {
+                    Ok(markdown_html) => rendered.push_str(&markdown_html),
+                    Err(error) => rendered.push_str(&format!(
+                        "<div class=\"z-alert z-alert--danger\" role=\"alert\">Markdown rendering failed: {}</div>",
+                        html_escape(&error)
+                    )),
+                }
+            } else {
+                rendered.push('{');
+                rendered.push_str(name);
+                rendered.push('}');
+            }
+            rest = &after_open[close + 1..];
+            continue;
+        }
         if let Some(value) = params.get(lookup_name).or_else(|| data.get(lookup_name)) {
             if url_encoded {
                 rendered.push_str(&html_escape(&url_encode(value)));

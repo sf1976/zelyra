@@ -16,6 +16,8 @@ zelyra-lexer.workspace = true
 zelyra-parser.workspace = true
 zeroize.workspace = true
 sha2.workspace = true
+pulldown-cmark.workspace = true
+url.workspace = true
 
 [[bench]]
 name = "mutable_arrays"

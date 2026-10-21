@@ -254,6 +254,7 @@ mod decimal_math;
 mod filesystem;
 mod host;
 mod mail;
+mod markdown;
 mod operators;
 mod package_settings;
 mod policies;
@@ -264,6 +265,7 @@ mod pdf_template;
 mod pure_builtins;
 mod step_budget;
 pub use mail::{prepare_mail_queue_query, supports_mail_outbox_database};
+pub use markdown::render_markdown;
 pub use operators::{evaluate_binary_value, evaluate_unary_value};
 pub use package_settings::PackageSettings;
 use pdf_template::interpolate_pdf_data;
@@ -1020,6 +1022,7 @@ fn is_runtime_builtin(name: &str) -> bool {
         name,
         "print"
             | "assert"
+            | "render_markdown"
             | "render_pdf"
             | "len"
             | "range"

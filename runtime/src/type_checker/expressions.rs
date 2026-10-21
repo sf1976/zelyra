@@ -287,7 +287,18 @@ impl Checker<'_> {
                 if matches!(name.as_str(), "map" | "filter" | "find" | "reduce") {
                     return self.check_higher_order_call(name, type_args, args, expr.span, scopes);
                 }
-                if name == "render_pdf" {
+                if name == "render_markdown" {
+                    if !type_args.is_empty() || args.len() != 1 {
+                        self.error(
+                            expr.span,
+                            "render_markdown expects exactly one String and no type arguments",
+                        );
+                        return Type::Unknown;
+                    }
+                    let source = self.check_expr(&args[0], scopes);
+                    self.expect_type(&Type::String, &source, args[0].span);
+                    return Type::String;
+                } else if name == "render_pdf" {
                     if !type_args.is_empty() || args.len() != 2 {
                         self.error(
                             expr.span,

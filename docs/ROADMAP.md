@@ -575,14 +575,19 @@ security and compatibility gates stated for that milestone.
   completion by switching the default early. This milestone targets portable
   verified Bytecode, not native machine-code generation.
 
-- [ ] **1.3.0 — confirmed web/compiler gaps:** Accept SQL-loaded `Option<Record>`
-  page data (the CLI validator fix is on the active unmerged feature branch);
-  finish and merge explicit dynamic page response content types, add a typed
-  server API response contract; add bounded, sanitized
-  CommonMark/GFM rendering; and add stdin piping to the existing allowlisted,
-  timeout/output-bounded Process capability. API `HttpResult<T>` currently models
-  responses received by outbound HTTP calls, not status/header returns from a
-  Zelyra API handler. These are separate from static `public/` asset serving.
+- [~] **1.3.0 — confirmed web/compiler gaps:** SQL-loaded `Option<Record>` page
+  data, dynamic page content types, static `public/` assets, and bounded
+  `run_process_piped` stdin for allowlisted processes are already implemented
+  on `main`. Typed successful API response contracts are implemented on an
+  active, unmerged feature branch as `ApiResponse<T>`; `HttpResult<T>` continues
+  to describe responses received by outbound HTTP calls. Parameterized view
+  properties and safe CommonMark/GFM rendering remain active work. The Markdown
+  branch now has a bounded runtime renderer that escapes raw HTML and restricts
+  link schemes, typed
+  `render_markdown(String) -> String`, a content-only `{render_markdown:field}`
+  template form, and PDF-view integration with positive/negative tests. This
+  does not provide a general raw-HTML escape hatch. It still needs full package
+  checks and release review.
 
 **Post-1.3.0 or explicitly reprioritized:** a native AOT backend is optional
 and depends on benchmark evidence. No open task is silently dropped: work that cannot meet its release

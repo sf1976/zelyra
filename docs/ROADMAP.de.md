@@ -625,16 +625,21 @@ abgeschlossen.
   unterstützte Bytecode-Operationen fail-closed scheitern und der bisherige
   Standard unverändert bleiben. Ziel ist portabler geprüfter Bytecode, keine
   native Maschinencodegenerierung.
-- [ ] **1.3.0 — bestätigte Web-/Compilerlücken:** SQL-geladene
-  `Option<Record>`-Seitendaten akzeptieren (der Validatorfix liegt auf dem
-  aktiven, noch nicht zusammengeführten Feature-Branch); dynamische
-  Seitentypen abschließen und zusammenführen sowie typisierte API-Antworten
-  ergänzen; begrenztes, bereinigtes CommonMark/GFM-Rendering bereitstellen;
-  sowie stdin-Piping für die bereits erlaubnislisten-, timeout- und
-  ausgabelimitierte Process-Capability ergänzen. `HttpResult<T>` beschreibt
-  derzeit Antworten ausgehender HTTP-Aufrufe, nicht Status-/Header-Rückgaben
-  eines Zelyra-API-Handlers. Diese Punkte sind getrennt vom statischen
-  `public/`-Asset-Serving.
+- [~] **1.3.0 — bestätigte Web-/Compilerlücken:** SQL-geladene
+  `Option<Record>`-Seitendaten, dynamische Seitentypen, statische `public/`-
+  Assets und begrenztes stdin-Piping über `run_process_piped` sind bereits auf
+  `main` vorhanden. Typisierte erfolgreiche API-Antwortverträge sind als
+  `ApiResponse<T>` auf einem aktiven, noch nicht zusammengeführten Branch
+  implementiert; `HttpResult<T>` beschreibt weiterhin Antworten ausgehender
+  HTTP-Aufrufe. Parametrisierte View-Eigenschaften und sicheres CommonMark/GFM-
+  Rendering bleiben in Arbeit. Der Markdown-Branch enthält jetzt einen
+  größenbegrenzten Runtime-Renderer, der rohes HTML escaped und Link-Schemes
+  beschränkt, das typisierte
+  `render_markdown(String) -> String`, die auf HTML-Inhalt begrenzte
+  Templateform `{render_markdown:feld}` und die PDF-View-Anbindung mit
+  positiven und negativen Tests. Eine allgemeine Raw-HTML-Ausgabe wird damit
+  nicht eingeführt. Vollständige Paketprüfungen und Releaseprüfung stehen noch
+  aus.
 
 **Nach 1.3.0 oder bei ausdrücklicher Neubewertung:** Ein natives AOT-Backend
 bleibt optional und hängt von Benchmarks ab. Kein offener Punkt entfällt stillschweigend: Arbeit, deren

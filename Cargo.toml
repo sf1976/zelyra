@@ -37,6 +37,7 @@ lettre = { version = "0.11.23", default-features = false, features = ["builder",
 ring = "0.17.14"
 subtle = "2.6.1"
 zeroize = "1.9.0"
+pulldown-cmark = "0.13.4"
 url = "2.5.8"
 zelyra-ast = { path = "ast", version = "1.0" }
 zelyra-lexer = { path = "lexer", version = "1.0" }

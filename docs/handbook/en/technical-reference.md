@@ -898,6 +898,27 @@ page "/dashboard" {
 
 *Note:* Component slots nested inside a component invocation no longer require an outer page `view:` layout.
 
+### Markdown in HTML views
+
+The pure `render_markdown(source)` function produces safe HTML from CommonMark with GFM tables, strikethrough, task lists, and footnotes. Headings receive stable IDs; repeated headings get a unique suffix. Embedded HTML is escaped as text and never executed as markup. Links may use HTTP(S), mailto, and relative URLs; images must use relative URLs so displaying a page does not fetch content from third-party hosts. Other link schemes are not rendered as links. Each source is limited to 1 MiB per call.
+
+In an HTML template, Markdown is rendered explicitly as content:
+
+~~~zelyra
+component HelpArticle {
+    props { source: String }
+    html {
+        <article class="help-article">
+            {render_markdown:source}
+        </article>
+    }
+}
+~~~
+
+`render_markdown:source` is allowed only in HTML content and must resolve to a typed text value; the compiler rejects use in attributes or with non-text values using `E-VIEW-040`. Ordinary `{source}` interpolation remains escaped. The function returns a `String`, but the template form renders it only through the Markdown renderer, which escapes raw HTML and restricts link destinations; there is no general raw-HTML output switch. `render_markdown(source)` can also be used in Zelyra expressions, but ordinary HTML interpolation escapes it like any other string.
+
+File access remains explicit: a Markdown file must be read through the existing `FileSystem` capability and project path rules. Markdown rendering itself does not load files or make network requests.
+
 ## 11. Forms
 
 ✅ Forms can inherit table rules:

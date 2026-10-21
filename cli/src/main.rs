@@ -3637,9 +3637,19 @@ fn is_template_identifier(expression: &str) -> bool {
 fn is_template_expression(expression: &str) -> bool {
     expression
         .strip_prefix("url_encode:")
+        .or_else(|| expression.strip_prefix("render_markdown:"))
         .unwrap_or(expression)
         .split('.')
         .all(is_template_identifier)
+}
+
+fn template_interpolation_is_in_html_tag(html: &str, open: usize) -> bool {
+    let before = &html[..open];
+    match (before.rfind('<'), before.rfind('>')) {
+        (Some(open_tag), Some(close_tag)) => open_tag > close_tag,
+        (Some(_), None) => true,
+        _ => false,
+    }
 }
 
 struct TemplateForBlock {
@@ -3860,7 +3870,14 @@ fn validate_template_interpolations(
         }
     };
     let mut valid = true;
+    let mut expression_search_from = 0;
     for expression in expressions {
+        let placeholder = format!("{{{expression}}}");
+        let expression_start = html[expression_search_from..]
+            .find(&placeholder)
+            .map(|offset| expression_search_from + offset)
+            .unwrap_or(expression_search_from);
+        expression_search_from = expression_start.saturating_add(placeholder.len());
         if !is_template_expression(&expression) {
             diagnostic(
                 path,
@@ -3875,8 +3892,21 @@ fn validate_template_interpolations(
             continue;
         }
         let url_encoded = expression.starts_with("url_encode:");
+        let markdown_rendered = expression.starts_with("render_markdown:");
+        if markdown_rendered && template_interpolation_is_in_html_tag(html, expression_start) {
+            diagnostic(
+                path,
+                "E-VIEW-040",
+                "render_markdown interpolation is only allowed in HTML content, not in an attribute",
+                line,
+                column,
+            );
+            valid = false;
+            continue;
+        }
         let type_expression = expression
             .strip_prefix("url_encode:")
+            .or_else(|| expression.strip_prefix("render_markdown:"))
             .unwrap_or(&expression);
         match resolve_template_type(type_expression, bindings, program) {
             Err(message) => {
@@ -3893,6 +3923,16 @@ fn validate_template_interpolations(
                     path,
                     "E-VIEW-034",
                     &format!("url_encode requires a text value, found `{ty}`"),
+                    line,
+                    column,
+                );
+                valid = false;
+            }
+            Ok(ty) if markdown_rendered && !template_value_is_text(&ty) => {
+                diagnostic(
+                    path,
+                    "E-VIEW-040",
+                    &format!("render_markdown requires a text value, found `{ty}`"),
                     line,
                     column,
                 );
@@ -12998,6 +13038,23 @@ fn render_component_property(
 ) -> String {
     let placeholder = format!("{{{}}}", prop.name);
     let url_encoded_placeholder = format!("{{url_encode:{}}}", prop.name);
+    let markdown_placeholder = format!("{{render_markdown:{}}}", prop.name);
+    if template.contains(&markdown_placeholder) {
+        let replacement = if value.starts_with('{') && value.ends_with('}') {
+            format!(
+                "{{render_markdown:{}}}",
+                value.trim_start_matches('{').trim_end_matches('}')
+            )
+        } else {
+            zelyra_runtime::render_markdown(value).unwrap_or_else(|error| {
+                format!(
+                    "<div class=\"z-alert z-alert--danger\" role=\"alert\">Markdown rendering failed: {}</div>",
+                    html_escape(&error)
+                )
+            })
+        };
+        return template.replace(&markdown_placeholder, &replacement);
+    }
     if template.contains(&url_encoded_placeholder) {
         let encoded_value = if value.starts_with('{') && value.ends_with('}') {
             format!(
