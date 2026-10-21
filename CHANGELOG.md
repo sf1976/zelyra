@@ -1,5 +1,22 @@
 ## Unreleased
 
+## 1.2.33 — 2026-10-21
+
+- Align source-level `--max-steps` accounting across the supported AST, MIR,
+  and bytecode execution paths while retaining the VM instruction safety cap.
+  / Die quellbezogene `--max-steps`-Abrechnung in den unterstützten AST-, MIR-
+  und Bytecode-Ausführungspfaden angleichen; die VM-Instruktionsgrenze bleibt
+  als zusätzlicher Schutz bestehen.
+- Add differential coverage for a bounded SQL audit insert and one queued PDF
+  email across AST, MIR, and encoded/decoded bytecode. This does not claim
+  general transaction or backend parity. / Differentielle Tests für einen
+  begrenzten SQL-Audit-Eintrag und eine eingereihte PDF-E-Mail über AST, MIR
+  und kodierten/dekodierten Bytecode ergänzen. Dies belegt keine allgemeine
+  Transaktions- oder Backend-Parität.
+- Keep AST as the default execution backend; MIR and bytecode remain explicit
+  experimental opt-ins. / AST bleibt das Standard-Backend; MIR und Bytecode
+  bleiben ausdrücklich experimentelle Opt-ins.
+
 ## 1.2.32 — 2026-10-21
 
 - Add compiler-checked `compute(expr)` table fields for generated CRUD and
