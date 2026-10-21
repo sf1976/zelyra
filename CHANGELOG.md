@@ -31,6 +31,9 @@
   `NUMERIC(20,0)` und behalten für Auto-Increment-IDs und Relationen passende
   native Schlüsseltypen. Vorzeichenbehaftete Laravel-Breiten und vollständige
   Schemengleichheit bleiben offen.
+
+## 1.2.34 — 2026-10-21
+
 - Preserve selected Laravel `mediumText` and `longText` capacities with
   `text_storage medium|long` in MariaDB schemas; unsupported indexes on these
   unbounded columns are rejected, and PostgreSQL/SQLite size differences are
@@ -41,9 +44,6 @@
   und Größenunterschiede bei PostgreSQL/SQLite gemeldet. Dies erhält die
   Speicherung unterstützter Felder, ohne den vollständigen Webseitenimport zu
   behaupten.
-
-## 1.2.34 — 2026-10-21
-
 - Add the allowlist- and `Process`-capability-gated `run_process_piped` host
   operation. It bounds stdin by the configured process limit, caps the
   per-call timeout at the project policy, and returns typed
