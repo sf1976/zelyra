@@ -1391,6 +1391,37 @@ the server-side action. Browsers become remarkably creative when trusted.
 
 ### API input and secure response defaults
 
+#### Typed successful API responses
+
+API handlers continue to return their declared JSON output type by default.
+When an endpoint needs a successful HTTP status or another supported media
+type, declare the allowed responses and return `ApiResponse<T>`:
+
+```zelyra
+api GET "/feed.xml" {
+    handler feed
+    output ApiResponse<String>
+    responses { 200 "application/xml; charset=utf-8" }
+}
+
+fn feed() -> ApiResponse<String> {
+    return api_response(
+        200,
+        ["Content-Type: application/xml; charset=utf-8"],
+        "<feed/>"
+    )
+}
+```
+
+`responses` is an allowlist of successful status codes (200–299) and media
+types. The runtime status must be declared. An undeclared status becomes an
+internal server response. Currently supported non-JSON responses are
+`text/plain`, `text/csv`, and XML media types with a `String` body. HTML and
+JavaScript are excluded. Response headers are validated; hop-by-hop,
+`Content-Length`, and cookie headers cannot be set. API errors remain described
+by the existing `errors` contract rather than `ApiResponse`. The response
+contracts are included in OpenAPI and the generated TypeScript client.
+
 API request bodies for methods other than `GET` and `DELETE` may currently use
 `application/json` or `application/x-www-form-urlencoded`. Unsupported media
 types return HTTP 415 as a structured JSON error. JSON bodies must be objects;

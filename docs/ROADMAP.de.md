@@ -626,19 +626,20 @@ abgeschlossen.
   Standard unverändert bleiben. Ziel ist portabler geprüfter Bytecode, keine
   native Maschinencodegenerierung.
 - [~] **1.3.0 — bestätigte Web-/Compilerlücken:** SQL-geladene
-  `Option<Record>`-Seitendaten und dynamische Seitentypen sind mit PRs #146 und
-  #147 in `main` angekommen. `run_process_piped` mit Allowlist, Laufzeit- und
-  Ein-/Ausgabegrenzen ist in PR #148 gemergt.
-  Typisierte Status-/Header-Antworten für API-Handler bleiben offen; das
-  vorhandene `HttpResult<T>` beschreibt Antworten ausgehender HTTP-Aufrufe.
-  Typisierte View-Props für gemeinsame Layouts liegen in PR #151 und warten
-  noch auf vollständige CI. Begrenztes, bereinigtes CommonMark/GFM-Rendering
-  fehlt weiterhin. Allgemeine Übersetzungen in handgeschriebenen Views und
-  sprachbewusstes Routing fehlen ebenfalls; vorhandene Projektkataloge
-  lokalisieren Zelyras generierte UI, stellen aber keine Template-Funktion
-  `t(key)` bereit. Markdown-HTML muss eine vertrauenswürdige, bereinigte
-  Ausgabesemantik erhalten und darf normales HTML-Escaping nicht umgehen.
-  Diese Aufgaben sind getrennt vom statischen `public/`-Asset-Serving.
+  `Option<Record>`-Seitendaten, dynamisches `page content_type`, statische
+  `public/`-Assets und begrenztes stdin für erlaubnislistengeprüfte Prozesse
+  (`run_process_piped`) sind bereits auf `main` vorhanden.
+  `run_process_piped` führt für sich allein weder Zelyra-Quelltext aus noch
+  stellt es eine Web-Sandbox bereit. Typisierte API-Erfolgsantworten sind auf
+  `main` als `ApiResponse<T>` umgesetzt; `HttpResult<T>` beschreibt weiter
+  Antworten ausgehender HTTP-Aufrufe. Typisierte `view`-Props und Übergaben aus
+  `page` sind Gegenstand dieses Branches. Benannte Layout-Slots für individuelle
+  Head-Inhalte funktionieren bereits. Projektkataloge `locales/de.json` und
+  `locales/en.json` sowie `data-zelyra-i18n`-/`@i18n:`-Marker lokalisieren
+  benutzerdefinierte Seitentexte; der typisierte Ausdruck `t("key")` und
+  deklarative Locale-Routengruppen bleiben offen und werden separat bearbeitet.
+  Sicheres CommonMark/GFM-Rendering bleibt offen. Statisches Asset-Serving ist
+  bereits vorhanden und keine offene Lücke.
 
 **Nach 1.3.0 oder bei ausdrücklicher Neubewertung:** Ein natives AOT-Backend
 bleibt optional und hängt von Benchmarks ab. Kein offener Punkt entfällt stillschweigend: Arbeit, deren

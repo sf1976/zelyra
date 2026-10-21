@@ -106,10 +106,25 @@ pub(super) fn format_openapi(program: &zelyra_ast::Program) -> String {
                     ))
                     .unwrap_or_default()
             );
-            let responses = std::iter::once(format!(
-                "\"200\":{{\"description\":\"Successful response\",\"content\":{{\"application/json\":{{\"schema\":{}}}}}}}",
-                openapi_schema(&api.output)
-            ))
+            let success_responses = if let Some(body) = api_response_body_type(&api.output) {
+                api.responses
+                    .iter()
+                    .map(|response| {
+                        format!(
+                            "\"{}\":{{\"description\":\"Successful response\",\"content\":{{\"{}\":{{\"schema\":{}}}}}}}",
+                            response.status,
+                            json_escape(&response.content_type),
+                            openapi_schema(body)
+                        )
+                    })
+                    .collect::<Vec<_>>()
+            } else {
+                vec![format!(
+                    "\"200\":{{\"description\":\"Successful response\",\"content\":{{\"application/json\":{{\"schema\":{}}}}}}}",
+                    openapi_schema(&api.output)
+                )]
+            };
+            let responses = success_responses.into_iter()
             .chain(api.errors.iter().map(|error| {
                 let response = if let Some(payload) = &error.payload {
                     format!(
@@ -334,6 +349,9 @@ pub(super) fn format_typescript_client(program: &zelyra_ast::Program) -> String 
         "export interface ZelyraClientOptions {\n  baseUrl: string;\n  fetch?: typeof fetch;\n  token?: string;\n}\n\n",
     );
     output.push_str(
+        "export interface ApiResponse<T> {\n  status: number;\n  headers: Record<string, string>;\n  body: T;\n}\n\n",
+    );
+    output.push_str(
         "export class ZelyraApiError extends Error {\n  constructor(\n    public readonly status: number,\n    public readonly code: ZelyraApiErrorCode | undefined,\n    public readonly body: string,\n    message: string,\n  ) {\n    super(message);\n  }\n\n  static async fromResponse(response: Response): Promise<ZelyraApiError> {\n    const body = await response.text();\n    let code: ZelyraApiErrorCode | undefined;\n    let message = `Zelyra API request failed (${response.status})`;\n    try {\n      const payload = JSON.parse(body) as { error?: { code?: unknown; message?: unknown } };\n      if (payload.error && typeof payload.error === \"object\") {\n        if (typeof payload.error.code === \"string\") code = payload.error.code;\n        if (typeof payload.error.message === \"string\") message = payload.error.message;\n      }\n    } catch {\n      // Keep the original response body when the server did not return JSON.
     }\n    return new ZelyraApiError(response.status, code, body, message);\n  }\n}\n\n",
     );
@@ -455,10 +473,22 @@ fn format_typescript_operation(output: &mut String, api: &zelyra_ast::ApiDef) {
         }
     )
     .expect("writing to a String cannot fail");
-    output.push_str("    if (!response.ok) throw await ZelyraApiError.fromResponse(response);\n");
-    output.push_str("    return await response.json() as ");
-    output.push_str(&typescript_type(&api.output));
-    output.push_str(";\n  }\n\n");
+    if let Some(body_type) = api_response_body_type(&api.output) {
+        output
+            .push_str("    if (!response.ok) throw await ZelyraApiError.fromResponse(response);\n");
+        output
+            .push_str("    const contentType = response.headers.get(\"content-type\") ?? \"\";\n");
+        output.push_str("    const body = contentType.toLowerCase().includes(\"json\") ? await response.json() : await response.text();\n");
+        output.push_str("    return { status: response.status, headers: Object.fromEntries(response.headers.entries()), body: body as ");
+        output.push_str(&typescript_type(body_type));
+        output.push_str(" };\n  }\n\n");
+    } else {
+        output
+            .push_str("    if (!response.ok) throw await ZelyraApiError.fromResponse(response);\n");
+        output.push_str("    return await response.json() as ");
+        output.push_str(&typescript_type(&api.output));
+        output.push_str(";\n  }\n\n");
+    }
 }
 
 pub(super) fn typescript_type(ty: &Type) -> String {
@@ -583,6 +613,9 @@ pub(super) fn openapi_schema(ty: &Type) -> String {
         Type::Option(inner) => openapi_schema(inner),
         Type::Result(ok, _) => openapi_schema(ok),
         Type::HttpResult(_) => "{\"type\":\"object\"}".into(),
+        Type::Applied { name, args } if name == "ApiResponse" && args.len() == 1 => {
+            openapi_schema(&args[0])
+        }
         Type::Named(name) => match name.as_str() {
             "Id" => "{\"type\":\"integer\",\"format\":\"int64\"}".into(),
             "Email" => "{\"type\":\"string\",\"format\":\"email\"}".into(),
@@ -594,6 +627,17 @@ pub(super) fn openapi_schema(ty: &Type) -> String {
             ),
         },
         _ => "{\"type\":\"string\"}".into(),
+    }
+}
+
+fn api_response_body_type(ty: &Type) -> Option<&Type> {
+    let payload = match ty {
+        Type::Result(ok, _) => ok.as_ref(),
+        other => other,
+    };
+    match payload {
+        Type::Applied { name, args } if name == "ApiResponse" && args.len() == 1 => args.first(),
+        _ => None,
     }
 }
 

@@ -1269,10 +1269,19 @@ pub struct ApiDef {
     /// request values before invoking the API handler.
     pub validates_table: Option<String>,
     pub output: Type,
+    /// Explicit successful status and media-type pairs for `ApiResponse<T>` handlers.
+    pub responses: Vec<ApiSuccessResponse>,
     pub errors: Vec<ApiError>,
     pub version: Option<String>,
     pub deprecated: bool,
     pub rate_limit: Option<ApiRateLimit>,
+    pub span: Span,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ApiSuccessResponse {
+    pub status: u16,
+    pub content_type: String,
     pub span: Span,
 }
 

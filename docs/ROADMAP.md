@@ -576,18 +576,18 @@ security and compatibility gates stated for that milestone.
   verified Bytecode, not native machine-code generation.
 
 - [~] **1.3.0 — confirmed web/compiler gaps:** SQL-loaded `Option<Record>` page
-  data and dynamic page media types landed in `main` in PRs #146 and #147.
-  `run_process_piped`, bounded by the command allowlist and input/output and
-  runtime limits, was merged in PR #148. Typed
-  status/header responses for API handlers remain open; existing `HttpResult<T>`
-  models responses received from outbound HTTP calls. Typed view props for
-  shared layouts are in PR #151 and still need complete CI. Bounded, sanitized
-  CommonMark/GFM rendering remains missing. General translations in handwritten
-  views and locale-aware routing are also missing: project catalogs currently
-  localize generated Zelyra UI but do not expose a template `t(key)` function.
-  Markdown HTML needs a trusted sanitized-output semantic and must not bypass
-  ordinary HTML escaping. These tasks are separate from static `public/` asset
-  serving.
+  data, dynamic `page content_type`, static `public/` assets, and bounded
+  `run_process_piped` stdin for allowlisted processes are implemented on `main`.
+  `run_process_piped` does not itself execute Zelyra source or provide a web
+  sandbox. Typed API success responses are implemented on `main` as
+  `ApiResponse<T>`; `HttpResult<T>` continues to model responses received from
+  outbound HTTP calls. Typed `view` props and passing values from `page` are the
+  subject of this branch. Named layout slots for page-specific head content
+  already work. Project `locales/de.json` and `locales/en.json` catalogs plus
+  `data-zelyra-i18n`/`@i18n:` markers localize custom page text; a typed
+  `t("key")` expression and declarative locale-route grouping remain open and
+  are handled separately. Safe CommonMark/GFM rendering remains open. Static
+  asset serving is already present and is not an open gap.
 
 **Post-1.3.0 or explicitly reprioritized:** a native AOT backend is optional
 and depends on benchmark evidence. No open task is silently dropped: work that cannot meet its release

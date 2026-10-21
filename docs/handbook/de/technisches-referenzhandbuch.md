@@ -1508,6 +1508,40 @@ wenn man ihm vertraut.
 
 ### API-Eingaben und sichere Antwort-Defaults
 
+#### Typisierte erfolgreiche API-Antworten
+
+Standard-API-Handler liefern weiterhin ihren deklarierten JSON-Ausgabetyp.
+Wenn ein Endpunkt einen erfolgreichen HTTP-Status oder einen anderen
+zulässigen Medientyp benötigt, deklariert er die erlaubten Antworten und gibt
+`ApiResponse<T>` zurück:
+
+```zelyra
+api GET "/feed.xml" {
+    handler feed
+    output ApiResponse<String>
+    responses { 200 "application/xml; charset=utf-8" }
+}
+
+fn feed() -> ApiResponse<String> {
+    return api_response(
+        200,
+        ["Content-Type: application/xml; charset=utf-8"],
+        "<feed/>"
+    )
+}
+```
+
+`responses` ist eine Allowlist erfolgreicher Statuscodes (200–299) samt
+Content-Type. Der zur Laufzeit gelieferte Status muss darin stehen. Ein
+abweichender Status führt zu einer internen Serverantwort und wird nicht
+durchgereicht. Für nicht-JSON-Antworten sind derzeit `text/plain`, `text/csv`
+und XML-Medientypen mit einem `String`-Body zugelassen. HTML und JavaScript
+sind ausgeschlossen. Antwortheader werden geprüft; unter anderem sind
+hop-by-hop-, `Content-Length`- und Cookie-Header nicht setzbar. API-Fehler
+bleiben im bestehenden `errors`-Vertrag und werden nicht als erfolgreiche
+`ApiResponse` modelliert. Die Verträge erscheinen in OpenAPI und im generierten
+TypeScript-Client.
+
 API-Bodies für Methoden außer `GET` und `DELETE` dürfen aktuell
 `application/json` oder `application/x-www-form-urlencoded` verwenden.
 Nicht unterstützte Medientypen liefern HTTP 415 als strukturierten JSON-Fehler.

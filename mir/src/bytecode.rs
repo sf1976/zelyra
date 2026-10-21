@@ -1051,6 +1051,24 @@ pub fn verify_bytecode(program: &BytecodeProgram) -> Result<(), Vec<MirError>> {
                 BytecodeOp::Builtin {
                     name,
                     arguments,
+                    type_arguments,
+                    result_type,
+                    ..
+                } if name == "api_response" => {
+                    let body_type = type_arguments.first();
+                    if *arguments != 3
+                        || type_arguments.len() > 1
+                        || !matches!(result_type, Type::Applied { name: ty, args } if ty == "ApiResponse" && args.len() == 1 && body_type.is_none_or(|body| body == &args[0]))
+                    {
+                        return Err(vec![bytecode_error(
+                            "bytecode `api_response` builtin has invalid arity or response type",
+                            instruction.span,
+                        )]);
+                    }
+                }
+                BytecodeOp::Builtin {
+                    name,
+                    arguments,
                     result_type,
                     ..
                 } if name == "run_process_piped" => {
@@ -3651,6 +3669,49 @@ fn execute_vm_builtin(
     };
 
     match name {
+        "api_response" => {
+            if arguments.len() != 3 || type_arguments.len() > 1 {
+                return Err(runtime_error(
+                    span,
+                    "api_response expects status, headers, and body",
+                ));
+            }
+            let Value::Int(status) = &arguments[0] else {
+                return Err(runtime_error(span, "api_response status must be Int"));
+            };
+            let Value::Array(raw_headers) = &arguments[1] else {
+                return Err(runtime_error(span, "api_response headers must be String[]"));
+            };
+            let headers = raw_headers
+                .iter()
+                .map(|header| match header {
+                    Value::String(header) => Ok(header.clone()),
+                    _ => Err(runtime_error(span, "api_response headers must be String[]")),
+                })
+                .collect::<Result<Vec<_>, _>>()?;
+            let body = arguments[2].clone();
+            if type_arguments
+                .first()
+                .is_some_and(|expected| expected != &body.ty())
+            {
+                return Err(runtime_error(
+                    span,
+                    "api_response body does not match its type argument",
+                ));
+            }
+            let expected_type = Type::Applied {
+                name: "ApiResponse".into(),
+                args: vec![body.ty()],
+            };
+            if result_type != &expected_type {
+                return Err(runtime_error(
+                    span,
+                    "api_response has an invalid response type",
+                ));
+            }
+            zelyra_runtime::api_response_value(*status, headers, body)
+                .map_err(|error| runtime_error(span, error))
+        }
         "sql_decode" => {
             if arguments.len() != 1
                 || type_arguments.len() != 1
