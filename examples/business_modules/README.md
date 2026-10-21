@@ -45,10 +45,15 @@ different number of fields.
 `preview_table(rows, max_rows)` returns at most 100 data rows plus the header.
 `map_columns(rows, source_columns, target_columns)` reorders and renames
 explicitly selected columns, rejecting missing or ambiguous headers and
-duplicate target names. Both return parsed values without writing to the
-database or converting field types. The `csv_import_demo` entry exercises
-valid and invalid inputs on AST, MIR, and Bytecode. It is not a preview UI or a
-transactional database importer.
+duplicate target names. `convert_columns(rows, mappings)` also applies
+explicit, compiler-visible conversions to text, integer, and Boolean cells
+and returns a table of tagged `CsvValue` cells. Invalid values identify their
+CSV row and target column. Integer parsing uses `parse_int`; Boolean parsing
+accepts `true`, `false`, `1`, and `0`. Conversion is never inferred from a
+database schema. Decimal/date/time conversion, database writes, and transactional
+apply remain open. The `csv_import_demo` and `csv_convert_demo` entries exercise
+valid and invalid inputs on AST, MIR, and Bytecode. They are not a preview UI or
+a transactional database importer.
 
 To run the CSV demonstration without connecting to MariaDB:
 
@@ -62,14 +67,18 @@ zelyra run main.zyl --entry csv_demo --backend bytecode
 zelyra run main.zyl --entry csv_import_demo --backend ast
 zelyra run main.zyl --entry csv_import_demo --backend mir
 zelyra run main.zyl --entry csv_import_demo --backend bytecode
+zelyra run main.zyl --entry csv_convert_demo
+zelyra run main.zyl --entry csv_convert_demo --backend mir
+zelyra run main.zyl --entry csv_convert_demo --backend bytecode
 ```
 
 The checked-in `zelyra.toml` explicitly enables the filesystem capability for
-the example. `csv_encode` and `csv_decode_result` use the same pure runtime
-implementation on AST, MIR, and bytecode. The CLI integration tests check the
-CSV export output and the importer's valid and malformed inputs across all three
-backends. A consuming application must also configure its allowed roots before
-calling `write_csv`; the package effect declaration alone never grants access.
+the example. `csv_encode`, `csv_decode_result`, `parse_int`, and `parse_bool`
+use the same pure runtime implementation on AST, MIR, and bytecode. The CLI
+integration tests check CSV export, valid and malformed parsing, explicit typed
+conversion, and exact output across all three backends. A consuming application
+must also configure its allowed roots before calling `write_csv`; the package
+effect declaration alone never grants access.
 
 Validate the dependency graph and build a standalone Docker app from the full
 web application. The app imports the reusable billing and storage packages;

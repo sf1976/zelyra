@@ -314,6 +314,37 @@ fn reusable_csv_import_package_checks_rows_on_all_execution_backends() {
 }
 
 #[test]
+fn reusable_csv_import_package_performs_explicit_typed_conversion_on_all_backends() {
+    let entry = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../examples/business_modules/main.zyl");
+    let entry = entry.to_str().unwrap();
+    let checked = run(&["check", entry]);
+    assert!(
+        checked.status.success(),
+        "{}",
+        String::from_utf8_lossy(&checked.stderr)
+    );
+
+    let expected = b"invoice_number\nINV-1\n2\ntrue\nempty note length 0\nCSV row 2 column quantity: invalid integer\n";
+    for backend in ["ast", "mir", "bytecode"] {
+        let output = run(&[
+            "run",
+            entry,
+            "--entry",
+            "csv_convert_demo",
+            "--backend",
+            backend,
+        ]);
+        assert!(
+            output.status.success(),
+            "{backend}: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        assert_eq!(output.stdout, expected, "backend {backend}");
+    }
+}
+
+#[test]
 fn run_can_invoke_an_explicit_parameterless_entry_without_running_main() {
     let source = r#"
 fn main() { print("main entry") }

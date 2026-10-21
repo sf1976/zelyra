@@ -121,3 +121,104 @@ pub fn map_columns(
     }
     return Ok(mapped)
 }
+
+/// Supported, explicit CSV conversions. Decimal and temporal parsing are not
+/// inferred from a database schema and are intentionally not represented yet.
+pub enum CsvColumnType {
+    Text
+    Integer
+    Boolean
+}
+
+/// A converted cell keeps its source-language type instead of storing a
+/// formatted string that could later be mistaken for validated data.
+pub enum CsvValue {
+    Text(String)
+    Integer(Int)
+    Boolean(Bool)
+}
+
+pub struct CsvColumnMapping {
+    source_name: String
+    target_name: String
+    value_type: CsvColumnType
+}
+
+pub struct CsvConvertedTable {
+    column_names: String[]
+    rows: CsvValue[][]
+}
+
+/// Select, rename, and explicitly convert CSV cells. Integer cells use
+/// `parse_int`; Boolean cells accept true/false and 1/0 through `parse_bool`.
+/// Errors include the source row and target column. This is validation only:
+/// it does not infer a schema or write to a database.
+pub fn convert_columns(
+    rows: String[][],
+    mappings: CsvColumnMapping[]
+) -> Result<CsvConvertedTable, String> {
+    if len(rows) == 0 {
+        return Err("CSV conversion requires a header row")
+    }
+    if len(mappings) == 0 {
+        return Err("CSV conversion requires at least one column mapping")
+    }
+
+    mutable source_columns: String[] = []
+    mutable target_columns: String[] = []
+    mutable mapping_index = 0
+    while mapping_index < len(mappings) {
+        source_columns = append(source_columns, mappings[mapping_index].source_name)
+        target_columns = append(target_columns, mappings[mapping_index].target_name)
+        mapping_index = mapping_index + 1
+    }
+
+    match map_columns(rows, source_columns, target_columns) {
+        Err(message) => { return Err(message) }
+        Ok(mapped) => {
+            mutable converted_rows: CsvValue[][] = []
+            mutable row_index = 1
+            while row_index < len(mapped) {
+                mutable converted_row: CsvValue[] = []
+                mutable column_index = 0
+                while column_index < len(mappings) {
+                    cell = mapped[row_index][column_index]
+                    target_name = mappings[column_index].target_name
+                    match mappings[column_index].value_type {
+                        CsvColumnType::Text => {
+                            converted_row = append(converted_row, CsvValue::Text(cell))
+                        }
+                        CsvColumnType::Integer => {
+                            match parse_int(cell) {
+                                Ok(value) => {
+                                    converted_row = append(converted_row, CsvValue::Integer(value))
+                                }
+                                Err(_) => {
+                                    return Err("CSV row " + to_string(row_index + 1) + " column " + target_name + ": invalid integer")
+                                }
+                            }
+                        }
+                        CsvColumnType::Boolean => {
+                            match parse_bool(cell) {
+                                Ok(value) => {
+                                    converted_row = append(converted_row, CsvValue::Boolean(value))
+                                }
+                                Err(_) => {
+                                    return Err("CSV row " + to_string(row_index + 1) + " column " + target_name + ": invalid boolean")
+                                }
+                            }
+                        }
+                    }
+                    column_index = column_index + 1
+                }
+                converted_rows = append(converted_rows, converted_row)
+                row_index = row_index + 1
+            }
+            converted_table = CsvConvertedTable {
+                column_names: target_columns
+                rows: converted_rows
+            }
+            return Ok(converted_table)
+        }
+    }
+}

@@ -2153,10 +2153,20 @@ impl ProgramBuilder {
                 body: self.expression_id(body),
             },
             HirExprKind::Local(local) => MirExpressionKind::Local(*local),
-            HirExprKind::EnumVariant { enum_name, variant } => MirExpressionKind::EnumVariant {
-                enum_name: enum_name.clone(),
-                variant: variant.clone(),
-            },
+            HirExprKind::EnumVariant { enum_name, variant } => {
+                let canonical_enum_name = self
+                    .inferred
+                    .get(&span_key(expression.span))
+                    .and_then(|ty| match ty {
+                        Type::Named(name) | Type::Applied { name, .. } => Some(name.clone()),
+                        _ => None,
+                    })
+                    .unwrap_or_else(|| enum_name.clone());
+                MirExpressionKind::EnumVariant {
+                    enum_name: canonical_enum_name,
+                    variant: variant.rsplit("::").next().unwrap_or(variant).to_owned(),
+                }
+            }
             HirExprKind::FunctionValue { name, function } => MirExpressionKind::FunctionValue {
                 name: name.clone(),
                 function: *function,

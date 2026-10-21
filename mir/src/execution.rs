@@ -1186,7 +1186,7 @@ impl Machine<'_> {
                 Ok(Value::Enum {
                     type_name,
                     type_args,
-                    variant,
+                    variant: variant.rsplit("::").next().unwrap_or(&variant).to_owned(),
                     payloads: Vec::new(),
                 })
             }
