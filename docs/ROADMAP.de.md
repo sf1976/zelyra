@@ -27,7 +27,7 @@ Ressourcendisziplin und ehrliche Beweisaussagen leiten jede Phase. Das
 [Manifest](MANIFESTO.de.md) beschreibt die Prinzipien; die Roadmap kennzeichnet
 den tatsächlich implementierten Stand.
 
-Das aktuelle stabile Release ist 1.2.32 und wurde unter https://github.com/sf1976/zelyra/releases/tag/v1.2.32 veröffentlicht. **Aktuelle Meilensteine** ist die
+Das aktuelle stabile Release ist 1.2.33 und wurde unter https://github.com/sf1976/zelyra/releases/tag/v1.2.33 veröffentlicht. **Aktuelle Meilensteine** ist die
 verbindliche Übersicht der nächsten Vorhaben. Ältere, nummerierte Release-
 Abschnitte bleiben als historische Planung und Nachweise erhalten; sie legen
 für sich keine aktuellen Releaseziele fest. Langfristige Ideen stehen im
@@ -681,16 +681,19 @@ Beide Releases bestanden ihre Release-Gates und sind veröffentlicht. Dies
 behauptet weder ein absturzatomisches kombiniertes Backup noch vollständige
 AST-/MIR-/Bytecode-Parität. Siehe den [Plan zum Abschluss des Geschäfts-CRUD](release-plans/1.2.31-1.2.32-business-crud.de.md).
 
-### 🧪 [~] Zelyra 1.2.33 — experimentelle Backend-Sicherheitsparität (Kandidat)
+### ✅ [x] Zelyra 1.2.33 — experimentelle Backend-Sicherheitsprüfungen (veröffentlicht)
 
-Der Kandidat gleicht die quellbezogene `--max-steps`-Abrechnung in den
+Veröffentlicht als [`v1.2.33`](https://github.com/sf1976/zelyra/releases/tag/v1.2.33).
+Das Release gleicht die quellbezogene `--max-steps`-Abrechnung in den
 unterstützten AST-, MIR- und Bytecode-Ausführungspfaden an; die
 Instruktionsgrenze der VM bleibt bestehen. Differentielle Tests vergleichen
 eine Transaktion mit SQL-Audit-Eintrag und einer eingereihten PDF-E-Mail über
 AST, MIR und kodierten/dekodierten Bytecode. Das ist ein begrenzter Testumfang
 und keine allgemeine Backend-, Transaktions-, Rollback- oder Host-Effekt-Parität.
 AST bleibt Standard; MIR und Bytecode sind ausdrückliche experimentelle
-Opt-ins. Ein Release wurde noch nicht veröffentlicht.
+Opt-ins. Linux- und Windows-Archive, Prüfsummen, SPDX-SBOMs und Attestierungen
+sind veröffentlicht; heruntergeladene Release-Dateien bestanden die
+SHA-256-Prüfung.
 
 ### 🗺️ [ ] Zelyra 1.3.0 — typisierte MIR und Rust-Bytecode-VM
 
