@@ -625,19 +625,19 @@ abgeschlossen.
   unterstützte Bytecode-Operationen fail-closed scheitern und der bisherige
   Standard unverändert bleiben. Ziel ist portabler geprüfter Bytecode, keine
   native Maschinencodegenerierung.
-- [~] **1.3.0 — geprüfte Web-/Compilerlücken und vorhandene Grundlagen:**
-  SQL-geladene `Option<Record>`-Seitendaten, dynamische Medien-Typen für
-  Seitenantworten, statische `public/`-Assets und begrenztes stdin-Piping für
-  die Process-Capability sind bereits in 1.2.33 enthalten und keine offenen
-  Lücken. Typisierte Properties für wiederverwendbare `view`-Layouts liegen in
-  PR #151; ein typisierter erfolgreicher API-Handler-Antwortvertrag in PR #153;
-  begrenztes, bereinigtes CommonMark/GFM-Rendering in PR #154; geprüfte
-  statische Locale-Referenzen und `{locale}`-Präfixauswahl in Views im
-  aktuellen Feature-Branch.
-  `HttpResult<T>` beschreibt weiterhin Antworten ausgehender HTTP-Aufrufe und
-  keine Status-/Header-Rückgaben eines Zelyra-API-Handlers. URL-basierte
-  Markdown-Inhaltsverzeichnisse, Pluralregeln und Codehervorhebung sind nicht
-  implementiert und benötigen eigene Abnahmetests.
+- [~] **1.3.0 — umgesetzte Web-/Compilerfunktionen und offene Punkte:**
+  SQL-geladene `Option<Record>`-Seitendaten, dynamisches `page content_type`,
+  statische `public/`-Assets, begrenztes `run_process_piped` und typisierte
+  erfolgreiche API-Antworten über `ApiResponse<T>` sind auf `main` umgesetzt.
+  Status, Medientyp, Header, OpenAPI-Ausgabe und TypeScript-Client-Unterstützung
+  sind abgedeckt. Piped Prozesseingabe führt für sich allein keinen Zelyra-Code
+  aus und stellt keine Web-Sandbox bereit. Parametrisierte `view`-Properties
+  liegen in PR #151, sicheres begrenztes CommonMark/GFM-Rendering in PR #154;
+  geprüfte statische Locale-Referenzen und `{locale}`-Präfixauswahl in Views
+  liegen in diesem Feature-Branch. `HttpResult<T>` beschreibt weiterhin
+  Antworten ausgehender HTTP-Aufrufe. Typisiertes `t("key")`, Markdown-
+  Inhaltsverzeichnisse, Pluralregeln und Codehervorhebung bleiben offen und
+  benötigen eigene Abnahmetests.
 
 **Nach 1.3.0 oder bei ausdrücklicher Neubewertung:** Ein natives AOT-Backend
 bleibt optional und hängt von Benchmarks ab. Kein offener Punkt entfällt stillschweigend: Arbeit, deren

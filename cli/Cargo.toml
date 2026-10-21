@@ -22,6 +22,7 @@ regex.workspace = true
 toml.workspace = true
 toml_edit.workspace = true
 glob.workspace = true
+mime.workspace = true
 similar.workspace = true
 url.workspace = true
 ureq.workspace = true
