@@ -579,17 +579,17 @@ security and compatibility gates stated for that milestone.
   data, dynamic `page content_type`, static `public/` assets, and bounded
   `run_process_piped` stdin for allowlisted processes are implemented on `main`.
   `run_process_piped` does not itself execute Zelyra source or provide a web
-  sandbox. Typed successful API responses are implemented on `main` as
-  `ApiResponse<T>` with status/content-type declarations, checked headers,
-  OpenAPI, and TypeScript-client support. `HttpResult<T>` still describes
-  responses from outbound HTTP calls. Parameterized `view` props remain open,
-  although pages can provide named layout slots for page-specific head
-  content. Project `locales/de.json` and `locales/en.json` catalogs plus
-  `data-zelyra-i18n`/`@i18n:` markers already localize custom page text; a
-  typed `t("key")` expression and declarative locale-route grouping remain
-  open. Safe CommonMark/GFM rendering is the subject of this branch and still
-  needs complete verification. Static asset serving is already present and
-  is not an open gap.
+- [~] **1.3.0 — verified web/compiler features and remaining gaps:** SQL-loaded
+  `Option<Record>` page data, dynamic `page content_type`, static `public/`
+  assets, bounded `run_process_piped`, typed successful API responses via
+  `ApiResponse<T>`, and typed properties for reusable `view` layouts are
+  implemented on `main`. Piped process input does not itself execute Zelyra
+  source or provide a web sandbox. Checked static locale references and
+  `/{locale}/...` route selection are in PR #155. Safe bounded CommonMark/GFM
+  rendering is implemented on this branch and awaits full CI verification.
+  `HttpResult<T>` remains the result type for outbound HTTP calls. Typed
+  translation calls in arbitrary expressions, Markdown table-of-contents
+  generation, plural rules, and code highlighting remain open.
 
 **Post-1.3.0 or explicitly reprioritized:** a native AOT backend is optional
 and depends on benchmark evidence. No open task is silently dropped: work that cannot meet its release
@@ -1093,6 +1093,9 @@ compatibility behavior before changing syntax. See the detailed
   APIs, OpenAPI, and TypeScript client generation.
 - [~] Reusable web views: named layouts, page composition, a validated content
   slot, and typed self-closing components with properties are available.
+  Views also declare typed properties, and pages pass statically checked
+  literal or page-scope values for shared layout data such as titles and meta
+  content. Optional properties may be used by CRUD and TableView layouts.
   Named slots with fallback content, CRUD view overrides, and per-resource
   content for named CRUD-layout slots are available. Static slot markup may
   use checked components; record-bound custom slot content remains open.
