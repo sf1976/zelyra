@@ -25,7 +25,7 @@ telemetry, explicit effects, portable data, resource discipline, and honest
 proof claims guide every phase. The [manifesto](MANIFESTO.md) states the
 principles; the roadmap below tracks what is actually implemented.
 
-The current stable release is 1.2.32, published at https://github.com/sf1976/zelyra/releases/tag/v1.2.32. **Current milestones** is the source of
+The current stable release is 1.2.33, published at https://github.com/sf1976/zelyra/releases/tag/v1.2.33. **Current milestones** is the source of
 near-term commitments. Older numbered release sections below are retained as
 historical planning and evidence; they do not by themselves define current
 release targets. Longer-term ideas remain in the post-1.0 evolution section.
@@ -627,15 +627,17 @@ Both releases passed their release gates and are published. This summary does
 not claim crash-atomic combined backups or full AST/MIR/Bytecode parity. See the
 [business CRUD completion plan](release-plans/1.2.31-1.2.32-business-crud.en.md).
 
-### 🧪 [~] Zelyra 1.2.33 — experimental backend safety parity (candidate)
+### ✅ [x] Zelyra 1.2.33 — experimental backend safety checks (released)
 
-The candidate aligns source-level `--max-steps` accounting for the supported
+Released as [`v1.2.33`](https://github.com/sf1976/zelyra/releases/tag/v1.2.33).
+The release aligns source-level `--max-steps` accounting for the supported
 AST, MIR, and bytecode execution slices while keeping the VM instruction cap.
 Differential coverage compares one transaction containing a SQL audit insert
 and one queued PDF email across AST, MIR, and encoded/decoded bytecode. This is
 a bounded test scope, not general backend, transaction, rollback, or host
 effect parity. AST remains the default; MIR and bytecode remain explicit
-experimental opt-ins. No release has been published yet.
+experimental opt-ins. Linux and Windows archives, checksums, SPDX SBOMs, and
+attestations were published; downloaded release assets passed SHA-256 checks.
 
 ### 🗺️ [ ] Zelyra 1.3.0 — typed MIR and Rust bytecode VM
 
