@@ -347,7 +347,17 @@ abgeschlossen.
   den Paketverbrauch mit einer minimalen Laravel-Fixture. Ungelöste Abläufe und
   genaue Quellpositionen
   in einem versionierten Bericht erhalten. Abnahmeprojekt ist
-  `/opt/siedelmann-laravel/app`; weitere Abdeckung folgt in 1.2.30. Als
+  `/opt/siedelmann-laravel/app`; weitere Abdeckung folgt in 1.2.30. Ein
+  erneuter ausdrücklich angeforderter Live-Schemacheck am 2026-10-21 verband
+  sich schreibgeschützt über den Docker-Compose-Servicealias und erfasste 89
+  Live-Tabellen mit 1.293 Spalten. Alle 80 generierten Kandidaten wurden
+  verglichen: 297 SQL-Typ-, 117 statische Default- und 59
+  Fremdschlüsselabweichungen. Vier Angaben blieben unklassifiziert; neun
+  Live-Tabellen lagen außerhalb des Migrationsinventars. Es wurden keine
+  Anwendungszeilen gelesen, keine Zugangsdaten gespeichert und weder
+  Laravel-Dateien noch Datenbankwerte verändert. Das bestätigt die
+  Live-Schema-Erkennung und ihren Abweichungsbericht, keine Schemaparität oder
+  Migration des Anwendungsverhaltens. Als
   [`v1.2.27`](https://github.com/sf1976/zelyra/releases/tag/v1.2.27)
   veröffentlicht; PR- und Releaseprüfungen bestanden. Siehe den
   [Arbeitsplan 1.2.27](release-plans/1.2.27-laravel-website-importer.de.md).

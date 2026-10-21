@@ -320,7 +320,14 @@ security and compatibility gates stated for that milestone.
   Keep unresolved behavior and exact source locations visible in a versioned
   report. The `/opt/siedelmann-laravel/app` project is the acceptance fixture;
   broader route/workflow coverage continues in 1.2.30. Released as
-  [`v1.2.27`](https://github.com/sf1976/zelyra/releases/tag/v1.2.27); its PR
+  A fresh explicit live inspection on 2026-10-21 also connected read-only via
+  the project's Docker Compose service alias: 89 live tables and 1,293 columns;
+  80 generated candidates were compared. The report records 473 reviewable
+  differences (297 SQL types, 117 defaults, and 59 foreign keys), four
+  unclassified items, and nine live tables outside the migration inventory.
+  It read no application rows, recorded no credentials, and did not modify the
+  Laravel source. These differences are findings, not importer parity.
+  Released as [`v1.2.27`](https://github.com/sf1976/zelyra/releases/tag/v1.2.27); its PR
   and release workflows passed all checks. See the
   [1.2.27 importer plan](release-plans/1.2.27-laravel-website-importer.en.md).
 - [x] **1.2.28 — typed CRUD domain actions and REPL safety (released):** Add a checked execution context
