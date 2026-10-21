@@ -242,7 +242,7 @@ impl<'program, 'services> Interpreter<'program, 'services> {
                     execute_database_query_with_host(
                         &database_url,
                         &database_query,
-                        self.host_services.as_ref(),
+                        self.execution_context.host_services.as_ref(),
                         expr.span,
                     )?
                 };

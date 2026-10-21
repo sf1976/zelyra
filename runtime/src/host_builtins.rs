@@ -33,7 +33,8 @@ impl AstInterpreter<'_, '_> {
                     }
                     Err(error) => return Some(Err(error)),
                 };
-                self.host_services
+                self.execution_context
+                    .host_services
                     .read_console_line(&prompt)
                     .map(|value| Value::Option(value.map(|value| Box::new(Value::String(value)))))
                     .map_err(|error| {
@@ -48,7 +49,7 @@ impl AstInterpreter<'_, '_> {
                 {
                     return Some(Err(error));
                 }
-                uuid_v4_with_host_services(self.host_services.as_ref())
+                uuid_v4_with_host_services(self.execution_context.host_services.as_ref())
                     .map(Value::String)
                     .map_err(|error| self.runtime_error(span, error))
             }
@@ -59,7 +60,7 @@ impl AstInterpreter<'_, '_> {
                 if let Err(error) = self.require_runtime_capability("Clock", "clock access", span) {
                     return Some(Err(error));
                 }
-                match self.host_services.unix_time_millis() {
+                match self.execution_context.host_services.unix_time_millis() {
                     Ok(timestamp) if zelyra_ast::temporal::valid_timestamp_millis(timestamp) => {
                         Ok(Value::Timestamp(timestamp))
                     }
@@ -98,7 +99,11 @@ impl AstInterpreter<'_, '_> {
                         "env expects a non-empty variable name",
                     )));
                 }
-                match self.host_services.environment_variable(&key) {
+                match self
+                    .execution_context
+                    .host_services
+                    .environment_variable(&key)
+                {
                     Ok(value) => Ok(Value::Option(
                         value.map(|value| Box::new(Value::String(value))),
                     )),
@@ -125,11 +130,13 @@ impl AstInterpreter<'_, '_> {
                     Err(error) => return Some(Err(error)),
                 };
                 match (minimum, maximum) {
-                    (Value::Int(minimum), Value::Int(maximum)) => {
-                        random_int_with_host_services(self.host_services.as_ref(), minimum, maximum)
-                            .map(Value::Int)
-                            .map_err(|error| self.runtime_error(span, error))
-                    }
+                    (Value::Int(minimum), Value::Int(maximum)) => random_int_with_host_services(
+                        self.execution_context.host_services.as_ref(),
+                        minimum,
+                        maximum,
+                    )
+                    .map(Value::Int)
+                    .map_err(|error| self.runtime_error(span, error)),
                     _ => Err(self.runtime_error(span, "random_int expects Int arguments")),
                 }
             }

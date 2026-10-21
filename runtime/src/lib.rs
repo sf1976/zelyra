@@ -994,13 +994,15 @@ fn json_codec_interpreter(
         }),
         storage_checked: false,
         scoped_tables: Vec::new(),
-        granted_capabilities: None,
-        filesystem_policy: None,
-        network_policy: None,
-        process_policy: None,
-        mail_policy: None,
-        package_settings: None,
-        host_services: Arc::new(SystemHostServices),
+        execution_context: ast_interpreter::ExecutionContext {
+            granted_capabilities: None,
+            filesystem_policy: None,
+            network_policy: None,
+            process_policy: None,
+            mail_policy: None,
+            package_settings: None,
+            host_services: Arc::new(SystemHostServices),
+        },
         record_definitions: records
             .iter()
             .cloned()
@@ -1523,7 +1525,7 @@ fn transaction_queries(
                     &evaluated,
                     &argument_spans,
                     expression.span,
-                    interpreter.host_services.as_ref(),
+                    interpreter.execution_context.host_services.as_ref(),
                 )?);
             }
             _ => return Err(RuntimeError {

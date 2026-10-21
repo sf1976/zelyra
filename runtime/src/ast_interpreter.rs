@@ -64,13 +64,7 @@ pub(super) struct AstInterpreter<'program, 'services> {
     pub(super) storage_schema: Result<zelyra_database::Schema, Vec<zelyra_database::SchemaError>>,
     pub(super) storage_checked: bool,
     pub(super) scoped_tables: Vec<String>,
-    pub(super) granted_capabilities: Option<HashSet<String>>,
-    pub(super) filesystem_policy: Option<FileSystemPolicy>,
-    pub(super) network_policy: Option<NetworkPolicy>,
-    pub(super) process_policy: Option<ProcessPolicy>,
-    pub(super) mail_policy: Option<MailPolicy>,
-    pub(super) package_settings: Option<PackageSettings>,
-    pub(super) host_services: Arc<dyn HostServices>,
+    pub(super) execution_context: ExecutionContext,
     pub(super) record_definitions: HashMap<String, RecordDef>,
     pub(super) sql_record_definitions: HashMap<String, RecordDef>,
     pub(super) type_aliases: HashMap<String, Type>,
@@ -82,6 +76,20 @@ pub(super) struct AstInterpreter<'program, 'services> {
 pub(super) type TransactionalQuery<'services> = dyn FnMut(&zelyra_database::Query) -> Result<zelyra_database::QueryResult, String>
     + Send
     + 'services;
+
+/// Host access and the policies that constrain it for one AST execution.
+/// Parallel workers clone this context as a unit so they cannot silently
+/// diverge in capability grants or provider policy.
+#[derive(Clone)]
+pub(super) struct ExecutionContext {
+    pub(super) granted_capabilities: Option<HashSet<String>>,
+    pub(super) filesystem_policy: Option<FileSystemPolicy>,
+    pub(super) network_policy: Option<NetworkPolicy>,
+    pub(super) process_policy: Option<ProcessPolicy>,
+    pub(super) mail_policy: Option<MailPolicy>,
+    pub(super) package_settings: Option<PackageSettings>,
+    pub(super) host_services: Arc<dyn HostServices>,
+}
 
 /// Per-execution host resources shared by every AST entry point.
 pub(super) struct RuntimeServices<'services> {
@@ -131,13 +139,15 @@ impl<'program, 'services> AstInterpreter<'program, 'services> {
                 .filter(|table| table.tenant_scope.is_some())
                 .map(|table| table.name.clone())
                 .collect(),
-            granted_capabilities,
-            filesystem_policy: policy.as_ref().and_then(|policy| policy.filesystem.clone()),
-            network_policy: policy.as_ref().and_then(|policy| policy.network.clone()),
-            process_policy: policy.as_ref().and_then(|policy| policy.process.clone()),
-            mail_policy: policy.as_ref().and_then(|policy| policy.mail.clone()),
-            package_settings: policy.and_then(|policy| policy.package_settings),
-            host_services: services.host_services,
+            execution_context: ExecutionContext {
+                granted_capabilities,
+                filesystem_policy: policy.as_ref().and_then(|policy| policy.filesystem.clone()),
+                network_policy: policy.as_ref().and_then(|policy| policy.network.clone()),
+                process_policy: policy.as_ref().and_then(|policy| policy.process.clone()),
+                mail_policy: policy.as_ref().and_then(|policy| policy.mail.clone()),
+                package_settings: policy.and_then(|policy| policy.package_settings),
+                host_services: services.host_services,
+            },
             sql_record_definitions: sql_results::definitions(program),
             record_definitions: program
                 .records
@@ -181,7 +191,7 @@ impl<'program, 'services> AstInterpreter<'program, 'services> {
                 validate_database_storage_with_host(
                     url,
                     &self.storage_schema,
-                    self.host_services.as_ref(),
+                    self.execution_context.host_services.as_ref(),
                     span,
                 )?;
             }
