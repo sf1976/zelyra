@@ -508,9 +508,10 @@ abgeschlossen.
   Treffer folgt 404 vor jedem Schreibzugriff, CSRF bleibt Pflicht und
   verifizierte Token-Seiten erhalten `Cache-Control: no-store`. Ein
   wiederholbarer MariaDB-/HTTP-E2E prüft den Ablauf am ausdrücklich
-  unmandantenfähigen Beispiel `examples/csv_mailer_unsubscribe.zyl`. Für das
-  echte Laravel-Projekt `/opt/siedelmann-laravel/app` wird dieser Ablauf
-  derzeit nicht generiert: `csv_mailer_suppressions` ist mandantengebunden, die
+  unmandantenfähigen Beispiel `examples/csv_mailer_unsubscribe.zyl`. Im
+  damaligen Lauf 1.2.30 gegen das echte Laravel-Projekt
+  `/opt/siedelmann-laravel/app` wurde dieser Ablauf nicht generiert:
+  `csv_mailer_suppressions` ist mandantengebunden, die
   öffentliche Tokenroute besitzt aber keinen authentifizierten
   Mandantenkontext. `tests/laravel_import_unsubscribe_e2e.py` prüft hier nun,
   dass die Tabelle als `scoped by` erzeugt, die unsichere Route ausgelassen und
@@ -589,7 +590,9 @@ abgeschlossen.
   575 Quelldateien. Das sind Analysebefunde, keine Zahl migrierter Funktionen.
   Eine eigenständige übersetzte Erfolgsansicht wird nur dann wiederverwendet,
   wenn der eng geprüfte Abmeldeablauf generiert wird; dieser Ablauf war beim
-  vollständigen Projektlauf nicht zulässig. Laravel,
+  vollständigen Projektlauf nicht zulässig. Dieser Text beschreibt den
+  damaligen Stand; der Ablauf wird im aktiven Meilenstein 1.2.40 ergänzt.
+  Laravel,
   Composer-Pakete, PHP-Controller, Blade-Laufzeitdateien und Zugangsdaten werden
   nicht kopiert. Der Source-Only-Integrationstest vergleicht den unabhängig
   durchlaufenen PHP-Dateibaum mit `SOURCE_FILE_PLAN.json` und
@@ -697,6 +700,24 @@ Veröffentlicht als [`v1.2.38`](https://github.com/sf1976/zelyra/releases/tag/v1
 ### ✅ [x] 1.2.39 — explizite CSV-Konvertierung von Date und Time (veröffentlicht)
 
 Veröffentlicht als [`v1.2.39`](https://github.com/sf1976/zelyra/releases/tag/v1.2.39). Die gemeinsame reine Runtime ergänzt typisierte `parse_date`- und `parse_time`-Result-Werte für die kanonischen, locale-unabhängigen Formen `YYYY-MM-DD` und `HH:MM:SS`. Der wiederverwendbare CSV-Importer gibt getaggte `Date`- und `Time`-Werte zurück und nennt Zeile sowie Zielspalte bei ungültigen Eingaben. Die vollständige PR-CI und reproduzierbare Linux-/Windows-Release-Workflows bestanden. Veröffentlichte Archive, Prüfsummendateien und Programmversion wurden geprüft. Dies ist weder zeitzonenbewusste Zeitstempelverarbeitung noch Schemaableitung oder transaktionaler Datenbankimport; die genauen Prüfnachweise und Artefakt-Hashes stehen in den Release-Notizen.
+
+### 🧪 [~] 1.2.40 — mandantensicherer öffentlicher Tokenablauf im Importer
+
+Der Laravel-Importer erzeugt die geprüfte Abmelderoute jetzt aus der realen,
+mandantengebundenen Tabelle `csv_mailer_suppressions` über ein eng begrenztes
+`public_token`-Formularprimitiv. Der Compiler verlangt einen global eindeutigen
+`String(64)`-Hash, eine mandantengebundene Tabelle, nullable `Timestamp?`, genau
+einen Routenparameter sowie eine reine Bestätigungsaktion ohne eigenes SQL oder
+Handler. Die Runtime hasht den Bearer-Token, findet genau einen Datensatz und
+ändert innerhalb einer Transaktion ausschließlich dessen Primär- und
+Mandantenschlüssel. CSRF bleibt Pflicht, Tokenantworten erhalten `no-store`,
+Wiederholungen behalten den ersten Zeitstempel. Der Scaffold-Check und der
+MariaDB-/HTTP-E2E-Test mit Wegwerfdatenbank bestanden; geprüft wurden auch
+ungültige Tokens, CSRF-Ablehnung und Isolation eines zweiten Mandanten.
+Generierte Erfolgskomponenten deklarieren ihre Modulabhängigkeiten explizit.
+PR #176 ist ein offener Entwurf; vor Abschluss des Meilensteins müssen seine
+CI- und Release-Gates bestehen. Das importiert einen erkannten Ablauf, nicht
+die gesamte Website oder alle 2.274 Befunde.
 
 ## Aktive Architektur-Meilensteine (1.1.5 bis 1.3.0)
 
@@ -1022,6 +1043,7 @@ werden. Details stehen im [Projektlayout-Arbeitsplan](release-plans/1.3.0-projec
   Performancemessungen sind noch offen; siehe den ausführlichen Abschnitt zu
   1.3.0.
 - [~] **Import von Laravel-Webseiten — aktiv bis 1.3.0:** Den entfernten Framework-Migrator durch einen quellbelegten Website-Importer ersetzen, der compilergeprüfte, wiederverwendbare Zelyra-Module erzeugt. Zuerst analysieren, vor Generierung eine Auswahl verlangen, nicht unterstützte Abläufe sichtbar erhalten und die Laravel-Quelle unverändert lassen. Erstes Integrationsprojekt ist `/opt/siedelmann-laravel/app`. Der Importer baut auf dem Modul-/Paketsystem von 1.1.5 und der Betriebsgrundlage von 1.2.0 auf; er führt kein paralleles Plugin-/Laufzeitmodell ein. Release 1.2.34 erhält für MariaDB die Kapazität von Laravel-`mediumText`/`longText` über `String text_storage medium|long`, weist nicht unterstützte MariaDB-Indizes auf diesen Spalten zurück und meldet die backendabhängigen PostgreSQL-/SQLite-Grenzen. Release 1.2.35 erhält außerdem unterstützte Breiten vorzeichenloser Integer. Der Website-Import ist damit nicht abgeschlossen; Routenverhalten und Anwendungsabläufe bleiben offen.
+- [~] **1.2.40 Import-Vertikalschnitt:** Die öffentliche Abmelderoute des echten Projekts wird ausschließlich über das geprüfte mandantengebundene `public_token`-Formularprimitiv erzeugt. Scaffold-Prüfung und MariaDB-/HTTP-E2E bestehen; alle übrigen Importbefunde bleiben offen und die CI-Prüfungen des Feature-PR laufen noch.
 
 - [ ] **1.2.0 — Compose-Prüfung im Installer:** Die Installer
   erkennen Docker Compose v2 oder neuer und unterscheiden es von der veralteten
