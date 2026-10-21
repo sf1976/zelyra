@@ -1,5 +1,19 @@
 ## Unreleased
 
+## 1.2.41 — 2026-10-22
+
+- Map the narrowly recognized Laravel `GET` route that returns a literal
+  `public_path(...)` file to a same-origin Zelyra public asset. The importer
+  requires an exact URL/path match, copies the regular source file through the
+  existing bounded and symlink-safe asset pipeline, and records the mapping.
+  This does not translate dynamic routes, middleware, route groups, or PHP
+  handlers. / Eine eng erkannte Laravel-`GET`-Route, die eine wörtliche Datei
+  aus `public_path(...)` zurückgibt, auf ein gleichursprüngliches Zelyra-
+  Public-Asset abbilden. Der Importer verlangt eine exakte URL-/Pfadüberein-
+  stimmung, kopiert reguläre Dateien über die bestehende Größen- und Symlink-
+  Prüfung und dokumentiert die Zuordnung. Dynamische Routen, Middleware,
+  Routengruppen und PHP-Handler werden damit nicht übersetzt.
+
 ## 1.2.40 — 2026-10-21
 
 - Add the constrained `public_token` form workflow for tenant-scoped public
