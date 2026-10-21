@@ -1932,6 +1932,29 @@ fn rejects_missing_unknown_and_incompatible_page_view_properties() {
 }
 
 #[test]
+fn checks_dynamic_view_properties_against_page_inputs() {
+    let source = r#"
+        view SiteShell {
+            props { title: String }
+            html { <html><head><title>{title}</title></head><body><slot /></body></html> }
+        }
+        page "/handbook" {
+            input { page_title: String }
+            view: SiteShell(title: "{page_title}")
+            html { <h1>Handbook</h1> }
+        }
+    "#;
+    let program = parse(&lex(source).unwrap()).unwrap();
+    assert!(validate_views("dynamic-view-props.zyl", &program));
+    let html = compose_page_view(&program, &program.pages[0]);
+    assert!(html.contains("<title>{page_title}</title>"));
+
+    let incompatible = source.replace("page_title: String", "page_title: Int");
+    let program = parse(&lex(&incompatible).unwrap()).unwrap();
+    assert!(!validate_views("dynamic-view-props.zyl", &program));
+}
+
+#[test]
 fn composes_default_component_slots_and_nested_components() {
     let source = r#"
         component Panel {
