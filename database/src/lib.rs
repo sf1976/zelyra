@@ -257,6 +257,29 @@ pub fn build_schema(program: &Program) -> Result<Schema, Vec<SchemaError>> {
                     continue;
                 }
             }
+            if let Some(text_storage) = definition.text_storage {
+                if resolved_inner != &Type::String || definition.length.is_some() {
+                    errors.push(SchemaError {
+                        message: "`text_storage` requires an unbounded String column".into(),
+                        span: definition.span,
+                    });
+                }
+                if backend == Backend::MariaDb
+                    && matches!(
+                        text_storage,
+                        zelyra_ast::TextStorage::MediumText | zelyra_ast::TextStorage::LongText
+                    )
+                    && (definition.unique
+                        || definition.unique_within_tenant
+                        || definition.primary_key
+                        || definition.auto_sequence.is_some())
+                {
+                    errors.push(SchemaError {
+                        message: "MariaDB MEDIUMTEXT/LONGTEXT columns cannot be used as ordinary or unique indexed columns".into(),
+                        span: definition.span,
+                    });
+                }
+            }
             let (default_storage_name, sql_type, inferred_relation) =
                 column_mapping(definition, &table_names, &program.types, backend);
             let relation = if let Some(target_name) = definition.references.as_deref() {
@@ -863,6 +886,25 @@ fn build_index(
 ) -> Option<Index> {
     let mut storage_columns = Vec::new();
     for name in &definition.columns {
+        if backend == Backend::MariaDb
+            && table.columns.iter().any(|column| {
+                column.name == *name
+                    && matches!(
+                        column.text_storage,
+                        Some(
+                            zelyra_ast::TextStorage::MediumText | zelyra_ast::TextStorage::LongText
+                        )
+                    )
+            })
+        {
+            errors.push(SchemaError {
+                message: format!(
+                    "MariaDB MEDIUMTEXT/LONGTEXT column `{name}` cannot be indexed without a prefix length"
+                ),
+                span: definition.span,
+            });
+            return None;
+        }
         let storage_name = if storage_names.contains(name) {
             name.clone()
         } else {
@@ -963,7 +1005,12 @@ fn column_mapping(
         },
         Type::String => match definition.length {
             Some(length) => return (definition.name.clone(), format!("VARCHAR({length})"), None),
-            None => "TEXT",
+            None => match (backend, definition.text_storage) {
+                (Backend::MariaDb, Some(zelyra_ast::TextStorage::MediumText)) => "MEDIUMTEXT",
+                (Backend::MariaDb, Some(zelyra_ast::TextStorage::LongText)) => "LONGTEXT",
+                (Backend::Postgres | Backend::Sqlite, _)
+                | (Backend::MariaDb, None | Some(zelyra_ast::TextStorage::Text)) => "TEXT",
+            },
         },
         Type::Json => match backend {
             Backend::Postgres => "JSONB",
@@ -7695,6 +7742,46 @@ mod tests {
             assert_eq!(schema.tables[0].columns[1].sql_type, expected);
             assert!(schema.create_sql().contains(expected));
         }
+    }
+
+    #[test]
+    fn maps_text_storage_capacity_per_backend_and_rejects_indexed_long_text() {
+        for (engine, expected) in [
+            ("mariadb", ["TEXT", "MEDIUMTEXT", "LONGTEXT"]),
+            ("postgres", ["TEXT", "TEXT", "TEXT"]),
+            ("sqlite", ["TEXT", "TEXT", "TEXT"]),
+        ] {
+            let source = format!(
+                "database main {{ engine: {engine} database: \"text_capacity\" }} table notes {{ plain: String text_storage text summary: String text_storage medium body: String? text_storage long }}"
+            );
+            let schema = schema(&source);
+            for (column, sql_type) in schema.tables[0].columns.iter().zip(expected) {
+                assert_eq!(column.sql_type, sql_type);
+            }
+        }
+
+        let program = parse(&lex(
+            "database main { engine: mariadb database: \"text_capacity\" } table notes { id: Id primary auto body: String text_storage long unique }",
+        ).unwrap()).unwrap();
+        let errors = build_schema(&program).unwrap_err();
+        assert!(errors
+            .iter()
+            .any(|error| error.message.contains("MEDIUMTEXT/LONGTEXT")));
+
+        let program = parse(&lex(
+            "database main { engine: mariadb database: \"text_capacity\" } table notes { body: String text_storage long index { body } }",
+        ).unwrap()).unwrap();
+        let errors = build_schema(&program).unwrap_err();
+        assert!(errors.iter().any(|error| error
+            .message
+            .contains("cannot be indexed without a prefix length")));
+
+        let program =
+            parse(&lex("table notes { body: String(100) text_storage long }").unwrap()).unwrap();
+        let errors = build_schema(&program).unwrap_err();
+        assert!(errors
+            .iter()
+            .any(|error| error.message.contains("unbounded String")));
     }
 
     #[test]
