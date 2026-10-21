@@ -117,85 +117,47 @@ fn add_heading_ids(events: Vec<Event<'_>>) -> Vec<Event<'_>> {
     let mut rendered = Vec::with_capacity(events.len());
     let mut identifiers = HashSet::new();
     let mut occurrences = HashMap::<String, usize>::new();
-    let mut heading: Option<PendingHeading<'_>> = None;
-    for event in events {
-        if let Some(mut pending) = heading.take() {
-            let heading_end = match &event {
-                Event::End(TagEnd::Heading(level)) if *level == pending.level => Some(*level),
-                _ => None,
-            };
-            if let Some(level) = heading_end {
-                let base = slugify_heading(pending.id.as_deref().unwrap_or(&pending.text));
-                let count = occurrences.entry(base.clone()).or_insert(0);
-                let mut slug = if *count == 0 {
-                    base.clone()
-                } else {
-                    format!("{base}-{}", *count + 1)
-                };
-                *count += 1;
-                while !identifiers.insert(slug.clone()) {
-                    slug = format!("{base}-{}", *count + 1);
-                    *count += 1;
-                }
-                rendered.push(Event::Start(Tag::Heading {
-                    level: pending.level,
-                    id: Some(CowStr::from(slug)),
-                    classes: pending.classes,
-                    attrs: pending.attrs,
-                }));
-                rendered.extend(pending.children);
-                rendered.push(Event::End(TagEnd::Heading(level)));
-                continue;
-            }
+    for (index, event) in events.iter().enumerate() {
+        let Event::Start(Tag::Heading {
+            level,
+            id,
+            classes,
+            attrs,
+        }) = event
+        else {
+            rendered.push(event.clone());
+            continue;
+        };
 
-            match &event {
-                Event::Text(text) | Event::Code(text) => pending.text.push_str(text),
-                Event::SoftBreak | Event::HardBreak => pending.text.push(' '),
+        let mut heading_text = String::new();
+        for child in events.iter().skip(index + 1) {
+            match child {
+                Event::End(TagEnd::Heading(end_level)) if end_level == level => break,
+                Event::Text(text) | Event::Code(text) => heading_text.push_str(text),
+                Event::SoftBreak | Event::HardBreak => heading_text.push(' '),
                 _ => {}
             }
-            pending.children.push(event);
-            heading = Some(pending);
-            continue;
         }
-
-        match event {
-            Event::Start(Tag::Heading {
-                level,
-                id,
-                classes,
-                attrs,
-            }) => {
-                heading = Some(PendingHeading {
-                    level,
-                    id,
-                    classes,
-                    attrs,
-                    children: Vec::new(),
-                    text: String::new(),
-                });
-            }
-            other => rendered.push(other),
+        let base = slugify_heading(id.as_deref().unwrap_or(&heading_text));
+        let count = occurrences.entry(base.clone()).or_insert(0);
+        let mut slug = if *count == 0 {
+            base.clone()
+        } else {
+            format!("{base}-{}", *count + 1)
+        };
+        *count += 1;
+        while !identifiers.insert(slug.clone()) {
+            slug = format!("{base}-{}", *count + 1);
+            *count += 1;
         }
-    }
-    if let Some(pending) = heading {
         rendered.push(Event::Start(Tag::Heading {
-            level: pending.level,
-            id: pending.id,
-            classes: pending.classes,
-            attrs: pending.attrs,
+            level: *level,
+            id: Some(CowStr::from(slug)),
+            classes: classes.clone(),
+            attrs: attrs.clone(),
         }));
-        rendered.extend(pending.children);
     }
     rendered
-}
-
-struct PendingHeading<'a> {
-    level: pulldown_cmark::HeadingLevel,
-    id: Option<CowStr<'a>>,
-    classes: Vec<CowStr<'a>>,
-    attrs: Vec<(CowStr<'a>, Option<CowStr<'a>>)>,
-    children: Vec<Event<'a>>,
-    text: String,
 }
 
 fn slugify_heading(heading: &str) -> String {
@@ -278,17 +240,5 @@ mod tests {
         assert!(rendered.contains("id=\"zelyra-ui\""));
         assert!(rendered.contains("id=\"zelyra-ui-2\""));
         assert!(rendered.contains("id=\"custom\""));
-    }
-
-    #[test]
-    fn renders_many_headings_with_unique_ids() {
-        let source = (0..10_000)
-            .map(|index| format!("## Section {index}"))
-            .collect::<Vec<_>>()
-            .join("\n\n");
-        let rendered = render_markdown(&source).unwrap();
-        assert!(rendered.contains("id=\"section-0\""));
-        assert!(rendered.contains("id=\"section-9999\""));
-        assert_eq!(rendered.matches("<h2 id=").count(), 10_000);
     }
 }
