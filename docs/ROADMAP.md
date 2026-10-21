@@ -654,7 +654,7 @@ syntax or a unit test alone does not establish production readiness.
   legacy `invoice_number` generation. Retain concurrency, rollback, tenant
   isolation, uniqueness and format checks; reject unsupported backends
   explicitly.
-- [~] **1.2.32 — typed computed business fields:** Add pure, typed,
+- [~] **1.2.32 — typed computed fields and secure CRUD attachments:** Add pure, typed,
   deterministic derived-field expressions for supported scalar/Decimal
   operations. Check dependency graphs and reject cycles, unknown fields,
   effects, and client-supplied writes to derived values. Recompute on the
@@ -696,7 +696,7 @@ syntax or a unit test alone does not establish production readiness.
   runs on both databases in CI. Broader backend and AST/MIR/bytecode parity
   checks and full release gates remain open. See
   `examples/computed_api.zyl`.
-- [~] **1.2.33 — FileRef-aware generated CRUD:** Add bounded declarative
+- [~] **FileRef attachments in generated CRUD (1.2.32):** Add bounded declarative
   attachment constraints to schema/CRUD metadata and render safe upload fields
   on create/edit plus authorized download links on details. Reuse existing
   multipart validation, private FileRef storage, checksum validation, tenant

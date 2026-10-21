@@ -4499,7 +4499,7 @@ Provides an elevated, modern card layout for master-detail forms with partitione
 }
 ```
 
-## FileRef attachments in generated CRUD (1.2.33)
+## FileRef attachments in generated CRUD (1.2.32)
 
 Declare an opaque `FileRef` column with its upload policy to make it available
 as a generated CRUD upload field:

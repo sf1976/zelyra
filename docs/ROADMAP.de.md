@@ -709,7 +709,7 @@ keine Produktionsreife.
   `invoice_number`-Vergabe prüfen. Konkurrenz, Rollback, Mandantentrennung,
   Eindeutigkeit und Formatprüfung bleiben erforderlich; nicht unterstützte
   Backends müssen ausdrücklich abgewiesen werden.
-- [~] **1.2.32 — typisierte berechnete Geschäftsfelder:** Reine, typisierte
+- [~] **1.2.32 — berechnete Geschäftsfelder und sichere CRUD-Anhänge:** Reine, typisierte
   und deterministische Ausdrücke für abgeleitete Felder ergänzen, einschließlich
   unterstützter skalarer und Decimal-Operationen. Abhängigkeitsgraphen prüfen;
   Zyklen, unbekannte Felder, Effects und Schreibversuche auf berechnete Werte
@@ -744,7 +744,7 @@ keine Produktionsreife.
   CI für MariaDB und PostgreSQL. Weitere Backend- und
   AST/MIR/Bytecode-Parität sowie vollständige Release-Prüfungen sind noch
   offen. Beispiel: `examples/computed_api.zyl`.
-- [~] **1.2.33 — FileRef-Unterstützung im generierten CRUD:** Begrenzte,
+- [~] **FileRef-Anhänge im generierten CRUD (1.2.32):** Begrenzte,
   deklarative Anhangsregeln für Schema und CRUD ergänzen und sichere
   Uploadfelder auf Create/Edit sowie geschützte Download-Links auf Details
   erzeugen. Bestehende Multipart-Prüfung, privaten FileRef-Speicher,

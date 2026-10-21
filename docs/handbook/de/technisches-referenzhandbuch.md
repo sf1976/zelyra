@@ -4659,7 +4659,7 @@ Dieses Rezept gestaltet Belegformulare mit geteilten Kopfdaten, strukturierter P
 }
 ```
 
-## FileRef-Anhänge im generierten CRUD (1.2.33)
+## FileRef-Anhänge im generierten CRUD (1.2.32)
 
 Eine undurchsichtige `FileRef`-Spalte wird mit ihrer Upload-Richtlinie als
 generiertes CRUD-Dateifeld verwendet:

@@ -1,5 +1,37 @@
 ## Unreleased
 
+## 1.2.32 — 2026-10-21
+
+- Add compiler-checked `compute(expr)` table fields for generated CRUD and
+  validated API mutations. Recompute on the server before validation and
+  persistence, reject client-forged computed values, and preserve tenant scope
+  when merging omitted fields for partial API updates. / Compilergeprüfte
+  `compute(expr)`-Tabellenfelder für generiertes CRUD und geprüfte API-Mutationen
+  ergänzen. Werte serverseitig vor Validierung und Speicherung neu berechnen,
+  manipulierte Clientwerte abweisen und beim Ergänzen ausgelassener Felder in
+  partiellen API-Updates den Mandantenscope erhalten.
+- Add schema-backed `FileRef` attachment policies to generated CRUD, with
+  bounded multipart input, private storage, edit retention/replacement,
+  rollback cleanup, and authorized tenant-scoped downloads. / Schema-gebundene
+  `FileRef`-Anhangsregeln in generiertem CRUD ergänzen: begrenzte Multipart-
+  Eingabe, privater Speicher, Erhalt/Ersetzung beim Bearbeiten,
+  Rollback-Bereinigung und autorisierte mandantengebundene Downloads.
+- Resolve localized master-detail legends after HTML escaping and verify
+  tutorial locale keys. / Lokalisierte Master-Detail-Legenden nach dem
+  HTML-Escaping auflösen und Locale-Schlüssel des Tutorials prüfen.
+- Preserve a narrowly recognized Laravel account-approval guard as the native
+  Zelyra authentication setting `login_enabled`; unsupported login behavior
+  remains an importer finding. / Eine eng erkannte Laravel-Kontosperre als
+  native Zelyra-Authentifizierungseinstellung `login_enabled` übernehmen;
+  nicht unterstütztes Login-Verhalten bleibt ein Importer-Befund.
+- Validate computed CRUD/API mutations and tenant isolation on MariaDB and
+  PostgreSQL; exercise attachment security and the documented database/file
+  restore sequence with disposable MariaDB. Tests send no real email. /
+  Berechnete CRUD-/API-Mutationen und Mandantentrennung unter MariaDB und
+  PostgreSQL prüfen; Anhangssicherheit und die dokumentierte Datenbank-/Datei-
+  Wiederherstellung mit Wegwerf-MariaDB prüfen. Tests versenden keine echten
+  E-Mails.
+
 ## 1.2.31 — 2026-10-20
 
 - Add declared, tenant-aware business number series for generated CRUD using
