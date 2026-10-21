@@ -73,6 +73,7 @@ pub(super) fn generate(
     route_candidates: &Value,
     schema_candidates: &[Value],
     has_shared_layout: bool,
+    view_translations: &Value,
 ) -> Option<GeneratedWorkflow> {
     let routes = route_candidates["model_consumer_routes"]
         .as_array()
@@ -158,6 +159,22 @@ pub(super) fn generate(
             let Some(success_content) = static_notice(root, &success_view) else {
                 continue;
             };
+            let success_view_file = format!(
+                "resources/views/{}.blade.php",
+                success_view.replace('.', "/")
+            );
+            let translated_success_component =
+                super::view_links::translated_component_name(view_translations, &success_view_file);
+            let success_page_markup = translated_success_component
+                .as_ref()
+                .map(|component| format!("<{component} />"))
+                .unwrap_or_else(|| {
+                    format!(
+                        "<main class=\"z-container\"><h1>{}</h1><p>{}</p></main>",
+                        html_escape(&success_content.heading),
+                        html_escape(&success_content.body)
+                    )
+                });
             let form_name = "ImportedPublicUnsubscribe";
             let success_path = unique_success_path(path, token_name);
             let layout_import = if has_shared_layout {
@@ -199,7 +216,7 @@ pub(super) fn generate(
                  page {success_path_literal} {{\n\
                  {layout_binding}\
                      html {{\n\
-                         <main class=\"z-container\"><h1>{success_heading_html}</h1><p>{success_body_html}</p></main>\n\
+                         {success_page_markup}\n\
                      }}\n\
                  }}\n",
                 path_literal = zelyra_string(path),
@@ -208,8 +225,7 @@ pub(super) fn generate(
                 confirm_message = zelyra_string(&confirm_content.body),
                 success_message = zelyra_string(&success_content.body),
                 success_path_literal = zelyra_string(&success_path),
-                success_heading_html = html_escape(&success_content.heading),
-                success_body_html = html_escape(&success_content.body),
+                success_page_markup = success_page_markup,
             );
             let report = json!({
                 "status": "generated_checked_token_unsubscribe_module",
@@ -222,7 +238,9 @@ pub(super) fn generate(
                 "write_semantics": "idempotent-unsubscribed-at-coalesce-current-timestamp",
                 "csrf": "native-zelyra-form-csrf",
                 "shared_layout": if has_shared_layout { Some("ImportedAppShell") } else { None::<&str> },
-                "source_views": [confirm_view, success_view],
+                "source_views": [confirm_view.clone(), success_view.clone()],
+                "success_view": success_view,
+                "success_view_component": translated_success_component,
                 "runtime_copied": false
             });
             return Some(GeneratedWorkflow {
@@ -600,8 +618,8 @@ class PublicUnsubscribeController {
             "table": "suppressions",
             "candidate_source": "table suppressions {\n    id: Id primary auto\n    token_hash: String(64) required\n    unsubscribed_at: Timestamp?\n}"
         })];
-        let result =
-            generate(&root, &candidates, &schema, true).expect("supported shape generated");
+        let result = generate(&root, &candidates, &schema, true, &Value::Null)
+            .expect("supported shape generated");
         assert!(result.source.contains("verify sql<Int[]>"));
         assert!(result.source.contains("require_match"));
         assert!(result
@@ -620,12 +638,12 @@ class PublicUnsubscribeController {
             "table": "suppressions",
             "candidate_source": "table suppressions { id: Id primary auto }"
         })];
-        assert!(generate(&root, &candidates, &incomplete_schema, true).is_none());
+        assert!(generate(&root, &candidates, &incomplete_schema, true, &Value::Null).is_none());
         let tenant_schema = vec![json!({
             "table": "suppressions",
             "candidate_source": "type TenantId = Id\ntable suppressions scoped by tenant_id: TenantId {\n    id: Id primary auto\n    tenant_id: TenantId required references tenants\n    token_hash: String(64) required\n    unsubscribed_at: Timestamp?\n}"
         })];
-        assert!(generate(&root, &candidates, &tenant_schema, true).is_none());
+        assert!(generate(&root, &candidates, &tenant_schema, true, &Value::Null).is_none());
         fs::remove_dir_all(root).unwrap();
     }
 
@@ -660,13 +678,69 @@ class PublicUnsubscribeController {
             "table": "suppressions",
             "candidate_source": "table suppressions {\n    id: Id primary auto\n    token_hash: String(64) required\n    unsubscribed_at: Timestamp?\n}"
         })];
-        let generated = generate(&root, &candidates, &schema, false)
+        let generated = generate(&root, &candidates, &schema, false, &Value::Null)
             .expect("supported workflow is still generated without a shell");
         assert!(!generated
             .source
             .contains("import \"src/imported_layouts.zyl\""));
         assert!(!generated.source.contains("view: ImportedAppShell"));
         assert_eq!(generated.report["shared_layout"], serde_json::Value::Null);
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn generated_route_reuses_only_a_translated_success_view_component() {
+        let root = std::env::temp_dir().join(format!(
+            "zelyra-route-workflow-view-component-{}-{}",
+            std::process::id(),
+            std::thread::current().name().unwrap_or("test")
+        ));
+        let _ = fs::remove_dir_all(&root);
+        let controller_dir = root.join("app/Http/Controllers");
+        let view_dir = root.join("resources/views/public");
+        fs::create_dir_all(&controller_dir).unwrap();
+        fs::create_dir_all(&view_dir).unwrap();
+        fs::write(controller_dir.join("UnsubscribeController.php"), CONTROLLER).unwrap();
+        fs::write(
+            view_dir.join("confirm.blade.php"),
+            "<h1>Confirm mailing preferences</h1><p>Stop these messages?</p><button>Unsubscribe</button>",
+        )
+        .unwrap();
+        fs::write(
+            view_dir.join("done.blade.php"),
+            "<h1>Preferences saved</h1><p>This address is unsubscribed.</p>",
+        )
+        .unwrap();
+        let candidates = json!({"model_consumer_routes": [
+            {"route":"get /unsubscribe/{token}","controller_action":"UnsubscribeController@show","controller_source_file":"app/Http/Controllers/UnsubscribeController.php","table":"suppressions"},
+            {"route":"post /unsubscribe/{token}","controller_action":"UnsubscribeController@unsubscribe","controller_source_file":"app/Http/Controllers/UnsubscribeController.php","table":"suppressions"}
+        ]});
+        let schema = vec![json!({
+            "table": "suppressions",
+            "candidate_source": "table suppressions {\n    id: Id primary auto\n    token_hash: String(64) required\n    unsubscribed_at: Timestamp?\n}"
+        })];
+        let translations = json!({"translations": [{
+            "source_file": "resources/views/public/done.blade.php",
+            "status": "translated_static_presentation_component",
+            "component": "PublicDone"
+        }]});
+        let generated = generate(&root, &candidates, &schema, true, &translations)
+            .expect("the verified unsubscribe workflow is supported");
+        assert!(generated.source.contains("<PublicDone />"));
+        assert!(!generated.source.contains("<h1>Preferences saved</h1>"));
+        assert_eq!(generated.report["success_view_component"], "PublicDone");
+
+        let unverified = json!({"translations": [{
+            "source_file": "resources/views/public/done.blade.php",
+            "status": "manual_review_required",
+            "component": "PublicDone"
+        }]});
+        let fallback = generate(&root, &candidates, &schema, true, &unverified)
+            .expect("fallback workflow remains available");
+        assert!(fallback
+            .source
+            .contains("<main class=\"z-container\"><h1>Preferences saved</h1>"));
+        assert!(fallback.report["success_view_component"].is_null());
         fs::remove_dir_all(root).unwrap();
     }
 }
