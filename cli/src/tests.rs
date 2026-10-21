@@ -2134,6 +2134,41 @@ fn validates_typed_page_data_field_bindings() {
 }
 
 #[test]
+fn validates_optional_typed_page_data_for_missing_detail_rows() {
+    let source = r#"
+        table packages { id: Id primary auto slug: String(120) required name: String(200) required }
+        page "/packages/{slug}" {
+            load package = sql<Package?> {
+                SELECT id, slug, name FROM packages WHERE slug = :slug
+            }
+            html { <main>{package}</main> }
+        }
+    "#;
+    let program = parse(&lex(source).unwrap()).unwrap();
+    assert!(validate_page_data("optional-page-data.zyl", &program));
+    assert!(matches!(
+        program.pages[0].data[0].result_type,
+        Type::Option(_)
+    ));
+    assert_eq!(
+        page_data_fields(&program, &program.pages[0].data[0].result_type),
+        ["id", "slug", "name"]
+    );
+
+    let unsupported_source = r#"
+        page "/invalid" {
+            load value = sql<Int?> { SELECT 1 }
+            html { <main>{value}</main> }
+        }
+    "#;
+    let unsupported = parse(&lex(unsupported_source).unwrap()).unwrap();
+    assert!(!validate_page_data(
+        "unsupported-page-data.zyl",
+        &unsupported
+    ));
+}
+
+#[test]
 fn validates_create_edit_contexts_and_custom_tableview_row_actions() {
     let source = r#"
         table customers { id: Id primary auto name: String(100) email: Email password_hash: String(255) }

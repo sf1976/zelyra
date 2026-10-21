@@ -575,6 +575,15 @@ security and compatibility gates stated for that milestone.
   completion by switching the default early. This milestone targets portable
   verified Bytecode, not native machine-code generation.
 
+- [ ] **1.3.0 — confirmed web/compiler gaps:** Accept SQL-loaded `Option<Record>`
+  page data (the CLI validator currently rejects it although web routing already
+  models missing optional rows); add explicit dynamic response content types for
+  pages and a typed server API response contract; add bounded, sanitized
+  CommonMark/GFM rendering; and add stdin piping to the existing allowlisted,
+  timeout/output-bounded Process capability. API `HttpResult<T>` currently models
+  responses received by outbound HTTP calls, not status/header returns from a
+  Zelyra API handler. These are separate from static `public/` asset serving.
+
 **Post-1.3.0 or explicitly reprioritized:** a native AOT backend is optional
 and depends on benchmark evidence. No open task is silently dropped: work that cannot meet its release
 gate stays open and blocks the relevant milestone instead of being represented
@@ -668,7 +677,7 @@ semantic parity.
 - [~] A Decimal boundary corpus compares add/subtract/multiply/divide/remainder across AST, MIR, and encoded-then-decoded Bytecode. It checks ordinary fixed-point values, `i128` addition/subtraction/multiplication overflow, division by zero, and exact error messages/source spans. This is targeted Decimal operator evidence only; it does not establish scale/formatting or general numeric parity.
 - [~] Configured recursion-depth limits are compared across AST, MIR, and decoded Bytecode: the same recursive function succeeds at depth 24 with limit 40 and fails at limit 20 with the same call-site source span. This verifies the tested depth boundary, not complete stack-resource parity.
 - [~] **Common source-level step budget:** MIR now charges source-level statements and loop iterations, and Bytecode v27 embeds source-step spans on the following instruction where possible and uses a local serial counter, avoiding standalone `Step` dispatch in the common case. Differential tests sweep budgets 0–63 over a while loop, 0–95 through function calls/contracts, 0–127 over collection loops, match, and if expressions, and 0–128 for `break`/`continue`. SQL-only transaction batches are checked at 0–63. Parallel `await` workers run unequal 40- and 80-iteration loops under budgets 0–300; a built CLI sweep also checks recursive and parallel programs across all three backends. Tested results, success/failure boundaries, diagnostics, and source spans match, and no database batch starts after budget exhaustion. Bytecode keeps a separate 10,000,000-op execution ceiling for malformed or hand-built artifacts. Mixed-effect transactions, parallel host effects, and all remaining source constructs still need coverage; the default-backend gate is not met. See the [progress log](release-plans/1.1.5-to-1.3.0-progress.en.md). The v27 instruction-step fusion and serial local counter reduced the measured v1.2.28-relative slowdown from 25.8% to 12.7% on that mutable-array workload; the remaining difference and other workloads need measurement before backend-default consideration.
-- [~] **Parallel host-effect parity:** A differential test runs two awaited `http_get` calls through AST, MIR, and encoded/decoded Bytecode using deterministic fake transports. All three preserve result binding independent of completion order, invoke both authorized requests, and reject a missing `Network` grant or disallowed host before transport; policy-denial messages and spans match. This covers one parallel HTTP case, not every host effect or cancellation/race behavior.
+- [~] **Host-effect and transaction parity:** Differential tests cover two parallel awaited `http_get` calls and a SQL audit insert combined with a rendered-PDF outbox write across AST, MIR, and encoded/decoded Bytecode. Parallel HTTP preserves branch binding and rejects missing `Network` grants or disallowed hosts before transport. For the PDF batch, a fake host verifies that all backends send one two-write transaction and produce the same injected database-error message and source span. This checks the batch boundary, not a real database rollback or external-side-effect rollback. Other host operations, timeout/cancellation, race behavior, and broader transaction parity remain open.
 - [~] The zero-step source-span mismatch is closed, and source-step markers now align tested statement/loop budgets across AST, MIR, and decoded Bytecode. The budget parity scope and remaining gaps are recorded in the progress log; this is not full runtime parity.
 - [ ] Release gate: no default-VM switch or production-readiness claim before feature parity, safety checks, differential tests, documented limitations, and reproducible builds.
 

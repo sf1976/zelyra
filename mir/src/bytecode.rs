@@ -3094,7 +3094,12 @@ fn execute_bytecode_entry(
                     )?;
                     host_services
                         .execute_database_batch(database.url, &queries, true)
-                        .map_err(|error| runtime_error(instruction.span, error))?;
+                        .map_err(|error| {
+                            runtime_error(
+                                instruction.span,
+                                format!("database transaction failed: {error}"),
+                            )
+                        })?;
                 }
                 BytecodeOp::Builtin {
                     name,

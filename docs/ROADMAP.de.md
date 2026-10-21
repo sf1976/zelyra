@@ -625,6 +625,16 @@ abgeschlossen.
   unterstützte Bytecode-Operationen fail-closed scheitern und der bisherige
   Standard unverändert bleiben. Ziel ist portabler geprüfter Bytecode, keine
   native Maschinencodegenerierung.
+- [ ] **1.3.0 — bestätigte Web-/Compilerlücken:** SQL-geladene
+  `Option<Record>`-Seitendaten zulassen (der CLI-Validator weist sie derzeit
+  zurück, obwohl der Web-Router fehlende optionale Zeilen bereits abbildet);
+  explizite dynamische Antworttypen für Seiten und typisierte API-Antworten
+  ergänzen; begrenztes, bereinigtes CommonMark/GFM-Rendering bereitstellen;
+  sowie stdin-Piping für die bereits erlaubnislisten-, timeout- und
+  ausgabelimitierte Process-Capability ergänzen. `HttpResult<T>` beschreibt
+  derzeit Antworten ausgehender HTTP-Aufrufe, nicht Status-/Header-Rückgaben
+  eines Zelyra-API-Handlers. Diese Punkte sind getrennt vom statischen
+  `public/`-Asset-Serving.
 
 **Nach 1.3.0 oder bei ausdrücklicher Neubewertung:** Ein natives AOT-Backend
 bleibt optional und hängt von Benchmarks ab. Kein offener Punkt entfällt stillschweigend: Arbeit, deren
@@ -717,7 +727,7 @@ SHA-256-Prüfung.
 - [~] Ein zweiter Grenzwertkorpus prüft UInt-Addition/Subtraktion/Multiplikation/Division/Rest an null, kleinen Werten und den Grenzen von `u64::MAX` gegen geprüfte Rust-Arithmetik. AST, MIR und dekodierter Bytecode müssen Erfolgswerte, Fehlermeldungen und exakte Quellspannen angleichen. UInt-Unterlauf bleibt von Überlauf unterschieden; der Nachweis gilt nur für diesen begrenzten vorzeichenlosen Integerausschnitt.
 - [~] Ein Decimal-Grenzwertkorpus vergleicht Addition/Subtraktion/Multiplikation/Division/Rest zwischen AST, MIR und kodiertem sowie dekodiertem Bytecode. Er prüft normale Festkommawerte, `i128`-Überläufe bei Addition/Subtraktion/Multiplikation, Division durch null sowie identische Fehlermeldungen und Quellspannen. Das belegt nur diese gezielten Decimal-Operatoren, keine Skalen-/Formatierungs- oder allgemeine Zahlenparität.
 - [~] Konfigurierte Rekursionstiefen werden zwischen AST, MIR und dekodiertem Bytecode verglichen: Dieselbe rekursive Funktion ist bei Tiefe 24 und Limit 40 erfolgreich und scheitert bei Limit 20 mit derselben Quellposition des Aufrufs. Dies prüft die getestete Tiefengrenze, nicht die vollständige Parität der Stackressourcen.
-- [~] **Parität paralleler Host-Effekte:** Ein Differentialtest führt zwei parallel erwartete `http_get`-Aufrufe über AST, MIR und kodierten/dekodierten Bytecode mit deterministischen Fake-Transporten aus. Alle drei binden Ergebnisse unabhängig von der Abschlussreihenfolge gleich, rufen beide freigegebenen Requests auf und weisen fehlende `Network`-Freigabe oder nicht erlaubte Hosts vor dem Transport ab; Meldung und Quellspan der Policy-Ablehnung stimmen überein. Der Nachweis umfasst einen parallelen HTTP-Fall, nicht alle Host-Effekte oder Abbruch-/Rennverhalten.
+- [~] **Parität von Hosteffekten und Transaktionen:** Differentialtests prüfen zwei parallele `await http_get`-Aufrufe und einen SQL-Audit-Eintrag zusammen mit einem PDF-Outbox-Schreibvorgang über AST, MIR und kodierten/dekodierten Bytecode. Bei parallelem HTTP bleiben Ergebnisse an den richtigen Zweig gebunden; fehlende `Network`-Freigaben oder gesperrte Hosts werden vor dem Transport abgewiesen. Für den PDF-Batch prüft ein Fake-Host, dass alle Backends eine Transaktion mit zwei Schreibvorgängen senden und bei einem eingespeisten Datenbankfehler dieselbe Meldung und Quellspan liefern. Das prüft die Batch-Grenze, aber keinen echten Datenbank-Rollback oder Rollback externer Seiteneffekte. Andere Hostoperationen, Timeout/Abbruch, Rennverhalten und breitere Transaktionsparität bleiben offen.
 - [~] Die Quellpositionsabweichung bei Schrittlimit null ist behoben. Explizite Quellschrittmarkierungen gleichen nun auch die getesteten Anweisungs- und Schleifenbudgets zwischen AST, MIR und dekodiertem Bytecode ab. Umfang und offene Paritätslücken stehen im Fortschrittsprotokoll; vollständige Runtime-Parität ist damit nicht belegt.
 - [ ] Freigabekriterium: VM erst nach vollständiger Feature-Parität, Sicherheitsnachweisen, Differentialtests, dokumentierten Grenzen und reproduzierbaren Builds zum Standard machen.
 
