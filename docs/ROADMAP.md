@@ -575,14 +575,16 @@ security and compatibility gates stated for that milestone.
   completion by switching the default early. This milestone targets portable
   verified Bytecode, not native machine-code generation.
 
-- [ ] **1.3.0 — confirmed web/compiler gaps:** Accept SQL-loaded `Option<Record>`
-  page data (the CLI validator fix is on the active unmerged feature branch);
-  finish and merge explicit dynamic page response content types, add a typed
-  server API response contract; add bounded, sanitized
-  CommonMark/GFM rendering; and add stdin piping to the existing allowlisted,
-  timeout/output-bounded Process capability. API `HttpResult<T>` currently models
-  responses received by outbound HTTP calls, not status/header returns from a
-  Zelyra API handler. These are separate from static `public/` asset serving.
+- [~] **1.3.0 — web/compiler follow-ups:** SQL-loaded `Option<Record>` page data
+  and dynamic page `content_type` are implemented and tested in v1.2.33. A
+  bounded Markdown renderer is implemented on draft PR #154; merge and release
+  verification remain open. `run_process_piped` is implemented and tested in
+  v1.2.33 with the existing Process allowlist, timeout, and output limit; MIR/
+  Bytecode and web-playground integration parity remain open. Flexible typed
+  success responses from server API handlers remain open: their current
+  success path returns JSON with status 200, while declared error payloads have
+  their declared statuses. `HttpResult<T>` models outbound HTTP results, not
+  server API responses. Static `public/` asset serving is already implemented.
 
 **Post-1.3.0 or explicitly reprioritized:** a native AOT backend is optional
 and depends on benchmark evidence. No open task is silently dropped: work that cannot meet its release

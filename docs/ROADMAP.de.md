@@ -625,16 +625,17 @@ abgeschlossen.
   unterstützte Bytecode-Operationen fail-closed scheitern und der bisherige
   Standard unverändert bleiben. Ziel ist portabler geprüfter Bytecode, keine
   native Maschinencodegenerierung.
-- [ ] **1.3.0 — bestätigte Web-/Compilerlücken:** SQL-geladene
-  `Option<Record>`-Seitendaten akzeptieren (der Validatorfix liegt auf dem
-  aktiven, noch nicht zusammengeführten Feature-Branch); dynamische
-  Seitentypen abschließen und zusammenführen sowie typisierte API-Antworten
-  ergänzen; begrenztes, bereinigtes CommonMark/GFM-Rendering bereitstellen;
-  sowie stdin-Piping für die bereits erlaubnislisten-, timeout- und
-  ausgabelimitierte Process-Capability ergänzen. `HttpResult<T>` beschreibt
-  derzeit Antworten ausgehender HTTP-Aufrufe, nicht Status-/Header-Rückgaben
-  eines Zelyra-API-Handlers. Diese Punkte sind getrennt vom statischen
-  `public/`-Asset-Serving.
+- [~] **1.3.0 — Web-/Compiler-Folgearbeiten:** SQL-geladene
+  `Option<Record>`-Seitendaten und dynamisches `content_type` für `page` sind
+  in v1.2.33 umgesetzt und getestet. Ein begrenzter Markdown-Renderer ist im
+  Entwurfs-PR #154 implementiert; Merge und Release-Prüfung stehen noch aus.
+  `run_process_piped` ist in v1.2.33 mit Prozess-Allowlist, Timeout und
+  Ausgabelimit umgesetzt und getestet; MIR-/Bytecode- sowie
+  Web-Playground-Parität bleiben offen. Flexible typisierte Erfolgsantworten
+  für API-Handler fehlen noch: Der Erfolgsweg liefert derzeit JSON mit Status
+  200, deklarierte Fehler-Payloads verwenden ihre Statuscodes. `HttpResult<T>`
+  bildet ausgehende HTTP-Antworten ab, keine Antworten eigener API-Handler.
+  Statische Dateien aus `public/` werden bereits unterstützt.
 
 **Nach 1.3.0 oder bei ausdrücklicher Neubewertung:** Ein natives AOT-Backend
 bleibt optional und hängt von Benchmarks ab. Kein offener Punkt entfällt stillschweigend: Arbeit, deren
