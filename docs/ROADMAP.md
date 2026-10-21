@@ -581,21 +581,7 @@ security and compatibility gates stated for that milestone.
   completion by switching the default early. This milestone targets portable
   verified Bytecode, not native machine-code generation.
 
-- [~] **1.3.0 — confirmed web/compiler gaps:** SQL-loaded `Option<Record>` page
-  data, dynamic `page content_type`, static `public/` assets, and bounded
-  `run_process_piped` stdin for allowlisted processes are implemented on `main`.
-  `run_process_piped` does not itself execute Zelyra source or provide a web
-- [~] **1.3.0 — verified web/compiler features and remaining gaps:** SQL-loaded
-  `Option<Record>` page data, dynamic `page content_type`, static `public/`
-  assets, bounded `run_process_piped`, typed successful API responses via
-  `ApiResponse<T>`, and typed properties for reusable `view` layouts are
-  implemented on `main`. Piped process input does not itself execute Zelyra
-  source or provide a web sandbox. Checked static locale references and
-  `/{locale}/...` route selection are in PR #155. Safe bounded CommonMark/GFM
-  rendering is implemented on this branch and awaits full CI verification.
-  `HttpResult<T>` remains the result type for outbound HTTP calls. Typed
-  translation calls in arbitrary expressions, Markdown table-of-contents
-  generation, plural rules, and code highlighting remain open.
+- [~] **1.3.0 — verified web/compiler capabilities and remaining gaps:** SQL-loaded `Option<Record>` page data, dynamic `page content_type`, static `public/` assets, bounded `run_process_piped` for allowlisted processes, typed successful API responses via `ApiResponse<T>`, typed properties for reusable `view` layouts, and bounded safe CommonMark/GFM rendering are implemented on `main`. Piped process input does not itself execute Zelyra source or provide a web sandbox. Checked static locale references and `/{locale}/...` route selection are in PR #155. `HttpResult<T>` remains the result type for outbound HTTP calls. Typed translation calls in arbitrary expressions, Markdown table-of-contents generation, plural rules, and code highlighting remain open.
 
 **Post-1.3.0 or explicitly reprioritized:** a native AOT backend is optional
 and depends on benchmark evidence. No open task is silently dropped: work that cannot meet its release
@@ -679,7 +665,7 @@ semantic parity.
 - [~] Share runtime semantics and host services between the reference AST interpreter and VM. Pure standard-library operations and value-level unary/binary operators now use shared runtime dispatch across AST, MIR, and bytecode execution. Bytecode compilation still restricts operators to its documented subset; broader helpers do not silently expand the accepted bytecode format. Host services and selected SQL/policy helpers are also shared. A bounded transaction mixing a SQL audit insert with a PDF-attachment `mail_queue` now has differential AST/MIR/decoded-bytecode evidence: the test compares transaction mode, SQL order, and complete serialized parameters across both writes. This covers one queued message only; multiple-message, failure/rollback, and other transaction effects still need explicit parity tests. Complete capability/effect handling, contracts, broader error behavior, resource accounting, and module APIs still need a systematic parity pass.
 - [~] **AST runtime construction shared:** Program execution and direct function execution now use one interpreter constructor for symbol tables, schema metadata, HostServices, capabilities, runtime policies, transactions, and resource limits. This removes duplicated security/policy wiring without changing AST evaluation semantics. The runtime suite passes; broader backend parity and iterative AST evaluation remain open.
 - [~] **Shared interpreter resource limits:** AST and MIR now use the same helper for the default and hard-capped call depth and for calculating bounded worker-stack allocation; MIR parallel branches use the same stack policy. This removes backend-local cap literals but does not make the recursive interpreters iterative.
-- [~] **Structured AST type checker:** Control-flow/match-exhaustiveness analysis lives in `runtime/src/type_checker/flow.rs`; type relations, generic inference, alias expansion, and type-annotation validation live in `runtime/src/type_checker/type_relations.rs`. Return/fallthrough, loop, guard, and type rules are unchanged. Focused match, generic record/function, and alias-error tests plus workspace tests pass. This is internal restructuring; further decomposition, flow diagnostics, and complete MIR/bytecode parity remain open.
+- [~] **Structured AST type checker:** Control-flow/match-exhaustiveness analysis lives in `runtime/src/type_checker/flow.rs`; type relations, generic inference, alias expansion, and type-annotation validation live in `runtime/src/type_checker/type_relations.rs`; binary operator checking lives in `runtime/src/type_checker/expression_operators.rs`; built-in, user-function, and constructor call checking lives in `runtime/src/type_checker/call_expressions.rs`. Return/fallthrough, loop, guard, operator, and call rules are unchanged by these structural splits. Runtime and phase-one tests pass. This is internal restructuring; further decomposition, flow diagnostics, and complete MIR/bytecode parity remain open.
 - [ ] Keep the AST interpreter selectable until the VM reaches complete supported-language compatibility. Add differential, property-based, fuzz, security, and regression tests.
 - [~] Opt-in CLI execution is available for AST, MIR, and the supported bytecode subset. MIR/bytecode inspection, safe versioned caching, stable machine-readable diagnostics, and Studio integration remain open without breaking existing CLI behavior.
 - [~] A reproducible CPU benchmark compares mutable array updates across AST, MIR, and Bytecode; its method and three release runs are recorded in the [benchmark report](benchmarks/mutable-array-backends.en.md). I/O workloads, startup, memory, throughput, and compilation cost remain open.
