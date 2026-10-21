@@ -311,6 +311,10 @@ capability.
 - `to_float(value) -> Float`: Converts `Float`, `Int`, `UInt`, or a numeric
   string to a finite float; invalid or non-finite values produce runtime errors.
 - `parse_int(text) -> Result<Int, String>`,
+  `parse_decimal(text) -> Result<Decimal, String>` (exact base-10 parsing with
+  an optional minus sign, at most nine fractional digits, and no floating-point
+  intermediate; whitespace, a leading plus, exponent notation, and overflow
+  return `Err`),
   `parse_float(text) -> Result<Float, String>`, and
   `parse_bool(text) -> Result<Bool, String>`: Parse strings without throwing;
   invalid values return `Err`. `parse_bool` accepts `true`, `false`, `1`, and

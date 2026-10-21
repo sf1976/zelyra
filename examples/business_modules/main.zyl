@@ -71,12 +71,13 @@ fn csv_import_demo() {
 }
 
 fn csv_convert_demo() {
-    source_text = "number;quantity;active;note\nINV-1;2;true;first\nINV-2;0;0;"
+    source_text = "number;quantity;active;note;amount\nINV-1;2;true;first;12.34\nINV-2;0;0;;0"
     mappings: csv_import::CsvColumnMapping[] = [
         csv_import::CsvColumnMapping { source_name: "number", target_name: "invoice_number", value_type: csv_import::CsvColumnType::Text },
         csv_import::CsvColumnMapping { source_name: "quantity", target_name: "quantity", value_type: csv_import::CsvColumnType::Integer },
         csv_import::CsvColumnMapping { source_name: "active", target_name: "active", value_type: csv_import::CsvColumnType::Boolean },
-        csv_import::CsvColumnMapping { source_name: "note", target_name: "note", value_type: csv_import::CsvColumnType::Text }
+        csv_import::CsvColumnMapping { source_name: "note", target_name: "note", value_type: csv_import::CsvColumnType::Text },
+        csv_import::CsvColumnMapping { source_name: "amount", target_name: "amount", value_type: csv_import::CsvColumnType::Decimal }
     ]
     match csv_import::decode_table(source_text, ';') {
         Ok(rows) => {
@@ -87,21 +88,31 @@ fn csv_convert_demo() {
                         csv_import::CsvValue::Text(value) => { print(value) }
                         csv_import::CsvValue::Integer(_) => { print("unexpected integer") }
                         csv_import::CsvValue::Boolean(_) => { print("unexpected boolean") }
+                        csv_import::CsvValue::Decimal(_) => { print("unexpected decimal") }
                     }
                     match converted.rows[0][1] {
                         csv_import::CsvValue::Text(_) => { print("unexpected text") }
                         csv_import::CsvValue::Integer(value) => { print(value) }
                         csv_import::CsvValue::Boolean(_) => { print("unexpected boolean") }
+                        csv_import::CsvValue::Decimal(_) => { print("unexpected decimal") }
                     }
                     match converted.rows[0][2] {
                         csv_import::CsvValue::Text(_) => { print("unexpected text") }
                         csv_import::CsvValue::Integer(_) => { print("unexpected integer") }
                         csv_import::CsvValue::Boolean(value) => { print(value) }
+                        csv_import::CsvValue::Decimal(_) => { print("unexpected decimal") }
                     }
                     match converted.rows[1][3] {
                         csv_import::CsvValue::Text(value) => { print("empty note length " + to_string(len(value))) }
                         csv_import::CsvValue::Integer(_) => { print("unexpected integer") }
                         csv_import::CsvValue::Boolean(_) => { print("unexpected boolean") }
+                        csv_import::CsvValue::Decimal(_) => { print("unexpected decimal") }
+                    }
+                    match converted.rows[0][4] {
+                        csv_import::CsvValue::Text(_) => { print("unexpected text") }
+                        csv_import::CsvValue::Integer(_) => { print("unexpected integer") }
+                        csv_import::CsvValue::Boolean(_) => { print("unexpected boolean") }
+                        csv_import::CsvValue::Decimal(value) => { print(value) }
                     }
                 }
                 Err(message) => { print(message) }
@@ -116,6 +127,15 @@ fn csv_convert_demo() {
     ]
     match csv_import::convert_columns(invalid_rows, invalid_mappings) {
         Ok(_) => { print("unexpected typed CSV conversion success") }
+        Err(message) => { print(message) }
+    }
+
+    invalid_decimal_rows = [["amount"], ["12.3456789012"]]
+    invalid_decimal_mappings: csv_import::CsvColumnMapping[] = [
+        csv_import::CsvColumnMapping { source_name: "amount", target_name: "amount", value_type: csv_import::CsvColumnType::Decimal }
+    ]
+    match csv_import::convert_columns(invalid_decimal_rows, invalid_decimal_mappings) {
+        Ok(_) => { print("unexpected decimal conversion success") }
         Err(message) => { print(message) }
     }
 }

@@ -1,5 +1,9 @@
 ## Unreleased
 
+## 1.2.38 — 2026-10-21
+
+- Add `parse_decimal(String) -> Result<Decimal, String>` and explicit Decimal conversion to the reusable CSV importer. Parsing is exact base 10, accepts at most nine fractional digits, and never passes through Float; date/time conversion and database writes remain open. / `parse_decimal(String) -> Result<Decimal, String>` und explizite Decimal-Konvertierung für den wiederverwendbaren CSV-Importer ergänzen. Das Parsing erfolgt exakt zur Basis 10 mit höchstens neun Nachkommastellen und ohne Float-Zwischenschritt; Datums-/Zeitkonvertierung und Datenbankschreibvorgänge bleiben offen.
+
 ## 1.2.37 — 2026-10-21
 
 - Add explicit text, integer, and Boolean CSV conversion to the reusable

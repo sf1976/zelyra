@@ -1169,6 +1169,7 @@ fn is_runtime_builtin(name: &str) -> bool {
             | "clamp"
             | "to_string"
             | "parse_int"
+            | "parse_decimal"
             | "parse_float"
             | "sort"
             | "sort_desc"
