@@ -659,8 +659,9 @@ keys in a transaction; CSRF is required, token responses are `no-store`, and
 repeat requests preserve the first timestamp. The current-project scaffold
 check and disposable MariaDB/HTTP E2E pass, including invalid-token, invalid
 CSRF, idempotency, and second-tenant isolation checks. Generated success
-components carry explicit module dependencies. PR #176 is open as a draft and
-its CI/release gates must pass before this milestone can be marked complete.
+components carry explicit module dependencies. PR #176 was merged as
+`6fc61c31`; its GitHub CI passed. Version bump and tag-pinned release checks
+are being prepared; v1.2.39 remains the latest published stable release.
 This imports one specifically recognized workflow, not the Laravel website or
 all 2,274 findings.
 
@@ -960,7 +961,7 @@ compatibility behavior before changing syntax. See the detailed
   portable Bytecode, not native machine-code generation. See the detailed
   1.3.0 section above.
 - [~] **Laravel website import — active through 1.3.0:** Replace the removed framework-oriented migrator with a source-evidenced website importer that emits compiler-checked reusable Zelyra modules. Analyze first, require explicit selections, preserve unsupported behavior as findings, and keep the Laravel source read-only. Use `/opt/siedelmann-laravel/app` as the first integration fixture. It must compose with the 1.1.5 package/module system and 1.2.0 operations foundation rather than introducing a parallel plugin/runtime model. Release 1.2.34 preserves Laravel `mediumText`/`longText` capacity as `String text_storage medium|long` for MariaDB, rejects unsupported MariaDB indexing of those columns, and reports backend-specific PostgreSQL/SQLite limits. Release 1.2.35 also preserves supported unsigned integer widths. This does not make the site importer complete; route behavior and workflow migration remain open.
-- [~] **1.2.40 importer vertical slice:** The real project's public unsubscribe route is now generated only through the checked tenant-scoped `public_token` form primitive. Its real-project scaffold and disposable MariaDB/HTTP E2E pass; all other importer findings remain open and the feature PR's CI gates are still pending.
+- [~] **1.2.40 importer vertical slice:** The real project's public unsubscribe route is generated only through the checked tenant-scoped `public_token` form primitive. Its real-project scaffold and disposable MariaDB/HTTP E2E pass; all other importer findings remain open. The tagged release is pending.
 
 - [ ] **1.2.0 — Compose check in the installer:** Installers detect
   Docker Compose v2 or newer and distinguish it from obsolete Python Compose
