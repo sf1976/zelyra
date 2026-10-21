@@ -575,6 +575,15 @@ security and compatibility gates stated for that milestone.
   completion by switching the default early. This milestone targets portable
   verified Bytecode, not native machine-code generation.
 
+- [ ] **1.3.0 — confirmed web/compiler gaps:** Accept SQL-loaded `Option<Record>`
+  page data (the CLI validator currently rejects it although web routing already
+  models missing optional rows); add explicit dynamic response content types for
+  pages and a typed server API response contract; add bounded, sanitized
+  CommonMark/GFM rendering; and add stdin piping to the existing allowlisted,
+  timeout/output-bounded Process capability. API `HttpResult<T>` currently models
+  responses received by outbound HTTP calls, not status/header returns from a
+  Zelyra API handler. These are separate from static `public/` asset serving.
+
 **Post-1.3.0 or explicitly reprioritized:** a native AOT backend is optional
 and depends on benchmark evidence. No open task is silently dropped: work that cannot meet its release
 gate stays open and blocks the relevant milestone instead of being represented

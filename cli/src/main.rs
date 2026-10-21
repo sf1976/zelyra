@@ -2458,7 +2458,7 @@ fn page_input_type_supported(ty: &Type) -> bool {
 
 fn page_data_type_supported(program: &zelyra_ast::Program, ty: &Type) -> bool {
     let ty = match ty {
-        Type::Array(inner) => inner.as_ref(),
+        Type::Array(inner) | Type::Option(inner) => inner.as_ref(),
         other => other,
     };
     let Type::Named(name) = ty else {

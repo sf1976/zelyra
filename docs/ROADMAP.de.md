@@ -625,6 +625,16 @@ abgeschlossen.
   unterstützte Bytecode-Operationen fail-closed scheitern und der bisherige
   Standard unverändert bleiben. Ziel ist portabler geprüfter Bytecode, keine
   native Maschinencodegenerierung.
+- [ ] **1.3.0 — bestätigte Web-/Compilerlücken:** SQL-geladene
+  `Option<Record>`-Seitendaten zulassen (der CLI-Validator weist sie derzeit
+  zurück, obwohl der Web-Router fehlende optionale Zeilen bereits abbildet);
+  explizite dynamische Antworttypen für Seiten und typisierte API-Antworten
+  ergänzen; begrenztes, bereinigtes CommonMark/GFM-Rendering bereitstellen;
+  sowie stdin-Piping für die bereits erlaubnislisten-, timeout- und
+  ausgabelimitierte Process-Capability ergänzen. `HttpResult<T>` beschreibt
+  derzeit Antworten ausgehender HTTP-Aufrufe, nicht Status-/Header-Rückgaben
+  eines Zelyra-API-Handlers. Diese Punkte sind getrennt vom statischen
+  `public/`-Asset-Serving.
 
 **Nach 1.3.0 oder bei ausdrücklicher Neubewertung:** Ein natives AOT-Backend
 bleibt optional und hängt von Benchmarks ab. Kein offener Punkt entfällt stillschweigend: Arbeit, deren
