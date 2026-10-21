@@ -1,5 +1,21 @@
 ## Unreleased
 
+## 1.2.40 — 2026-10-21
+
+- Add the constrained `public_token` form workflow for tenant-scoped public
+  confirmation routes. Tokens are SHA-256 checked, updates are transactionally
+  scoped by record and tenant, CSRF remains required, responses are `no-store`,
+  and repeated submissions preserve the original timestamp. The Laravel
+  website importer now generates this workflow for the recognized unsubscribe
+  route; other application findings remain unmigrated. /
+  Mandantengebundene öffentliche Bestätigungsrouten mit dem eingeschränkten
+  `public_token`-Formularablauf ergänzen. Tokens werden per SHA-256 geprüft,
+  Änderungen transaktional nach Datensatz und Mandant begrenzt, CSRF bleibt
+  erforderlich, Antworten erhalten `no-store` und Wiederholungen behalten den
+  ursprünglichen Zeitstempel. Der Laravel-Webseitenimporter erzeugt diesen
+  Ablauf für die erkannte Abmelderoute; andere Anwendungsbefunde bleiben
+  unportiert.
+
 ## 1.2.39 — 2026-10-21
 
 - Add exact `parse_date` and `parse_time` results and explicit Date/Time
