@@ -1912,6 +1912,19 @@ fn composes_typed_view_properties_into_page_metadata_and_escapes_values() {
     assert!(html.contains("<title>Zelyra &amp; Business</title>"));
     assert!(html.contains("content=\"Types &lt; security\""));
     assert!(html.contains("<h1>Handbook</h1>"));
+    let body_start = html.find("<body>").expect("view body opening tag");
+    let page_content = html
+        .find("<h1>Handbook</h1>")
+        .expect("page content remains in the view body");
+    let body_end = html.find("</body>").expect("view body closing tag");
+    assert!(
+        body_start < page_content && page_content < body_end,
+        "composed layout lost its slot structure: {html}"
+    );
+    assert!(
+        !html.contains("<slot"),
+        "composed layout kept an unresolved slot: {html}"
+    );
     assert!(!html.contains("{title}"));
     assert!(!html.contains("{description}"));
 }

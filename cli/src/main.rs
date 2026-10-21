@@ -12983,26 +12983,38 @@ fn compose_view_parts_with_props(
         .find(|view| view.name == view_name)
         .expect("page and CRUD views are validated before route generation");
     let slots = view_template_slot_invocations(&view.html).expect("view slots are validated");
-    let mut composed =
-        view.props.iter().fold(view.html.clone(), |html, prop| {
-            match supplied_props.get(&prop.name) {
-                Some(value) => render_component_property(html, prop, value),
-                None => remove_component_property(html, &prop.name),
-            }
-        });
-    for slot in slots.into_iter().rev() {
-        let replacement = slot
-            .name
-            .as_deref()
-            .and_then(|name| named_slots.get(name))
-            .map_or_else(
-                || match slot.name {
-                    Some(_) => slot.body.as_deref().unwrap_or(""),
-                    None => default_body,
-                },
-                String::as_str,
-            );
-        composed.replace_range(slot.start..slot.end, replacement);
+    let mut composed = view.html.clone();
+    let mut replacements = Vec::with_capacity(slots.len());
+    for (index, slot) in slots.iter().enumerate().rev() {
+        let supplied = slot.name.as_deref().and_then(|name| named_slots.get(name));
+        let replacement = supplied.map_or_else(
+            || match slot.name {
+                Some(_) => slot.body.as_deref().unwrap_or(""),
+                None => default_body,
+            },
+            String::as_str,
+        );
+        let mut replacement = replacement.to_owned();
+        if supplied.is_none() && slot.name.is_some() {
+            replacement = view.props.iter().fold(replacement, |html, prop| {
+                match supplied_props.get(&prop.name) {
+                    Some(value) => render_component_property(html, prop, value),
+                    None => remove_component_property(html, &prop.name),
+                }
+            });
+        }
+        let marker = format!("\0ZELYRA_VIEW_SLOT_{index:08}\0");
+        composed.replace_range(slot.start..slot.end, &marker);
+        replacements.push((marker, replacement));
+    }
+    composed = view.props.iter().fold(composed, |html, prop| {
+        match supplied_props.get(&prop.name) {
+            Some(value) => render_component_property(html, prop, value),
+            None => remove_component_property(html, &prop.name),
+        }
+    });
+    for (marker, replacement) in replacements {
+        composed = composed.replace(&marker, &replacement);
     }
     expand_view_components(program, composed)
 }
