@@ -3,6 +3,7 @@
 //! The checker remains the single source of truth for AST execution, MIR
 //! lowering, CLI checks, and source-mapped editor type information.
 use super::*;
+mod call_expressions;
 mod enum_constructors;
 mod expression_operators;
 mod expressions;
