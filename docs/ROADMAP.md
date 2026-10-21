@@ -25,7 +25,7 @@ telemetry, explicit effects, portable data, resource discipline, and honest
 proof claims guide every phase. The [manifesto](MANIFESTO.md) states the
 principles; the roadmap below tracks what is actually implemented.
 
-The current stable release is 1.2.38, published at https://github.com/sf1976/zelyra/releases/tag/v1.2.38. **Current milestones** is the source of
+The current stable release is [1.2.39](https://github.com/sf1976/zelyra/releases/tag/v1.2.39). **Current milestones** is the source of
 near-term commitments. Older numbered release sections below are retained as
 historical planning and evidence; they do not by themselves define current
 release targets. Longer-term ideas remain in the post-1.0 evolution section.
@@ -642,9 +642,9 @@ Released as [`v1.2.37`](https://github.com/sf1976/zelyra/releases/tag/v1.2.37). 
 
 Released as [`v1.2.38`](https://github.com/sf1976/zelyra/releases/tag/v1.2.38). The standard library provides exact `parse_decimal(String) -> Result<Decimal, String>` conversion and the reusable CSV package exposes it through explicit typed mappings. It accepts at most nine fractional digits without a Float intermediate. It does not infer a schema or write to a database. PR CI and release workflows passed; reproducible Linux and Windows artifacts, checksums, and SPDX SBOMs were published. Downloaded archives and checksum sidecars were verified, and the Linux executable reported `zelyra 1.2.38`.
 
-### 🧪 [~] 1.2.39 — explicit CSV Date and Time conversion (in progress)
+### ✅ [x] 1.2.39 — explicit CSV Date and Time conversion (released)
 
-The shared pure runtime adds typed `parse_date` and `parse_time` Results for the canonical, locale-independent forms `YYYY-MM-DD` and `HH:MM:SS`. The reusable CSV importer returns tagged `Date` and `Time` values and identifies invalid input by row and target column. Focused tests and the example pass on AST, MIR, and Bytecode. This is not timezone-aware timestamp parsing, schema inference, or transactional database import; the full release gates remain pending.
+Released as [`v1.2.39`](https://github.com/sf1976/zelyra/releases/tag/v1.2.39). The shared pure runtime adds typed `parse_date` and `parse_time` Results for the canonical, locale-independent forms `YYYY-MM-DD` and `HH:MM:SS`. The reusable CSV importer returns tagged `Date` and `Time` values and identifies invalid input by row and target column. Full PR CI and reproducible Linux/Windows release workflows passed. Published archives, checksum sidecars, and executable version were verified. This is not timezone-aware timestamp parsing, schema inference, or transactional database import; see the release notes for exact test evidence and artifact hashes.
 
 ## Active architecture milestones (1.1.5 through 1.3.0)
 
