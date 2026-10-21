@@ -157,6 +157,14 @@ fn numeric_conversion_builtins_reject_type_arguments() {
             "fn main() { value = parse_decimal<Decimal>(\"1.0\") }",
             "parse_decimal",
         ),
+        (
+            "fn main() { value = parse_date<Date>(\"2026-01-01\") }",
+            "parse_date",
+        ),
+        (
+            "fn main() { value = parse_time<Time>(\"12:00:00\") }",
+            "parse_time",
+        ),
     ] {
         let program = parse(&lex(source).unwrap()).unwrap();
         let errors = check(&program).expect_err("scalar conversions are not generic");
@@ -166,6 +174,54 @@ fn numeric_conversion_builtins_reject_type_arguments() {
             }),
             "expected a clear type-argument diagnostic for {builtin}, got {errors:?}"
         );
+    }
+}
+
+#[test]
+fn parse_date_and_time_return_typed_results_for_canonical_values() {
+    let source = r#"
+fn main() {
+    match parse_date("2024-02-29") {
+        Ok(value) => { print(value) }
+        Err(_) => { print("unexpected date error") }
+    }
+    print(is_err(parse_date("1900-02-29")))
+    print(is_err(parse_date("0000-01-01")))
+    print(is_err(parse_date("2024-2-09")))
+    match parse_time("23:59:59") {
+        Ok(value) => { print(value) }
+        Err(_) => { print("unexpected time error") }
+    }
+    print(is_err(parse_time("24:00:00")))
+    print(is_err(parse_time("12:60:00")))
+    print(is_err(parse_time("09:15")))
+    print(is_err(parse_time("09:15:30.000")))
+}
+"#;
+    assert_eq!(
+        run(source),
+        [
+            "2024-02-29",
+            "true",
+            "true",
+            "true",
+            "23:59:59",
+            "true",
+            "true",
+            "true",
+            "true"
+        ]
+    );
+
+    for source in [
+        "fn main() { value = parse_date(42) }",
+        "fn main() { value = parse_time(false) }",
+    ] {
+        let program = parse(&lex(source).unwrap()).unwrap();
+        let errors = check(&program).expect_err("temporal parsing must require String");
+        assert!(errors
+            .iter()
+            .any(|error| { error.message.contains("expected `String`") }));
     }
 }
 

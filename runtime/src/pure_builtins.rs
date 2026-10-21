@@ -87,6 +87,8 @@ pub fn is_pure_builtin(name: &str) -> bool {
             | "text_capitalize"
             | "parse_int"
             | "parse_decimal"
+            | "parse_date"
+            | "parse_time"
             | "parse_float"
             | "sort"
             | "sort_desc"
@@ -1474,6 +1476,30 @@ pub fn execute_pure_builtin(
                 }
             }
             _ => Err(builtin_error(span, "parse_decimal expects a String")),
+        },
+        "parse_date" if arguments.len() == 1 => match &arguments[0] {
+            Value::String(text) => {
+                if zelyra_ast::temporal::valid_date(text) {
+                    Ok(Value::Result(Ok(Box::new(Value::Date(text.clone())))))
+                } else {
+                    Ok(Value::Result(Err(Box::new(Value::String(format!(
+                        "invalid date: {text}"
+                    ))))))
+                }
+            }
+            _ => Err(builtin_error(span, "parse_date expects a String")),
+        },
+        "parse_time" if arguments.len() == 1 => match &arguments[0] {
+            Value::String(text) => {
+                if zelyra_ast::temporal::valid_time(text) {
+                    Ok(Value::Result(Ok(Box::new(Value::Time(text.clone())))))
+                } else {
+                    Ok(Value::Result(Err(Box::new(Value::String(format!(
+                        "invalid time: {text}"
+                    ))))))
+                }
+            }
+            _ => Err(builtin_error(span, "parse_time expects a String")),
         },
         "to_float" if arguments.len() == 1 => match &arguments[0] {
             Value::Float(value) if value.is_finite() => Ok(Value::Float(*value)),

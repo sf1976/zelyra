@@ -665,6 +665,22 @@ impl Checker<'_> {
             let ty = self.check_expr(&args[0], scopes);
             self.expect_type(&Type::String, &ty, args[0].span);
             Type::Result(Box::new(Type::Decimal), Box::new(Type::String))
+        } else if name == "parse_date" || name == "parse_time" {
+            if !type_args.is_empty() || args.len() != 1 {
+                self.error(
+                    span,
+                    format!("{name} expects exactly one String and no type arguments"),
+                );
+                return Type::Unknown;
+            }
+            let ty = self.check_expr(&args[0], scopes);
+            self.expect_type(&Type::String, &ty, args[0].span);
+            let parsed_type = if name == "parse_date" {
+                Type::Date
+            } else {
+                Type::Time
+            };
+            Type::Result(Box::new(parsed_type), Box::new(Type::String))
         } else if name == "parse_float" {
             if !type_args.is_empty() || args.len() != 1 {
                 self.error(

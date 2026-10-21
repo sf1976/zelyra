@@ -129,6 +129,8 @@ pub enum CsvColumnType {
     Integer
     Boolean
     Decimal
+    Date
+    Time
 }
 
 /// A converted cell keeps its source-language type instead of storing a
@@ -138,6 +140,8 @@ pub enum CsvValue {
     Integer(Int)
     Boolean(Bool)
     Decimal(Decimal)
+    Date(Date)
+    Time(Time)
 }
 
 pub struct CsvColumnMapping {
@@ -151,8 +155,8 @@ pub struct CsvConvertedTable {
     rows: CsvValue[][]
 }
 
-/// Select, rename, and explicitly convert CSV cells. Integer, Boolean, and
-/// Decimal parsing return typed Results; malformed cells produce a regular
+/// Select, rename, and explicitly convert CSV cells. Numeric, Boolean, and
+/// temporal parsing return typed Results; malformed cells produce a regular
 /// conversion error with their source row and target column. This is
 /// validation only: it does not infer a schema or write to a database.
 pub fn convert_columns(
@@ -217,6 +221,26 @@ pub fn convert_columns(
                                 }
                                 Err(_) => {
                                     return Err("CSV row " + to_string(row_index + 1) + " column " + target_name + ": invalid decimal")
+                                }
+                            }
+                        }
+                        CsvColumnType::Date => {
+                            match parse_date(cell) {
+                                Ok(value) => {
+                                    converted_row = append(converted_row, CsvValue::Date(value))
+                                }
+                                Err(_) => {
+                                    return Err("CSV row " + to_string(row_index + 1) + " column " + target_name + ": invalid date (expected YYYY-MM-DD)")
+                                }
+                            }
+                        }
+                        CsvColumnType::Time => {
+                            match parse_time(cell) {
+                                Ok(value) => {
+                                    converted_row = append(converted_row, CsvValue::Time(value))
+                                }
+                                Err(_) => {
+                                    return Err("CSV row " + to_string(row_index + 1) + " column " + target_name + ": invalid time (expected HH:MM:SS)")
                                 }
                             }
                         }

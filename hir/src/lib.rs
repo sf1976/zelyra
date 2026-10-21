@@ -894,6 +894,8 @@ impl<'a> Resolver<'a> {
                             | "to_string"
                             | "parse_int"
                             | "parse_decimal"
+                            | "parse_date"
+                            | "parse_time"
                             | "parse_float"
                             | "sort"
                             | "sort_desc"

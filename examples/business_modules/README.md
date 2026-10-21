@@ -51,8 +51,10 @@ cells and returns a table of tagged `CsvValue` cells. Invalid values identify
 their CSV row and target column. Integer parsing uses `parse_int`; Boolean
 parsing accepts `true`, `false`, `1`, and `0`; Decimal parsing uses
 `parse_decimal` and preserves exact base-10 values with up to nine fractional
-digits. Conversion is never inferred from a database schema. Date/time
-conversion, database writes, and transactional apply remain open. The
+digits. Date and time parsing use the canonical, locale-independent forms
+`YYYY-MM-DD` and `HH:MM:SS`, validate Gregorian dates and 24-hour clock ranges,
+and return tagged `Date` and `Time` values. Conversion is never inferred from
+a database schema. Database writes and transactional apply remain open. The
 `csv_import_demo` and `csv_convert_demo` entries exercise valid and invalid
 inputs on AST, MIR, and Bytecode. They are not a preview UI or a transactional
 database importer.
@@ -72,6 +74,9 @@ zelyra run main.zyl --entry csv_import_demo --backend bytecode
 zelyra run main.zyl --entry csv_convert_demo
 zelyra run main.zyl --entry csv_convert_demo --backend mir
 zelyra run main.zyl --entry csv_convert_demo --backend bytecode
+zelyra run main.zyl --entry csv_temporal_demo --backend ast
+zelyra run main.zyl --entry csv_temporal_demo --backend mir
+zelyra run main.zyl --entry csv_temporal_demo --backend bytecode
 ```
 
 The checked-in `zelyra.toml` explicitly enables the filesystem capability for
