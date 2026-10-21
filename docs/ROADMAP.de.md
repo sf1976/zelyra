@@ -27,7 +27,7 @@ Ressourcendisziplin und ehrliche Beweisaussagen leiten jede Phase. Das
 [Manifest](MANIFESTO.de.md) beschreibt die Prinzipien; die Roadmap kennzeichnet
 den tatsächlich implementierten Stand.
 
-Das aktuelle stabile Release ist 1.2.33 und wurde unter https://github.com/sf1976/zelyra/releases/tag/v1.2.33 veröffentlicht. **Aktuelle Meilensteine** ist die
+Das aktuelle stabile Release ist 1.2.35 und wurde unter https://github.com/sf1976/zelyra/releases/tag/v1.2.35 veröffentlicht. **Aktuelle Meilensteine** ist die
 verbindliche Übersicht der nächsten Vorhaben. Ältere, nummerierte Release-
 Abschnitte bleiben als historische Planung und Nachweise erhalten; sie legen
 für sich keine aktuellen Releaseziele fest. Langfristige Ideen stehen im
@@ -661,9 +661,10 @@ verbessert die Schema-Rekonstruktion für das Abnahmeprojekt; übersprungene
 Felder werden dadurch nicht importiert und Laravel-Parität wird nicht
 behauptet.
 
-### 1.2.35 — Breiten vorzeichenloser Integer erhalten
+### ✅ [x] 1.2.35 — Breiten vorzeichenloser Integer erhalten (veröffentlicht)
 
-Der Laravel-Schemaimporter soll die physischen MariaDB-Breiten von `id()`,
+Veröffentlicht als [`v1.2.35`](https://github.com/sf1976/zelyra/releases/tag/v1.2.35).
+Der Laravel-Schemaimporter erhält die physischen MariaDB-Breiten von `id()`,
 `foreignId()` und Laravel-Methoden von `unsignedTinyInteger()` bis
 `unsignedBigInteger()` übernehmen, ohne Zelyras nominale/Werttypen zu ändern.
 Der compilergeprüfte Spaltenmodifikator `unsigned_storage` verändert nur das
@@ -998,7 +999,7 @@ werden. Details stehen im [Projektlayout-Arbeitsplan](release-plans/1.3.0-projec
   Semantikparität, breitere Differential-/Sicherheitstests und reproduzierbare
   Performancemessungen sind noch offen; siehe den ausführlichen Abschnitt zu
   1.3.0.
-- [~] **Import von Laravel-Webseiten — aktiv bis 1.3.0:** Den entfernten Framework-Migrator durch einen quellbelegten Website-Importer ersetzen, der compilergeprüfte, wiederverwendbare Zelyra-Module erzeugt. Zuerst analysieren, vor Generierung eine Auswahl verlangen, nicht unterstützte Abläufe sichtbar erhalten und die Laravel-Quelle unverändert lassen. Erstes Integrationsprojekt ist `/opt/siedelmann-laravel/app`. Der Importer baut auf dem Modul-/Paketsystem von 1.1.5 und der Betriebsgrundlage von 1.2.0 auf; er führt kein paralleles Plugin-/Laufzeitmodell ein. Die noch unveröffentlichte Schemaverbesserung erhält für MariaDB die Kapazität von Laravel-`mediumText`/`longText` über `String text_storage medium|long`, weist nicht unterstützte MariaDB-Indizes auf diesen Spalten zurück und meldet die backendabhängigen PostgreSQL-/SQLite-Grenzen. Der Website-Import ist damit nicht abgeschlossen; Routenverhalten und Anwendungsabläufe bleiben offen.
+- [~] **Import von Laravel-Webseiten — aktiv bis 1.3.0:** Den entfernten Framework-Migrator durch einen quellbelegten Website-Importer ersetzen, der compilergeprüfte, wiederverwendbare Zelyra-Module erzeugt. Zuerst analysieren, vor Generierung eine Auswahl verlangen, nicht unterstützte Abläufe sichtbar erhalten und die Laravel-Quelle unverändert lassen. Erstes Integrationsprojekt ist `/opt/siedelmann-laravel/app`. Der Importer baut auf dem Modul-/Paketsystem von 1.1.5 und der Betriebsgrundlage von 1.2.0 auf; er führt kein paralleles Plugin-/Laufzeitmodell ein. Die veröffentlichte Schemaverbesserung erhält für MariaDB die Kapazität von Laravel-`mediumText`/`longText` über `String text_storage medium|long`, weist nicht unterstützte MariaDB-Indizes auf diesen Spalten zurück und meldet die backendabhängigen PostgreSQL-/SQLite-Grenzen. Release 1.2.35 erhält außerdem unterstützte Breiten vorzeichenloser Integer. Der Website-Import ist damit nicht abgeschlossen; Routenverhalten und Anwendungsabläufe bleiben offen.
 
 - [ ] **1.2.0 — Compose-Prüfung im Installer:** Die Installer
   erkennen Docker Compose v2 oder neuer und unterscheiden es von der veralteten
