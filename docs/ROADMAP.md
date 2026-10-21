@@ -684,6 +684,23 @@ end-to-end tests, database compatibility, fuzzing, and Linux/Windows release
 archive and SBOM verification. The release workflow skipped publication
 because no release tag was requested; no release has been published.
 
+### 🧪 [~] 1.2.42 — source-resolved Laravel view dependencies
+
+`VIEW_LINKS.json` now resolves literal Blade `@extends`, `@include`,
+`@includeIf`, `@includeWhen`, `@each`, and local anonymous `@component`
+references against the scanned `resources/views` inventory. Anonymous
+components use Blade's `components/` view directory; class-based or package
+components without a local template remain unresolved. It emits deterministic dependency edges
+with original source spans, lists unresolved literal references, and detects
+composition cycles iteratively. `VIEW_LAYOUTS.md` presents resolved edges,
+unresolved references, and cycles in a reviewable report. The acceptance-project check resolves the
+shared `app.layouts.app` edge and currently sees 231 dependencies, no
+unresolved references, and no cycles across the scanned views. This is an
+analysis graph only: it does not translate Blade layout or fragment behavior,
+wire page routes, or claim the site has been imported. Focused Rust tests and
+the source-only check against `/opt/siedelmann-laravel/app` passed. Full release
+gates have not run.
+
 ## Active architecture milestones (1.1.5 through 1.3.0)
 
 These milestones are in progress and unreleased. Items with `[~]` are partially implemented; open subgoals remain explicit. Entries for released versions remain historical evidence.

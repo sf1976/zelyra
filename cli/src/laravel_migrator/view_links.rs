@@ -196,15 +196,6 @@ impl ViewLinkAnalyzer {
                     right["source_span"]["start"]["byte_offset"].as_u64(),
                 ))
         });
-        let mut view_files = entries
-            .iter()
-            .filter_map(|entry| entry["file"].as_str())
-            .collect::<BTreeSet<_>>();
-        view_files.extend(
-            self.composition
-                .iter()
-                .filter_map(|entry| entry["file"].as_str()),
-        );
         let translated_link_count = entries
             .iter()
             .filter(|entry| {
@@ -213,6 +204,40 @@ impl ViewLinkAnalyzer {
             })
             .count();
         let mut composition = self.composition.clone();
+        let scanned_views = self.views.iter().cloned().collect::<BTreeSet<_>>();
+        let mut dependency_edges = Vec::new();
+        let mut unresolved_composition = Vec::new();
+        for entry in &mut composition {
+            let directive = entry["directive"].as_str().unwrap_or_default().to_owned();
+            if !matches!(
+                directive.as_str(),
+                "extends" | "include" | "includeif" | "includewhen" | "each" | "component"
+            ) {
+                continue;
+            }
+            let target = entry["target_or_slot"].as_str().unwrap_or_default();
+            let resolved = if directive == "component" {
+                blade_component_path(target)
+            } else {
+                blade_view_path(target)
+            };
+            let source_file = entry["file"].as_str().unwrap_or_default().to_owned();
+            let Some(target_file) = resolved.filter(|path| scanned_views.contains(path)) else {
+                entry["resolution_status"] = json!("missing_or_unresolved");
+                entry["resolved_source_file"] = Value::Null;
+                unresolved_composition.push(entry.clone());
+                continue;
+            };
+            entry["resolution_status"] = json!("resolved_source_view");
+            entry["resolved_source_file"] = json!(target_file);
+            dependency_edges.push(json!({
+                "source_file": source_file,
+                "directive": directive,
+                "target_view": target_file,
+                "source_span": entry["source_span"].clone(),
+                "conditional": matches!(directive.as_str(), "includeif" | "includewhen")
+            }));
+        }
         composition.sort_by(|left, right| {
             (
                 left["file"].as_str(),
@@ -223,6 +248,43 @@ impl ViewLinkAnalyzer {
                     right["source_span"]["start"]["byte_offset"].as_u64(),
                 ))
         });
+        dependency_edges.sort_by(|left, right| {
+            (
+                left["source_file"].as_str(),
+                left["source_span"]["start"]["byte_offset"].as_u64(),
+                left["target_view"].as_str(),
+            )
+                .cmp(&(
+                    right["source_file"].as_str(),
+                    right["source_span"]["start"]["byte_offset"].as_u64(),
+                    right["target_view"].as_str(),
+                ))
+        });
+        let mut view_files = entries
+            .iter()
+            .filter_map(|entry| entry["file"].as_str())
+            .collect::<BTreeSet<_>>();
+        view_files.extend(
+            self.composition
+                .iter()
+                .filter_map(|entry| entry["file"].as_str()),
+        );
+        view_files.extend(
+            dependency_edges
+                .iter()
+                .filter_map(|edge| edge["target_view"].as_str()),
+        );
+        unresolved_composition.sort_by(|left, right| {
+            (
+                left["file"].as_str(),
+                left["source_span"]["start"]["byte_offset"].as_u64(),
+            )
+                .cmp(&(
+                    right["file"].as_str(),
+                    right["source_span"]["start"]["byte_offset"].as_u64(),
+                ))
+        });
+        let cyclic_dependencies = find_composition_cycles(&scanned_views, &dependency_edges);
         json!({
             "schema_version": "1",
             "view_count": view_files.len(),
@@ -234,9 +296,93 @@ impl ViewLinkAnalyzer {
             "shared_layouts": summarize_layouts(&composition),
             "view_layout_bindings": summarize_view_layout_bindings(&composition),
             "composition": composition,
+            "dependency_graph": {
+                "edges": dependency_edges,
+                "unresolved_references": unresolved_composition,
+                "cycles": cyclic_dependencies
+            },
             "entries": entries
         })
     }
+}
+
+/// Find exact cycles in the resolved Blade composition graph without recursive
+/// calls. The iterative walk keeps deeply nested or machine-generated view
+/// graphs from consuming the Rust call stack.
+fn find_composition_cycles(views: &BTreeSet<String>, edges: &[Value]) -> Vec<Vec<String>> {
+    let mut adjacency = std::collections::BTreeMap::<String, BTreeSet<String>>::new();
+    for edge in edges {
+        let (Some(source), Some(target)) =
+            (edge["source_file"].as_str(), edge["target_view"].as_str())
+        else {
+            continue;
+        };
+        adjacency
+            .entry(source.to_owned())
+            .or_default()
+            .insert(target.to_owned());
+    }
+
+    let mut state = std::collections::BTreeMap::<String, u8>::new();
+    let mut cycles = BTreeSet::<Vec<String>>::new();
+    for root in views {
+        if state.get(root).copied().unwrap_or_default() != 0 {
+            continue;
+        }
+        state.insert(root.clone(), 1);
+        let mut path = vec![root.clone()];
+        let mut stack = vec![(root.clone(), Vec::<String>::new(), 0_usize)];
+        while let Some((node, children, next_index)) = stack.last_mut() {
+            if children.is_empty() {
+                *children = adjacency
+                    .get(node)
+                    .map(|targets| targets.iter().cloned().collect())
+                    .unwrap_or_default();
+            }
+            if *next_index >= children.len() {
+                let completed = node.clone();
+                stack.pop();
+                path.pop();
+                state.insert(completed, 2);
+                continue;
+            }
+            let child = children[*next_index].clone();
+            *next_index += 1;
+            match state.get(&child).copied().unwrap_or_default() {
+                0 => {
+                    state.insert(child.clone(), 1);
+                    path.push(child.clone());
+                    stack.push((child, Vec::new(), 0));
+                }
+                1 => {
+                    if let Some(start) = path.iter().position(|entry| entry == &child) {
+                        let mut cycle = path[start..].to_vec();
+                        cycle.push(child);
+                        cycles.insert(canonical_cycle(cycle));
+                    }
+                }
+                _ => {}
+            }
+        }
+    }
+    cycles.into_iter().collect()
+}
+
+fn canonical_cycle(mut cycle: Vec<String>) -> Vec<String> {
+    if cycle.len() <= 2 {
+        return cycle;
+    }
+    cycle.pop();
+    let Some((rotation, _)) = cycle
+        .iter()
+        .enumerate()
+        .min_by(|(_, left), (_, right)| left.cmp(right))
+    else {
+        return cycle;
+    };
+    cycle.rotate_left(rotation);
+    cycle.push(cycle[0].clone());
+    cycle
 }
 
 /// Resolve the conventional Blade view name to a project-relative template
@@ -250,6 +396,14 @@ fn blade_view_path(name: &str) -> Option<String> {
             })
     });
     valid.then(|| format!("resources/views/{}.blade.php", name.replace('.', "/")))
+}
+
+/// Anonymous Blade components live under the dedicated `components/` view
+/// namespace. Class-based or package components remain unresolved unless a
+/// matching local template is present in the scanned project.
+fn blade_component_path(name: &str) -> Option<String> {
+    let view = blade_view_path(name)?;
+    Some(view.replacen("resources/views/", "resources/views/components/", 1))
 }
 
 fn summarize_layouts(composition: &[Value]) -> Vec<Value> {
@@ -380,12 +534,12 @@ pub(super) fn render_layout_mapping_markdown(report: &Value) -> String {
         .unwrap_or_default();
     if layouts.is_empty() {
         output.push_str("No literal `@extends` layout was found.\n");
-        return output;
-    }
-    for layout in layouts {
-        let name = layout["blade_layout"].as_str().unwrap_or("(unknown)");
-        let source = layout["source_file"].as_str().unwrap_or("unresolved");
-        output.push_str(&format!("## `{name}`\n\n- Source: `{source}`\n- Consumers: {}\n- Layout sections (`@yield`) mapped to named slots: {}\n\n", layout["consumer_count"].as_u64().unwrap_or(0), layout["yielded_slots"].as_array().map(|slots| slots.iter().filter_map(Value::as_str).map(|slot| format!("`{slot}`")).collect::<Vec<_>>().join(", ")).filter(|slots| !slots.is_empty()).unwrap_or_else(|| "none detected".to_owned())));
+    } else {
+        for layout in layouts {
+            let name = layout["blade_layout"].as_str().unwrap_or("(unknown)");
+            let source = layout["source_file"].as_str().unwrap_or("unresolved");
+            output.push_str(&format!("## `{name}`\n\n- Source: `{source}`\n- Consumers: {}\n- Layout sections (`@yield`) mapped to named slots: {}\n\n", layout["consumer_count"].as_u64().unwrap_or(0), layout["yielded_slots"].as_array().map(|slots| slots.iter().filter_map(Value::as_str).map(|slot| format!("`{slot}`")).collect::<Vec<_>>().join(", ")).filter(|slots| !slots.is_empty()).unwrap_or_else(|| "none detected".to_owned())));
+        }
     }
     output.push_str("## Per-view bindings\n\nEvery listed consumer should declare `view: ImportedAppShell` on its Zelyra `page`. The `content` section uses the default page slot; the other mapped section names use named slots. A minimal page follows this shape (replace the route and translated body with the actual route and content):\n\n```zelyra\npage \"/your-route\" {\n    view: ImportedAppShell\n    html {\n        <slot name=\"title\">Seitentitel</slot>\n        <slot name=\"header_title\">Seitentitel</slot>\n        <p>Übersetzter Seiteninhalt</p>\n    }\n}\n```\n\n| Blade view | Shared layout | Default slot section | Named slots | Unmapped sections |\n|---|---|---|---|---|\n");
     for binding in report["view_layout_bindings"]
@@ -418,6 +572,77 @@ pub(super) fn render_layout_mapping_markdown(report: &Value) -> String {
             list("section_to_named_slot"),
             list("sections_without_matching_layout_yield")
         ));
+    }
+    output.push_str("\n## Resolved composition dependencies\n\nThese edges locate literal layout, include, and local anonymous component dependencies in the source tree. They are an analysis map; they do not mean the referenced Blade behavior was translated.\n\n| Source view | Directive | Target view | Conditional |\n|---|---|---|---|\n");
+    for edge in report["dependency_graph"]["edges"]
+        .as_array()
+        .into_iter()
+        .flatten()
+    {
+        let source = edge["source_file"]
+            .as_str()
+            .unwrap_or("")
+            .replace('|', "&#124;");
+        let directive = edge["directive"].as_str().unwrap_or("");
+        let target = edge["target_view"]
+            .as_str()
+            .unwrap_or("")
+            .replace('|', "&#124;");
+        let conditional = if edge["conditional"] == true {
+            "yes"
+        } else {
+            "no"
+        };
+        output.push_str(&format!(
+            "| `{source}` | `@{directive}` | `{target}` | {conditional} |\n"
+        ));
+    }
+    output.push_str("\n## Unresolved composition references\n\n");
+    let unresolved = report["dependency_graph"]["unresolved_references"]
+        .as_array()
+        .map(Vec::as_slice)
+        .unwrap_or_default();
+    if unresolved.is_empty() {
+        output.push_str("No literal composition references are unresolved.\n");
+    } else {
+        output.push_str("| Source view | Line | Directive | Target |\n|---|---:|---|---|\n");
+        for reference in unresolved {
+            let source = reference["file"]
+                .as_str()
+                .unwrap_or("")
+                .replace('|', "&#124;");
+            let directive = reference["directive"].as_str().unwrap_or("");
+            let target = reference["target_or_slot"]
+                .as_str()
+                .unwrap_or("")
+                .replace('|', "&#124;");
+            let line = reference["source_span"]["start"]["line"]
+                .as_u64()
+                .unwrap_or(0);
+            output.push_str(&format!(
+                "| `{source}` | {line} | `@{directive}` | `{target}` |\n"
+            ));
+        }
+    }
+    output.push_str("\n## Composition cycles\n\n");
+    let cycles = report["dependency_graph"]["cycles"]
+        .as_array()
+        .map(Vec::as_slice)
+        .unwrap_or_default();
+    if cycles.is_empty() {
+        output.push_str("No composition cycles were detected.\n");
+    } else {
+        for cycle in cycles {
+            let path = cycle
+                .as_array()
+                .into_iter()
+                .flatten()
+                .filter_map(Value::as_str)
+                .map(|part| format!("`{}`", part.replace('|', "&#124;")))
+                .collect::<Vec<_>>()
+                .join(" → ");
+            output.push_str(&format!("- {path}\n"));
+        }
     }
     output
 }
@@ -1363,12 +1588,21 @@ mod tests {
     #[test]
     fn blade_layout_and_fragment_references_are_recorded_as_shared_zelyra_composition() {
         let view = "resources/views/orders/index.blade.php";
-        let source = "@extends('layouts.app')\n@section('content') @include('shared.nav')";
+        let source = "@extends('layouts.app')\n@section('content') @include('shared.nav') @includeIf('shared.optional') @component('shared.banner') @endcomponent";
         let mut analyzer = ViewLinkAnalyzer::default();
         analyzer.scan(view, source);
         analyzer.scan(
             "resources/views/layouts/app.blade.php",
-            "@yield('title') @yield('content') @yield('footer')",
+            "@yield('title') @yield('content') @yield('footer') @include('partials.footer')",
+        );
+        analyzer.scan("resources/views/shared/nav.blade.php", "<nav>Menu</nav>");
+        analyzer.scan(
+            "resources/views/components/shared/banner.blade.php",
+            "<aside>Banner</aside>",
+        );
+        analyzer.scan(
+            "resources/views/partials/footer.blade.php",
+            "@include('layouts.app')",
         );
         let composition = analyzer.finish(&json!({"nodes": []}))["composition"]
             .as_array()
@@ -1393,7 +1627,7 @@ mod tests {
                 && entry["target_or_slot"] == "footer"
         }));
         let report = analyzer.finish(&json!({"nodes": []}));
-        assert_eq!(report["view_count"], 2);
+        assert_eq!(report["view_count"], 5);
         assert_eq!(report["shared_layouts"][0]["blade_layout"], "layouts.app");
         assert_eq!(
             report["shared_layouts"][0]["yielded_slots"],
@@ -1408,8 +1642,35 @@ mod tests {
             report["view_layout_bindings"][0]["section_to_named_slot"],
             json!([])
         );
+        let dependency_graph = &report["dependency_graph"];
+        assert_eq!(dependency_graph["edges"].as_array().unwrap().len(), 5);
+        assert_eq!(
+            dependency_graph["unresolved_references"]
+                .as_array()
+                .unwrap()
+                .len(),
+            1
+        );
+        assert_eq!(
+            dependency_graph["unresolved_references"][0]["resolution_status"],
+            "missing_or_unresolved"
+        );
+        assert_eq!(dependency_graph["cycles"].as_array().unwrap().len(), 1);
+        assert_eq!(
+            dependency_graph["cycles"][0],
+            json!([
+                "resources/views/layouts/app.blade.php",
+                "resources/views/partials/footer.blade.php",
+                "resources/views/layouts/app.blade.php"
+            ])
+        );
         let markdown = render_layout_mapping_markdown(&report);
         assert!(markdown.contains("default `<slot />`"));
         assert!(markdown.contains("`content`"));
+        assert!(markdown.contains("## Resolved composition dependencies"));
+        assert!(markdown.contains("`@component`"));
+        assert!(markdown.contains("shared.optional"));
+        assert!(markdown.contains("Composition cycles"));
+        assert!(markdown.contains("partials/footer.blade.php"));
     }
 }

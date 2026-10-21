@@ -201,6 +201,53 @@ def check_static_asset_routes(source: Path, output: Path) -> bool:
     return True
 
 
+def check_view_dependency_graph(output: Path) -> bool:
+    try:
+        report = json.loads((output / "VIEW_LINKS.json").read_text(encoding="utf-8"))
+        layout_report = (output / "VIEW_LAYOUTS.md").read_text(encoding="utf-8")
+    except (OSError, json.JSONDecodeError) as error:
+        print(f"error: Blade view dependency report cannot be read: {error}", file=sys.stderr)
+        return False
+    graph = report.get("dependency_graph")
+    if not isinstance(graph, dict):
+        print("error: Blade view report has no dependency graph", file=sys.stderr)
+        return False
+    edges = graph.get("edges")
+    unresolved = graph.get("unresolved_references")
+    cycles = graph.get("cycles")
+    if not isinstance(edges, list) or not isinstance(unresolved, list) or not isinstance(cycles, list):
+        print("error: Blade view dependency graph has an invalid shape", file=sys.stderr)
+        return False
+    app_layout = "resources/views/app/layouts/app.blade.php"
+    if not any(
+        edge.get("source_file") == "resources/views/app/dashboard.blade.php"
+        and edge.get("directive") == "extends"
+        and edge.get("target_view") == app_layout
+        for edge in edges
+    ):
+        print("error: shared Laravel app layout dependency was not resolved", file=sys.stderr)
+        return False
+    if any(not isinstance(edge.get("source_span"), dict) for edge in edges):
+        print("error: a resolved Blade dependency has no source span", file=sys.stderr)
+        return False
+    if (
+        "## Resolved composition dependencies" not in layout_report
+        or "## Unresolved composition references" not in layout_report
+        or "## Composition cycles" not in layout_report
+        or "resources/views/app/layouts/app.blade.php" not in layout_report
+    ):
+        print("error: VIEW_LAYOUTS.md does not include the resolved composition report", file=sys.stderr)
+        return False
+    if cycles:
+        print(f"error: Laravel view dependency graph contains cycles: {cycles!r}", file=sys.stderr)
+        return False
+    print(
+        f"Blade view graph resolves {len(edges)} composition dependencies; "
+        f"{len(unresolved)} reference(s) need review and no cycles were detected."
+    )
+    return True
+
+
 def main() -> int:
     if len(sys.argv) != 2:
         print(
@@ -249,6 +296,8 @@ def main() -> int:
         if not check_import_coverage(output):
             return 1
         if not check_static_asset_routes(source, output):
+            return 1
+        if not check_view_dependency_graph(output):
             return 1
 
         check = subprocess.run(
