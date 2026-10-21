@@ -625,16 +625,20 @@ abgeschlossen.
   unterstützte Bytecode-Operationen fail-closed scheitern und der bisherige
   Standard unverändert bleiben. Ziel ist portabler geprüfter Bytecode, keine
   native Maschinencodegenerierung.
-- [ ] **1.3.0 — bestätigte Web-/Compilerlücken:** SQL-geladene
-  `Option<Record>`-Seitendaten akzeptieren (der Validatorfix liegt auf dem
-  aktiven, noch nicht zusammengeführten Feature-Branch); dynamische
-  Seitentypen abschließen und zusammenführen sowie typisierte API-Antworten
-  ergänzen; begrenztes, bereinigtes CommonMark/GFM-Rendering bereitstellen;
-  sowie stdin-Piping für die bereits erlaubnislisten-, timeout- und
-  ausgabelimitierte Process-Capability ergänzen. `HttpResult<T>` beschreibt
-  derzeit Antworten ausgehender HTTP-Aufrufe, nicht Status-/Header-Rückgaben
-  eines Zelyra-API-Handlers. Diese Punkte sind getrennt vom statischen
-  `public/`-Asset-Serving.
+- [~] **1.3.0 — bestätigte Web-/Compilerlücken:** SQL-geladene
+  `Option<Record>`-Seitendaten und dynamische Seitentypen sind mit PRs #146 und
+  #147 in `main` angekommen. `run_process_piped` mit Allowlist, Laufzeit- und
+  Ein-/Ausgabegrenzen ist in PR #148 implementiert; dessen CI läuft noch.
+  Typisierte Status-/Header-Antworten für API-Handler bleiben offen; das
+  vorhandene `HttpResult<T>` beschreibt Antworten ausgehender HTTP-Aufrufe.
+  Typisierte View-Props für gemeinsame Layouts liegen in PR #149 und warten
+  noch auf vollständige CI. Begrenztes, bereinigtes CommonMark/GFM-Rendering
+  fehlt weiterhin. Allgemeine Übersetzungen in handgeschriebenen Views und
+  sprachbewusstes Routing fehlen ebenfalls; vorhandene Projektkataloge
+  lokalisieren Zelyras generierte UI, stellen aber keine Template-Funktion
+  `t(key)` bereit. Markdown-HTML muss eine vertrauenswürdige, bereinigte
+  Ausgabesemantik erhalten und darf normales HTML-Escaping nicht umgehen.
+  Diese Aufgaben sind getrennt vom statischen `public/`-Asset-Serving.
 
 **Nach 1.3.0 oder bei ausdrücklicher Neubewertung:** Ein natives AOT-Backend
 bleibt optional und hängt von Benchmarks ab. Kein offener Punkt entfällt stillschweigend: Arbeit, deren
