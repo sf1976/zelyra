@@ -1844,6 +1844,7 @@ impl SchemaAnalyzer {
                         "mapping_review": mapping_review_note(&column.laravel_method),
                         "length": column.length,
                         "text_storage": column.text_storage.map(text_storage_name),
+                        "unsigned_storage": unsigned_storage_for_method(&column.laravel_method),
                         "allowed_values": column.enum_values,
                         "decimal_precision": column.decimal_precision.map(|(precision, scale)| json!({ "precision": precision, "scale": scale })),
                         "nullable": column.nullable,
@@ -2784,16 +2785,15 @@ fn mapping_review_note(method: &str) -> &'static str {
         "mediumText" => "The String value uses Zelyra `text_storage medium`; MariaDB MEDIUMTEXT capacity is preserved. PostgreSQL and SQLite use their native TEXT type, whose actual size limit is backend-specific.",
         "longText" => "The String value uses Zelyra `text_storage long`; MariaDB LONGTEXT capacity is preserved. PostgreSQL and SQLite use their native TEXT type and have lower maximum value sizes than MariaDB LONGTEXT, so review data sizes before changing backends.",
         "rememberToken" => "Laravel defines remember_token as nullable VARCHAR(100); verify the target backend DDL.",
-        "id" => "Laravel incrementing IDs may be unsigned; compare target-backend DDL with Zelyra Id.",
+        "id" => "The generated field preserves Laravel's unsigned BIGINT storage on MariaDB while keeping Zelyra's nominal Id type. Other backends use NUMERIC(20,0); review their native range and constraints.",
         "integer" | "mediumInteger" | "smallInteger" | "tinyInteger" => {
             "Laravel integer width may be narrower than Zelyra Int; compare target-backend range and DDL."
         }
         "bigInteger" => "Compare signedness and target-backend DDL before treating the mapping as equivalent.",
-        "unsignedBigInteger" => "Mapped to UInt; confirm target-backend range, signedness, and DDL before treating the mapping as equivalent.",
-        "unsignedInteger" | "unsignedMediumInteger" | "unsignedSmallInteger" | "unsignedTinyInteger" => "Mapped to UInt; Laravel width differs by method and may be wider than the source backend representation.",
+        "unsignedBigInteger" | "unsignedInteger" | "unsignedMediumInteger" | "unsignedSmallInteger" | "unsignedTinyInteger" => "The generated UInt field preserves this Laravel unsigned width on MariaDB. PostgreSQL and SQLite use NUMERIC(20,0), so native width and range constraints differ; review before changing backends.",
         "timestamps" | "timestamp" | "dateTime" => "Mapped to Timestamp; compare precision, timezone, nullability, and Eloquent timestamp behavior against the target backend.",
         "decimal" => "Laravel precision and scale are carried to the generated Decimal field; review value-range and target-backend constraints.",
-        "foreignId" => "Laravel foreignId storage is unsigned; only an explicitly resolved constrained() target creates a relation, and the backend width still requires review.",
+        "foreignId" => "The generated UInt or relation field preserves Laravel's unsigned BIGINT storage on MariaDB. PostgreSQL and SQLite use NUMERIC(20,0), so native width and range constraints differ; only an explicitly resolved constrained() target creates a relation.",
         _ if method.starts_with("raw SQL:") => "Mapped from a bounded static deployment SQL declaration; see the candidate backend_review_notes for width, collation, index-name, and deployment-order limitations.",
         _ => "Compiler validity does not prove target-backend storage equivalence; review the generated DDL.",
     }
@@ -3429,6 +3429,32 @@ fn text_storage_name(storage: TextStorage) -> &'static str {
     }
 }
 
+fn unsigned_storage_for_method(method: &str) -> Option<&'static str> {
+    match method {
+        "id" | "foreignId" | "unsignedBigInteger" => Some("bigint"),
+        "unsignedInteger" => Some("int"),
+        "unsignedMediumInteger" => Some("mediumint"),
+        "unsignedSmallInteger" => Some("smallint"),
+        "unsignedTinyInteger" => Some("tinyint"),
+        _ => method
+            .strip_prefix("raw SQL: ")
+            .filter(|declaration| declaration.to_ascii_uppercase().contains("UNSIGNED"))
+            .and_then(|declaration| {
+                let base = declaration
+                    .split(|character: char| !character.is_ascii_alphanumeric())
+                    .next()?;
+                match base.to_ascii_lowercase().as_str() {
+                    "tinyint" => Some("tinyint"),
+                    "smallint" => Some("smallint"),
+                    "mediumint" => Some("mediumint"),
+                    "int" | "integer" => Some("int"),
+                    "bigint" => Some("bigint"),
+                    _ => None,
+                }
+            }),
+    }
+}
+
 fn render_table(candidate: &Candidate) -> String {
     let tenant_scope = candidate.columns.iter().find(|column| {
         column.name == "tenant_id"
@@ -3468,6 +3494,9 @@ fn render_table(candidate: &Candidate) -> String {
         }
         if let Some(text_storage) = column.text_storage {
             attributes.push(format!("text_storage {}", text_storage_name(text_storage)));
+        }
+        if let Some(unsigned_storage) = unsigned_storage_for_method(&column.laravel_method) {
+            attributes.push(format!("unsigned_storage {unsigned_storage}"));
         }
         if let Some(default) = &column.default {
             attributes.push(default.clone());
@@ -3556,11 +3585,13 @@ mod tests {
             "{source}"
         );
         assert!(
-            source.contains("tenant_id: TenantId required on_delete cascade references tenants"),
+            source.contains("tenant_id: TenantId required unsigned_storage bigint on_delete cascade references tenants"),
             "{source}"
         );
         assert!(
-            source.contains("customer_group: Customer_Group? on_delete restrict"),
+            source.contains(
+                "customer_group: Customer_Group? unsigned_storage bigint on_delete restrict"
+            ),
             "{source}"
         );
         let column = plan["candidates"]
@@ -4368,8 +4399,9 @@ return new class extends Migration {
         let plan = analyzer.finish();
         assert_eq!(plan["generated_table_count"], 3);
         let source = plan["candidate_source"].as_str().unwrap();
-        assert!(source.contains("customer: Customer required on_delete cascade"));
-        assert!(source.contains("template: Template? on_delete set_null"));
+        assert!(source
+            .contains("customer: Customer required unsigned_storage bigint on_delete cascade"));
+        assert!(source.contains("template: Template? unsigned_storage bigint on_delete set_null"));
         let invoice = plan["candidates"]
             .as_array()
             .unwrap()
@@ -4437,14 +4469,14 @@ return new class extends Migration {
         assert!(columns[1]["mapping_review"]
             .as_str()
             .unwrap()
-            .contains("signedness"));
+            .contains("PostgreSQL and SQLite use NUMERIC(20,0)"));
         assert_eq!(columns[3]["name"], "created_at");
         assert_eq!(columns[4]["name"], "updated_at");
         assert_eq!(columns[3]["zelyra_type"], "Timestamp");
         assert!(columns[3]["nullable"].as_bool().unwrap());
         assert_eq!(candidate["indexes"].as_array().unwrap().len(), 2);
         let source = plan["candidate_source"].as_str().unwrap();
-        assert!(source.contains("external_id: UInt required"));
+        assert!(source.contains("external_id: UInt required unsigned_storage bigint"));
         assert!(source.contains("created_at: Timestamp?"));
         assert!(source.contains("index {\n        external_id\n        kind\n    }"));
         assert!(source.contains("index {\n        kind\n    }"));
@@ -4741,7 +4773,7 @@ return new class extends Migration {
         assert_eq!(customer["on_delete"], "set_null");
         assert_eq!(customer["nullable"], true);
         let source = plan["candidate_source"].as_str().unwrap();
-        assert!(source.contains("customer: Customer? on_delete set_null"));
+        assert!(source.contains("customer: Customer? unsigned_storage bigint on_delete set_null"));
         assert!(source.contains("index {\n        customer\n    }"));
     }
 
@@ -4921,7 +4953,7 @@ return new class extends Migration {
             "target_unavailable_emitted_as_unsigned_id"
         );
         let source = plan["candidate_source"].as_str().unwrap();
-        assert!(source.contains("customer_id: UInt required"));
+        assert!(source.contains("customer_id: UInt required unsigned_storage bigint"));
         assert!(source.contains("index {\n        customer_id\n    }"));
         assert!(!source.contains("on_delete cascade"));
     }
@@ -5021,6 +5053,53 @@ return new class extends Migration {
     }
 
     #[test]
+    fn preserves_laravel_unsigned_integer_widths_in_source_and_candidate_metadata() {
+        let mut analyzer = SchemaAnalyzer::default();
+        analyzer.scan(
+            "database/migrations/0001_create_measurements.php",
+            "<?php Schema::create('measurements', function ($table) { $table->id(); $table->unsignedTinyInteger('tiny'); $table->unsignedSmallInteger('small'); $table->unsignedMediumInteger('medium'); $table->unsignedInteger('normal'); $table->unsignedBigInteger('large'); $table->foreignId('owner_id'); });",
+        );
+        let plan = analyzer.finish();
+        assert_eq!(plan["generated_table_count"], 1, "{plan}");
+        let columns = plan["candidates"][0]["columns"].as_array().unwrap();
+        for (name, expected) in [
+            ("id", "bigint"),
+            ("tiny", "tinyint"),
+            ("small", "smallint"),
+            ("medium", "mediumint"),
+            ("normal", "int"),
+            ("large", "bigint"),
+            ("owner_id", "bigint"),
+        ] {
+            let column = columns
+                .iter()
+                .find(|column| column["source_column_name"] == name)
+                .unwrap_or_else(|| panic!("missing candidate column {name}: {plan}"));
+            assert_eq!(column["unsigned_storage"], expected, "{name}: {plan}");
+        }
+        let source = plan["candidate_source"].as_str().unwrap();
+        for fragment in [
+            "id: Id primary auto unsigned_storage bigint",
+            "tiny: UInt required unsigned_storage tinyint",
+            "small: UInt required unsigned_storage smallint",
+            "medium: UInt required unsigned_storage mediumint",
+            "normal: UInt required unsigned_storage int",
+            "large: UInt required unsigned_storage bigint",
+            "owner_id: UInt required unsigned_storage bigint",
+        ] {
+            assert!(
+                source.contains(fragment),
+                "missing {fragment} in:\n{source}"
+            );
+        }
+        assert!(columns.iter().any(|column| {
+            column["mapping_review"]
+                .as_str()
+                .is_some_and(|note| note.contains("PostgreSQL and SQLite use NUMERIC(20,0)"))
+        }));
+    }
+
+    #[test]
     fn imports_custom_physical_foreign_id_relation_and_delete_action() {
         let mut analyzer = SchemaAnalyzer::default();
         analyzer.scan(
@@ -5062,7 +5141,7 @@ return new class extends Migration {
                 .contains("target type and delete action are imported")));
         let source = plan["candidate_source"].as_str().unwrap();
         assert!(
-            source.contains("approved_by: User? storage_name \"approved_by\" on_delete set_null"),
+            source.contains("approved_by: User? storage_name \"approved_by\" unsigned_storage bigint on_delete set_null"),
             "{source}"
         );
         assert!(!source.contains("approved_by_id"), "{source}");
@@ -5149,7 +5228,9 @@ return new class extends Migration {
             .iter()
             .any(|column| column["source_column_name"] == "reference_date"));
         let generated = orders["candidate_source"].as_str().unwrap();
-        assert!(generated.contains("customer: Customer? on_delete set_null"));
+        assert!(
+            generated.contains("customer: Customer? unsigned_storage bigint on_delete set_null")
+        );
         assert!(generated.contains("reference_date: Date?"));
         assert!(generated.contains("unique {\n        token\n    }"));
         assert!(generated.contains("index {\n        status\n    }"));

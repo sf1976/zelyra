@@ -222,6 +222,7 @@ pub(super) fn render_native_auth_module(
     let mut saw_email = false;
     let mut saw_password = false;
     let mut saw_password_hash = false;
+    let mut user_id_storage = None;
     let mut projected = Vec::new();
     for line in source.lines() {
         let trimmed = line.trim();
@@ -231,7 +232,17 @@ pub(super) fn render_native_auth_module(
         if let Some((field, declaration)) = trimmed.split_once(':') {
             let field = field.trim();
             let declaration = declaration.trim();
-            saw_id |= field == "id" && declaration == "Id primary auto";
+            let id_attributes = declaration.split_whitespace().collect::<Vec<_>>();
+            saw_id |= field == "id"
+                && id_attributes.first() == Some(&"Id")
+                && id_attributes.contains(&"primary")
+                && id_attributes.contains(&"auto");
+            if field == "id" {
+                user_id_storage = id_attributes
+                    .windows(2)
+                    .find(|pair| pair[0] == "unsigned_storage")
+                    .map(|pair| pair[1]);
+            }
             saw_email |= field == "email"
                 && (declaration.starts_with("String") || declaration.starts_with("Email"))
                 && declaration.contains("required")
@@ -303,8 +314,11 @@ pub(super) fn render_native_auth_module(
         output.push_str("\n\n");
         output.push_str(source);
     }
+    let user_storage = user_id_storage
+        .map(|storage| format!(" unsigned_storage {storage}"))
+        .unwrap_or_default();
     output.push_str(&format!(
-        "\n\ntable {session_table} {{\n    id: Id primary auto\n    user: User required\n    token_hash: String(64) required unique\n    expires_at: Timestamp required\n}}\n\nauth users {{\n    table: users\n    sessions: {session_table}\n"
+        "\n\ntable {session_table} {{\n    id: Id primary auto\n    user: User required{user_storage}\n    token_hash: String(64) required unique\n    expires_at: Timestamp required\n}}\n\nauth users {{\n    table: users\n    sessions: {session_table}\n"
     ));
     if let Some(membership_table) = tenant_mapping.membership_table.as_deref() {
         output.push_str(&format!("    memberships: {membership_table}\n"));

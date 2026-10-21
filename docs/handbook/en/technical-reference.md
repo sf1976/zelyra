@@ -3222,6 +3222,16 @@ table invoices scoped by tenant_id: TenantId {
 3. **Tenant-Scoped Uniqueness:** Fields marked `unique within tenant` produce `UNIQUE KEY (tenant_id, customer_number)`. Different tenants can use identical numbering schemes without collisions.
 4. **Optional Relations & Decimals:** Optional relationships (`Customer?`) generate typed `BIGINT NULL`. `Decimal(p, s)` (e.g. `Decimal(12, 2)`) is stored without floating-point conversion. Forms reject values exceeding the declared precision or scale; computed fields are calculated exactly before storage and rounded to their target scale.
 
+For imported schemas that need to retain a physical unsigned integer width, a
+column can use `unsigned_storage tinyint|smallint|mediumint|int|bigint`, for
+example `customer_id: UInt required unsigned_storage bigint`. This modifier
+changes SQL storage only: it does not narrow the Zelyra `UInt` type. MariaDB
+emits the matching `UNSIGNED` integer type. Ordinary `UInt` columns use
+`NUMERIC(20,0)` on PostgreSQL and SQLite because they have no matching native
+unsigned integer family. Auto-incrementing IDs and relation columns keep the
+backend's matching native key types so generated keys and foreign keys remain
+compatible.
+
 ## 33. Table Invariants and Validation Rules
 
 Business logic belongs directly on the data model. Instead of duplicating validation rules in controllers, form requests, and UI forms, Zelyra allows you to declare typed table invariants inside the `table` declaration.

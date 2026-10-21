@@ -695,6 +695,19 @@ fn canonical_time(value: &str) -> Option<String> {
 
 fn expected_mariadb_type(column: &Value) -> Option<String> {
     let type_name = column["zelyra_type"].as_str()?;
+    if let Some(storage) = column["unsigned_storage"].as_str() {
+        return Some(
+            match storage {
+                "tinyint" => "TINYINT UNSIGNED",
+                "smallint" => "SMALLINT UNSIGNED",
+                "mediumint" => "MEDIUMINT UNSIGNED",
+                "int" => "INT UNSIGNED",
+                "bigint" => "BIGINT UNSIGNED",
+                _ => return None,
+            }
+            .into(),
+        );
+    }
     if column["relation_status"] == "resolved" {
         return Some("BIGINT".into());
     }
@@ -735,6 +748,23 @@ fn normalize_schema_type(value: &str) -> String {
         .filter(|character| !character.is_ascii_whitespace() && *character != '`')
         .flat_map(char::to_uppercase)
         .collect::<String>();
+    let (base, suffix) = normalized
+        .split_once('(')
+        .and_then(|(base, rest)| rest.split_once(')').map(|(_, suffix)| (base, suffix)))
+        .unwrap_or((normalized.as_str(), ""));
+    let canonical_integer = match base {
+        "INTEGER" => Some("INT"),
+        "TINYINT" | "SMALLINT" | "MEDIUMINT" | "INT" | "BIGINT" => Some(base),
+        _ => None,
+    };
+    if let Some(base) = canonical_integer {
+        let unsigned = suffix == "UNSIGNED" || normalized.ends_with("UNSIGNED");
+        return if unsigned {
+            format!("{base} UNSIGNED")
+        } else {
+            base.into()
+        };
+    }
     match normalized.as_str() {
         "NUMERIC(20,0)" => "DECIMAL(20,0)".into(),
         "NUMERIC(39,9)" => "DECIMAL(39,9)".into(),
@@ -1375,6 +1405,31 @@ mod tests {
                     && difference["expected_type"] == "DECIMAL(12,2)"
                     && difference["actual_type"] == "DECIMAL(12,4)"
             }));
+    }
+
+    #[test]
+    fn normalizes_mariadb_integer_display_widths_but_preserves_unsigned_width() {
+        assert_eq!(
+            normalize_schema_type("bigint(20) unsigned"),
+            "BIGINT UNSIGNED"
+        );
+        assert_eq!(normalize_schema_type("int(10) UNSIGNED"), "INT UNSIGNED");
+        assert_eq!(normalize_schema_type("INTEGER(10)"), "INT");
+        assert_eq!(normalize_schema_type("MEDIUMINT(8)"), "MEDIUMINT");
+        assert_ne!(
+            normalize_schema_type("smallint(5) unsigned"),
+            normalize_schema_type("int(10) unsigned")
+        );
+        for (storage, expected) in [
+            ("tinyint", "TINYINT UNSIGNED"),
+            ("smallint", "SMALLINT UNSIGNED"),
+            ("mediumint", "MEDIUMINT UNSIGNED"),
+            ("int", "INT UNSIGNED"),
+            ("bigint", "BIGINT UNSIGNED"),
+        ] {
+            let column = json!({"zelyra_type":"UInt","unsigned_storage":storage});
+            assert_eq!(expected_mariadb_type(&column).as_deref(), Some(expected));
+        }
     }
 
     #[test]

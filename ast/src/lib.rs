@@ -1360,6 +1360,8 @@ pub struct ColumnDef {
     /// Optional text storage capacity override. This affects physical schema
     /// storage only; the source-language value remains String.
     pub text_storage: Option<TextStorage>,
+    /// Optional physical width for an unsigned integer or ID relation.
+    pub unsigned_storage: Option<UnsignedStorage>,
     /// Optional explicit database column name; useful when a relation column
     /// does not follow Zelyra's default `<field>_id` naming convention.
     pub storage_name: Option<String>,
@@ -1394,6 +1396,18 @@ pub enum TextStorage {
     Text,
     MediumText,
     LongText,
+}
+
+/// Physical width for an unsigned integer column. The source-language value
+/// retains its full UInt/ID type; native database limits apply where the
+/// backend offers an unsigned integer type.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum UnsignedStorage {
+    TinyInt,
+    SmallInt,
+    MediumInt,
+    Int,
+    BigInt,
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]

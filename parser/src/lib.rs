@@ -2910,6 +2910,7 @@ impl<'a> Parser<'a> {
         self.expect(TokenKind::Colon, "`:` after column name")?;
         let (ty, length, decimal_precision) = self.column_type()?;
         let mut text_storage = None;
+        let mut unsigned_storage = None;
         let mut storage_name = None;
         let mut auto_sequence = None;
         let mut computed = None;
@@ -3009,6 +3010,32 @@ impl<'a> Parser<'a> {
                         _ => {
                             return Err(ParseError {
                                 message: "text_storage must be `text`, `medium`, or `long`".into(),
+                                span: storage_span,
+                            })
+                        }
+                    });
+                }
+                TokenKind::Ident(ref value) if value == "unsigned_storage" => {
+                    let option_span = self.current().span;
+                    self.advance();
+                    if unsigned_storage.is_some() {
+                        return Err(ParseError {
+                            message: "`unsigned_storage` may be specified only once".into(),
+                            span: option_span,
+                        });
+                    }
+                    let (storage, storage_span) = self.ident(
+                        "`tinyint`, `smallint`, `mediumint`, `int`, or `bigint` unsigned storage",
+                    )?;
+                    unsigned_storage = Some(match storage.as_str() {
+                        "tinyint" => zelyra_ast::UnsignedStorage::TinyInt,
+                        "smallint" => zelyra_ast::UnsignedStorage::SmallInt,
+                        "mediumint" => zelyra_ast::UnsignedStorage::MediumInt,
+                        "int" => zelyra_ast::UnsignedStorage::Int,
+                        "bigint" => zelyra_ast::UnsignedStorage::BigInt,
+                        _ => {
+                            return Err(ParseError {
+                                message: "unsigned_storage must be `tinyint`, `smallint`, `mediumint`, `int`, or `bigint`".into(),
                                 span: storage_span,
                             })
                         }
@@ -3117,6 +3144,7 @@ impl<'a> Parser<'a> {
             ty,
             length,
             text_storage,
+            unsigned_storage,
             storage_name,
             decimal_precision,
             auto_sequence,
@@ -6056,6 +6084,45 @@ mod tests {
         assert_eq!(columns[1].text_storage, Some(TextStorage::MediumText));
         assert_eq!(columns[2].ty, Type::Option(Box::new(Type::String)));
         assert_eq!(columns[2].text_storage, Some(TextStorage::LongText));
+    }
+
+    #[test]
+    fn parses_unsigned_storage_width_without_changing_the_value_type() {
+        let program = parse(
+            &lex("table numbers { tiny: UInt unsigned_storage tinyint small: UInt unsigned_storage smallint medium: UInt unsigned_storage mediumint normal: UInt unsigned_storage int large: UInt unsigned_storage bigint }").unwrap(),
+        )
+        .unwrap();
+        assert_eq!(program.tables[0].columns[0].ty, Type::UInt);
+        assert_eq!(
+            program.tables[0].columns[0].unsigned_storage,
+            Some(zelyra_ast::UnsignedStorage::TinyInt)
+        );
+        assert_eq!(
+            program.tables[0].columns[1].unsigned_storage,
+            Some(zelyra_ast::UnsignedStorage::SmallInt)
+        );
+        assert_eq!(
+            program.tables[0].columns[2].unsigned_storage,
+            Some(zelyra_ast::UnsignedStorage::MediumInt)
+        );
+        assert_eq!(
+            program.tables[0].columns[3].unsigned_storage,
+            Some(zelyra_ast::UnsignedStorage::Int)
+        );
+        assert_eq!(
+            program.tables[0].columns[4].unsigned_storage,
+            Some(zelyra_ast::UnsignedStorage::BigInt)
+        );
+    }
+
+    #[test]
+    fn rejects_unknown_and_duplicate_unsigned_storage_widths() {
+        for source in [
+            "table numbers { value: UInt unsigned_storage huge }",
+            "table numbers { value: UInt unsigned_storage int unsigned_storage bigint }",
+        ] {
+            assert!(parse(&lex(source).unwrap()).is_err(), "{source}");
+        }
     }
 
     #[test]
