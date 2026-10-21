@@ -628,10 +628,10 @@ abgeschlossen.
 - [~] **1.3.0 — bestätigte Web-/Compilerlücken:** SQL-geladene
   `Option<Record>`-Seitendaten und dynamische Seitentypen sind mit PRs #146 und
   #147 in `main` angekommen. `run_process_piped` mit Allowlist, Laufzeit- und
-  Ein-/Ausgabegrenzen ist in PR #148 implementiert; dessen CI läuft noch.
+  Ein-/Ausgabegrenzen ist in PR #148 gemergt.
   Typisierte Status-/Header-Antworten für API-Handler bleiben offen; das
   vorhandene `HttpResult<T>` beschreibt Antworten ausgehender HTTP-Aufrufe.
-  Typisierte View-Props für gemeinsame Layouts liegen in PR #149 und warten
+  Typisierte View-Props für gemeinsame Layouts liegen in PR #151 und warten
   noch auf vollständige CI. Begrenztes, bereinigtes CommonMark/GFM-Rendering
   fehlt weiterhin. Allgemeine Übersetzungen in handgeschriebenen Views und
   sprachbewusstes Routing fehlen ebenfalls; vorhandene Projektkataloge

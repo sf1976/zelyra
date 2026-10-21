@@ -578,10 +578,10 @@ security and compatibility gates stated for that milestone.
 - [~] **1.3.0 — confirmed web/compiler gaps:** SQL-loaded `Option<Record>` page
   data and dynamic page media types landed in `main` in PRs #146 and #147.
   `run_process_piped`, bounded by the command allowlist and input/output and
-  runtime limits, is implemented in PR #148; its CI is still running. Typed
+  runtime limits, was merged in PR #148. Typed
   status/header responses for API handlers remain open; existing `HttpResult<T>`
   models responses received from outbound HTTP calls. Typed view props for
-  shared layouts are in PR #149 and still need complete CI. Bounded, sanitized
+  shared layouts are in PR #151 and still need complete CI. Bounded, sanitized
   CommonMark/GFM rendering remains missing. General translations in handwritten
   views and locale-aware routing are also missing: project catalogs currently
   localize generated Zelyra UI but do not expose a template `t(key)` function.
