@@ -1,10 +1,12 @@
 ## Unreleased
 
+## 1.2.37 — 2026-10-21
+
 - Add explicit text, integer, and Boolean CSV conversion to the reusable
   importer example, returning tagged values and row/column diagnostics. Fix
   qualified imported enum variants in MIR and Bytecode. Decimal/date/time
-  conversion, schema inference, and database writes remain unsupported. / Dem
-  wiederverwendbaren CSV-Importer explizite Text-, Integer- und Bool-Konvertierung
+  conversion, schema inference, and database writes remain unsupported.
+  / Dem wiederverwendbaren CSV-Importer explizite Text-, Integer- und Bool-Konvertierung
   mit getaggten Werten und Zeilen-/Spaltendiagnosen hinzufügen. Qualifizierte
   importierte Enum-Varianten in MIR und Bytecode korrigieren. Decimal-/Datums-/
   Zeitkonvertierung, Schemaableitung und Datenbankschreibvorgänge bleiben
