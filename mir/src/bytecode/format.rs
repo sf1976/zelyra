@@ -6,7 +6,7 @@ use super::{
 };
 use crate::{IteratorId, MirError};
 use zelyra_ast::{
-    BinaryOp, EnumDef, RecordDef, RecordField, Span, Type, TypeDef, UnaryOp, ViewDef,
+    BinaryOp, ComponentProp, EnumDef, RecordDef, RecordField, Span, Type, TypeDef, UnaryOp, ViewDef,
 };
 use zelyra_hir::{FunctionId, LocalId};
 use zelyra_runtime::Value;
@@ -346,6 +346,12 @@ impl Writer {
         for view in views {
             self.string(&view.name)?;
             self.u8(u8::from(view.is_public))?;
+            self.usize(view.props.len())?;
+            for prop in &view.props {
+                self.string(&prop.name)?;
+                self.ty(&prop.ty, 0)?;
+                self.span(prop.span)?;
+            }
             self.string(&view.html)?;
             self.span(view.span)?;
         }
@@ -1020,9 +1026,21 @@ impl<'a> Reader<'a> {
         let view_count = self.count(self.limits.max_functions, "view definition")?;
         let mut views = Vec::with_capacity(view_count);
         for _ in 0..view_count {
+            let name = self.string()?;
+            let is_public = self.boolean()?;
+            let prop_count = self.count(self.limits.max_type_nodes, "view property")?;
+            let mut props = Vec::with_capacity(prop_count);
+            for _ in 0..prop_count {
+                props.push(ComponentProp {
+                    name: self.string()?,
+                    ty: self.ty(0)?,
+                    span: self.span()?,
+                });
+            }
             views.push(ViewDef {
-                name: self.string()?,
-                is_public: self.boolean()?,
+                name,
+                is_public,
+                props,
                 html: self.string()?,
                 span: self.span()?,
             });

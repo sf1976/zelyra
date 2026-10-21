@@ -1929,6 +1929,33 @@ fn validate_views(path: &str, program: &zelyra_ast::Program) -> bool {
             );
             valid = false;
         }
+        let mut prop_names = HashSet::new();
+        for prop in &view.props {
+            if !prop_names.insert(prop.name.as_str()) {
+                diagnostic_with_span(
+                    path,
+                    "E-VIEW-005",
+                    &format!("duplicate property `{}` in view `{}`", prop.name, view.name),
+                    prop.span,
+                );
+                valid = false;
+            }
+        }
+        let view_bindings = view
+            .props
+            .iter()
+            .map(|prop| (prop.name.clone(), prop.ty.clone()))
+            .collect::<HashMap<_, _>>();
+        if !view.props.is_empty() {
+            valid &= validate_template_expressions(
+                path,
+                &view.html,
+                program,
+                &view_bindings,
+                view.span.line,
+                view.span.column,
+            );
+        }
         let slots = match view_template_slot_invocations(&view.html) {
             Ok(slots) => slots,
             Err(message) => {
@@ -1997,7 +2024,33 @@ fn validate_views(path: &str, program: &zelyra_ast::Program) -> bool {
                 );
                 valid = false;
             }
+            let bindings = page_template_bindings(
+                &page.path,
+                &page.data,
+                &page.inputs,
+                page.page_size,
+                !page.sort.is_empty(),
+                !page.search.is_empty(),
+                &page.filters,
+            );
+            valid &= validate_view_properties(
+                path,
+                program,
+                view,
+                &page.view_props,
+                &bindings,
+                page.span,
+            );
         } else {
+            if !page.view_props.is_empty() {
+                diagnostic_with_span(
+                    path,
+                    "E-VIEW-039",
+                    "page view properties require a `view: ...` declaration",
+                    page.span,
+                );
+                valid = false;
+            }
             match page_layout_slot_invocations(&page.html) {
                 Ok(slots) if !slots.is_empty() => {
                     diagnostic(
@@ -2026,6 +2079,19 @@ fn validate_views(path: &str, program: &zelyra_ast::Program) -> bool {
     for crud in &program.cruds {
         if let Some(layout) = &crud.layout {
             if let Some(view) = program.views.iter().find(|view| view.name == *layout) {
+                if view
+                    .props
+                    .iter()
+                    .any(|prop| !matches!(prop.ty, Type::Option(_)))
+                {
+                    diagnostic_with_span(
+                        path,
+                        "E-VIEW-039",
+                        &format!("view layout `{layout}` has required properties; CRUD layouts can only use optional view properties"),
+                        crud.span,
+                    );
+                    valid = false;
+                }
                 if let Err((slot_index, message)) =
                     validate_crud_layout_slots(view, &crud.layout_slots)
                 {
@@ -2076,7 +2142,21 @@ fn validate_views(path: &str, program: &zelyra_ast::Program) -> bool {
     }
     for tableview in &program.tableviews {
         if let Some(layout) = &tableview.layout {
-            if !program.views.iter().any(|view| view.name == *layout) {
+            if let Some(view) = program.views.iter().find(|view| view.name == *layout) {
+                if view
+                    .props
+                    .iter()
+                    .any(|prop| !matches!(prop.ty, Type::Option(_)))
+                {
+                    diagnostic_with_span(
+                        path,
+                        "E-VIEW-039",
+                        &format!("view layout `{layout}` has required properties; TableView layouts can only use optional view properties"),
+                        tableview.span,
+                    );
+                    valid = false;
+                }
+            } else {
                 diagnostic(
                     path,
                     "E-VIEW-030",
@@ -2089,6 +2169,74 @@ fn validate_views(path: &str, program: &zelyra_ast::Program) -> bool {
                 );
                 valid = false;
             }
+        }
+    }
+    valid
+}
+
+fn validate_view_properties(
+    path: &str,
+    program: &zelyra_ast::Program,
+    view: &zelyra_ast::ViewDef,
+    supplied: &[zelyra_ast::PageViewProp],
+    bindings: &HashMap<String, Type>,
+    fallback_span: zelyra_ast::Span,
+) -> bool {
+    let mut valid = true;
+    let mut supplied_names = HashSet::new();
+    for value in supplied {
+        if !supplied_names.insert(value.name.as_str()) {
+            diagnostic_with_span(
+                path,
+                "E-VIEW-039",
+                &format!("view property `{}` is supplied more than once", value.name),
+                value.span,
+            );
+            valid = false;
+            continue;
+        }
+        let Some(prop) = view.props.iter().find(|prop| prop.name == value.name) else {
+            diagnostic_with_span(
+                path,
+                "E-VIEW-039",
+                &format!("view `{}` has no property `{}`", view.name, value.name),
+                value.span,
+            );
+            valid = false;
+            continue;
+        };
+        let dynamic_type_error = value
+            .value
+            .strip_prefix('{')
+            .and_then(|value| value.strip_suffix('}'))
+            .map(str::trim)
+            .and_then(|expression| resolve_template_type(expression, bindings, program).ok())
+            .filter(|actual| !template_type_compatible(&prop.ty, actual));
+        if dynamic_type_error.is_some() || !component_prop_accepts(program, prop, &value.value) {
+            diagnostic_with_span(
+                path,
+                "E-VIEW-039",
+                &format!(
+                    "value `{}` is incompatible with view property `{}` of type {}",
+                    value.value, prop.name, prop.ty
+                ),
+                value.span,
+            );
+            valid = false;
+        }
+    }
+    for prop in &view.props {
+        if !matches!(prop.ty, Type::Option(_)) && !supplied_names.contains(prop.name.as_str()) {
+            diagnostic_with_span(
+                path,
+                "E-VIEW-039",
+                &format!(
+                    "page using view `{}` is missing required property `{}`",
+                    view.name, prop.name
+                ),
+                fallback_span,
+            );
+            valid = false;
         }
     }
     valid
@@ -3920,7 +4068,22 @@ fn validate_component_template(
     column: usize,
     bindings: &HashMap<String, Type>,
 ) -> bool {
-    let mut valid = validate_template_expressions(path, html, program, bindings, line, column);
+    validate_component_template_with_expression_check(
+        path, program, html, line, column, bindings, true,
+    )
+}
+
+fn validate_component_template_with_expression_check(
+    path: &str,
+    program: &zelyra_ast::Program,
+    html: &str,
+    line: usize,
+    column: usize,
+    bindings: &HashMap<String, Type>,
+    check_expressions: bool,
+) -> bool {
+    let mut valid = !check_expressions
+        || validate_template_expressions(path, html, program, bindings, line, column);
     let invocations = match component_invocations(html) {
         Ok(invocations) => invocations,
         Err(message) => {
@@ -4145,6 +4308,22 @@ fn validate_components(path: &str, program: &zelyra_ast::Program) -> bool {
                 .collect(),
         );
     }
+    for view in &program.views {
+        let bindings = view
+            .props
+            .iter()
+            .map(|prop| (prop.name.clone(), prop.ty.clone()))
+            .collect::<HashMap<_, _>>();
+        valid &= validate_component_template_with_expression_check(
+            path,
+            program,
+            &view.html,
+            view.span.line,
+            view.span.column,
+            &bindings,
+            false,
+        );
+    }
     for page in &program.pages {
         let bindings = page_template_bindings(
             &page.path,
@@ -4163,18 +4342,6 @@ fn validate_components(path: &str, program: &zelyra_ast::Program) -> bool {
             page.span.column,
             &bindings,
         );
-        if let Some(view_name) = &page.view {
-            if let Some(view) = program.views.iter().find(|view| view.name == *view_name) {
-                valid &= validate_component_template(
-                    path,
-                    program,
-                    &view.html,
-                    view.span.line,
-                    view.span.column,
-                    &bindings,
-                );
-            }
-        }
     }
     for crud in &program.cruds {
         if let Some(table) = program.tables.iter().find(|table| table.name == crud.table) {
@@ -12779,7 +12946,13 @@ const CRUD_LAYOUT_CONTENT_MARKER: &str = "\u{0}ZELYRA_CRUD_CONTENT\u{0}";
 fn compose_view_html(program: &zelyra_ast::Program, view_name: &str, content: &str) -> String {
     let (default_body, named_slots) =
         split_view_content(content).expect("page view slots are validated before route generation");
-    compose_view_parts(program, view_name, &default_body, &named_slots)
+    compose_view_parts_with_props(
+        program,
+        view_name,
+        &default_body,
+        &named_slots,
+        &HashMap::new(),
+    )
 }
 
 fn compose_view_parts(
@@ -12788,13 +12961,35 @@ fn compose_view_parts(
     default_body: &str,
     named_slots: &HashMap<String, String>,
 ) -> String {
+    compose_view_parts_with_props(
+        program,
+        view_name,
+        default_body,
+        named_slots,
+        &HashMap::new(),
+    )
+}
+
+fn compose_view_parts_with_props(
+    program: &zelyra_ast::Program,
+    view_name: &str,
+    default_body: &str,
+    named_slots: &HashMap<String, String>,
+    supplied_props: &HashMap<String, String>,
+) -> String {
     let view = program
         .views
         .iter()
         .find(|view| view.name == view_name)
         .expect("page and CRUD views are validated before route generation");
     let slots = view_template_slot_invocations(&view.html).expect("view slots are validated");
-    let mut composed = view.html.clone();
+    let mut composed =
+        view.props.iter().fold(view.html.clone(), |html, prop| {
+            match supplied_props.get(&prop.name) {
+                Some(value) => render_component_property(html, prop, value),
+                None => remove_component_property(html, &prop.name),
+            }
+        });
     for slot in slots.into_iter().rev() {
         let replacement = slot
             .name
@@ -12814,7 +13009,20 @@ fn compose_view_parts(
 
 fn compose_page_view(program: &zelyra_ast::Program, page: &zelyra_ast::PageDef) -> String {
     if let Some(view_name) = page.view.as_deref() {
-        compose_view_html(program, view_name, &page.html)
+        let (default_body, named_slots) = split_view_content(&page.html)
+            .expect("page view slots are validated before route generation");
+        let supplied_props = page
+            .view_props
+            .iter()
+            .map(|prop| (prop.name.clone(), prop.value.clone()))
+            .collect::<HashMap<_, _>>();
+        compose_view_parts_with_props(
+            program,
+            view_name,
+            &default_body,
+            &named_slots,
+            &supplied_props,
+        )
     } else {
         expand_view_components(program, page.html.clone())
     }
