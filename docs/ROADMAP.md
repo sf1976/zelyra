@@ -660,10 +660,29 @@ repeat requests preserve the first timestamp. The current-project scaffold
 check and disposable MariaDB/HTTP E2E pass, including invalid-token, invalid
 CSRF, idempotency, and second-tenant isolation checks. Generated success
 components carry explicit module dependencies. PR #176 was merged as
-`6fc61c31`; its GitHub CI passed. Version bump and tag-pinned release checks
-are being prepared; v1.2.39 remains the latest published stable release.
+`6fc61c31`; its GitHub CI passed. The v1.2.40 release tag points to merge
+`4d5a58ab`; the published release now includes Linux and Windows archives,
+checksums, and SPDX SBOMs. The latest published stable release is v1.2.40.
 This imports one specifically recognized workflow, not the Laravel website or
 all 2,274 findings.
+
+### 🧪 [~] 1.2.41 — literal Laravel public-file routes
+
+The importer recognizes a deliberately narrow route shape: an ungrouped,
+middleware-free `GET` closure whose only statement returns
+`response()->file(public_path('<literal path>'))`, where the route path exactly
+matches that file under `public/`. If the existing bounded, symlink-safe asset
+copy succeeds, the generated scaffold serves the same-origin path using
+Zelyra's existing static-file server and records the mapping in
+`STATIC_ASSET_ROUTES.json`. The real `/opt/siedelmann-laravel/app` acceptance
+check verifies `/favicon.ico` was copied byte-for-byte and the generated
+scaffold passes `zelyra check`. This does not translate dynamic responses,
+middleware, route groups, PHP logic, or arbitrary controller routes. It is a
+small route-import slice, not Laravel compatibility.
+On PR head `88fe1d00`, the full GitHub CI passed, including workspace and
+end-to-end tests, database compatibility, fuzzing, and Linux/Windows release
+archive and SBOM verification. The release workflow skipped publication
+because no release tag was requested; no release has been published.
 
 ## Active architecture milestones (1.1.5 through 1.3.0)
 
