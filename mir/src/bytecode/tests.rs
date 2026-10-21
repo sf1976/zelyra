@@ -35,6 +35,48 @@ struct OutboxHost {
     random_calls: AtomicUsize,
 }
 
+struct ParallelHttpParityHost {
+    calls: AtomicUsize,
+    urls: Mutex<Vec<String>>,
+}
+
+impl HostServices for ParallelHttpParityHost {
+    fn unix_time_millis(&self) -> Result<i64, String> {
+        Ok(0)
+    }
+
+    fn environment_variable(&self, _name: &str) -> Result<Option<String>, String> {
+        Ok(None)
+    }
+
+    fn fill_random(&self, output: &mut [u8]) -> Result<(), String> {
+        output.fill(0);
+        Ok(())
+    }
+
+    fn http_request(
+        &self,
+        _method: &str,
+        url: &str,
+        _headers: &[(String, String)],
+        _body: Option<&[u8]>,
+        _timeout_ms: u64,
+        _max_response_bytes: usize,
+    ) -> Result<zelyra_runtime::HostHttpResponse, String> {
+        self.calls.fetch_add(1, Ordering::SeqCst);
+        self.urls.lock().unwrap().push(url.to_owned());
+        let body = url
+            .rsplit('/')
+            .next()
+            .ok_or_else(|| "test URL has no path segment".to_owned())?;
+        Ok(zelyra_runtime::HostHttpResponse {
+            status: 200,
+            headers: vec![("content-type".into(), "text/plain".into())],
+            body: body.as_bytes().to_vec(),
+        })
+    }
+}
+
 impl HostServices for SqlBatchHost {
     fn unix_time_millis(&self) -> Result<i64, String> {
         Ok(0)
@@ -7137,6 +7179,194 @@ fn main() {
         actual.error.as_ref().map(|error| &error.message),
         expected.error.as_ref().map(|error| &error.message)
     );
+}
+
+#[test]
+fn parallel_http_await_results_and_denials_match_ast_mir_and_decoded_bytecode() {
+    let source = r#"
+fn main() -> String uses Network {
+    parallel {
+        first = await http_get("https://api.example.test/first")
+        second = await http_get("https://api.example.test/second")
+    }
+    return first + second
+}
+"#;
+    let ast = parse(&lex(source).expect("source lexes")).expect("source parses");
+    let (mir, bytecode) = compile_source(source, "main");
+    let bytecode = decode(&encode(&bytecode).expect("bytecode encodes")).expect("bytecode decodes");
+    let grants = HashSet::from(["Network".to_owned()]);
+    let policy = RuntimePolicy {
+        network: Some(NetworkPolicy {
+            allowed_hosts: vec!["api.example.test".into()],
+            timeout_ms: 1000,
+            max_response_bytes: 1024,
+        }),
+        ..RuntimePolicy::default()
+    };
+    let make_host = || {
+        Arc::new(ParallelHttpParityHost {
+            calls: AtomicUsize::new(0),
+            urls: Mutex::new(Vec::new()),
+        })
+    };
+
+    let ast_host = make_host();
+    let ast_result =
+        zelyra_runtime::execute_function_captured_with_host_services_and_capabilities_and_policies(
+            &ast,
+            "main",
+            vec![],
+            None,
+            Some(&grants),
+            Some(&policy),
+            ast_host.clone(),
+        );
+    assert_eq!(ast_result.error, None);
+
+    let mir_host = make_host();
+    let mir_result = execution::execute_function_captured_with_host_services_and_policy(
+        &mir,
+        "main",
+        vec![],
+        ExecutionLimits::default(),
+        Some(&grants),
+        Some(&policy),
+        mir_host.clone(),
+    );
+    assert_eq!(mir_result.error, None);
+
+    let bytecode_host = make_host();
+    let bytecode_result = execute_with_host_services_and_policy_captured(
+        &bytecode,
+        vec![],
+        ExecutionLimits::default(),
+        Some(&grants),
+        Some(&policy),
+        bytecode_host.clone(),
+    );
+    assert_eq!(bytecode_result.error, None);
+    let expected = Some(Value::String("firstsecond".into()));
+    assert_eq!(ast_result.value, expected);
+    assert_eq!(mir_result.value, expected);
+    assert_eq!(bytecode_result.value, expected);
+
+    let expected_urls = vec![
+        "https://api.example.test/first".to_owned(),
+        "https://api.example.test/second".to_owned(),
+    ];
+    for host in [&ast_host, &mir_host, &bytecode_host] {
+        assert_eq!(host.calls.load(Ordering::SeqCst), 2);
+        let mut actual_urls = host.urls.lock().unwrap().clone();
+        actual_urls.sort();
+        let mut sorted_expected = expected_urls.clone();
+        sorted_expected.sort();
+        assert_eq!(actual_urls, sorted_expected);
+    }
+
+    // Every backend must reject the undeclared effect before any HTTP call.
+    let denied_host = make_host();
+    let denied_ast =
+        zelyra_runtime::execute_function_captured_with_host_services_and_capabilities_and_policies(
+            &ast,
+            "main",
+            vec![],
+            None,
+            Some(&HashSet::new()),
+            Some(&policy),
+            denied_host.clone(),
+        );
+    assert!(denied_ast
+        .error
+        .as_ref()
+        .is_some_and(|error| error.message.contains("Network")));
+    assert_eq!(denied_host.calls.load(Ordering::SeqCst), 0);
+
+    let denied_host = make_host();
+    let denied_mir = execution::execute_function_captured_with_host_services_and_policy(
+        &mir,
+        "main",
+        vec![],
+        ExecutionLimits::default(),
+        Some(&HashSet::new()),
+        Some(&policy),
+        denied_host.clone(),
+    );
+    assert!(denied_mir
+        .error
+        .as_ref()
+        .is_some_and(|error| error.message.contains("Network")));
+    assert_eq!(denied_host.calls.load(Ordering::SeqCst), 0);
+
+    let denied_host = make_host();
+    let denied_bytecode = execute_with_host_services_and_policy_captured(
+        &bytecode,
+        vec![],
+        ExecutionLimits::default(),
+        Some(&HashSet::new()),
+        Some(&policy),
+        denied_host.clone(),
+    );
+    assert!(denied_bytecode
+        .error
+        .as_ref()
+        .is_some_and(|error| error.message.contains("Network")));
+    assert_eq!(denied_host.calls.load(Ordering::SeqCst), 0);
+
+    // The capability is present here, but the runtime host allowlist denies
+    // the target. All backends must make the same decision before transport.
+    let denied_policy = RuntimePolicy {
+        network: Some(NetworkPolicy {
+            allowed_hosts: vec!["other.example.test".into()],
+            timeout_ms: 1000,
+            max_response_bytes: 1024,
+        }),
+        ..RuntimePolicy::default()
+    };
+    let denied_host = make_host();
+    let denied_ast =
+        zelyra_runtime::execute_function_captured_with_host_services_and_capabilities_and_policies(
+            &ast,
+            "main",
+            vec![],
+            None,
+            Some(&grants),
+            Some(&denied_policy),
+            denied_host.clone(),
+        );
+    let ast_error = denied_ast.error.expect("AST policy denies target");
+    assert_eq!(denied_host.calls.load(Ordering::SeqCst), 0);
+
+    let denied_host = make_host();
+    let denied_mir = execution::execute_function_captured_with_host_services_and_policy(
+        &mir,
+        "main",
+        vec![],
+        ExecutionLimits::default(),
+        Some(&grants),
+        Some(&denied_policy),
+        denied_host.clone(),
+    );
+    let mir_error = denied_mir.error.expect("MIR policy denies target");
+    assert_eq!(mir_error.message, ast_error.message);
+    assert_eq!(mir_error.span, ast_error.span);
+    assert_eq!(denied_host.calls.load(Ordering::SeqCst), 0);
+
+    let denied_host = make_host();
+    let denied_bytecode = execute_with_host_services_and_policy_captured(
+        &bytecode,
+        vec![],
+        ExecutionLimits::default(),
+        Some(&grants),
+        Some(&denied_policy),
+        denied_host.clone(),
+    );
+    let bytecode_error = denied_bytecode
+        .error
+        .expect("Bytecode policy denies target");
+    assert_eq!(bytecode_error.message, ast_error.message);
+    assert_eq!(bytecode_error.span, ast_error.span);
+    assert_eq!(denied_host.calls.load(Ordering::SeqCst), 0);
 }
 
 #[test]
