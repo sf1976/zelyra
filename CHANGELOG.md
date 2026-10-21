@@ -1,5 +1,7 @@
 ## Unreleased
 
+## 1.2.34 — 2026-10-21
+
 - Add the allowlist- and `Process`-capability-gated `run_process_piped` host
   operation. It bounds stdin by the configured process limit, caps the
   per-call timeout at the project policy, and returns typed
@@ -10,6 +12,21 @@
   Prozesslimit, deckelt das Aufruf-Timeout auf die Projekt-Policy und liefert
   `ProcessResult { exit_code, stdout, stderr }` konsistent in AST-, MIR- und
   Bytecode-Ausführung. `run_process` behält sein bisheriges Verhalten.
+
+- Statically skip a Laravel `Schema::table` callback only when the entire
+  supported callback is guarded by one `!Schema::hasColumn(...)` condition
+  and an earlier ordered migration already declares that column. Mixed or
+  unsupported migration code remains subject to conservative review. This
+  fixes schema analysis for the acceptance project's `quotes` table; it does
+  not import fields that Laravel skips or complete the website migration. /
+  Einen Laravel-`Schema::table`-Callback statisch nur dann überspringen, wenn
+  der gesamte unterstützte Callback durch genau eine
+  `!Schema::hasColumn(...)`-Bedingung geschützt ist und eine frühere geordnete
+  Migration die Spalte bereits deklariert. Gemischter oder nicht unterstützter
+  Migrationscode bleibt in der vorsichtigen Prüfung. Damit wird die
+  Schemaanalyse der `quotes`-Tabelle im Abnahmeprojekt korrigiert; von Laravel
+  übersprungene Felder werden nicht importiert und der Webseitenimport ist
+  damit nicht abgeschlossen.
 
 ## 1.2.33 — 2026-10-21
 
