@@ -575,17 +575,7 @@ security and compatibility gates stated for that milestone.
   completion by switching the default early. This milestone targets portable
   verified Bytecode, not native machine-code generation.
 
-- [~] **1.3.0 — verified web/compiler features and remaining gaps:** SQL-loaded
-  `Option<Record>` page data, dynamic `page content_type`, static `public/`
-  assets, bounded `run_process_piped`, typed successful API responses via
-  `ApiResponse<T>`, and typed properties for reusable `view` layouts are
-  implemented on `main`. Piped process input does not itself execute Zelyra
-  source or provide a web sandbox. Checked static locale references and
-  `/{locale}/...` route selection are in PR #155; safe bounded CommonMark/GFM
-  rendering remains in PR #154. `HttpResult<T>` remains the result type for
-  outbound HTTP calls. Typed translation calls in arbitrary expressions,
-  Markdown table-of-contents generation, plural rules, and code highlighting
-  remain open and need separate acceptance tests.
+- [~] **1.3.0 — verified web/compiler capabilities and remaining gaps:** SQL-loaded `Option<Record>` page data, dynamic `page content_type`, static `public/` assets, bounded `run_process_piped` for allowlisted processes, typed successful API responses via `ApiResponse<T>`, typed properties for reusable `view` layouts, and bounded safe CommonMark/GFM rendering are implemented on `main`. Piped process input does not itself execute Zelyra source or provide a web sandbox. Checked static locale references and `/{locale}/...` route selection are in PR #155. `HttpResult<T>` remains the result type for outbound HTTP calls. Typed translation calls in arbitrary expressions, Markdown table-of-contents generation, plural rules, and code highlighting remain open.
 
 **Post-1.3.0 or explicitly reprioritized:** a native AOT backend is optional
 and depends on benchmark evidence. No open task is silently dropped: work that cannot meet its release

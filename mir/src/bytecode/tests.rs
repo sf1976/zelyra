@@ -3309,6 +3309,7 @@ fn trims_unicode_space() -> String { return text_trim("  \tZelyra  \n") }
 fn splits_unicode_scalars() -> String[] { return text_chars("Aä🧭") }
 fn lowercases_unicode() -> String { return text_to_lower("İ") }
 fn uppercases_expanding_character() -> String { return text_to_upper("straße") }
+fn renders_markdown_safely() -> String { return render_markdown("Guide\n=====\n\n**safe**") }
 fn ucfirst_preserves_non_ascii_leading_character() -> String { return text_ucfirst("ßeta") }
 fn matches_prefix() -> Bool { return text_starts_with("Zelyra Studio", "Zelyra") }
 fn matches_suffix() -> Bool { return text_ends_with("invoice.zyl", ".zyl") }
@@ -3333,6 +3334,10 @@ fn main() {}
             ),
         ),
         ("lowercases_unicode", Value::String("i\u{307}".into())),
+        (
+            "renders_markdown_safely",
+            Value::String("<h1 id=\"guide\">Guide</h1>\n<p><strong>safe</strong></p>\n".into()),
+        ),
         (
             "uppercases_expanding_character",
             Value::String("STRASSE".into()),

@@ -3,6 +3,7 @@ use super::Value;
 const MAX_PDF_TEMPLATE_BYTES: usize = 2 * 1024 * 1024;
 pub(super) const MAX_PDF_TEMPLATE_ROWS: usize = 10_000;
 pub(super) const PDF_TEMPLATE_LIMIT_ERROR: &str = "PDF view exceeds its rendering limit";
+const PDF_MARKDOWN_LIMIT_ERROR: &str = "Markdown source exceeds its rendering limit";
 
 pub(super) fn interpolate_pdf_data(template: &str, data: &Value) -> Result<String, &'static str> {
     if template.len() > MAX_PDF_TEMPLATE_BYTES {
@@ -135,6 +136,18 @@ fn interpolate_pdf_values(
             return Ok(());
         };
         let name = &after_open[..close];
+        if let Some(markdown_source) = name.strip_prefix("render_markdown:") {
+            if let Some(value) = values.get(markdown_source) {
+                let html = super::render_markdown(value).map_err(|_| PDF_MARKDOWN_LIMIT_ERROR)?;
+                append_pdf_template(output, &html)?;
+            } else {
+                append_pdf_template(output, "{")?;
+                append_pdf_template(output, name)?;
+                append_pdf_template(output, "}")?;
+            }
+            rest = &after_open[close + 1..];
+            continue;
+        }
         if let Some(value) = values.get(name) {
             append_pdf_html_escaped(output, value)?;
         } else {

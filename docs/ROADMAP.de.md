@@ -625,18 +625,7 @@ abgeschlossen.
   unterstützte Bytecode-Operationen fail-closed scheitern und der bisherige
   Standard unverändert bleiben. Ziel ist portabler geprüfter Bytecode, keine
   native Maschinencodegenerierung.
-- [~] **1.3.0 — umgesetzte Web-/Compilerfunktionen und offene Punkte:**
-  SQL-geladene `Option<Record>`-Seitendaten, dynamisches `page content_type`,
-  statische `public/`-Assets, begrenztes `run_process_piped`, typisierte
-  erfolgreiche API-Antworten über `ApiResponse<T>` und typisierte Eigenschaften
-  wiederverwendbarer `view`-Layouts sind auf `main` umgesetzt. Piped
-  Prozesseingabe führt für sich allein keinen Zelyra-Quelltext aus und stellt
-  keine Web-Sandbox bereit. Geprüfte statische Locale-Referenzen und
-  `/{locale}/...`-Routenauswahl liegen in PR #155; sicheres, begrenztes
-  CommonMark/GFM-Rendering bleibt in PR #154. `HttpResult<T>` bleibt der
-  Ergebnistyp für ausgehende HTTP-Aufrufe. Übersetzungsaufrufe in beliebigen
-  Ausdrücken, Markdown-Inhaltsverzeichnisse, Pluralregeln und Codehervorhebung
-  bleiben offen und benötigen eigene Tests.
+- [~] **1.3.0 — geprüfte Web-/Compilerfunktionen und offene Punkte:** SQL-geladene `Option<Record>`-Seitendaten, dynamisches `page content_type`, statische `public/`-Assets, begrenztes `run_process_piped` für erlaubnislistengeprüfte Prozesse, typisierte erfolgreiche API-Antworten über `ApiResponse<T>`, typisierte Eigenschaften wiederverwendbarer `view`-Layouts sowie begrenztes sicheres CommonMark/GFM-Rendering sind auf `main` umgesetzt. Piped Prozesseingabe führt für sich allein keinen Zelyra-Quelltext aus und stellt keine Web-Sandbox bereit. Geprüfte statische Locale-Referenzen und `/{locale}/...`-Routenauswahl liegen in PR #155. `HttpResult<T>` bleibt der Ergebnistyp für ausgehende HTTP-Aufrufe. Übersetzungsaufrufe in beliebigen Ausdrücken, Markdown-Inhaltsverzeichnisse, Pluralregeln und Codehervorhebung bleiben offen.
 
 **Nach 1.3.0 oder bei ausdrücklicher Neubewertung:** Ein natives AOT-Backend
 bleibt optional und hängt von Benchmarks ab. Kein offener Punkt entfällt stillschweigend: Arbeit, deren
