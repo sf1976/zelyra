@@ -625,23 +625,7 @@ abgeschlossen.
   unterstützte Bytecode-Operationen fail-closed scheitern und der bisherige
   Standard unverändert bleiben. Ziel ist portabler geprüfter Bytecode, keine
   native Maschinencodegenerierung.
-- [~] **1.3.0 — bestätigte Web-/Compilerlücken:** SQL-geladene
-  `Option<Record>`-Seitendaten, dynamisches `page content_type`, statische
-  `public/`-Assets und begrenztes stdin für erlaubnislistengeprüfte Prozesse
-  (`run_process_piped`) sind bereits auf `main` vorhanden.
-  `run_process_piped` führt für sich allein weder Zelyra-Quelltext aus noch
-- [~] **1.3.0 — umgesetzte Web-/Compilerfunktionen und offene Punkte:**
-  SQL-geladene `Option<Record>`-Seitendaten, dynamisches `page content_type`,
-  statische `public/`-Assets, begrenztes `run_process_piped`, typisierte
-  erfolgreiche API-Antworten über `ApiResponse<T>` und typisierte Eigenschaften
-  wiederverwendbarer `view`-Layouts sind auf `main` umgesetzt. Piped
-  Prozesseingabe führt für sich allein keinen Zelyra-Quelltext aus und stellt
-  keine Web-Sandbox bereit. Geprüfte statische Locale-Referenzen und
-  `/{locale}/...`-Routenauswahl liegen in PR #155. Sicheres, begrenztes
-  CommonMark/GFM-Rendering ist in diesem Branch implementiert; die vollständige
-  CI-Prüfung steht noch aus. `HttpResult<T>` bleibt der Ergebnistyp für
-  ausgehende HTTP-Aufrufe. Übersetzungsaufrufe in beliebigen Ausdrücken,
-  Markdown-Inhaltsverzeichnisse, Pluralregeln und Codehervorhebung bleiben offen.
+- [~] **1.3.0 — geprüfte Web-/Compilerfunktionen und offene Punkte:** SQL-geladene `Option<Record>`-Seitendaten, dynamisches `page content_type`, statische `public/`-Assets, begrenztes `run_process_piped` für erlaubnislistengeprüfte Prozesse, typisierte erfolgreiche API-Antworten über `ApiResponse<T>`, typisierte Eigenschaften wiederverwendbarer `view`-Layouts sowie begrenztes sicheres CommonMark/GFM-Rendering sind auf `main` umgesetzt. Piped Prozesseingabe führt für sich allein keinen Zelyra-Quelltext aus und stellt keine Web-Sandbox bereit. Geprüfte statische Locale-Referenzen und `/{locale}/...`-Routenauswahl liegen in PR #155. `HttpResult<T>` bleibt der Ergebnistyp für ausgehende HTTP-Aufrufe. Übersetzungsaufrufe in beliebigen Ausdrücken, Markdown-Inhaltsverzeichnisse, Pluralregeln und Codehervorhebung bleiben offen.
 
 **Nach 1.3.0 oder bei ausdrücklicher Neubewertung:** Ein natives AOT-Backend
 bleibt optional und hängt von Benchmarks ab. Kein offener Punkt entfällt stillschweigend: Arbeit, deren
@@ -723,7 +707,7 @@ SHA-256-Prüfung.
 - [~] Interpreter und VM teilen Runtime-Semantik und Host-Services teilweise: Reine Standardbibliotheksoperationen sowie Operatoren auf Runtime-Werten verwenden für AST, MIR und Bytecode dieselbe Implementierung. Der Bytecode-Compiler begrenzt Operatoren weiterhin auf seine dokumentierte Teilmenge; die gemeinsamen Helfer erweitern das akzeptierte Bytecode-Format nicht stillschweigend. Host-Services und ausgewählte SQL-/Policy-Helfer sind ebenfalls gemeinsam. Für eine begrenzte Transaktion aus SQL-Audit-Eintrag plus `mail_queue` mit PDF-Anhang gibt es nun einen differentiellen AST/MIR/dekodierter-Bytecode-Nachweis: Der Test vergleicht Transaktionsmodus, SQL-Reihenfolge und sämtliche serialisierten Parameter beider Schreibvorgänge. Abgedeckt ist eine einzelne Mail; mehrere Nachrichten, Fehler-/Rollback-Pfade und andere Transaktionseffekte benötigen weiterhin eigene Paritätstests. Vollständige Capability-/Effektbehandlung, Verträge, breiteres Fehlerverhalten, Ressourcenabrechnung und Modul-APIs benötigen weiterhin einen systematischen Paritätsabgleich.
 - [~] **AST-Laufzeitkonstruktion vereinheitlicht:** Programmausführung und direkte Funktionsausführung verwenden jetzt denselben Interpreter-Konstruktor für Symboltabellen, Schemametadaten, HostServices, Capabilities, Laufzeitrichtlinien, Transaktionen und Ressourcengrenzen. Dadurch entfällt doppelte Sicherheits-/Policy-Verdrahtung, ohne die AST-Auswertungssemantik zu ändern. Die Runtime-Tests bestehen; breitere Backend-Parität und iterative AST-Auswertung bleiben offen.
 - [~] **Gemeinsame Interpreter-Ressourcenlimits:** AST und MIR nutzen jetzt denselben Helfer für Standard- und Maximalaufruftiefe sowie für die begrenzte Worker-Stackgröße; MIR-Parallelzweige verwenden dieselbe Stackregel. Backendlokale Grenzwerte entfallen dadurch, die rekursiven Interpreter werden aber nicht iterativ.
-- [~] **AST-Typprüfung strukturiert:** Kontrollfluss-/Match-Exhaustiveness-Analyse liegt in `runtime/src/type_checker/flow.rs`; Typbeziehungen, Generic-Inferenz, Aliasauflösung und Typannotationsvalidierung liegen in `runtime/src/type_checker/type_relations.rs`. Rückgabe-/Fallthrough-, Loop- und Guard-Regeln sowie die Typregeln blieben unverändert. Gezielte Match-, Generic-Record-/Funktions- und Aliasfehler-Tests sowie Workspace-Tests bestehen. Dies ist interne Strukturierung; weitere Teilung, Flow-Diagnostik und vollständige MIR-/Bytecode-Parität bleiben offen.
+- [~] **AST-Typprüfung strukturiert:** Kontrollfluss-/Match-Exhaustiveness-Analyse liegt in `runtime/src/type_checker/flow.rs`; Typbeziehungen, Generic-Inferenz, Aliasauflösung und Typannotationsvalidierung liegen in `runtime/src/type_checker/type_relations.rs`; die binäre Operator-Typprüfung liegt in `runtime/src/type_checker/expression_operators.rs`; die Aufrufprüfung für Built-ins, Nutzerfunktionen und Konstruktoren liegt in `runtime/src/type_checker/call_expressions.rs`. Rückgabe-/Fallthrough-, Loop-, Guard-, Operator- und Aufrufregeln blieben durch diese Strukturänderungen unverändert. Runtime- und Phase-1-Tests bestehen. Weitere Teilung, Flow-Diagnostik und vollständige MIR-/Bytecode-Parität bleiben offen.
 - [ ] AST-Interpreter als auswählbare Referenz behalten, bis die VM den gesamten unterstützten Sprachumfang korrekt abdeckt. Differential-, Property-, Fuzz-, Sicherheits- und Regressionstests ergänzen.
 - [~] Opt-in-CLI-Ausführung ist für AST, MIR und die unterstützte Bytecode-Teilmenge vorhanden. MIR-/Bytecode-Inspektion, sicheres versioniertes Caching, stabile maschinenlesbare Diagnosen und Studio-Integration bleiben offen, ohne bestehendes CLI-Verhalten zu brechen.
 - [~] Ein reproduzierbarer CPU-Benchmark vergleicht mutable Arrayupdates über AST, MIR und Bytecode; Messaufbau und drei Release-Läufe sind im [Benchmarkbericht](benchmarks/mutable-array-backends.de.md) dokumentiert. I/O-Last, Startzeit, Speicherverbrauch, Durchsatz und Kompilieraufwand bleiben offen.
