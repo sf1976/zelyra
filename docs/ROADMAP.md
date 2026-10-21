@@ -634,6 +634,10 @@ request-owned SQL transactions. This reduces setup work; no performance
 improvement is claimed without a benchmark. Linux and Windows artifacts,
 reproducible builds, attestations, and the complete CI passed.
 
+### ✅ [x] 1.2.37 — explicit CSV conversion and imported enum parity (released)
+
+Released as [`v1.2.37`](https://github.com/sf1976/zelyra/releases/tag/v1.2.37). The reusable `csv_import` example converts explicitly mapped cells to tagged text, integer, or Boolean values and reports invalid row/target-column values. MIR normalizes qualified enum variants so imported package enums match across AST, MIR, and Bytecode. Conversion is not inferred from schemas and does not write to databases; Decimal/date/time conversions remain open. Full GitHub CI passed, and published Linux/Windows artifacts passed checksum and archive-integrity checks.
+
 ## Active architecture milestones (1.1.5 through 1.3.0)
 
 These milestones are in progress and unreleased. Items with `[~]` are partially implemented; open subgoals remain explicit. Entries for released versions remain historical evidence.

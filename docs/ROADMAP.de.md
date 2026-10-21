@@ -686,6 +686,10 @@ erhalten. Dies reduziert Einrichtungsaufwand; ohne Benchmark wird keine
 Performanceverbesserung behauptet. Linux- und Windows-Artefakte,
 wiederholbare Builds, Attestierungen und vollständige CI bestanden.
 
+### ✅ [x] 1.2.37 — explizite CSV-Konvertierung und importierte Enum-Parität (veröffentlicht)
+
+Veröffentlicht als [`v1.2.37`](https://github.com/sf1976/zelyra/releases/tag/v1.2.37). Das wiederverwendbare Beispiel `csv_import` konvertiert explizit zugeordnete Zellen in getaggte Text-, Integer- oder Bool-Werte und meldet ungültige Zeilen-/Zielspaltenwerte. MIR normalisiert qualifizierte Enum-Varianten, sodass importierte Paket-Enums in AST, MIR und Bytecode gleich abgeglichen werden. Die Konvertierung wird nicht aus Schemas abgeleitet und schreibt nicht in Datenbanken; Decimal-/Datums-/Zeitkonvertierungen bleiben offen. Die vollständige GitHub-CI bestand; veröffentlichte Linux-/Windows-Artefakte bestanden Prüfsummen- und Archiv-Integritätsprüfungen.
+
 ## Aktive Architektur-Meilensteine (1.1.5 bis 1.3.0)
 
 Diese Meilensteine sind in Arbeit und noch nicht veröffentlicht. Bereits teilweise umgesetzte Punkte sind mit `[~]` markiert; offene Teilziele bleiben ausdrücklich stehen. Einträge veröffentlichter Versionen bleiben historische Nachweise.
