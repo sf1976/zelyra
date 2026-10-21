@@ -315,10 +315,13 @@ capability.
   an optional minus sign, at most nine fractional digits, and no floating-point
   intermediate; whitespace, a leading plus, exponent notation, and overflow
   return `Err`),
-  `parse_float(text) -> Result<Float, String>`, and
-  `parse_bool(text) -> Result<Bool, String>`: Parse strings without throwing;
-  invalid values return `Err`. `parse_bool` accepts `true`, `false`, `1`, and
-  `0`, case-insensitively for words.
+  `parse_date(text) -> Result<Date, String>`, and
+  `parse_time(text) -> Result<Time, String>` validate the unambiguous forms
+  `YYYY-MM-DD` and `HH:MM:SS`, without inferring a locale or timezone. Invalid
+  calendar dates and clock values return `Err`. `parse_float(text) ->
+  Result<Float, String>` and `parse_bool(text) -> Result<Bool, String>` parse
+  without throwing; invalid values return `Err`. `parse_bool` accepts `true`,
+  `false`, `1`, and `0`, case-insensitively for words.
 
 ### 6. Hashing, encodings, and paths
 

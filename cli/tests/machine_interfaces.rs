@@ -345,6 +345,30 @@ fn reusable_csv_import_package_performs_explicit_typed_conversion_on_all_backend
 }
 
 #[test]
+fn reusable_csv_import_package_performs_explicit_date_time_conversion_on_all_backends() {
+    let entry = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../examples/business_modules/main.zyl");
+    let entry = entry.to_str().unwrap();
+    let expected = b"2024-02-29\n09:15:30\nCSV row 2 column invoice_date: invalid date (expected YYYY-MM-DD)\nCSV row 2 column sent_at: invalid time (expected HH:MM:SS)\n";
+    for backend in ["ast", "mir", "bytecode"] {
+        let output = run(&[
+            "run",
+            entry,
+            "--entry",
+            "csv_temporal_demo",
+            "--backend",
+            backend,
+        ]);
+        assert!(
+            output.status.success(),
+            "{backend}: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        assert_eq!(output.stdout, expected, "backend {backend}");
+    }
+}
+
+#[test]
 fn run_can_invoke_an_explicit_parameterless_entry_without_running_main() {
     let source = r#"
 fn main() { print("main entry") }

@@ -89,30 +89,40 @@ fn csv_convert_demo() {
                         csv_import::CsvValue::Integer(_) => { print("unexpected integer") }
                         csv_import::CsvValue::Boolean(_) => { print("unexpected boolean") }
                         csv_import::CsvValue::Decimal(_) => { print("unexpected decimal") }
+                        csv_import::CsvValue::Date(_) => { print("unexpected date") }
+                        csv_import::CsvValue::Time(_) => { print("unexpected time") }
                     }
                     match converted.rows[0][1] {
                         csv_import::CsvValue::Text(_) => { print("unexpected text") }
                         csv_import::CsvValue::Integer(value) => { print(value) }
                         csv_import::CsvValue::Boolean(_) => { print("unexpected boolean") }
                         csv_import::CsvValue::Decimal(_) => { print("unexpected decimal") }
+                        csv_import::CsvValue::Date(_) => { print("unexpected date") }
+                        csv_import::CsvValue::Time(_) => { print("unexpected time") }
                     }
                     match converted.rows[0][2] {
                         csv_import::CsvValue::Text(_) => { print("unexpected text") }
                         csv_import::CsvValue::Integer(_) => { print("unexpected integer") }
                         csv_import::CsvValue::Boolean(value) => { print(value) }
                         csv_import::CsvValue::Decimal(_) => { print("unexpected decimal") }
+                        csv_import::CsvValue::Date(_) => { print("unexpected date") }
+                        csv_import::CsvValue::Time(_) => { print("unexpected time") }
                     }
                     match converted.rows[1][3] {
                         csv_import::CsvValue::Text(value) => { print("empty note length " + to_string(len(value))) }
                         csv_import::CsvValue::Integer(_) => { print("unexpected integer") }
                         csv_import::CsvValue::Boolean(_) => { print("unexpected boolean") }
                         csv_import::CsvValue::Decimal(_) => { print("unexpected decimal") }
+                        csv_import::CsvValue::Date(_) => { print("unexpected date") }
+                        csv_import::CsvValue::Time(_) => { print("unexpected time") }
                     }
                     match converted.rows[0][4] {
                         csv_import::CsvValue::Text(_) => { print("unexpected text") }
                         csv_import::CsvValue::Integer(_) => { print("unexpected integer") }
                         csv_import::CsvValue::Boolean(_) => { print("unexpected boolean") }
                         csv_import::CsvValue::Decimal(value) => { print(value) }
+                        csv_import::CsvValue::Date(_) => { print("unexpected date") }
+                        csv_import::CsvValue::Time(_) => { print("unexpected time") }
                     }
                 }
                 Err(message) => { print(message) }
@@ -136,6 +146,45 @@ fn csv_convert_demo() {
     ]
     match csv_import::convert_columns(invalid_decimal_rows, invalid_decimal_mappings) {
         Ok(_) => { print("unexpected decimal conversion success") }
+        Err(message) => { print(message) }
+    }
+}
+
+fn csv_temporal_demo() {
+    rows = [["invoice_date", "sent_at"], ["2024-02-29", "09:15:30"]]
+    mappings: csv_import::CsvColumnMapping[] = [
+        csv_import::CsvColumnMapping { source_name: "invoice_date", target_name: "invoice_date", value_type: csv_import::CsvColumnType::Date },
+        csv_import::CsvColumnMapping { source_name: "sent_at", target_name: "sent_at", value_type: csv_import::CsvColumnType::Time }
+    ]
+    match csv_import::convert_columns(rows, mappings) {
+        Ok(converted) => {
+            match converted.rows[0][0] {
+                csv_import::CsvValue::Date(value) => { print(value) }
+                _ => { print("unexpected date conversion") }
+            }
+            match converted.rows[0][1] {
+                csv_import::CsvValue::Time(value) => { print(value) }
+                _ => { print("unexpected time conversion") }
+            }
+        }
+        Err(message) => { print(message) }
+    }
+
+    invalid_rows = [["invoice_date"], ["2023-02-29"]]
+    invalid_mappings: csv_import::CsvColumnMapping[] = [
+        csv_import::CsvColumnMapping { source_name: "invoice_date", target_name: "invoice_date", value_type: csv_import::CsvColumnType::Date }
+    ]
+    match csv_import::convert_columns(invalid_rows, invalid_mappings) {
+        Ok(_) => { print("unexpected invalid date conversion success") }
+        Err(message) => { print(message) }
+    }
+
+    invalid_time_rows = [["sent_at"], ["09:15"]]
+    invalid_time_mappings: csv_import::CsvColumnMapping[] = [
+        csv_import::CsvColumnMapping { source_name: "sent_at", target_name: "sent_at", value_type: csv_import::CsvColumnType::Time }
+    ]
+    match csv_import::convert_columns(invalid_time_rows, invalid_time_mappings) {
+        Ok(_) => { print("unexpected invalid time conversion success") }
         Err(message) => { print(message) }
     }
 }
