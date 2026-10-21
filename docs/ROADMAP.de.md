@@ -664,122 +664,22 @@ Diese Meilensteine sind in Arbeit und noch nicht veröffentlicht. Bereits teilwe
 - [ ] Paketvertrauen, Veröffentlichung, Supply-Chain-Sicherheit, Kompatibilität, CLI-/Studio-Anbindung, Diagnostik, positive/negative Tests und ausführbare Beispiele dokumentieren.
 - [ ] Freigabekriterium: 1.1.5 erst nach bestandenen Kompatibilitäts-, Berechtigungsverweigerungs-, Abhängigkeits-, Offline-/Reproduzierbarkeits- und Integrationstests als fertig kennzeichnen.
 
-### 🧪 [~] Geschäfts-CRUD vor 1.3.0 abschließen
+### ✅ [x] Geschäfts-CRUD-Befunde aus dem Review zu 1.2.30
 
-Alle fünf im 1.2.30-Review gemeldeten Hürden für Geschäftsbelege sind
-verbindliche Release-Arbeit vor 1.3.0. Die Implementierung ist auf kleine
-Releases verteilt, damit Datenbank-, Compiler-, Rendering- und Sicherheits-
-Grenzen unabhängig geprüft werden können. Nichts davon ist bereits als
-aktueller Branch-Stand veröffentlicht. Der derzeit verifizierte Stand:
+Die fünf Befunde wurden mit den veröffentlichten Releases 1.2.31 und 1.2.32
+abgeschlossen.
 
-| Gemeldete Hürde | Aktueller Stand | Verbleibende Abnahme |
+| Befund | Umgesetztes Ergebnis | Verbleibende Grenze |
 | --- | --- | --- |
-| Wiederverwendbare fortlaufende Belegnummern | In der 1.2.31-Arbeit implementiert: deklaratives `auto_sequence`, transaktionale Zähler, Mandanten-/Jahresbereich und Schutz generierter CRUD-Routen vor gefälschten Eingaben. SQLite wird bei der Schema-Prüfung quellpositioniert mit `E-DB-001` abgewiesen. | Unterstützte Backend-/Versionsmatrix, SQLite-Ablehnung in Release-Tests behalten, Kompatibilität mit alter Rechnungsnummernvergabe sowie vollständige Release-Gates. Lückenlosigkeit wird nicht garantiert. |
-| Mandantenfilter der Rechnungsnummern-Kollisionssuche | Der bisherige Rechnungsnummernpfad und der generische Zähler binden den authentifizierten Mandanten. Integrationsläufe auf MariaDB 11.8 und PostgreSQL 16 prüfen getrennte Zähler und atomare Vergabe; beide laufen jetzt in CI. | Unterstützte Versionsmatrix und vollständige Release-Gates. |
-| Serverseitig berechnete Geschäftsfelder | Für generiertes CRUD und geprüfte API-POST-/PUT-/PATCH-Pfade implementiert, einschließlich Abhängigkeits-/Typprüfung und exakter Decimal-Rundung. Ein teilweises geprüftes API-PATCH lädt ausgelassene Werte aus dem bestehenden Datensatz, beachtet den Mandantenscope und berechnet abgeleitete Werte vor Validierung und Handler neu. | Vollständige Backend- sowie AST-/MIR-/Bytecode-Paritätsabnahme; das MariaDB-E2E für Teil-PATCH bestand lokal, CI wird auf MariaDB und PostgreSQL erweitert. |
-| Lokalisierte Master-Detail-Beschriftungen | HTML-escaped Locale-Marker werden für Kindlisten-Legenden aufgelöst. Tests prüfen Escaping, projektseitige Übersetzungen und den Fallback ohne projektspezifischen Eintrag. Das Invoice-Tutorial-E2E prüft jeden referenzierten Schlüssel aus den Zelyra-Quelldateien gegen beide Locale-Kataloge sowie gerenderte deutsche Startseite, Navigation und Hilfetexte. | Locale-Tests und Tutorial-E2E in den Release-Gates behalten. |
-| Datei-Anhänge im generierten CRUD | Mit geprüften `FileRef`-Metadaten, privatem Speicher, generierten Uploadfeldern und autorisierten Downloads implementiert. MariaDB-HTTP- und Chromium-E2E prüfen authentifizierten Upload, Download im eigenen Mandanten, fremdmandantige 404-Antwort, MIME-Typ und geschützte Referenz. Ein Wegwerf-MariaDB-Drill prüft außerdem das gemeinsame Wiederherstellen von Datenbank und Dateien. | Vollständige Release-Gates. Geprüft ist ein manueller Ablauf bei gestopptem Server mit separaten Sicherungen; ein einzelnes Archiv oder absturzatomisches Anwendungsbackup gibt es nicht. |
+| Wiederverwendbare Belegnummern | 1.2.31 liefert `auto_sequence`, transaktionale Vergabe, Mandanten-/Jahresbereich, Schutz vor gefälschten Werten und eine quellpositionierte SQLite-Ablehnung (`E-DB-001`). | Eine lückenlose Vergabe wird nicht versprochen. |
+| Mandantenscope der Nummernvergabe | 1.2.31 bindet den bestätigten Mandanten in alte Rechnungsnummernprüfungen und generische Nummernkreise ein. Die Datenbank-CI prüft MariaDB, MySQL und PostgreSQL. | Keiner für den gemeldeten Befund. |
+| Serverseitig berechnete Felder | 1.2.32 berechnet typisierte Werte in generiertem CRUD und geprüften API-POST-/PUT-/PATCH-Pfaden neu, weist gefälschte Schreibwerte ab und prüft Abhängigkeiten sowie Decimal-Präzision/Rundung. Teil-PATCH ergänzt ausgelassene Werte aus dem mandantengeprüften Datensatz. | AST-/MIR-/Bytecode-Parität bleibt Teil der 1.3.0-Abnahme. |
+| Lokalisierte Master-Detail-Beschriftungen | 1.2.32 löst escaped Locale-Tokens in Kindlisten-Legenden auf; Fallbacks, Projektkataloge und Invoice-Tutorial-Schlüssel sind geprüft. | Keiner für den gemeldeten Befund. |
+| CRUD-Dateianhänge | 1.2.32 bietet begrenzte `FileRef`-Regeln, generierte Uploadfelder, privaten Speicher und rechte-/mandantengeprüfte Downloads. MariaDB- und headless-Chromium-E2E prüfen Upload, Download, MIME, Redaktion und fremdmandantige Ablehnung. | Datenbank und Dateien brauchen separate Sicherungen; ein absturzatomisches Gesamtbackup gibt es nicht. |
 
-Dieser Arbeitsbereich ist erst abgeschlossen, wenn alle verbleibenden
-Abnahmen aus der Tabelle und den detaillierten Release-Plänen darunter
-bestanden sind. Sprachsyntax oder ein einzelner Unit-Test belegen für sich
-keine Produktionsreife.
-
-- [~] **1.2.31 — mandantenbezogene Belegnummernkreise:** Der Branch parst
-  `auto_sequence("KD-{0001}")` und `auto_sequence("AG-{year}-{0001}")`, nimmt
-  eine verwaltete Zählertabelle in den Schema-Plan auf und vergibt Nummern in
-  der Anlegen-Transaktion. Der Zähler ist nach Mandant und – bei `{year}` –
-  UTC-Kalenderjahr getrennt. Vorhandene Werte werden geprüft und übersprungen;
-  generierte Create-Routen ignorieren übermittelte Nummern und Edit-Formulare
-  lassen generierte Nummern aus. Unit-Tests und ein MariaDB-Integrationstest
-  prüfen Mandantentrennung, Rollback, Altwert-Kollisionen, gefälschte Eingaben
-  und parallele Vergabe. Derselbe Integrationstest läuft auch mit PostgreSQL
-  16. CI testet den Zähler außerdem mit MariaDB 10.11/11.4/11.8/12.3, MySQL
-  8.4 und PostgreSQL 16; diese Matrixläufe stehen noch aus. Auf MariaDB 11.8,
-  MySQL 8.4.11 und PostgreSQL 16 wurde das verwaltete Schema außerdem
-  jeweils angewendet und danach ohne Drift erneut geplant. Der
-  MariaDB-Inspektor unterscheidet zusammengesetzte Unique-Schlüssel jetzt
-  anhand der echten Primärschlüssel-Constraint. Die vollständige Release-CI,
-  Versionsmatrix, Tutorial-Kompatibilität und Veröffentlichung sind noch
-  offen. Eine lückenlose Vergabe wird nicht garantiert.
-- [ ] **1.2.31 Rest — mandantenbezogene Belegnummernkreise:** PostgreSQL
-  zusätzlich auf der unterstützten Versionsmatrix prüfen, die stabile
-  Schema-Prüfung mit `E-DB-001` für SQLite-`auto_sequence` in der Release-Suite
-  abdecken, Release-Gates abschließen und die Kompatibilität mit der bisherigen
-  `invoice_number`-Vergabe prüfen. Konkurrenz, Rollback, Mandantentrennung,
-  Eindeutigkeit und Formatprüfung bleiben erforderlich; nicht unterstützte
-  Backends müssen ausdrücklich abgewiesen werden.
-- [~] **1.2.32 — berechnete Geschäftsfelder und sichere CRUD-Anhänge:** Reine, typisierte
-  und deterministische Ausdrücke für abgeleitete Felder ergänzen, einschließlich
-  unterstützter skalarer und Decimal-Operationen. Abhängigkeitsgraphen prüfen;
-  Zyklen, unbekannte Felder, Effects und Schreibversuche auf berechnete Werte
-  abweisen. Die Implementierung berechnet Werte in generierten CRUD-Formularen
-  serverseitig neu, normalisiert Decimal-Skalen und weist rohe SQL-Schreibpfade
-  zurück, die die Berechnung umgehen würden. API-POST- und -PUT-Validierung
-  unterstützt berechnete Felder als zusätzliche typisierte Handlerparameter;
-  Clientfelder werden nicht als API-Eingabe zugelassen. SQL-Updates sind nur
-  zulässig, wenn alle berechneten Abhängigkeiten und Ergebnisse an passende
-  typisierte Parameter gebunden sind. Ein isolierter MariaDB-11.8-Test deckt
-  Create und Update ab und bestätigt, dass gefälschte Clientwerte ignoriert
-  werden. Solche Handler sind aus normalem Zelyra-Code nicht aufrufbar und
-  lassen sich nicht als CLI-Einstieg ausführen. Ein MariaDB-CRUD-HTTP-Test
-  deckt Anlegen, Bearbeiten, abgewiesene Validierung, unveränderte Speicherung
-  nach dem Fehler und den neu berechneten Wert in der Fehlerantwort ab. Optionale
-  Eingaben bleiben typisierte `Option<T>` und müssen mit `match` behandelt
-  werden; `None` wird bei optionalen Zielfeldern als fehlender Wert gespeichert.
-  Benutzereingaben vom Typ Decimal bleiben bis zur Formularprüfung unverändert;
-  dadurch kann Rundung keine überzähligen Nachkommastellen verbergen. Der
-  Exact-Number-HTTP-Test gegen MySQL 8.4.11 bestätigt, dass `Money` mit fünf
-  Nachkommastellen abgewiesen wird. Die Präzisions-/Skalenanalyse erkennt auch
-  abweichende Großschreibung und Leerzeichen in MySQL-Metadaten.
-  Validierte API-`PATCH`-Handler berechnen Felder ebenfalls neu. Fehlende
-  Tabellenfelder werden aus dem vorhandenen Datensatz ergänzt; mandantenfähige
-  Lesezugriffe sind auf den bestätigten Mandanten begrenzt. Ungültige
-  Teilupdates lassen den Datensatz unverändert, fehlende Datensätze liefern
-  404 und fehlende Datenbankverbindungen 503. Nominale API-Pfadparameter vom
-  Typ `Id` werden in Integer-Runtimewerte konvertiert; damit besteht der
-  vollständige Create-/PUT-/PATCH-Test unter PostgreSQL 16 und MariaDB. Ein
-  zweiter Datenbanktest bestätigt 404 für einen fremden Mandanten und ein
-  sicheres Abbrechen ohne bestätigten Mandantenkontext. Beide Tests laufen in
-  CI für MariaDB und PostgreSQL. Weitere Backend- und
-  AST/MIR/Bytecode-Parität sowie vollständige Release-Prüfungen sind noch
-  offen. Beispiel: `examples/computed_api.zyl`.
-- [~] **FileRef-Anhänge im generierten CRUD (1.2.32):** Begrenzte,
-  deklarative Anhangsregeln für Schema und CRUD ergänzen und sichere
-  Uploadfelder auf Create/Edit sowie geschützte Download-Links auf Details
-  erzeugen. Bestehende Multipart-Prüfung, privaten FileRef-Speicher,
-  Prüfsummen, Mandantentrennung, Transaktionsbereinigung, CSRF und Rechte
-  wiederverwenden. Rohe FileRef-Werte nie ausgeben und clientseitige Referenzen
-  nicht als vertrauenswürdig behandeln. Tests prüfen Upload, Ersetzung,
-  Erhalt bei fehlender neuer Datei, Rollback-Bereinigung, verweigerte fremde
-  Downloads, MIME-/Größenlimits und generierte Routen. Damit wird die aktuelle
-  Lücke zwischen geprüften eigenständigen File-Forms und CRUD geschlossen.
-  Bisher umgesetzt: Tabellenmetadaten
-  `attachment { max_size, allowed_types }` für `FileRef`, Compile-Time-Prüfung
-  von MIME-Typ, Größe und Spaltentyp, generierte native Uploadfelder sowie
-  Downloadlinks auf Listen- und Detailseiten ohne rohe Referenzwerte. Vorhandene
-  Upload-Staging-, Edit-Erhalt-/Ersetzungs- und Fehlerbereinigung, Mandanten-/
-  Rechteprüfung sowie referenzbewusste Bereinigung beim Löschen werden genutzt.
-  Parser-, Formular-, Routengenerator- und Render-Tests bestehen. Ein echter
-  Wegwerf-MariaDB-/HTTP-Test bestand über den CLI-generierten CRUD-Pfad:
-  `.env`-Datenbankauflösung, `/new`, Multipart-Speicherung, Listenlink ohne
-  rohe Referenz und authentifizierter Download. Ein vorhandener Upload-
-  Integrationstest deckt Edit-Erhalt/Ersetzung, Rollback-Bereinigung sowie
-  direkte Dispatcher-Prüfungen ab. Der Mandanten-CRUD-E2E lädt nun zusätzlich
-  ein Dokument über das authentifizierte generierte Formular hoch, prüft den
-  gespeicherten Mandanten, lädt die Datei im selben Mandanten herunter und
-  bestätigt 404 bei Auswahl eines anderen Mandanten. Der Test prüft außerdem
-  den PDF-Content-Type und dass die opake FileRef nicht im Detail-HTML erscheint.
-  Der vollständige MariaDB-Mandanten-CRUD-E2E wird zusätzlich in headless
-  Chromium ohne JavaScript ausgeführt; Upload-Control, Detail-Link, PDF-Bytes,
-  MIME-Typ und 404 im fremden Mandanten bestehen. Datenbank-/Datei-
-  Wiederherstellung besteht nun ebenfalls als Wegwerf-MariaDB-Drill: Dump und
-  Dateisnapshot sichern, beide Bestände entfernen, Datenbank zuerst
-  wiederherstellen, danach die referenzierte Datei mit Prüfsumme prüfen. Es
-  bleibt ein manueller Ablauf bei gestopptem Server und kein absturzatomisches
-  Gesamtarchiv. Vollständige Release-Gates bleiben offen.
-
-Siehe den [Plan zum Abschluss des Geschäfts-CRUD](release-plans/1.2.31-1.2.32-business-crud.de.md).
+Beide Releases bestanden ihre Release-Gates und sind veröffentlicht. Dies
+behauptet weder ein absturzatomisches kombiniertes Backup noch vollständige
+AST-/MIR-/Bytecode-Parität. Siehe den [Plan zum Abschluss des Geschäfts-CRUD](release-plans/1.2.31-1.2.32-business-crud.de.md).
 
 ### 🗺️ [ ] Zelyra 1.3.0 — typisierte MIR und Rust-Bytecode-VM
 
