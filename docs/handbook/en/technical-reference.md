@@ -786,6 +786,29 @@ page "/customers" {
 }
 ~~~
 
+Project pages can use text from `locales/de.json` and `locales/en.json`
+directly in text or attribute positions:
+
+~~~zelyra
+page "/" {
+    html {
+        <h1>{t("site.home.title")}</h1>
+        <p>{i18n("site.home.intro")}</p>
+        <a title='{t("site.home.help")}'>Help</a>
+    }
+}
+~~~
+
+`t("key")` and `i18n("key")` are static view translation references. A key
+may contain up to 128 ASCII letters, digits, periods, underscores, and hyphens.
+Translated values are HTML-escaped. The configured project UI language selects
+the catalog; a missing project German entry falls back to the English catalog.
+An unknown key is rendered as a missing translation. For URL-based language
+selection, the first route segment must be named `{locale}`, for example
+`page "/{locale}/compare"`. Zelyra accepts only `de` and `en` there; other
+values return 404. Routes without this prefix use the configured project UI
+language. Plural rules are not implemented.
+
 Pages return `text/html; charset=utf-8` by default. A page can declare another
 validated media type for XML feeds and similar text responses:
 

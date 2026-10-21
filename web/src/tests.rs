@@ -1841,6 +1841,84 @@ fn url_encoded_template_interpolation_escapes_mailto_query_values() {
 }
 
 #[test]
+fn static_view_translation_interpolation_uses_project_locale_and_escapes_html() {
+    let rendered = render_interpolations(
+        "<h1>{t(\"site.title\")}</h1><meta content=\"{i18n(\"site.summary\")}\"><p>{t(\"site.fallback\")}</p><p>{t(\"site.missing\")}</p>",
+        &HashMap::new(),
+        &HashMap::new(),
+    );
+    assert!(rendered.contains("\u{e000}zelyra-locale:site.title\u{e001}"));
+
+    let mut catalogs = ProjectUiCatalogs::default();
+    catalogs
+        .set_json(
+            UiLanguage::German,
+            r#"{"site.title":"Willkommen <script>","site.summary":"A & B"}"#,
+        )
+        .unwrap();
+    catalogs
+        .set_json(
+            UiLanguage::English,
+            r#"{"site.fallback":"English & fallback"}"#,
+        )
+        .unwrap();
+    let localized = localize_html_with_catalog(&rendered, UiLanguage::German, &catalogs);
+    assert_eq!(
+        localized,
+        "<h1>Willkommen &lt;script&gt;</h1><meta content=\"A &amp; B\"><p>English &amp; fallback</p><p>[missing translation]</p>"
+    );
+}
+
+#[test]
+fn locale_prefix_selects_catalog_for_shared_view_and_rejects_unknown_locale() {
+    let route = Route {
+        path: "/{locale}/home".into(),
+        html: "<h1>{t(\"site.home.title\")}</h1>".into(),
+        query: Vec::new(),
+        page_size: None,
+        sort_columns: Vec::new(),
+        search_columns: Vec::new(),
+        filters: Vec::new(),
+        data: Vec::new(),
+        requires_auth: false,
+        permissions: Vec::new(),
+    };
+    let router = Router::new(vec![route.clone()]);
+    let mut catalogs = ProjectUiCatalogs::default();
+    catalogs
+        .set_json(UiLanguage::German, r#"{"site.home.title":"Startseite"}"#)
+        .unwrap();
+    catalogs
+        .set_json(UiLanguage::English, r#"{"site.home.title":"Home"}"#)
+        .unwrap();
+
+    let render = |path| {
+        router.dispatch_with_database_language_and_catalogs(
+            "GET",
+            path,
+            None,
+            UiLanguage::English,
+            &catalogs,
+        )
+    };
+    assert_eq!(render("/de/home").body, "<h1>Startseite</h1>");
+    assert_eq!(render("/en/home").body, "<h1>Home</h1>");
+    assert_eq!(render("/fr/home").status, 404);
+
+    let app = WebApp::new(vec![route], Vec::new()).with_project_ui_catalogs(catalogs);
+    let response = app.dispatch(&Request {
+        method: "GET".into(),
+        target: "/de/home".into(),
+        path: "/de/home".into(),
+        headers: HashMap::new(),
+        body: String::new(),
+        remote_addr: None,
+    });
+    assert_eq!(response.status, 200);
+    assert_eq!(response.body, "<h1>Startseite</h1>");
+}
+
+#[test]
 fn default_application_shell_uses_the_shared_mobile_navigation_contract() {
     let context = DefaultUiContext {
         current_path: "/invoices".into(),

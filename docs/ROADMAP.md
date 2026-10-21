@@ -575,14 +575,17 @@ security and compatibility gates stated for that milestone.
   completion by switching the default early. This milestone targets portable
   verified Bytecode, not native machine-code generation.
 
-- [ ] **1.3.0 — confirmed web/compiler gaps:** Accept SQL-loaded `Option<Record>`
-  page data (the CLI validator fix is on the active unmerged feature branch);
-  finish and merge explicit dynamic page response content types, add a typed
-  server API response contract; add bounded, sanitized
-  CommonMark/GFM rendering; and add stdin piping to the existing allowlisted,
-  timeout/output-bounded Process capability. API `HttpResult<T>` currently models
-  responses received by outbound HTTP calls, not status/header returns from a
-  Zelyra API handler. These are separate from static `public/` asset serving.
+- [~] **1.3.0 — verified web/compiler gaps and existing foundations:** SQL-loaded
+  `Option<Record>` page data, dynamic page response media types, static
+  `public/` assets, and bounded stdin piping for the Process capability are
+  already present in 1.2.33 and are not outstanding gaps. Typed properties for
+  reusable `view` layouts are in PR #151; a typed successful API-handler
+  response contract is in PR #153; bounded sanitized CommonMark/GFM rendering
+  is in PR #154; checked static locale references and `{locale}` prefix
+  selection in views are in the current feature branch. API `HttpResult<T>` still models responses received
+  by outbound HTTP calls, not status/header returns from a Zelyra API handler.
+  Markdown table-of-contents generation, plural rules, and code highlighting
+  remain unimplemented and require separate acceptance tests.
 
 **Post-1.3.0 or explicitly reprioritized:** a native AOT backend is optional
 and depends on benchmark evidence. No open task is silently dropped: work that cannot meet its release

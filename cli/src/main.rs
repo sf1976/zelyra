@@ -2108,6 +2108,27 @@ fn validate_page_data(path: &str, program: &zelyra_ast::Program) -> bool {
                 );
                 valid = false;
             }
+            if !content_type.to_ascii_lowercase().starts_with("text/html")
+                && (template_has_translation_reference(&page.html, program)
+                    || page.view.as_deref().is_some_and(|view_name| {
+                        program
+                            .views
+                            .iter()
+                            .find(|view| view.name == view_name)
+                            .is_some_and(|view| {
+                                template_has_translation_reference(&view.html, program)
+                            })
+                    }))
+            {
+                diagnostic(
+                    path,
+                    "E-VIEW-042",
+                    "view translation references require an HTML page response",
+                    page.span.line,
+                    page.span.column,
+                );
+                valid = false;
+            }
         }
         if page.page_size.is_some()
             && !page
@@ -3623,6 +3644,40 @@ fn template_expressions(html: &str) -> Result<Vec<String>, String> {
     Ok(expressions)
 }
 
+fn template_has_translation_reference(template: &str, program: &zelyra_ast::Program) -> bool {
+    template_tree_has_translation_reference(template, program, &mut HashSet::new())
+}
+
+fn template_tree_has_translation_reference(
+    template: &str,
+    program: &zelyra_ast::Program,
+    visited_components: &mut HashSet<String>,
+) -> bool {
+    if template_expressions(template).is_ok_and(|expressions| {
+        expressions
+            .iter()
+            .any(|expression| template_translation_key(expression).is_some())
+    }) {
+        return true;
+    }
+    component_invocations(template).is_ok_and(|invocations| {
+        invocations.iter().any(|invocation| {
+            program
+                .components
+                .iter()
+                .find(|component| component.name == invocation.name)
+                .is_some_and(|component| {
+                    visited_components.insert(component.name.clone())
+                        && template_tree_has_translation_reference(
+                            &component.html,
+                            program,
+                            visited_components,
+                        )
+                })
+        })
+    })
+}
+
 fn is_template_identifier(expression: &str) -> bool {
     !expression.is_empty()
         && expression.chars().enumerate().all(|(index, character)| {
@@ -3635,11 +3690,29 @@ fn is_template_identifier(expression: &str) -> bool {
 }
 
 fn is_template_expression(expression: &str) -> bool {
+    if let Some(key) = template_translation_key(expression) {
+        return valid_template_translation_key(key);
+    }
     expression
         .strip_prefix("url_encode:")
         .unwrap_or(expression)
         .split('.')
         .all(is_template_identifier)
+}
+
+fn template_translation_key(expression: &str) -> Option<&str> {
+    expression
+        .strip_prefix("t(\"")
+        .or_else(|| expression.strip_prefix("i18n(\""))
+        .and_then(|key| key.strip_suffix("\")"))
+}
+
+fn valid_template_translation_key(key: &str) -> bool {
+    !key.is_empty()
+        && key.len() <= 128
+        && key
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'.' | b'_' | b'-'))
 }
 
 struct TemplateForBlock {
@@ -3861,6 +3934,19 @@ fn validate_template_interpolations(
     };
     let mut valid = true;
     for expression in expressions {
+        if let Some(key) = template_translation_key(&expression) {
+            if !valid_template_translation_key(key) {
+                diagnostic(
+                    path,
+                    "E-VIEW-041",
+                    "translation reference must use a non-empty key of at most 128 ASCII letters, digits, dots, underscores, or hyphens",
+                    line,
+                    column,
+                );
+                valid = false;
+            }
+            continue;
+        }
         if !is_template_expression(&expression) {
             diagnostic(
                 path,
