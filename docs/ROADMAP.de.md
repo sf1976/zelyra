@@ -627,21 +627,20 @@ abgeschlossen.
   native Maschinencodegenerierung.
 - [~] **1.3.0 — bestätigte Web-/Compilerlücken:** SQL-geladene
   `Option<Record>`-Seitendaten, dynamisches `page content_type`, statische
-  `public/`-Assets und begrenztes stdin für erlaubnislistengeprüfte Prozesse
-  (`run_process_piped`) sind bereits auf `main` vorhanden.
-  `run_process_piped` führt für sich allein weder Zelyra-Quelltext aus noch
-  stellt es eine Web-Sandbox bereit. Typisierte erfolgreiche API-Antworten sind
-  auf dem aktiven, noch nicht zusammengeführten Branch als `ApiResponse<T>` mit
-  Status-/Content-Type-Deklarationen, geprüften Headern, OpenAPI- und
-  TypeScript-Client-Unterstützung umgesetzt. `HttpResult<T>` beschreibt weiter
-  Antworten ausgehender HTTP-Aufrufe. Parametrisierte `view`-Props bleiben
-  offen; Seiten können aber bereits benannte Layout-Slots für individuelle
-  Head-Inhalte bereitstellen. Projektkataloge `locales/de.json` und
-  `locales/en.json` sowie `data-zelyra-i18n`-/`@i18n:`-Marker lokalisieren
-  benutzerdefinierte Seitentexte bereits. Ein typisierter Ausdruck
-  `t("key")` und deklarative Locale-Routengruppen fehlen noch. Sicheres
-  CommonMark/GFM-Rendering bleibt offen. Statisches Asset-Serving ist bereits
-  vorhanden und keine offene Lücke.
+  `public/`-Assets, begrenztes stdin für erlaubnislistengeprüfte Prozesse
+  (`run_process_piped`) und typisierte erfolgreiche API-Antworten über
+  `ApiResponse<T>` sind bereits auf `main` vorhanden. API-Antworten unterstützen
+  deklarierte Status-/Content-Type-Paare, geprüfte Header, OpenAPI und
+  TypeScript-Clients; `HttpResult<T>` bleibt für ausgehende HTTP-Aufrufe.
+  `run_process_piped` führt keinen beliebigen Zelyra-Quelltext aus und stellt
+  keine Web-Sandbox bereit. Parametrisierte `view`-Props bleiben offen; Seiten
+  können aber bereits benannte Layout-Slots für individuelle Head-Inhalte
+  bereitstellen. Projektkataloge `locales/de.json` und `locales/en.json` sowie
+  `data-zelyra-i18n`-/`@i18n:`-Marker lokalisieren benutzerdefinierte
+  Seitentexte bereits. Ein typisierter Ausdruck `t("key")` und deklarative
+  Locale-Routengruppen fehlen noch. Sicheres CommonMark/GFM-Rendering bleibt
+  offen und ist der einzige noch fehlende Punkt des jüngsten Viererberichts.
+  Statisches Asset-Serving ist bereits vorhanden und keine offene Lücke.
 
 **Nach 1.3.0 oder bei ausdrücklicher Neubewertung:** Ein natives AOT-Backend
 bleibt optional und hängt von Benchmarks ab. Kein offener Punkt entfällt stillschweigend: Arbeit, deren
