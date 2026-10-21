@@ -280,6 +280,30 @@ pub fn build_schema(program: &Program) -> Result<Schema, Vec<SchemaError>> {
                     });
                 }
             }
+            let unsigned_storage_supported = match resolved_inner {
+                Type::UInt => true,
+                Type::Named(name) => name == "Id" || table_for_type(name, &table_names).is_some(),
+                _ => false,
+            };
+            if definition.unsigned_storage.is_some() && !unsigned_storage_supported {
+                errors.push(SchemaError {
+                    message: "`unsigned_storage` requires a UInt, Id, or table-relation column"
+                        .into(),
+                    span: definition.span,
+                });
+            }
+            if definition.auto
+                && resolve_type(&definition.ty, &program.types) == Type::Named("Id".into())
+                && definition
+                    .unsigned_storage
+                    .is_some_and(|storage| storage != zelyra_ast::UnsignedStorage::BigInt)
+            {
+                errors.push(SchemaError {
+                    message: "auto-incrementing Id columns require `unsigned_storage bigint`"
+                        .into(),
+                    span: definition.span,
+                });
+            }
             let (default_storage_name, sql_type, inferred_relation) =
                 column_mapping(definition, &table_names, &program.types, backend);
             let relation = if let Some(target_name) = definition.references.as_deref() {
@@ -404,6 +428,15 @@ pub fn build_schema(program: &Program) -> Result<Schema, Vec<SchemaError>> {
                 continue;
             }
             if let Some(relation) = relation {
+                if definition
+                    .unsigned_storage
+                    .is_some_and(|storage| storage != zelyra_ast::UnsignedStorage::BigInt)
+                {
+                    errors.push(SchemaError {
+                        message: "table relations currently require `unsigned_storage bigint` to match the target Id".into(),
+                        span: definition.span,
+                    });
+                }
                 if !table_names.contains(&relation) {
                     errors.push(SchemaError {
                         message: format!(
@@ -414,6 +447,24 @@ pub fn build_schema(program: &Program) -> Result<Schema, Vec<SchemaError>> {
                     });
                 } else {
                     let target_table = program.tables.iter().find(|target| target.name == relation);
+                    let target_id_storage = target_table.and_then(|target| {
+                        target
+                            .columns
+                            .iter()
+                            .find(|column| column.name == "id" && column.primary_key)
+                            .and_then(|column| column.unsigned_storage)
+                    });
+                    if target_id_storage != definition.unsigned_storage
+                        && (target_id_storage.is_some() || definition.unsigned_storage.is_some())
+                    {
+                        errors.push(SchemaError {
+                            message: format!(
+                                "relation {}.{} must use the same `unsigned_storage` as {}.id",
+                                table.name, definition.name, relation
+                            ),
+                            span: definition.span,
+                        });
+                    }
                     let target_scope = target_table.and_then(|target| target.tenant_scope.as_ref());
                     let matching_scope_types =
                         table.tenant_scope.as_ref().zip(target_scope).is_some_and(
@@ -948,11 +999,17 @@ fn column_mapping(
         if let Some(table) = table_for_type(name, table_names) {
             return (
                 format!("{}_id", definition.name),
-                match backend {
-                    Backend::Sqlite => "INTEGER",
-                    Backend::Postgres | Backend::MariaDb => "BIGINT",
-                }
-                .into(),
+                definition.unsigned_storage.map_or_else(
+                    || match backend {
+                        Backend::Sqlite => "INTEGER".into(),
+                        Backend::Postgres | Backend::MariaDb => "BIGINT".into(),
+                    },
+                    |storage| match backend {
+                        Backend::MariaDb => unsigned_storage_sql(storage, backend).into(),
+                        Backend::Postgres => "BIGINT".into(),
+                        Backend::Sqlite => "INTEGER".into(),
+                    },
+                ),
                 Some(table),
             );
         }
@@ -972,10 +1029,13 @@ fn column_mapping(
                 }
             }
         }
-        Type::UInt => match backend {
-            Backend::Postgres | Backend::Sqlite => "NUMERIC(20,0)",
-            Backend::MariaDb => "DECIMAL(20,0)",
-        },
+        Type::UInt => definition.unsigned_storage.map_or(
+            match backend {
+                Backend::Postgres | Backend::Sqlite => "NUMERIC(20,0)",
+                Backend::MariaDb => "DECIMAL(20,0)",
+            },
+            |storage| unsigned_storage_sql(storage, backend),
+        ),
         Type::Float => match backend {
             Backend::Postgres => "DOUBLE PRECISION",
             Backend::MariaDb => "DOUBLE",
@@ -1039,6 +1099,27 @@ fn column_mapping(
         },
         Type::Named(ref name) if name == "Id" => {
             if definition.auto {
+                return (
+                    definition.name.clone(),
+                    match (backend, definition.unsigned_storage) {
+                        (Backend::MariaDb, Some(storage)) => {
+                            unsigned_storage_sql(storage, backend).into()
+                        }
+                        (Backend::Postgres, _) => "BIGSERIAL".into(),
+                        (Backend::MariaDb, None) => "BIGINT".into(),
+                        (Backend::Sqlite, _) => "INTEGER".into(),
+                    },
+                    None,
+                );
+            }
+            if let Some(storage) = definition.unsigned_storage {
+                return (
+                    definition.name.clone(),
+                    unsigned_storage_sql(storage, backend).into(),
+                    None,
+                );
+            }
+            if definition.auto {
                 match backend {
                     Backend::Postgres => "BIGSERIAL",
                     Backend::MariaDb => "BIGINT",
@@ -1081,6 +1162,22 @@ fn column_mapping(
         | Type::Unknown => "TEXT",
     };
     (definition.name.clone(), sql_type.into(), None)
+}
+
+fn unsigned_storage_sql(storage: zelyra_ast::UnsignedStorage, backend: Backend) -> &'static str {
+    if backend != Backend::MariaDb {
+        // PostgreSQL and SQLite have no native unsigned integer family. A
+        // fixed precision numeric column retains UInt's nonnegative range;
+        // the MariaDB importer can preserve the exact Laravel width.
+        return "NUMERIC(20,0)";
+    }
+    match storage {
+        zelyra_ast::UnsignedStorage::TinyInt => "TINYINT UNSIGNED",
+        zelyra_ast::UnsignedStorage::SmallInt => "SMALLINT UNSIGNED",
+        zelyra_ast::UnsignedStorage::MediumInt => "MEDIUMINT UNSIGNED",
+        zelyra_ast::UnsignedStorage::Int => "INT UNSIGNED",
+        zelyra_ast::UnsignedStorage::BigInt => "BIGINT UNSIGNED",
+    }
 }
 
 fn resolve_type(ty: &Type, definitions: &[TypeDef]) -> Type {
@@ -2980,7 +3077,7 @@ pub fn inspect_mariadb(database_url: &str) -> Result<Schema, DatabaseError> {
     let mysql_server = mysql_server_from_version(&server_version);
     let output = run_mariadb_command(
         database_url,
-        "SELECT c.TABLE_NAME, c.COLUMN_NAME, c.DATA_TYPE, c.IS_NULLABLE, c.COLUMN_KEY, c.EXTRA, COALESCE(c.CHARACTER_MAXIMUM_LENGTH, c.DATETIME_PRECISION, ''), COALESCE(c.NUMERIC_PRECISION, ''), COALESCE(c.NUMERIC_SCALE, ''), CASE WHEN c.COLUMN_DEFAULT IS NULL THEN 'N' ELSE CONCAT('V', HEX(CAST(c.COLUMN_DEFAULT AS CHAR CHARACTER SET utf8mb4))) END, EXISTS (SELECT 1 FROM information_schema.KEY_COLUMN_USAGE pk WHERE pk.CONSTRAINT_SCHEMA = c.TABLE_SCHEMA AND pk.TABLE_NAME = c.TABLE_NAME AND pk.COLUMN_NAME = c.COLUMN_NAME AND pk.CONSTRAINT_NAME = 'PRIMARY') FROM information_schema.COLUMNS c WHERE c.TABLE_SCHEMA = DATABASE() AND c.TABLE_NAME NOT IN ('_zelyra_schema_history', '_zelyra_outbox') ORDER BY c.TABLE_NAME, c.ORDINAL_POSITION",
+        "SELECT c.TABLE_NAME, c.COLUMN_NAME, c.COLUMN_TYPE, c.IS_NULLABLE, c.COLUMN_KEY, c.EXTRA, COALESCE(c.CHARACTER_MAXIMUM_LENGTH, c.DATETIME_PRECISION, ''), COALESCE(c.NUMERIC_PRECISION, ''), COALESCE(c.NUMERIC_SCALE, ''), CASE WHEN c.COLUMN_DEFAULT IS NULL THEN 'N' ELSE CONCAT('V', HEX(CAST(c.COLUMN_DEFAULT AS CHAR CHARACTER SET utf8mb4))) END, EXISTS (SELECT 1 FROM information_schema.KEY_COLUMN_USAGE pk WHERE pk.CONSTRAINT_SCHEMA = c.TABLE_SCHEMA AND pk.TABLE_NAME = c.TABLE_NAME AND pk.COLUMN_NAME = c.COLUMN_NAME AND pk.CONSTRAINT_NAME = 'PRIMARY') FROM information_schema.COLUMNS c WHERE c.TABLE_SCHEMA = DATABASE() AND c.TABLE_NAME NOT IN ('_zelyra_schema_history', '_zelyra_outbox') ORDER BY c.TABLE_NAME, c.ORDINAL_POSITION",
         None,
         Some(mysql_server),
     )?;
@@ -5670,19 +5767,41 @@ fn decode_hex_metadata(hex: &str) -> Result<String, DatabaseError> {
 }
 
 fn mariadb_sql_type(data_type: &str, length: &str, precision: &str, scale: &str) -> String {
-    match data_type.to_ascii_lowercase().as_str() {
+    let upper = data_type.to_ascii_uppercase();
+    let unsigned = upper.ends_with(" UNSIGNED");
+    let base = upper
+        .split_once('(')
+        .map_or(upper.as_str(), |(base, _)| base);
+    let integer = match base {
+        "TINYINT" => Some("TINYINT"),
+        "SMALLINT" => Some("SMALLINT"),
+        "MEDIUMINT" => Some("MEDIUMINT"),
+        "INT" | "INTEGER" => Some("INT"),
+        "BIGINT" => Some("BIGINT"),
+        _ => None,
+    };
+    if let Some(integer) = integer {
+        if unsigned {
+            return format!("{integer} UNSIGNED");
+        }
+        if integer == "TINYINT" && (upper.contains("(1)") || length == "1") {
+            return "BOOLEAN".into();
+        }
+        return integer.into();
+    }
+    match base.to_ascii_lowercase().as_str() {
         "varchar" | "char" if !length.is_empty() => {
-            format!("{}({length})", data_type.to_ascii_uppercase())
+            format!("{base}({length})")
         }
         "decimal" | "numeric" if !precision.is_empty() && !scale.is_empty() => {
             format!("DECIMAL({precision},{scale})")
         }
         "decimal" | "numeric" if !precision.is_empty() => format!("DECIMAL({precision})"),
-        "tinyint" => "BOOLEAN".into(),
-        "int" | "integer" => "INTEGER".into(),
+        "tinyint" => "TINYINT".into(),
+        "int" | "integer" => "INT".into(),
         "double" => "DOUBLE".into(),
         "datetime" | "timestamp" | "time" if !length.is_empty() && length != "0" => {
-            format!("{}({length})", data_type.to_ascii_uppercase())
+            format!("{base}({length})")
         }
         "longblob" | "mediumblob" | "tinyblob" => "BLOB".into(),
         other => other.to_uppercase(),
@@ -7785,6 +7904,74 @@ mod tests {
     }
 
     #[test]
+    fn maps_explicit_unsigned_storage_widths_without_changing_uint_values() {
+        let mariadb = schema(
+            "database main { engine: mariadb database: \"unsigned_storage\" } table customers { id: Id primary auto unsigned_storage bigint } table values { id: Id primary auto unsigned_storage bigint tiny: UInt unsigned_storage tinyint small: UInt unsigned_storage smallint medium: UInt unsigned_storage mediumint normal: UInt unsigned_storage int large: UInt unsigned_storage bigint customer: Customer? unsigned_storage bigint }",
+        );
+        let ddl = mariadb.create_sql();
+        for expected in [
+            "BIGINT UNSIGNED",
+            "TINYINT UNSIGNED",
+            "SMALLINT UNSIGNED",
+            "MEDIUMINT UNSIGNED",
+            "INT UNSIGNED",
+        ] {
+            assert!(ddl.contains(expected), "missing {expected} in {ddl}");
+        }
+        assert!(ddl.contains("`customer_id` BIGINT UNSIGNED"), "{ddl}");
+        assert!(
+            ddl.contains("`id` BIGINT UNSIGNED PRIMARY KEY NOT NULL AUTO_INCREMENT"),
+            "{ddl}"
+        );
+
+        for engine in ["postgres", "sqlite"] {
+            let source = format!(
+                "database main {{ engine: {engine} database: \"unsigned_storage\" }} table customers {{ id: Id primary auto unsigned_storage bigint }} table values {{ id: Id primary auto unsigned_storage bigint value: UInt unsigned_storage bigint customer: Customer? unsigned_storage bigint }}"
+            );
+            let schema = schema(&source);
+            assert_eq!(
+                schema.tables[0].columns[0].sql_type,
+                if engine == "postgres" {
+                    "BIGSERIAL"
+                } else {
+                    "INTEGER"
+                }
+            );
+            assert!(schema.tables[0].columns[0].auto);
+            assert_eq!(
+                schema.tables[1].columns[0].sql_type,
+                schema.tables[0].columns[0].sql_type
+            );
+            assert!(schema.tables[1].columns[0].auto);
+            assert_eq!(schema.tables[1].columns[1].sql_type, "NUMERIC(20,0)");
+            assert_eq!(
+                schema.tables[1].columns[2].sql_type,
+                if engine == "postgres" {
+                    "BIGINT"
+                } else {
+                    "INTEGER"
+                }
+            );
+        }
+
+        let invalid = parse(&lex(
+            "database main { engine: mariadb } table values { text: String unsigned_storage int }",
+        ).unwrap()).unwrap();
+        let errors = build_schema(&invalid).unwrap_err();
+        assert!(errors.iter().any(|error| error
+            .message
+            .contains("`unsigned_storage` requires a UInt, Id, or table-relation column")));
+
+        let invalid_relation = parse(&lex(
+            "database main { engine: mariadb } table customers { id: Id primary auto } table invoices { customer: Customer? unsigned_storage int }",
+        ).unwrap()).unwrap();
+        let errors = build_schema(&invalid_relation).unwrap_err();
+        assert!(errors.iter().any(|error| error
+            .message
+            .contains("table relations currently require `unsigned_storage bigint`")));
+    }
+
+    #[test]
     fn detects_destructive_schema_changes() {
         let desired = schema("table users { id: Id primary auto name: String(200) required }");
         let current =
@@ -8759,7 +8946,7 @@ mod tests {
     #[test]
     fn parses_mariadb_default_metadata_without_exposing_encoded_values() {
         let schema = parse_mariadb_columns(
-            "users\tname\tvarchar\tNO\t\t\t80\t\t\tV2768656c6c6f27\nusers\tactive\ttinyint\tNO\t\t\t1\t\t\tV31\nusers\tempty\tvarchar\tNO\t\t\t80\t\t\tV2727\nusers\tmissing\tvarchar\tYES\t\t\t80\t\t\tN\nusers\tdeleted_at\ttimestamp\tYES\t\t\t\t\t\tV4E554C4C\n",
+            "users\tname\tvarchar(80)\tNO\t\t\t80\t\t\tV2768656c6c6f27\nusers\tactive\ttinyint(1)\tNO\t\t\t1\t\t\tV31\nusers\tempty\tvarchar(80)\tNO\t\t\t80\t\t\tV2727\nusers\tmissing\tvarchar(80)\tYES\t\t\t80\t\t\tN\nusers\tdeleted_at\ttimestamp\tYES\t\t\t\t\t\tV4E554C4C\nusers\tuser_id\tbigint(20) unsigned\tNO\t\t\t\t20\t0\tN\nusers\tpriority\tint(10) unsigned\tNO\t\t\t\t10\t0\tN\n",
         )
         .unwrap();
         let columns = &schema.tables[0].columns;
@@ -8769,6 +8956,8 @@ mod tests {
         assert_eq!(columns[3].default, None);
         assert_eq!(columns[4].default, None);
         assert!(!columns[1].primary_key);
+        assert_eq!(columns[5].sql_type, "BIGINT UNSIGNED");
+        assert_eq!(columns[6].sql_type, "INT UNSIGNED");
     }
 
     #[test]

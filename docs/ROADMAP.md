@@ -609,6 +609,21 @@ the existing fail-closed review. This improves schema reconstruction for the
 acceptance project; it does not import the guarded callback's skipped fields
 or claim full Laravel parity.
 
+### 1.2.35 — preserve unsigned integer storage widths
+
+The Laravel schema importer must preserve the MariaDB physical widths of
+`id()`, `foreignId()`, and Laravel's `unsignedTinyInteger()` through
+`unsignedBigInteger()` methods while retaining Zelyra's nominal/value types.
+The `unsigned_storage` table-column modifier is compiler checked and affects
+DDL only: `UInt`, `Id`, and table relations retain their existing Zelyra type
+semantics. MariaDB receives the matching `UNSIGNED` type and live-schema
+comparison recognizes display-width spellings without conflating integer
+widths. Ordinary `UInt` fields use `NUMERIC(20,0)` on PostgreSQL and SQLite;
+auto-incrementing IDs and relation columns keep matching native backend key
+types. This does not claim MariaDB range parity on those backends. Signed
+Laravel integer widths and full schema parity remain separate open importer
+work.
+
 ## Active architecture milestones (1.1.5 through 1.3.0)
 
 These milestones are in progress and unreleased. Items with `[~]` are partially implemented; open subgoals remain explicit. Entries for released versions remain historical evidence.

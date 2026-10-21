@@ -3408,6 +3408,17 @@ table invoices scoped by tenant_id: TenantId {
 3. **Mandantenbezogene Eindeutigkeit:** Mit `unique within tenant` deklarierte Felder erzeugen `UNIQUE KEY (tenant_id, customer_number)`. Unterschiedliche Mandanten können dieselbe Belegnummer führen, innerhalb eines Mandanten sind Duplikate ausgeschlossen.
 4. **Optionale Relationen und kaufmännische Dezimalzahlen:** Optionale Verknüpfungen (`Customer?`) erzeugen typsicher `BIGINT NULL`. `Decimal(p, s)` (z. B. `Decimal(12, 2)`) wird ohne Gleitkomma-Ungenauigkeit gespeichert. Formulare weisen Werte ab, die die deklarierte Präzision oder Skala überschreiten; berechnete Felder werden vor dem Speichern exakt berechnet und auf ihre Zielskala gerundet.
 
+Für importierte Schemas, die eine physische Breite vorzeichenloser Integer
+erhalten müssen, kann eine Spalte
+`unsigned_storage tinyint|smallint|mediumint|int|bigint` verwenden, zum Beispiel
+`customer_id: UInt required unsigned_storage bigint`. Der Modifikator ändert
+nur die SQL-Speicherung und schränkt den Zelyra-Typ `UInt` nicht ein. MariaDB
+erzeugt den passenden `UNSIGNED`-Integer. Gewöhnliche `UInt`-Spalten verwenden
+auf PostgreSQL und SQLite `NUMERIC(20,0)`, weil ihnen eine entsprechende native
+Familie vorzeichenloser Integer fehlt. Auto-Increment-IDs und Relationsspalten
+behalten die passenden nativen Schlüsseltypen des Backends, damit erzeugte IDs
+und Fremdschlüssel kompatibel bleiben.
+
 ## 33. Tabelleninvarianten und Validierungsregeln
 
 Geschäftsregeln gehören direkt an die Datenstruktur. Statt Validierungsregeln in Controllern, Requests und Formularen redundant zu wiederholen, deklariert Zelyra typgeprüfte Invarianten im `table`-Block.

@@ -661,6 +661,20 @@ verbessert die Schema-Rekonstruktion für das Abnahmeprojekt; übersprungene
 Felder werden dadurch nicht importiert und Laravel-Parität wird nicht
 behauptet.
 
+### 1.2.35 — Breiten vorzeichenloser Integer erhalten
+
+Der Laravel-Schemaimporter soll die physischen MariaDB-Breiten von `id()`,
+`foreignId()` und Laravel-Methoden von `unsignedTinyInteger()` bis
+`unsignedBigInteger()` übernehmen, ohne Zelyras nominale/Werttypen zu ändern.
+Der compilergeprüfte Spaltenmodifikator `unsigned_storage` verändert nur das
+DDL für `UInt`, `Id` und Tabellenrelationen. MariaDB erhält den passenden
+`UNSIGNED`-Typ; der Live-Schemavergleich ignoriert veraltete Anzeigebreiten,
+aber nicht die Integerbreite. PostgreSQL und SQLite verwenden
+`NUMERIC(20,0)`; Auto-Increment-IDs und Relationsspalten behalten passende
+native Schlüsseltypen des Backends. MariaDB-Wertebereiche werden dadurch auf
+diesen Backends nicht gleichwertig nachgebildet. Vorzeichenbehaftete
+Laravel-Integerbreiten und vollständige Schemengleichheit bleiben offen.
+
 ## Aktive Architektur-Meilensteine (1.1.5 bis 1.3.0)
 
 Diese Meilensteine sind in Arbeit und noch nicht veröffentlicht. Bereits teilweise umgesetzte Punkte sind mit `[~]` markiert; offene Teilziele bleiben ausdrücklich stehen. Einträge veröffentlichter Versionen bleiben historische Nachweise.
