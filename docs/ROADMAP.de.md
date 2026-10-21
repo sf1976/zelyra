@@ -625,17 +625,18 @@ abgeschlossen.
   unterstützte Bytecode-Operationen fail-closed scheitern und der bisherige
   Standard unverändert bleiben. Ziel ist portabler geprüfter Bytecode, keine
   native Maschinencodegenerierung.
-- [~] **1.3.0 — Web-/Compiler-Folgearbeiten:** SQL-geladene
-  `Option<Record>`-Seitendaten und dynamisches `content_type` für `page` sind
-  in v1.2.33 umgesetzt und getestet. Ein begrenzter Markdown-Renderer ist im
-  Entwurfs-PR #154 implementiert; Merge und Release-Prüfung stehen noch aus.
-  `run_process_piped` ist in v1.2.33 mit Prozess-Allowlist, Timeout und
-  Ausgabelimit umgesetzt und getestet; MIR-/Bytecode- sowie
-  Web-Playground-Parität bleiben offen. Flexible typisierte Erfolgsantworten
-  für API-Handler fehlen noch: Der Erfolgsweg liefert derzeit JSON mit Status
-  200, deklarierte Fehler-Payloads verwenden ihre Statuscodes. `HttpResult<T>`
-  bildet ausgehende HTTP-Antworten ab, keine Antworten eigener API-Handler.
-  Statische Dateien aus `public/` werden bereits unterstützt.
+- [~] **1.3.0 — geprüfte Web-/Compilerfunktionen und offene Punkte:**
+  SQL-geladene `Option<Record>`-Seitendaten, dynamisches `page content_type`,
+  statische `public/`-Assets, begrenztes `run_process_piped` und typisierte
+  erfolgreiche API-Antworten über `ApiResponse<T>` sind auf `main` umgesetzt.
+  Status, Medientyp, Header, OpenAPI-Ausgabe und TypeScript-Client-Unterstützung
+  sind abgedeckt. Piped Prozesseingabe führt für sich allein keinen Zelyra-Code
+  aus und stellt keine Web-Sandbox bereit. Parametrisierte `view`-Properties
+  liegen in PR #151, sicheres begrenztes CommonMark/GFM-Rendering in PR #154;
+  geprüfte statische Locale-Referenzen und `/{locale}/...`-Routenauswahl liegen
+  in PR #155. `HttpResult<T>` bleibt der Ergebnistyp für ausgehende HTTP-Aufrufe.
+  Übersetzungsaufrufe in beliebigen Ausdrücken, Markdown-Inhaltsverzeichnisse,
+  Pluralregeln und Codehervorhebung bleiben offen und benötigen eigene Tests.
 
 **Nach 1.3.0 oder bei ausdrücklicher Neubewertung:** Ein natives AOT-Backend
 bleibt optional und hängt von Benchmarks ab. Kein offener Punkt entfällt stillschweigend: Arbeit, deren

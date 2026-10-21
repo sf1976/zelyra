@@ -575,16 +575,18 @@ security and compatibility gates stated for that milestone.
   completion by switching the default early. This milestone targets portable
   verified Bytecode, not native machine-code generation.
 
-- [~] **1.3.0 — web/compiler follow-ups:** SQL-loaded `Option<Record>` page data
-  and dynamic page `content_type` are implemented and tested in v1.2.33. A
-  bounded Markdown renderer is implemented on draft PR #154; merge and release
-  verification remain open. `run_process_piped` is implemented and tested in
-  v1.2.33 with the existing Process allowlist, timeout, and output limit; MIR/
-  Bytecode and web-playground integration parity remain open. Flexible typed
-  success responses from server API handlers remain open: their current
-  success path returns JSON with status 200, while declared error payloads have
-  their declared statuses. `HttpResult<T>` models outbound HTTP results, not
-  server API responses. Static `public/` asset serving is already implemented.
+- [~] **1.3.0 — verified web/compiler features and remaining gaps:** SQL-loaded
+  `Option<Record>` page data, dynamic `page content_type`, static `public/`
+  assets, bounded `run_process_piped`, and typed successful API responses via
+  `ApiResponse<T>` are implemented on `main`; API response status, media type,
+  headers, OpenAPI output, and TypeScript-client support are covered. Piped
+  process input does not itself execute Zelyra source or provide a web sandbox.
+  Parameterized `view` properties are in PR #151; safe bounded CommonMark/GFM
+  rendering is in PR #154; checked static locale references and `/{locale}/...`
+  route selection are in PR #155. `HttpResult<T>` remains the result type for
+  outbound HTTP calls. Typed translation calls in arbitrary expressions,
+  Markdown table-of-contents generation, plural rules, and code highlighting
+  remain open and need separate acceptance tests.
 
 **Post-1.3.0 or explicitly reprioritized:** a native AOT backend is optional
 and depends on benchmark evidence. No open task is silently dropped: work that cannot meet its release

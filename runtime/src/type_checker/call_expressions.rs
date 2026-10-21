@@ -1627,6 +1627,29 @@ impl Checker<'_> {
             self.expect_type(&Type::Int, &minimum, args[0].span);
             self.expect_type(&Type::Int, &maximum, args[1].span);
             Type::Int
+        } else if name == "api_response" {
+            if args.len() != 3 || type_args.len() > 1 {
+                self.error(
+                    span,
+                    "api_response expects status, String[] headers, body, and at most one body type argument",
+                );
+                return Type::Unknown;
+            }
+            let status = self.check_expr(&args[0], scopes);
+            let headers = self.check_expr(&args[1], scopes);
+            let body = if let Some(expected) = type_args.first() {
+                self.check_type(expected, span);
+                self.check_expr_expected(&args[2], scopes, Some(expected))
+            } else {
+                self.check_expr(&args[2], scopes)
+            };
+            self.expect_type(&Type::Int, &status, args[0].span);
+            self.expect_type(&Type::Array(Box::new(Type::String)), &headers, args[1].span);
+            let body = type_args.first().cloned().unwrap_or(body);
+            Type::Applied {
+                name: "ApiResponse".into(),
+                args: vec![body],
+            }
         } else if name == "http_get" {
             if args.len() != 1 {
                 self.error(span, "http_get expects exactly one String URL");

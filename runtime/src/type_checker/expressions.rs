@@ -407,6 +407,16 @@ impl Checker<'_> {
         }
     }
     pub(super) fn record_field_type(&self, ty: &Type, field: &str) -> Option<Type> {
+        if let Type::Applied { name, args } = ty {
+            if name == "ApiResponse" && args.len() == 1 {
+                return match field {
+                    "status" => Some(Type::Int),
+                    "headers" => Some(Type::Array(Box::new(Type::String))),
+                    "body" => args.first().cloned(),
+                    _ => None,
+                };
+            }
+        }
         if let Type::HttpResult(response) = ty {
             return match field {
                 "status" => Some(Type::Int),
