@@ -35,6 +35,11 @@ struct OutboxHost {
     random_calls: AtomicUsize,
 }
 
+struct FailingOutboxHost {
+    batch: Mutex<Option<(Vec<zelyra_database::Query>, bool)>>,
+    calls: AtomicUsize,
+}
+
 struct ParallelHttpParityHost {
     calls: AtomicUsize,
     urls: Mutex<Vec<String>>,
@@ -135,6 +140,36 @@ impl HostServices for OutboxHost {
     ) -> Result<Vec<zelyra_database::QueryResult>, String> {
         *self.batch.lock().unwrap() = Some((queries.to_vec(), transaction));
         Ok(vec![zelyra_database::QueryResult::default(); queries.len()])
+    }
+}
+
+impl HostServices for FailingOutboxHost {
+    fn unix_time_millis(&self) -> Result<i64, String> {
+        Ok(0)
+    }
+    fn environment_variable(&self, _name: &str) -> Result<Option<String>, String> {
+        Ok(None)
+    }
+    fn fill_random(&self, output: &mut [u8]) -> Result<(), String> {
+        output.fill(0xab);
+        Ok(())
+    }
+    fn validate_database_storage(
+        &self,
+        _url: &str,
+        _schema: &zelyra_database::Schema,
+    ) -> Result<(), String> {
+        Ok(())
+    }
+    fn execute_database_batch(
+        &self,
+        _url: &str,
+        queries: &[zelyra_database::Query],
+        transaction: bool,
+    ) -> Result<Vec<zelyra_database::QueryResult>, String> {
+        self.calls.fetch_add(1, Ordering::SeqCst);
+        *self.batch.lock().unwrap() = Some((queries.to_vec(), transaction));
+        Err("injected atomic transaction failure".into())
     }
 }
 
@@ -923,6 +958,116 @@ fn bytecode_pdf_attachment_survives_encoding_and_uses_the_shared_renderer() {
     assert!(denied_host.batch.lock().unwrap().is_none());
     assert_eq!(denied_host.random_calls.load(Ordering::SeqCst), 0);
     assert_eq!(denied_host.validations.load(Ordering::SeqCst), 0);
+}
+
+#[test]
+fn pdf_outbox_transaction_host_failure_is_differential_and_atomic() {
+    let source = r#"
+            database main { engine: mariadb database: "bytecode_test" }
+            table invoice_audits {
+                id: Id primary auto
+                invoice_number: String(32) required
+            }
+            struct Invoice { number: String }
+            view InvoicePrint { html { <p>{number}</p> } }
+            fn queue(invoice: Invoice) uses Email, Database(write) {
+                invoice_number = invoice.number
+                transaction {
+                    sql { INSERT INTO invoice_audits (invoice_number) VALUES (:invoice_number) }
+                    mail_queue("customer@example.test", "Invoice", "Attached", "invoice.pdf", render_pdf("InvoicePrint", invoice))
+                }
+            }
+            fn main() uses Email, Database(write) {
+                queue(Invoice { number: "INV-ROLLBACK" })
+            }
+        "#;
+    let ast = parse(&lex(source).expect("source lexes")).expect("source parses");
+    let (mir, bytecode) = compile_source(source, "main");
+    let bytecode =
+        decode(&encode(&bytecode).expect("bytecode encodes")).expect("encoded bytecode decodes");
+    let database_url = "mariadb://user:secret@127.0.0.1:3306/bytecode_test";
+    let grants = HashSet::from(["Email".to_owned(), "Database(write)".to_owned()]);
+
+    let ast_host = Arc::new(FailingOutboxHost {
+        batch: Mutex::new(None),
+        calls: AtomicUsize::new(0),
+    });
+    let ast_outcome = zelyra_runtime::execute_captured_with_database_and_host_services(
+        &ast,
+        database_url,
+        ast_host.clone(),
+        Some(&grants),
+        None,
+    );
+
+    let mir_host = Arc::new(FailingOutboxHost {
+        batch: Mutex::new(None),
+        calls: AtomicUsize::new(0),
+    });
+    let mir_outcome =
+        execution::execute_function_captured_with_database_and_host_services_and_policy(
+            &mir,
+            "main",
+            Vec::new(),
+            ExecutionLimits::default(),
+            Some(&grants),
+            None,
+            execution::DatabaseExecution {
+                url: database_url,
+                host_services: mir_host.clone(),
+            },
+        );
+
+    let bytecode_host = Arc::new(FailingOutboxHost {
+        batch: Mutex::new(None),
+        calls: AtomicUsize::new(0),
+    });
+    let bytecode_outcome = execute_with_database_and_host_services_and_policy_captured(
+        &bytecode,
+        Vec::new(),
+        ExecutionLimits::default(),
+        Some(&grants),
+        None,
+        BytecodeDatabaseExecution {
+            url: database_url,
+            schema: &mir.database_schema,
+        },
+        bytecode_host.clone(),
+    );
+
+    let ast_error = ast_outcome.error.expect("AST reports transaction failure");
+    let mir_error = mir_outcome.error.expect("MIR reports transaction failure");
+    let bytecode_error = bytecode_outcome
+        .error
+        .expect("Bytecode reports transaction failure");
+    assert!(ast_error
+        .message
+        .contains("injected atomic transaction failure"));
+    assert_eq!(ast_error, mir_error);
+    assert_eq!(ast_error, bytecode_error);
+    let mut reference_queries: Option<Vec<zelyra_database::Query>> = None;
+    for host in [&ast_host, &mir_host, &bytecode_host] {
+        let (queries, transactional) = host.batch.lock().unwrap().clone().expect("atomic batch");
+        assert!(
+            transactional,
+            "SQL and outbox writes must share a transaction"
+        );
+        assert_eq!(queries.len(), 2);
+        assert_eq!(host.calls.load(Ordering::SeqCst), 1);
+        assert!(queries[0].sql.contains("INSERT INTO invoice_audits"));
+        assert!(queries[1].sql.contains("INSERT INTO `_zelyra_outbox`"));
+        if let Some(expected_queries) = &reference_queries {
+            for (actual, expected) in queries.iter().zip(expected_queries) {
+                assert_eq!(actual.sql, expected.sql);
+                assert_eq!(
+                    format!("{:?}", actual.params),
+                    format!("{:?}", expected.params)
+                );
+            }
+        } else {
+            reference_queries = Some(queries);
+        }
+    }
 }
 
 #[test]
