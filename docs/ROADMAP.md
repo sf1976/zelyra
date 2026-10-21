@@ -25,7 +25,7 @@ telemetry, explicit effects, portable data, resource discipline, and honest
 proof claims guide every phase. The [manifesto](MANIFESTO.md) states the
 principles; the roadmap below tracks what is actually implemented.
 
-The current stable release is 1.2.33, published at https://github.com/sf1976/zelyra/releases/tag/v1.2.33. **Current milestones** is the source of
+The current stable release is 1.2.35, published at https://github.com/sf1976/zelyra/releases/tag/v1.2.35. **Current milestones** is the source of
 near-term commitments. Older numbered release sections below are retained as
 historical planning and evidence; they do not by themselves define current
 release targets. Longer-term ideas remain in the post-1.0 evolution section.
@@ -609,9 +609,10 @@ the existing fail-closed review. This improves schema reconstruction for the
 acceptance project; it does not import the guarded callback's skipped fields
 or claim full Laravel parity.
 
-### 1.2.35 — preserve unsigned integer storage widths
+### ✅ [x] 1.2.35 — preserve unsigned integer storage widths (released)
 
-The Laravel schema importer must preserve the MariaDB physical widths of
+Released as [`v1.2.35`](https://github.com/sf1976/zelyra/releases/tag/v1.2.35).
+The Laravel schema importer preserves the MariaDB physical widths of
 `id()`, `foreignId()`, and Laravel's `unsignedTinyInteger()` through
 `unsignedBigInteger()` methods while retaining Zelyra's nominal/value types.
 The `unsigned_storage` table-column modifier is compiler checked and affects
@@ -623,6 +624,14 @@ auto-incrementing IDs and relation columns keep matching native backend key
 types. This does not claim MariaDB range parity on those backends. Signed
 Laravel integer widths and full schema parity remain separate open importer
 work.
+
+### 1.2.36 — reuse AST runtime context across guarded CRUD actions
+
+The release candidate reuses a single AST interpreter and derived program
+context across a generated guard and its handler while preserving guard
+capabilities, short-circuit behavior, and request-owned SQL transactions. The
+change is an allocation/setup reduction; no performance improvement is claimed
+without a benchmark. Full CI is required before release.
 
 ## Active architecture milestones (1.1.5 through 1.3.0)
 
@@ -919,7 +928,7 @@ compatibility behavior before changing syntax. See the detailed
   operations fail closed and the current default stays in place. This targets
   portable Bytecode, not native machine-code generation. See the detailed
   1.3.0 section above.
-- [~] **Laravel website import — active through 1.3.0:** Replace the removed framework-oriented migrator with a source-evidenced website importer that emits compiler-checked reusable Zelyra modules. Analyze first, require explicit selections, preserve unsupported behavior as findings, and keep the Laravel source read-only. Use `/opt/siedelmann-laravel/app` as the first integration fixture. It must compose with the 1.1.5 package/module system and 1.2.0 operations foundation rather than introducing a parallel plugin/runtime model. The unreleased schema-fidelity follow-up preserves Laravel `mediumText`/`longText` capacity as `String text_storage medium|long` for MariaDB, rejects unsupported MariaDB indexing of those columns, and reports backend-specific PostgreSQL/SQLite limits. This does not make the site importer complete; route behavior and workflow migration remain open.
+- [~] **Laravel website import — active through 1.3.0:** Replace the removed framework-oriented migrator with a source-evidenced website importer that emits compiler-checked reusable Zelyra modules. Analyze first, require explicit selections, preserve unsupported behavior as findings, and keep the Laravel source read-only. Use `/opt/siedelmann-laravel/app` as the first integration fixture. It must compose with the 1.1.5 package/module system and 1.2.0 operations foundation rather than introducing a parallel plugin/runtime model. Release 1.2.34 preserves Laravel `mediumText`/`longText` capacity as `String text_storage medium|long` for MariaDB, rejects unsupported MariaDB indexing of those columns, and reports backend-specific PostgreSQL/SQLite limits. Release 1.2.35 also preserves supported unsigned integer widths. This does not make the site importer complete; route behavior and workflow migration remain open.
 
 - [ ] **1.2.0 — Compose check in the installer:** Installers detect
   Docker Compose v2 or newer and distinguish it from obsolete Python Compose

@@ -13873,25 +13873,61 @@ fn execute_typed_crud_action(
                 ].into_iter().collect(),
             },
         ];
-        if let Some(function) = &mapping.guard_function {
-            let outcome = zelyra_runtime::execute_function_captured_with_capabilities_and_policies(
-                program, function, args.clone(), Some(database_url), grants, policy,
+        if let (Some(guard_function), Some(execute_function)) =
+            (&mapping.guard_function, &mapping.execute_function)
+        {
+            let mut query = |query: &zelyra_database::Query| {
+                transaction.execute(query).map_err(|error| error.to_string())
+            };
+            let outcome = zelyra_runtime::execute_guarded_function_captured_with_transactional_query(
+                program,
+                guard_function,
+                execute_function,
+                args,
+                database_url,
+                grants,
+                policy,
+                &mut query,
             );
             if let Some(error) = outcome.error {
-                return Err(zelyra_database::DatabaseError { message: format!("typed action guard failed: {}", error.message) });
+                let message = if outcome.failed_in_guard {
+                    format!("typed action guard failed: {}", error.message)
+                } else {
+                    format!("typed CRUD action failed: {}", error.message)
+                };
+                return Err(zelyra_database::DatabaseError { message });
             }
-            if outcome.value == Some(RuntimeValue::Bool(true)) {
-                let message = action.guard.as_ref().map(|guard| guard.message.as_str()).unwrap_or("action guard rejected this operation");
-                return Err(zelyra_database::DatabaseError { message: format!("ZELYRA_ACTION_GUARD: {message}") });
+            if outcome.guard_rejected {
+                let message = action
+                    .guard
+                    .as_ref()
+                    .map(|guard| guard.message.as_str())
+                    .unwrap_or("action guard rejected this operation");
+                return Err(zelyra_database::DatabaseError {
+                    message: format!("ZELYRA_ACTION_GUARD: {message}"),
+                });
             }
-        }
-        if let Some(function) = &mapping.execute_function {
-            let mut query = |query: &zelyra_database::Query| transaction.execute(query).map_err(|error| error.to_string());
-            let outcome = zelyra_runtime::execute_function_captured_with_transactional_query(
-                program, function, args, database_url, grants, policy, &mut query,
-            );
-            if let Some(error) = outcome.error {
-                return Err(zelyra_database::DatabaseError { message: format!("typed CRUD action failed: {}", error.message) });
+        } else {
+            if let Some(function) = &mapping.guard_function {
+                let outcome = zelyra_runtime::execute_function_captured_with_capabilities_and_policies(
+                    program, function, args.clone(), Some(database_url), grants, policy,
+                );
+                if let Some(error) = outcome.error {
+                    return Err(zelyra_database::DatabaseError { message: format!("typed action guard failed: {}", error.message) });
+                }
+                if outcome.value == Some(RuntimeValue::Bool(true)) {
+                    let message = action.guard.as_ref().map(|guard| guard.message.as_str()).unwrap_or("action guard rejected this operation");
+                    return Err(zelyra_database::DatabaseError { message: format!("ZELYRA_ACTION_GUARD: {message}") });
+                }
+            }
+            if let Some(function) = &mapping.execute_function {
+                let mut query = |query: &zelyra_database::Query| transaction.execute(query).map_err(|error| error.to_string());
+                let outcome = zelyra_runtime::execute_function_captured_with_transactional_query(
+                    program, function, args, database_url, grants, policy, &mut query,
+                );
+                if let Some(error) = outcome.error {
+                    return Err(zelyra_database::DatabaseError { message: format!("typed CRUD action failed: {}", error.message) });
+                }
             }
         }
         if let (Some(audit_table), Some(audit_event)) =

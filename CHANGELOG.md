@@ -1,5 +1,18 @@
 ## Unreleased
 
+## 1.2.36 — 2026-10-21
+
+- Reuse one AST interpreter and one derived program context when a guarded
+  typed CRUD action proceeds to its handler. Rejected guards still short-circuit
+  the handler; capability-limited guard execution and caller-owned SQL
+  transactions remain intact. This reduces repeated setup work but makes no
+  unmeasured performance claim. / Bei einer freigegebenen typisierten CRUD-
+  Aktion verwenden Guard und Handler denselben AST-Interpreter und denselben
+  abgeleiteten Program-Kontext. Abgewiesene Guards überspringen weiterhin den
+  Handler; Capability-Grenzen der Guard-Ausführung und SQL-Transaktionen des
+  Aufrufers bleiben erhalten. Das vermeidet wiederholte Einrichtung, behauptet
+  aber keine ungemessene Performanceverbesserung.
+
 ## 1.2.35 — 2026-10-21
 
 - Preserve Laravel's unsigned integer storage widths in imported schemas with
@@ -21,6 +34,16 @@
 
 ## 1.2.34 — 2026-10-21
 
+- Preserve selected Laravel `mediumText` and `longText` capacities with
+  `text_storage medium|long` in MariaDB schemas; unsupported indexes on these
+  unbounded columns are rejected, and PostgreSQL/SQLite size differences are
+  reported. This preserves storage for supported fields without claiming full
+  website migration. / Ausgewählte Laravel-`mediumText`- und `longText`-
+  Kapazitäten mit `text_storage medium|long` in MariaDB-Schemas erhalten;
+  nicht unterstützte Indizes auf diesen unbegrenzten Spalten werden abgewiesen
+  und Größenunterschiede bei PostgreSQL/SQLite gemeldet. Dies erhält die
+  Speicherung unterstützter Felder, ohne den vollständigen Webseitenimport zu
+  behaupten.
 - Add the allowlist- and `Process`-capability-gated `run_process_piped` host
   operation. It bounds stdin by the configured process limit, caps the
   per-call timeout at the project policy, and returns typed
