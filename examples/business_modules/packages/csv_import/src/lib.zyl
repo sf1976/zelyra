@@ -122,12 +122,13 @@ pub fn map_columns(
     return Ok(mapped)
 }
 
-/// Supported, explicit CSV conversions. Decimal and temporal parsing are not
-/// inferred from a database schema and are intentionally not represented yet.
+/// Supported, explicit CSV conversions. These are selected by the caller and
+/// are never inferred from a database schema.
 pub enum CsvColumnType {
     Text
     Integer
     Boolean
+    Decimal
 }
 
 /// A converted cell keeps its source-language type instead of storing a
@@ -136,6 +137,7 @@ pub enum CsvValue {
     Text(String)
     Integer(Int)
     Boolean(Bool)
+    Decimal(Decimal)
 }
 
 pub struct CsvColumnMapping {
@@ -149,10 +151,10 @@ pub struct CsvConvertedTable {
     rows: CsvValue[][]
 }
 
-/// Select, rename, and explicitly convert CSV cells. Integer cells use
-/// `parse_int`; Boolean cells accept true/false and 1/0 through `parse_bool`.
-/// Errors include the source row and target column. This is validation only:
-/// it does not infer a schema or write to a database.
+/// Select, rename, and explicitly convert CSV cells. Integer, Boolean, and
+/// Decimal parsing return typed Results; malformed cells produce a regular
+/// conversion error with their source row and target column. This is
+/// validation only: it does not infer a schema or write to a database.
 pub fn convert_columns(
     rows: String[][],
     mappings: CsvColumnMapping[]
@@ -205,6 +207,16 @@ pub fn convert_columns(
                                 }
                                 Err(_) => {
                                     return Err("CSV row " + to_string(row_index + 1) + " column " + target_name + ": invalid boolean")
+                                }
+                            }
+                        }
+                        CsvColumnType::Decimal => {
+                            match parse_decimal(cell) {
+                                Ok(value) => {
+                                    converted_row = append(converted_row, CsvValue::Decimal(value))
+                                }
+                                Err(_) => {
+                                    return Err("CSV row " + to_string(row_index + 1) + " column " + target_name + ": invalid decimal")
                                 }
                             }
                         }

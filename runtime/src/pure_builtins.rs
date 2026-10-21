@@ -86,6 +86,7 @@ pub fn is_pure_builtin(name: &str) -> bool {
             | "text_is_empty"
             | "text_capitalize"
             | "parse_int"
+            | "parse_decimal"
             | "parse_float"
             | "sort"
             | "sort_desc"
@@ -1462,6 +1463,17 @@ pub fn execute_pure_builtin(
                 )))))),
             },
             _ => Err(builtin_error(span, "parse_int expects a String")),
+        },
+        "parse_decimal" if arguments.len() == 1 => match &arguments[0] {
+            Value::String(text) => {
+                match zelyra_ast::decimal::parse_scaled(text, zelyra_ast::decimal::SCALE_DIGITS) {
+                    Some(value) => Ok(Value::Result(Ok(Box::new(Value::Decimal(value))))),
+                    None => Ok(Value::Result(Err(Box::new(Value::String(format!(
+                        "invalid decimal: {text}"
+                    )))))),
+                }
+            }
+            _ => Err(builtin_error(span, "parse_decimal expects a String")),
         },
         "to_float" if arguments.len() == 1 => match &arguments[0] {
             Value::Float(value) if value.is_finite() => Ok(Value::Float(*value)),

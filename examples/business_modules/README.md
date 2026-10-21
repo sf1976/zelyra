@@ -46,14 +46,16 @@ different number of fields.
 `map_columns(rows, source_columns, target_columns)` reorders and renames
 explicitly selected columns, rejecting missing or ambiguous headers and
 duplicate target names. `convert_columns(rows, mappings)` also applies
-explicit, compiler-visible conversions to text, integer, and Boolean cells
-and returns a table of tagged `CsvValue` cells. Invalid values identify their
-CSV row and target column. Integer parsing uses `parse_int`; Boolean parsing
-accepts `true`, `false`, `1`, and `0`. Conversion is never inferred from a
-database schema. Decimal/date/time conversion, database writes, and transactional
-apply remain open. The `csv_import_demo` and `csv_convert_demo` entries exercise
-valid and invalid inputs on AST, MIR, and Bytecode. They are not a preview UI or
-a transactional database importer.
+explicit, compiler-visible conversions to text, integer, Boolean, and Decimal
+cells and returns a table of tagged `CsvValue` cells. Invalid values identify
+their CSV row and target column. Integer parsing uses `parse_int`; Boolean
+parsing accepts `true`, `false`, `1`, and `0`; Decimal parsing uses
+`parse_decimal` and preserves exact base-10 values with up to nine fractional
+digits. Conversion is never inferred from a database schema. Date/time
+conversion, database writes, and transactional apply remain open. The
+`csv_import_demo` and `csv_convert_demo` entries exercise valid and invalid
+inputs on AST, MIR, and Bytecode. They are not a preview UI or a transactional
+database importer.
 
 To run the CSV demonstration without connecting to MariaDB:
 

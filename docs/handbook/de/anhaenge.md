@@ -280,6 +280,7 @@ Die eingebaute Zelyra-Standardbibliothek umfasst Funktionen für Mathematik, Tex
 - `to_int(value: Int | UInt | Float | Bool | String) -> Int`: Konvertiert zu `Int`; Fließkommazahlen werden gegen null abgeschnitten. Nicht endliche oder außerhalb des `Int`-Bereichs liegende Zahlen und ungültige Strings ergeben einen Laufzeitfehler.
 - `to_float(value: Float | Int | UInt | String) -> Float`: Konvertiert zu einer endlichen Fließkommazahl; ungültige oder nicht-endliche Werte ergeben einen Laufzeitfehler.
 - `parse_int(text: String) -> Result<Int, String>`: Parst einen String sicher als `Int` oder liefert `Err(String)`.
+- `parse_decimal(text: String) -> Result<Decimal, String>`: Parst einen exakten Dezimal-String mit optionalem Minuszeichen und höchstens neun Nachkommastellen ohne Fließkomma-Zwischenschritt. Leerraum, führendes Plus, Exponentenschreibweise, Überlauf und ungültige Werte liefern `Err(String)`.
 - `parse_float(text: String) -> Result<Float, String>`: Parst einen String als endliche `Float`-Zahl oder liefert `Err(String)`.
 - `parse_bool(text: String) -> Result<Bool, String>`: Parst `"true"`, `"false"`, `"1"`, `"0"` in einen `Bool`; Groß-/Kleinschreibung der Wörter ist egal, ungültige Werte liefern `Err(String)`.
 

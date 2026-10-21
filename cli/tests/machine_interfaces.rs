@@ -325,7 +325,7 @@ fn reusable_csv_import_package_performs_explicit_typed_conversion_on_all_backend
         String::from_utf8_lossy(&checked.stderr)
     );
 
-    let expected = b"invoice_number\nINV-1\n2\ntrue\nempty note length 0\nCSV row 2 column quantity: invalid integer\n";
+    let expected = b"invoice_number\nINV-1\n2\ntrue\nempty note length 0\n12.34\nCSV row 2 column quantity: invalid integer\nCSV row 2 column amount: invalid decimal\n";
     for backend in ["ast", "mir", "bytecode"] {
         let output = run(&[
             "run",

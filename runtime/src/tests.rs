@@ -153,6 +153,10 @@ fn numeric_conversion_builtins_reject_type_arguments() {
             "fn main() { value = parse_float<Float>(\"1.0\") }",
             "parse_float",
         ),
+        (
+            "fn main() { value = parse_decimal<Decimal>(\"1.0\") }",
+            "parse_decimal",
+        ),
     ] {
         let program = parse(&lex(source).unwrap()).unwrap();
         let errors = check(&program).expect_err("scalar conversions are not generic");
@@ -163,6 +167,43 @@ fn numeric_conversion_builtins_reject_type_arguments() {
             "expected a clear type-argument diagnostic for {builtin}, got {errors:?}"
         );
     }
+}
+
+#[test]
+fn parse_decimal_returns_a_typed_result_for_valid_and_invalid_values() {
+    let source = r#"
+fn main() {
+    print(is_err(parse_decimal("+1.0")))
+    print(is_err(parse_decimal(" 1.0")))
+    print(is_err(parse_decimal("1e2")))
+    print(is_err(parse_decimal("170141183460469231731687303715.884105728")))
+    match parse_decimal("12345678901234567890.123456789") {
+        Ok(value) => { print(value) }
+        Err(_) => { print("unexpected decimal error") }
+    }
+    match parse_decimal("1.0000000001") {
+        Ok(_) => { print("unexpected decimal success") }
+        Err(message) => { print(message) }
+    }
+}
+"#;
+    assert_eq!(
+        run(source),
+        [
+            "true",
+            "true",
+            "true",
+            "true",
+            "12345678901234567890.123456789",
+            "invalid decimal: 1.0000000001"
+        ]
+    );
+
+    let wrong_type = parse(&lex("fn main() { value = parse_decimal(42) }").unwrap()).unwrap();
+    let errors = check(&wrong_type).expect_err("parse_decimal must require a String");
+    assert!(errors.iter().any(|error| {
+        error.message.contains("expected `String`") && error.message.contains("found `Int`")
+    }));
 }
 
 #[test]
