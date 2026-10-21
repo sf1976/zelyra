@@ -27,7 +27,7 @@ Ressourcendisziplin und ehrliche Beweisaussagen leiten jede Phase. Das
 [Manifest](MANIFESTO.de.md) beschreibt die Prinzipien; die Roadmap kennzeichnet
 den tatsächlich implementierten Stand.
 
-Das aktuelle stabile Release ist 1.2.35 und wurde unter https://github.com/sf1976/zelyra/releases/tag/v1.2.35 veröffentlicht. **Aktuelle Meilensteine** ist die
+Das aktuelle stabile Release ist 1.2.36 und wurde unter https://github.com/sf1976/zelyra/releases/tag/v1.2.36 veröffentlicht. **Aktuelle Meilensteine** ist die
 verbindliche Übersicht der nächsten Vorhaben. Ältere, nummerierte Release-
 Abschnitte bleiben als historische Planung und Nachweise erhalten; sie legen
 für sich keine aktuellen Releaseziele fest. Langfristige Ideen stehen im
@@ -675,6 +675,16 @@ aber nicht die Integerbreite. PostgreSQL und SQLite verwenden
 native Schlüsseltypen des Backends. MariaDB-Wertebereiche werden dadurch auf
 diesen Backends nicht gleichwertig nachgebildet. Vorzeichenbehaftete
 Laravel-Integerbreiten und vollständige Schemengleichheit bleiben offen.
+
+### ✅ [x] 1.2.36 — AST-Runtime-Kontext bei geschützten CRUD-Aktionen wiederverwenden (veröffentlicht)
+
+Veröffentlicht als [`v1.2.36`](https://github.com/sf1976/zelyra/releases/tag/v1.2.36).
+Generierter Guard und Handler verwenden denselben AST-Interpreter und
+denselben abgeleiteten Program-Kontext. Capability-Grenzen des Guards,
+Kurzschluss bei Abweisung und Request-eigene SQL-Transaktionen bleiben
+erhalten. Dies reduziert Einrichtungsaufwand; ohne Benchmark wird keine
+Performanceverbesserung behauptet. Linux- und Windows-Artefakte,
+wiederholbare Builds, Attestierungen und vollständige CI bestanden.
 
 ## Aktive Architektur-Meilensteine (1.1.5 bis 1.3.0)
 

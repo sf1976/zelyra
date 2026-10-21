@@ -25,7 +25,7 @@ telemetry, explicit effects, portable data, resource discipline, and honest
 proof claims guide every phase. The [manifesto](MANIFESTO.md) states the
 principles; the roadmap below tracks what is actually implemented.
 
-The current stable release is 1.2.35, published at https://github.com/sf1976/zelyra/releases/tag/v1.2.35. **Current milestones** is the source of
+The current stable release is 1.2.36, published at https://github.com/sf1976/zelyra/releases/tag/v1.2.36. **Current milestones** is the source of
 near-term commitments. Older numbered release sections below are retained as
 historical planning and evidence; they do not by themselves define current
 release targets. Longer-term ideas remain in the post-1.0 evolution section.
@@ -625,13 +625,14 @@ types. This does not claim MariaDB range parity on those backends. Signed
 Laravel integer widths and full schema parity remain separate open importer
 work.
 
-### 1.2.36 — reuse AST runtime context across guarded CRUD actions
+### ✅ [x] 1.2.36 — reuse AST runtime context across guarded CRUD actions (released)
 
-The release candidate reuses a single AST interpreter and derived program
-context across a generated guard and its handler while preserving guard
-capabilities, short-circuit behavior, and request-owned SQL transactions. The
-change is an allocation/setup reduction; no performance improvement is claimed
-without a benchmark. Full CI is required before release.
+Released as [`v1.2.36`](https://github.com/sf1976/zelyra/releases/tag/v1.2.36).
+Generated guard and handler share one AST interpreter and derived program
+context while preserving guard capabilities, short-circuit behavior, and
+request-owned SQL transactions. This reduces setup work; no performance
+improvement is claimed without a benchmark. Linux and Windows artifacts,
+reproducible builds, attestations, and the complete CI passed.
 
 ## Active architecture milestones (1.1.5 through 1.3.0)
 
