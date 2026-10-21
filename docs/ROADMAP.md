@@ -529,9 +529,15 @@ security and compatibility gates stated for that milestone.
   the script strips ambient database URLs and removes its temporary scaffold.
   This check does not run the generated HTTP workflow or connect to a database.
   The scaffold
-  remains an incomplete migration: the latest source-only rerun reports 2,263
-  findings (1,387 manual/unresolved and 876 partial across 572 source files).
-  These are analysis findings, not a migrated-feature count.
+  remains an incomplete migration: a fresh `--all-supported` generation on
+  2026-10-21 passed `zelyra check` for its `main.zyl` scaffold, but generated no
+  route workflow (`no_complete_supported_workflow_found`). It translated two
+  static presentation components, neither wired to a route. The report lists
+  2,268 findings (1,391 manual/unresolved and 877 partial across 575 source
+  files). These are analysis findings, not a migrated-feature count. A
+  standalone translated success component is reused only when the narrowly
+  verified unsubscribe workflow is generated; that workflow was not eligible
+  in this full-project run.
   Laravel, Composer packages, PHP controllers, Blade runtime files, and source
   credentials are not copied. The source-only integration check compares an
   independently traversed PHP source tree with `SOURCE_FILE_PLAN.json` and

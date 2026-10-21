@@ -581,9 +581,15 @@ abgeschlossen.
   wiederholen; das Skript entfernt geerbte Datenbank-URLs aus der Umgebung und
   löscht das temporäre Gerüst. Es startet weder den HTTP-Ablauf noch eine
   Datenbankverbindung. Das Gerüst ist weiterhin keine vollständige Migration:
-  der letzte Source-Only-Lauf meldet nun 2.229 Befunde (1.367 manuell/ungelöst,
-  862 teilweise) in 565 Quelldateien. Diese Zahlen beschreiben
-  Analysebefunde und keine Zahl migrierter Funktionen. Laravel,
+  eine frische Generierung mit `--all-supported` bestand am 21.10.2026
+  `zelyra check` für das Gerüst `main.zyl`, erzeugte aber keinen Routenablauf
+  (`no_complete_supported_workflow_found`). Sie übersetzte zwei statische
+  Darstellungskomponenten, von denen keine mit einer Route verbunden ist. Der
+  Bericht enthält 2.268 Befunde (1.391 manuell/ungelöst und 877 teilweise) in
+  575 Quelldateien. Das sind Analysebefunde, keine Zahl migrierter Funktionen.
+  Eine eigenständige übersetzte Erfolgsansicht wird nur dann wiederverwendet,
+  wenn der eng geprüfte Abmeldeablauf generiert wird; dieser Ablauf war beim
+  vollständigen Projektlauf nicht zulässig. Laravel,
   Composer-Pakete, PHP-Controller, Blade-Laufzeitdateien und Zugangsdaten werden
   nicht kopiert. Der Source-Only-Integrationstest vergleicht den unabhängig
   durchlaufenen PHP-Dateibaum mit `SOURCE_FILE_PLAN.json` und
