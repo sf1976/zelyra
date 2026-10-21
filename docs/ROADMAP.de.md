@@ -715,10 +715,10 @@ Wiederholungen behalten den ersten Zeitstempel. Der Scaffold-Check und der
 MariaDB-/HTTP-E2E-Test mit Wegwerfdatenbank bestanden; geprüft wurden auch
 ungültige Tokens, CSRF-Ablehnung und Isolation eines zweiten Mandanten.
 Generierte Erfolgskomponenten deklarieren ihre Modulabhängigkeiten explizit.
-PR #176 wurde als `6fc61c31` gemergt; seine GitHub-CI bestand. Versionsanhebung
-und taggebundene Release-Prüfungen werden vorbereitet. v1.2.39 bleibt bis zur
-Veröffentlichung das aktuelle stabile Release. Dies importiert einen
-erkannten Ablauf, nicht die Laravel-Webseite oder alle 2.274 Befunde.
+PR #176 wurde als `6fc61c31` gemergt; seine GitHub-CI bestand. v1.2.40 wurde
+mit Linux- und Windows-Archiven, Prüfsummen und SPDX-SBOMs veröffentlicht und
+ist das aktuelle stabile Release. Dies importiert einen erkannten Ablauf,
+nicht die Laravel-Webseite oder alle 2.274 Befunde.
 
 ## Aktive Architektur-Meilensteine (1.1.5 bis 1.3.0)
 
@@ -1044,9 +1044,7 @@ werden. Details stehen im [Projektlayout-Arbeitsplan](release-plans/1.3.0-projec
   Performancemessungen sind noch offen; siehe den ausführlichen Abschnitt zu
   1.3.0.
 - [~] **Import von Laravel-Webseiten — aktiv bis 1.3.0:** Den entfernten Framework-Migrator durch einen quellbelegten Website-Importer ersetzen, der compilergeprüfte, wiederverwendbare Zelyra-Module erzeugt. Zuerst analysieren, vor Generierung eine Auswahl verlangen, nicht unterstützte Abläufe sichtbar erhalten und die Laravel-Quelle unverändert lassen. Erstes Integrationsprojekt ist `/opt/siedelmann-laravel/app`. Der Importer baut auf dem Modul-/Paketsystem von 1.1.5 und der Betriebsgrundlage von 1.2.0 auf; er führt kein paralleles Plugin-/Laufzeitmodell ein. Release 1.2.34 erhält für MariaDB die Kapazität von Laravel-`mediumText`/`longText` über `String text_storage medium|long`, weist nicht unterstützte MariaDB-Indizes auf diesen Spalten zurück und meldet die backendabhängigen PostgreSQL-/SQLite-Grenzen. Release 1.2.35 erhält außerdem unterstützte Breiten vorzeichenloser Integer. Der Website-Import ist damit nicht abgeschlossen; Routenverhalten und Anwendungsabläufe bleiben offen.
-- [~] **1.2.40 Import-Vertikalschnitt:** Die öffentliche Abmelderoute des echten Projekts wird ausschließlich über das geprüfte mandantengebundene `public_token`-Formularprimitiv erzeugt. Scaffold-Prüfung und MariaDB-/HTTP-E2E bestehen; alle übrigen Importbefunde bleiben offen. Das getaggte Release steht noch aus.
-
-- [~] **1.2.40 Import-Vertikalschnitt:** Die öffentliche Abmelderoute des echten Projekts wird ausschließlich über das geprüfte mandantengebundene `public_token`-Formularprimitiv erzeugt. Scaffold-Prüfung und MariaDB-/HTTP-E2E bestehen; alle übrigen Importbefunde bleiben offen und die CI-Prüfungen des Feature-PR laufen noch.
+- [~] **1.2.40 Import-Vertikalschnitt:** Die öffentliche Abmelderoute des echten Projekts wird ausschließlich über das geprüfte mandantengebundene `public_token`-Formularprimitiv erzeugt. Scaffold-Prüfung und MariaDB-/HTTP-E2E bestehen; alle übrigen Importbefunde bleiben offen. Release v1.2.40 ist mit geprüften Linux-/Windows-Artefakten veröffentlicht.
 - [~] **1.2.41 — wörtliche Laravel-Routen für öffentliche Dateien:** Der Importer erkennt jetzt eine eng begrenzte Routenform: eine nicht gruppierte, middlewarefreie `GET`-Closure, deren einzige Anweisung `response()->file(public_path('<wörtlicher Pfad>'))` zurückgibt. Der Routenpfad muss genau der Datei unter `public/` entsprechen. Nur wenn das bestehende begrenzte und symlinksichere Kopieren der Datei gelingt, liefert der generierte Scaffold denselben gleichursprünglichen Pfad über Zelyras vorhandenen statischen Dateiserver aus und dokumentiert die Zuordnung in `STATIC_ASSET_ROUTES.json`. Der Abnahmelauf für `/opt/siedelmann-laravel/app` prüft die bytegenaue Kopie von `/favicon.ico` und `zelyra check` des Scaffolds. Dynamische Antworten, Middleware, Routengruppen, PHP-Logik und beliebige Controller-Routen werden dadurch nicht übersetzt. Dies ist ein kleiner Routenschnitt, keine Laravel-Kompatibilität.
 
 - [ ] **1.2.0 — Compose-Prüfung im Installer:** Die Installer

@@ -660,8 +660,9 @@ repeat requests preserve the first timestamp. The current-project scaffold
 check and disposable MariaDB/HTTP E2E pass, including invalid-token, invalid
 CSRF, idempotency, and second-tenant isolation checks. Generated success
 components carry explicit module dependencies. PR #176 was merged as
-`6fc61c31`; its GitHub CI passed. Version bump and tag-pinned release checks
-are being prepared; v1.2.39 remains the latest published stable release.
+`6fc61c31`; its GitHub CI passed. The v1.2.40 release tag points to merge
+`4d5a58ab`; the published release now includes Linux and Windows archives,
+checksums, and SPDX SBOMs. The latest published stable release is v1.2.40.
 This imports one specifically recognized workflow, not the Laravel website or
 all 2,274 findings.
 
