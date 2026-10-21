@@ -295,6 +295,51 @@ fn compile_source(source: &str, entry: &str) -> (MirProgram, BytecodeProgram) {
 }
 
 #[test]
+fn backend_differential_regression_covers_tuples_records_pipelines_and_match() {
+    let cases = [
+        (
+            "tuple destructuring and if expression",
+            "fn main() -> Int {\n    (left, right) = (7, -3)\n    selected = if left > right { left } else { right }\n    return left + right + selected\n}",
+            Value::Int(11),
+        ),
+        (
+            "generic record copy update",
+            "struct Box<T> { value: T }\nfn main() -> Int {\n    old = Box<Int> { value: 7 }\n    updated = Box<Int> { ..old, value: -3 }\n    return updated.value\n}",
+            Value::Int(-3),
+        ),
+        (
+            "capturing lambda collection pipeline",
+            "fn main() -> Int {\n    factor = 2\n    values = [-3, 1, 4] |> filter(|item| item > 0) |> map(|item| item * factor)\n    mutable total = 0\n    for item in values {\n        total = total + item\n    }\n    return total\n}",
+            Value::Int(10),
+        ),
+        (
+            "enum payload with guarded match expression",
+            "enum Outcome { Value(Int) Empty }\nfn main() -> Int {\n    outcome = Outcome::Value(7)\n    return match outcome {\n        Outcome::Value(item) if item > 0 => item + 2\n        Outcome::Value(item) => item - 2\n        Outcome::Empty => 0\n    }\n}",
+            Value::Int(9),
+        ),
+    ];
+
+    for (name, source, expected_value) in cases {
+        let ast = parse(&lex(source).unwrap_or_else(|error| panic!("{name}: {error:?}")))
+            .unwrap_or_else(|error| panic!("{name}: {error:?}"));
+        let (mir, bytecode) = compile_source(source, "main");
+        let ast_result = zelyra_runtime::execute_function(&ast, "main", Vec::new(), None)
+            .unwrap_or_else(|error| panic!("AST {name}: {}", error.message));
+        let mir_result =
+            execution::execute_function(&mir, "main", Vec::new(), ExecutionLimits::default())
+                .unwrap_or_else(|error| panic!("MIR {name}: {}", error.message));
+        let decoded = decode(&encode(&bytecode).expect("bytecode encodes"))
+            .expect("encoded bytecode verifies after decoding");
+        let bytecode_result = execute(&decoded, Vec::new(), ExecutionLimits::default())
+            .unwrap_or_else(|error| panic!("bytecode {name}: {}", error.message));
+
+        assert_eq!(ast_result, expected_value, "AST {name}");
+        assert_eq!(mir_result.value, expected_value, "MIR {name}");
+        assert_eq!(bytecode_result.value, expected_value, "bytecode {name}");
+    }
+}
+
+#[test]
 fn tenant_scope_metadata_roundtrips_and_bytecode_verifier_blocks_raw_sql() {
     let source = parse(
         &lex("type TenantId = Id table invoices scoped by tenant_id: TenantId { id: Id primary auto tenant_id: TenantId required } fn main() {}").unwrap(),
@@ -7932,39 +7977,119 @@ fn main() {}
 
 #[test]
 fn piped_process_result_executes_consistently_in_bytecode_and_ast() {
-    let source = "fn run() -> String uses Process { return run_process_piped(\"/usr/bin/cat\", [\"-\"], \"hello from stdin\", 1000).stdout } fn main() {}";
+    type ProcessRequest = (String, Vec<String>, String, u64, usize);
+
+    struct PipedProcessHost {
+        calls: Mutex<Vec<ProcessRequest>>,
+    }
+
+    impl HostServices for PipedProcessHost {
+        fn unix_time_millis(&self) -> Result<i64, String> {
+            Ok(0)
+        }
+
+        fn environment_variable(&self, _name: &str) -> Result<Option<String>, String> {
+            Ok(None)
+        }
+
+        fn fill_random(&self, output: &mut [u8]) -> Result<(), String> {
+            output.fill(0);
+            Ok(())
+        }
+
+        fn run_process_piped(
+            &self,
+            command: &str,
+            arguments: &[String],
+            stdin: &str,
+            timeout_ms: u64,
+            max_output_bytes: usize,
+        ) -> Result<zelyra_runtime::HostProcessResult, String> {
+            self.calls.lock().unwrap().push((
+                command.to_owned(),
+                arguments.to_vec(),
+                stdin.to_owned(),
+                timeout_ms,
+                max_output_bytes,
+            ));
+            Ok(zelyra_runtime::HostProcessResult {
+                exit_code: 7,
+                stdout: format!("received: {stdin}"),
+                stderr: "controlled test stderr".into(),
+            })
+        }
+    }
+
+    let source = r#"
+fn run() -> ProcessResult uses Process {
+    return run_process_piped("approved-tool", ["--mode", "safe"], "hello from stdin", 1000)
+}
+fn denied() -> ProcessResult uses Process {
+    return run_process_piped("other-tool", ["unused"], "must not reach the host", 1000)
+}
+fn main() {}
+"#;
     let ast = parse(&lex(source).unwrap()).unwrap();
-    let (mir, bytecode) = compile_source(source, "run");
+    let mir = crate::lower(&ast).unwrap();
+    let bytecode = compile(&mir, "run").unwrap();
     let grants = HashSet::from(["Process".to_owned()]);
     let policy = RuntimePolicy {
         process: Some(ProcessPolicy {
-            allowed_commands: vec!["/usr/bin/cat".into()],
-            timeout_ms: 2_000,
+            allowed_commands: vec!["approved-tool".into()],
+            timeout_ms: 200,
             max_output_bytes: 128,
         }),
         ..RuntimePolicy::default()
     };
+    let vm_host = Arc::new(PipedProcessHost {
+        calls: Mutex::new(Vec::new()),
+    });
     let vm = execute_with_host_services_and_policy_captured(
         &bytecode,
         Vec::new(),
         ExecutionLimits::default(),
         Some(&grants),
         Some(&policy),
-        Arc::new(SystemHostServices),
+        vm_host.clone(),
     );
-    let ast_result = zelyra_runtime::execute_function_with_capabilities_and_policies(
-        &ast,
-        "run",
-        Vec::new(),
-        None,
-        Some(&grants),
-        Some(&policy),
-    )
-    .unwrap();
+    let ast_host = Arc::new(PipedProcessHost {
+        calls: Mutex::new(Vec::new()),
+    });
+    let ast_result =
+        zelyra_runtime::execute_function_captured_with_host_services_and_capabilities_and_policies(
+            &ast,
+            "run",
+            Vec::new(),
+            None,
+            Some(&grants),
+            Some(&policy),
+            ast_host.clone(),
+        );
     assert_eq!(vm.error, None);
-    assert_eq!(vm.value, Some(ast_result));
-    assert_eq!(vm.value, Some(Value::String("hello from stdin".into())));
+    assert_eq!(ast_result.error, None);
+    assert_eq!(vm.value, ast_result.value);
+    assert_eq!(
+        vm.value,
+        Some(Value::Object {
+            type_name: "ProcessResult".into(),
+            type_args: Vec::new(),
+            fields: HashMap::from([
+                ("exit_code".into(), Value::Int(7)),
+                (
+                    "stdout".into(),
+                    Value::String("received: hello from stdin".into())
+                ),
+                (
+                    "stderr".into(),
+                    Value::String("controlled test stderr".into())
+                ),
+            ]),
+        })
+    );
 
+    let mir_host = Arc::new(PipedProcessHost {
+        calls: Mutex::new(Vec::new()),
+    });
     let mir_result = execution::execute_function_with_host_services_and_policy(
         &mir,
         "run",
@@ -7972,8 +8097,65 @@ fn piped_process_result_executes_consistently_in_bytecode_and_ast() {
         ExecutionLimits::default(),
         Some(&grants),
         Some(&policy),
-        Arc::new(SystemHostServices),
+        mir_host.clone(),
     )
     .unwrap();
-    assert_eq!(mir_result.value, Value::String("hello from stdin".into()));
+    assert_eq!(mir_result.value, vm.value.clone().unwrap());
+
+    let expected_call = vec![(
+        "approved-tool".into(),
+        vec!["--mode".into(), "safe".into()],
+        "hello from stdin".into(),
+        200,
+        128,
+    )];
+    assert_eq!(*vm_host.calls.lock().unwrap(), expected_call);
+    assert_eq!(*ast_host.calls.lock().unwrap(), expected_call);
+    assert_eq!(*mir_host.calls.lock().unwrap(), expected_call);
+
+    // Denied commands must produce errors in all backends without reaching
+    // the injected process host.
+    let denied_bytecode = compile(&mir, "denied").unwrap();
+    let denied_vm_host = Arc::new(PipedProcessHost {
+        calls: Mutex::new(Vec::new()),
+    });
+    let denied_vm = execute_with_host_services_and_policy_captured(
+        &denied_bytecode,
+        Vec::new(),
+        ExecutionLimits::default(),
+        Some(&grants),
+        Some(&policy),
+        denied_vm_host.clone(),
+    );
+    let denied_ast_host = Arc::new(PipedProcessHost {
+        calls: Mutex::new(Vec::new()),
+    });
+    let denied_ast =
+        zelyra_runtime::execute_function_captured_with_host_services_and_capabilities_and_policies(
+            &ast,
+            "denied",
+            Vec::new(),
+            None,
+            Some(&grants),
+            Some(&policy),
+            denied_ast_host.clone(),
+        );
+    let denied_mir_host = Arc::new(PipedProcessHost {
+        calls: Mutex::new(Vec::new()),
+    });
+    let denied_mir = execution::execute_function_with_host_services_and_policy(
+        &mir,
+        "denied",
+        Vec::new(),
+        ExecutionLimits::default(),
+        Some(&grants),
+        Some(&policy),
+        denied_mir_host.clone(),
+    );
+    assert!(denied_vm.error.is_some());
+    assert!(denied_ast.error.is_some());
+    assert!(denied_mir.is_err());
+    assert!(denied_vm_host.calls.lock().unwrap().is_empty());
+    assert!(denied_ast_host.calls.lock().unwrap().is_empty());
+    assert!(denied_mir_host.calls.lock().unwrap().is_empty());
 }
