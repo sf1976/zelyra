@@ -461,6 +461,8 @@ impl<'a> Parser<'a> {
         let mut input = Vec::new();
         let mut validates_table = None;
         let mut output = None;
+        let mut responses = Vec::new();
+        let mut saw_responses = false;
         let mut errors = Vec::new();
         let mut version = None;
         let mut deprecated = false;
@@ -562,6 +564,41 @@ impl<'a> Parser<'a> {
             } else if self.at(&TokenKind::Output) {
                 self.advance();
                 output = Some(self.type_name()?);
+            } else if self.at_word("responses") {
+                let responses_start = self.current().span;
+                let (_, _) = self.ident("`responses`")?;
+                if saw_responses {
+                    return Err(ParseError {
+                        message: "API responses may only be declared once".into(),
+                        span: responses_start,
+                    });
+                }
+                saw_responses = true;
+                self.expect(TokenKind::LBrace, "`{` after API responses")?;
+                self.skip_newlines();
+                while !self.at(&TokenKind::RBrace) && !self.at(&TokenKind::Eof) {
+                    let response_start = self.current().span;
+                    let status =
+                        match self.current().kind.clone() {
+                            TokenKind::Int(value) if (200..=299).contains(&value) => {
+                                self.advance();
+                                value as u16
+                            }
+                            _ => return self.error(
+                                "expected a successful HTTP status code (200-299) in API responses",
+                            ),
+                        };
+                    let content_type_span = self.current().span;
+                    let content_type = self.string_value("API response content type")?;
+                    let span = response_start.join(content_type_span);
+                    responses.push(ApiSuccessResponse {
+                        status,
+                        content_type,
+                        span,
+                    });
+                    self.skip_newlines();
+                }
+                self.expect(TokenKind::RBrace, "`}` after API responses")?;
             } else if self.at(&TokenKind::Errors) {
                 self.advance();
                 self.expect(TokenKind::LBrace, "`{` after `errors`")?;
@@ -592,7 +629,7 @@ impl<'a> Parser<'a> {
                 self.expect(TokenKind::RBrace, "`}` after API errors")?;
             } else {
                 return self
-                    .error("expected `handler`, `requires auth`, `permits`, `validates`, `version`, `deprecated`, `rate_limit`, `input`, `output`, or `errors` in API definition");
+                    .error("expected `handler`, `requires auth`, `permits`, `validates`, `version`, `deprecated`, `rate_limit`, `input`, `output`, `responses`, or `errors` in API definition");
             }
             self.skip_newlines();
         }
@@ -609,6 +646,7 @@ impl<'a> Parser<'a> {
             input,
             validates_table,
             output,
+            responses,
             errors,
             version,
             deprecated,

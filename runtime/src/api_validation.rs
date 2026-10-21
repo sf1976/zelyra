@@ -36,6 +36,7 @@ pub fn check_apis(program: &Program) -> Result<(), Vec<ApiDiagnostic>> {
         "Duration",
         "Unit",
         "HttpResponse",
+        "ApiResponse",
         "HttpError",
         "HttpResult",
     ]
@@ -57,7 +58,7 @@ pub fn check_apis(program: &Program) -> Result<(), Vec<ApiDiagnostic>> {
             known_types.insert(singular);
         }
     }
-    let generic_arities = program
+    let mut generic_arities = program
         .records
         .iter()
         .map(|record| (record.name.clone(), record.type_params.len()))
@@ -68,6 +69,7 @@ pub fn check_apis(program: &Program) -> Result<(), Vec<ApiDiagnostic>> {
                 .map(|definition| (definition.name.clone(), definition.type_params.len())),
         )
         .collect::<HashMap<_, _>>();
+    generic_arities.insert("ApiResponse".into(), 1);
 
     let mut routes = HashSet::new();
     let functions = program
@@ -320,6 +322,73 @@ pub fn check_apis(program: &Program) -> Result<(), Vec<ApiDiagnostic>> {
                 message: format!("API output: {message}"),
                 span: api.span,
             });
+        }
+        let response_body = api_response_body_type(&api.output);
+        if response_body.is_some() && api.responses.is_empty() {
+            errors.push(ApiDiagnostic {
+                message: "API output `ApiResponse<T>` requires a `responses` block declaring allowed successful statuses and content types".into(),
+                span: api.span,
+            });
+        }
+        if response_body.is_none() && !api.responses.is_empty() {
+            errors.push(ApiDiagnostic {
+                message: "API `responses` declarations require output `ApiResponse<T>` or `Result<ApiResponse<T>, E>`".into(),
+                span: api.responses[0].span,
+            });
+        }
+        let mut response_statuses = HashSet::new();
+        for response in &api.responses {
+            if !response_statuses.insert(response.status) {
+                errors.push(ApiDiagnostic {
+                    message: format!(
+                        "duplicate API successful response status `{}`",
+                        response.status
+                    ),
+                    span: response.span,
+                });
+            }
+            let media = response.content_type.parse::<mime::Mime>();
+            if media.is_err()
+                || response
+                    .content_type
+                    .bytes()
+                    .any(|byte| byte.is_ascii_control())
+            {
+                errors.push(ApiDiagnostic {
+                    message: "API response content type must be a valid media type without control characters".into(),
+                    span: response.span,
+                });
+            } else if let Ok(media) = media {
+                let media_type = format!("{}/{}", media.type_(), media.subtype());
+                if media.type_() == mime::STAR
+                    || media.subtype() == mime::STAR
+                    || ["text/html", "text/javascript", "application/javascript"]
+                        .contains(&media_type.as_str())
+                {
+                    errors.push(ApiDiagnostic {
+                        message: "API response content type must be concrete and non-executable; HTML and JavaScript require a page route".into(),
+                        span: response.span,
+                    });
+                }
+                let json_media =
+                    media_type == "application/json" || media.subtype().as_str().ends_with("+json");
+                let string_media = ["text/plain", "text/csv", "application/xml", "text/xml"]
+                    .contains(&media_type.as_str())
+                    || media.subtype().as_str().ends_with("+xml");
+                if !(json_media || string_media) {
+                    errors.push(ApiDiagnostic {
+                        message: format!("unsupported API response content type `{}`; use JSON, plain text, CSV, or XML", response.content_type),
+                        span: response.span,
+                    });
+                } else if string_media && response_body.is_some_and(|body| *body != Type::String) {
+                    errors.push(ApiDiagnostic {
+                        message:
+                            "plain-text, CSV, and XML API responses require `ApiResponse<String>`"
+                                .into(),
+                        span: response.span,
+                    });
+                }
+            }
         }
         if let Some(handler) = &api.handler {
             let Some(function) = functions.get(handler.as_str()) else {
@@ -927,6 +996,17 @@ pub(crate) fn contains_class_reference_type(ty: &Type, program: &Program) -> boo
     }
 
     contains(ty, program, &mut HashSet::new())
+}
+
+fn api_response_body_type(ty: &Type) -> Option<&Type> {
+    let payload = match ty {
+        Type::Result(ok, _) => ok.as_ref(),
+        other => other,
+    };
+    match payload {
+        Type::Applied { name, args } if name == "ApiResponse" && args.len() == 1 => args.first(),
+        _ => None,
+    }
 }
 
 fn api_path_parameters(path: &str) -> Result<Vec<String>, String> {

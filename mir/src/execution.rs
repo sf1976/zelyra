@@ -1659,6 +1659,47 @@ impl Machine<'_> {
                 type_args,
                 args,
                 ..
+            } if name == "api_response" => {
+                if args.len() != 3 || type_args.len() > 1 {
+                    return Err(runtime_error(
+                        span,
+                        "api_response expects status, headers, and body",
+                    ));
+                }
+                let status = self.expression(args[0], locals, depth, span)?;
+                let headers = self.expression(args[1], locals, depth, span)?;
+                let body = self.expression(args[2], locals, depth, span)?;
+                let Value::Int(status) = status else {
+                    return Err(runtime_error(span, "api_response status must be Int"));
+                };
+                let Value::Array(headers) = headers else {
+                    return Err(runtime_error(span, "api_response headers must be String[]"));
+                };
+                let headers = headers
+                    .into_iter()
+                    .map(|header| match header {
+                        Value::String(header) => Ok(header),
+                        _ => Err(runtime_error(span, "api_response headers must be String[]")),
+                    })
+                    .collect::<Result<Vec<_>, _>>()?;
+                if type_args
+                    .first()
+                    .is_some_and(|expected| expected != &body.ty())
+                {
+                    return Err(runtime_error(
+                        span,
+                        "api_response body does not match its type argument",
+                    ));
+                }
+                zelyra_runtime::api_response_value(status, headers, body)
+                    .map_err(|error| runtime_error(span, error))
+            }
+            MirExpressionKind::Call {
+                name,
+                function: None,
+                type_args,
+                args,
+                ..
             } if matches!(
                 name.as_str(),
                 "now"

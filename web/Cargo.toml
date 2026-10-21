@@ -22,7 +22,7 @@ ring.workspace = true
 subtle.workspace = true
 zeroize.workspace = true
 url.workspace = true
-mime = "0.3"
+mime.workspace = true
 
 [dev-dependencies]
 zelyra-lexer.workspace = true

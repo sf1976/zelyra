@@ -705,6 +705,94 @@ pub fn http_response_value_from_host(response: HostHttpResponse) -> Result<Value
     })
 }
 
+/// Build the typed response envelope used by API handlers. Header names and
+/// values are checked here so AST, MIR, and Bytecode reject injection and
+/// hop-by-hop headers consistently before a response reaches the web server.
+pub fn api_response_value(status: i64, headers: Vec<String>, body: Value) -> Result<Value, String> {
+    if !(200..=299).contains(&status) {
+        return Err("api_response status must be between 200 and 299; use the API `errors` contract for failures".into());
+    }
+    let mut checked_headers = Vec::with_capacity(headers.len());
+    let mut content_types = 0usize;
+    for header in headers {
+        let Some((name, value)) = header.split_once(':') else {
+            return Err("api_response header must use `Name: value` format".into());
+        };
+        let name = name.trim();
+        let value = value.trim();
+        if name.is_empty()
+            || !name
+                .bytes()
+                .all(|byte| byte.is_ascii_alphanumeric() || b"!#$%&'*+-.^_`|~".contains(&byte))
+            || value
+                .bytes()
+                .any(|byte| byte.is_ascii_control() && byte != b'\t')
+        {
+            return Err("api_response contains an invalid header name or value".into());
+        }
+        if [
+            "content-length",
+            "transfer-encoding",
+            "connection",
+            "keep-alive",
+            "trailer",
+            "upgrade",
+            "set-cookie",
+        ]
+        .iter()
+        .any(|forbidden| name.eq_ignore_ascii_case(forbidden))
+        {
+            return Err(
+                "api_response cannot set a hop-by-hop, content-length, or cookie header".into(),
+            );
+        }
+        if !name.eq_ignore_ascii_case("content-type")
+            && ![
+                "cache-control",
+                "content-disposition",
+                "content-language",
+                "etag",
+                "last-modified",
+                "link",
+                "location",
+                "retry-after",
+                "vary",
+                "x-request-id",
+            ]
+            .iter()
+            .any(|allowed| name.eq_ignore_ascii_case(allowed))
+        {
+            return Err(format!(
+                "api_response header `{name}` is not in the supported response header allowlist"
+            ));
+        }
+        if name.eq_ignore_ascii_case("location")
+            && (!value.starts_with('/')
+                || value.starts_with("//")
+                || value.contains('\\')
+                || value.chars().any(char::is_control))
+        {
+            return Err("api_response Location must be a same-origin absolute path".into());
+        }
+        if name.eq_ignore_ascii_case("content-type") {
+            content_types += 1;
+            if content_types > 1 {
+                return Err("api_response may set Content-Type only once".into());
+            }
+        }
+        checked_headers.push(Value::String(format!("{name}: {value}")));
+    }
+    Ok(Value::Object {
+        type_name: "ApiResponse".into(),
+        type_args: vec![body.ty()],
+        fields: HashMap::from([
+            ("status".into(), Value::Int(status)),
+            ("headers".into(), Value::Array(checked_headers)),
+            ("body".into(), body),
+        ]),
+    })
+}
+
 /// Deliver one already-created outbox event through the configured host.
 ///
 /// This shared policy boundary keeps AST and MIR execution consistent. The
@@ -1021,6 +1109,7 @@ fn is_runtime_builtin(name: &str) -> bool {
         "print"
             | "assert"
             | "render_pdf"
+            | "api_response"
             | "len"
             | "range"
             | "array_replace_result"
