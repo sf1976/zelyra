@@ -64,6 +64,28 @@ def validate_changelog(root: Path) -> None:
         raise ValueError("CHANGELOG.md has no Unreleased section")
 
 
+def validate_release_workflow(root: Path) -> None:
+    workflow = (root / ".github/workflows/release.yml").read_text(encoding="utf-8")
+    lines = workflow.splitlines()
+    try:
+        body_index = next(i for i, line in enumerate(lines) if line.strip() == "body: |")
+    except StopIteration as error:
+        raise ValueError("release workflow has no GitHub release body") from error
+
+    body_lines: list[str] = []
+    for line in lines[body_index + 1 :]:
+        if line.strip() and not line.startswith("            "):
+            break
+        body_lines.append(line)
+    body_size = len("\n".join(body_lines))
+    # GitHub rejects oversized expressions in action inputs before dispatching
+    # the release workflow. Keep margin below its 21,000 character limit.
+    if body_size > 20_000:
+        raise ValueError(
+            f"GitHub release body template is too large ({body_size} characters; maximum 20000)"
+        )
+
+
 def validate_binary(binary: Path, version: str) -> None:
     if not binary.is_file():
         raise ValueError(f"release binary does not exist: {binary}")
@@ -94,6 +116,7 @@ def main() -> int:
         version = workspace_version(args.root)
         validate_lock(args.root, version)
         validate_changelog(args.root)
+        validate_release_workflow(args.root)
         expected_tag = f"v{version}"
         if args.tag is not None:
             if not TAG.fullmatch(args.tag):
