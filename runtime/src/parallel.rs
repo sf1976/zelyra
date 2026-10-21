@@ -43,8 +43,7 @@ impl Interpreter<'_, '_> {
                 .iter()
                 .map(|(name, expression, branch_span)| {
                     let mut child = Interpreter {
-                        functions: self.functions.clone(),
-                        view_definitions: self.view_definitions.clone(),
+                        program_context: Arc::clone(&self.program_context),
                         output: Vec::new(),
                         next_class_object_id: Arc::clone(&self.next_class_object_id),
                         parallel_worker: true,
@@ -54,14 +53,8 @@ impl Interpreter<'_, '_> {
                         database_url: self.database_url.clone(),
                         database_transaction: self.database_transaction.clone(),
                         transactional_query: None,
-                        storage_schema: self.storage_schema.clone(),
                         storage_checked: self.storage_checked,
-                        scoped_tables: self.scoped_tables.clone(),
                         execution_context: self.execution_context.clone(),
-                        record_definitions: self.record_definitions.clone(),
-                        sql_record_definitions: self.sql_record_definitions.clone(),
-                        type_aliases: self.type_aliases.clone(),
-                        enum_definitions: self.enum_definitions.clone(),
                         active_capabilities: self.active_capabilities.clone(),
                         active_type_substitutions: self.active_type_substitutions.clone(),
                     };

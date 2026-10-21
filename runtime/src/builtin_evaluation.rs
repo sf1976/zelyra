@@ -134,6 +134,7 @@ impl<'program, 'services> Interpreter<'program, 'services> {
                 }
             };
             let view = self
+                .program_context
                 .view_definitions
                 .get(&view_name)
                 .cloned()
@@ -211,9 +212,13 @@ impl<'program, 'services> Interpreter<'program, 'services> {
                     ))
                 }
             };
-            let definition = self.record_definitions.get(&type_name).ok_or_else(|| {
-                self.runtime_error(span, format!("unknown class type `{type_name}`"))
-            })?;
+            let definition = self
+                .program_context
+                .record_definitions
+                .get(&type_name)
+                .ok_or_else(|| {
+                    self.runtime_error(span, format!("unknown class type `{type_name}`"))
+                })?;
             if !definition.is_class {
                 return Err(self.runtime_error(span, "field assignment requires a class instance"));
             }
@@ -297,6 +302,7 @@ impl<'program, 'services> Interpreter<'program, 'services> {
                 ));
             }
             let definition = self
+                .program_context
                 .record_definitions
                 .get(&type_name)
                 .cloned()
@@ -376,9 +382,13 @@ impl<'program, 'services> Interpreter<'program, 'services> {
                     self.runtime_error(span, "record_with expects a record and String field name")
                 );
             };
-            let definition = self.record_definitions.get(&type_name).ok_or_else(|| {
-                self.runtime_error(span, format!("unknown record type `{type_name}`"))
-            })?;
+            let definition = self
+                .program_context
+                .record_definitions
+                .get(&type_name)
+                .ok_or_else(|| {
+                    self.runtime_error(span, format!("unknown record type `{type_name}`"))
+                })?;
             let field = definition
                 .fields
                 .iter()

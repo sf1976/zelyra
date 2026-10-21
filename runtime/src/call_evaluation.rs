@@ -361,7 +361,12 @@ impl<'program, 'services> Interpreter<'program, 'services> {
             return self.invoke_callback(&function, values, span);
         }
         if let Some((enum_name, variant)) = name.rsplit_once("::") {
-            if let Some(definition) = self.enum_definitions.get(enum_name).cloned() {
+            if let Some(definition) = self
+                .program_context
+                .enum_definitions
+                .get(enum_name)
+                .cloned()
+            {
                 let payload_types = definition
                     .variant_payloads
                     .iter()
@@ -471,7 +476,7 @@ impl<'program, 'services> Interpreter<'program, 'services> {
                 });
             }
         }
-        if !is_runtime_builtin(name) && self.functions.contains_key(name) {
+        if !is_runtime_builtin(name) && self.program_context.functions.contains_key(name) {
             let values = args
                 .iter()
                 .map(|arg| self.eval(arg, env))

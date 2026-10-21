@@ -18,6 +18,7 @@ impl<'program, 'services> Interpreter<'program, 'services> {
         span: Span,
     ) -> Result<Value, RuntimeError> {
         let function = self
+            .program_context
             .functions
             .get(name)
             .copied()

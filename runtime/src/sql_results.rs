@@ -227,6 +227,7 @@ impl Interpreter<'_, '_> {
         span: Span,
     ) -> Result<Value, RuntimeError> {
         let enums = self
+            .program_context
             .enum_definitions
             .keys()
             .cloned()
@@ -234,8 +235,8 @@ impl Interpreter<'_, '_> {
         decode_native_sql_rows(
             value,
             target,
-            &self.sql_record_definitions,
-            &self.type_aliases,
+            &self.program_context.sql_record_definitions,
+            &self.program_context.type_aliases,
             &enums,
             span,
         )

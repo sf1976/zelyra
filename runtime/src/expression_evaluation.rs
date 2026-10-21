@@ -15,9 +15,14 @@ impl<'program, 'services> Interpreter<'program, 'services> {
             ExprKind::String(v) => Ok(Value::String(v.clone())),
             ExprKind::Char(v) => Ok(Value::Char(*v)),
             ExprKind::FunctionValue(name) => {
-                let function = self.functions.get(name).copied().ok_or_else(|| {
-                    self.runtime_error(expr.span, format!("unknown function value `{name}`"))
-                })?;
+                let function = self
+                    .program_context
+                    .functions
+                    .get(name)
+                    .copied()
+                    .ok_or_else(|| {
+                        self.runtime_error(expr.span, format!("unknown function value `{name}`"))
+                    })?;
                 if !function.type_params.is_empty() {
                     return Err(self.runtime_error(
                         expr.span,
@@ -86,7 +91,7 @@ impl<'program, 'services> Interpreter<'program, 'services> {
                     return Ok(Value::Option(None));
                 }
                 if let Some((type_name, variant)) = name.rsplit_once("::") {
-                    if let Some(definition) = self.enum_definitions.get(type_name) {
+                    if let Some(definition) = self.program_context.enum_definitions.get(type_name) {
                         let payload_types = definition
                             .variant_payloads
                             .iter()
@@ -206,7 +211,7 @@ impl<'program, 'services> Interpreter<'program, 'services> {
                 Ok(value)
             }
             ExprKind::Sql { query, result_type } => {
-                check_scoped_sql(query, &self.scoped_tables)
+                check_scoped_sql(query, &self.program_context.scoped_tables)
                     .map_err(|error| self.runtime_error(expr.span, error))?;
                 let capability = sql_required_capability(query);
                 self.require_runtime_capability(capability, "SQL access", expr.span)?;

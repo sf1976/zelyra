@@ -15,9 +15,13 @@ impl Interpreter<'_, '_> {
         for (field, value) in fields {
             values.insert(field.clone(), self.eval(value, env)?);
         }
-        let definition = self.record_definitions.get(type_name).ok_or_else(|| {
-            self.runtime_error(span, format!("unknown record type `{type_name}`"))
-        })?;
+        let definition = self
+            .program_context
+            .record_definitions
+            .get(type_name)
+            .ok_or_else(|| {
+                self.runtime_error(span, format!("unknown record type `{type_name}`"))
+            })?;
         for field in &definition.fields {
             if !values.contains_key(&field.name) && matches!(&field.ty, Type::Option(_)) {
                 values.insert(field.name.clone(), Value::Option(None));
