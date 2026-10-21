@@ -1892,6 +1892,82 @@ fn composes_a_page_inside_its_named_view() {
 }
 
 #[test]
+fn composes_typed_view_properties_into_page_metadata_and_escapes_values() {
+    let source = r#"
+        view SiteShell {
+            props { title: String description: String? }
+            html {
+                <html><head><title>{title}</title><meta name="description" content="{description}" /></head>
+                <body><slot /></body></html>
+            }
+        }
+        page "/handbook" {
+            view: SiteShell(title: "Zelyra & Business", description: "Types < security")
+            html { <h1>Handbook</h1> }
+        }
+    "#;
+    let program = parse(&lex(source).unwrap()).unwrap();
+    assert!(validate_views("view-props.zyl", &program));
+    let html = compose_page_view(&program, &program.pages[0]);
+    assert!(html.contains("<title>Zelyra &amp; Business</title>"));
+    assert!(html.contains("content=\"Types &lt; security\""));
+    assert!(html.contains("<h1>Handbook</h1>"));
+    let body_start = html.find("<body>").expect("view body opening tag");
+    let page_content = html
+        .find("<h1>Handbook</h1>")
+        .expect("page content remains in the view body");
+    let body_end = html.find("</body>").expect("view body closing tag");
+    assert!(
+        body_start < page_content && page_content < body_end,
+        "composed layout lost its slot structure: {html}"
+    );
+    assert!(
+        !html.contains("<slot"),
+        "composed layout kept an unresolved slot: {html}"
+    );
+    assert!(!html.contains("{title}"));
+    assert!(!html.contains("{description}"));
+}
+
+#[test]
+fn rejects_missing_unknown_and_incompatible_page_view_properties() {
+    for source in [
+        r#"view Shell { props { title: String } html { <title>{title}</title><slot /> } }
+            page "/" { view: Shell html { <p>Home</p> } }"#,
+        r#"view Shell { props { title: String } html { <title>{title}</title><slot /> } }
+            page "/" { view: Shell(title: "Home", extra: "x") html { <p>Home</p> } }"#,
+        r#"view Shell { props { title: Int } html { <title>{title}</title><slot /> } }
+            page "/" { view: Shell(title: "Home") html { <p>Home</p> } }"#,
+    ] {
+        let program = parse(&lex(source).unwrap()).unwrap();
+        assert!(!validate_views("invalid-view-props.zyl", &program));
+    }
+}
+
+#[test]
+fn checks_dynamic_view_properties_against_page_inputs() {
+    let source = r#"
+        view SiteShell {
+            props { title: String }
+            html { <html><head><title>{title}</title></head><body><slot /></body></html> }
+        }
+        page "/handbook" {
+            input { page_title: String }
+            view: SiteShell(title: "{page_title}")
+            html { <h1>Handbook</h1> }
+        }
+    "#;
+    let program = parse(&lex(source).unwrap()).unwrap();
+    assert!(validate_views("dynamic-view-props.zyl", &program));
+    let html = compose_page_view(&program, &program.pages[0]);
+    assert!(html.contains("<title>{page_title}</title>"));
+
+    let incompatible = source.replace("page_title: String", "page_title: Int");
+    let program = parse(&lex(&incompatible).unwrap()).unwrap();
+    assert!(!validate_views("dynamic-view-props.zyl", &program));
+}
+
+#[test]
 fn composes_default_component_slots_and_nested_components() {
     let source = r#"
         component Panel {
@@ -2131,6 +2207,40 @@ fn validates_typed_page_data_field_bindings() {
     let program = parse(&lex(source).unwrap()).unwrap();
     assert!(validate_page_data("views.zyl", &program));
     assert!(validate_components("views.zyl", &program));
+}
+
+#[test]
+fn validates_static_translation_references_in_view_text_and_attributes() {
+    let source = r#"
+        page "/" {
+            html {
+                <main title='{t("site.home.title")}'>
+                    <h1>{t("site.home.title")}</h1>
+                    <p>{i18n("site.home.intro")}</p>
+                </main>
+            }
+        }
+    "#;
+    let program = parse(&lex(source).unwrap()).unwrap();
+    assert!(validate_components("localized-page.zyl", &program));
+
+    let invalid = r#"
+        page "/" { html { <h1>{t("bad key")}</h1> } }
+    "#;
+    let program = parse(&lex(invalid).unwrap()).unwrap();
+    assert!(!validate_components("invalid-locale-key.zyl", &program));
+
+    let invalid_media_type = r#"
+        component FeedTitle {
+            html { <title>{t("site.feed.title")}</title> }
+        }
+        page "/feed.xml" {
+            content_type: "application/xml; charset=utf-8"
+            html { <feed><FeedTitle /></feed> }
+        }
+    "#;
+    let program = parse(&lex(invalid_media_type).unwrap()).unwrap();
+    assert!(!validate_page_data("localized-xml.zyl", &program));
 }
 
 #[test]
@@ -2569,6 +2679,37 @@ fn rejects_url_encode_component_interpolation_on_non_text_values() {
     "#;
     let program = parse(&lex(source).unwrap()).unwrap();
     assert!(!validate_components("email.zyl", &program));
+}
+
+#[test]
+fn markdown_template_interpolation_is_typed_and_content_only() {
+    let valid = r#"
+        component HelpArticle {
+            props { markdown: String }
+            html { <article>{render_markdown:markdown}</article> }
+        }
+    "#;
+    let program = parse(&lex(valid).unwrap()).unwrap();
+    assert!(validate_components("markdown.zyl", &program));
+    let dynamic = render_view_component(&program.components[0], "markdown=\"{doc.body}\"", None);
+    assert!(dynamic.contains("{render_markdown:doc.body}"));
+    let static_html = render_view_component(
+        &program.components[0],
+        "markdown=\"<script>alert(1)</script>\"",
+        None,
+    );
+    assert!(!static_html.contains("<script"));
+
+    let invalid_type = valid.replace("markdown: String", "markdown: Int");
+    let program = parse(&lex(&invalid_type).unwrap()).unwrap();
+    assert!(!validate_components("markdown.zyl", &program));
+
+    let invalid_attribute = valid.replace(
+        "<article>{render_markdown:markdown}</article>",
+        "<article title=\"{render_markdown:markdown}\">Help</article>",
+    );
+    let program = parse(&lex(&invalid_attribute).unwrap()).unwrap();
+    assert!(!validate_components("markdown.zyl", &program));
 }
 
 #[test]

@@ -786,6 +786,63 @@ page "/customers" {
 }
 ~~~
 
+Project pages can use text from `locales/de.json` and `locales/en.json`
+directly in text or attribute positions:
+
+~~~zelyra
+page "/" {
+    html {
+        <h1>{t("site.home.title")}</h1>
+        <p>{i18n("site.home.intro")}</p>
+        <a title='{t("site.home.help")}'>Help</a>
+    }
+}
+~~~
+
+`t("key")` and `i18n("key")` are static view translation references. A key
+may contain up to 128 ASCII letters, digits, periods, underscores, and hyphens.
+Translated values are HTML-escaped. The configured project UI language selects
+the catalog; a missing project German entry falls back to the English catalog.
+An unknown key is rendered as a missing translation. For URL-based language
+selection, the first route segment must be named `{locale}`, for example
+`page "/{locale}/compare"`. Zelyra accepts only `de` and `en` there; other
+values return 404. Routes without this prefix use the configured project UI
+language. Plural rules are not implemented.
+
+### Reusable views with typed properties
+
+A `view` can declare typed properties for page titles, descriptions, and other
+shared layout data. Each page supplies its values in the `view` declaration;
+optional properties may be omitted:
+
+~~~zelyra
+view SiteShell {
+    props { title: String description: String? }
+    html {
+        <html>
+            <head>
+                <title>{title}</title>
+                <meta name="description" content="{description}" />
+                <slot name="head" />
+            </head>
+            <body><main><slot /></main></body>
+        </html>
+    }
+}
+
+page "/handbook" {
+    view: SiteShell(title: "Zelyra Handbook", description: "Technical reference")
+    html { <h1>Handbook</h1> }
+}
+~~~
+
+View properties are type-checked before slot composition; missing, unknown, or
+incompatible values produce `E-VIEW-039`. Dynamic values may come from typed
+route parameters or `load` data, for example `title: "{page_title}"`; output
+remains HTML-escaped. Optional view properties may also be used in CRUD or
+TableView layouts and are left empty there. Required view properties are
+mandatory on pages and are not allowed in CRUD/TableView layouts.
+
 Pages return `text/html; charset=utf-8` by default. A page can declare another
 validated media type for XML feeds and similar text responses:
 
@@ -897,6 +954,27 @@ page "/dashboard" {
 ~~~
 
 *Note:* Component slots nested inside a component invocation no longer require an outer page `view:` layout.
+
+### Markdown in HTML views
+
+The pure `render_markdown(source)` function produces safe HTML from CommonMark with GFM tables, strikethrough, task lists, and footnotes. Headings receive stable IDs; repeated headings get a unique suffix. Embedded HTML is escaped as text and never executed as markup. Links may use HTTP(S), mailto, and relative URLs; images must use relative URLs so displaying a page does not fetch content from third-party hosts. Other link schemes are not rendered as links. Each source is limited to 1 MiB per call.
+
+In an HTML template, Markdown is rendered explicitly as content:
+
+~~~zelyra
+component HelpArticle {
+    props { source: String }
+    html {
+        <article class="help-article">
+            {render_markdown:source}
+        </article>
+    }
+}
+~~~
+
+`render_markdown:source` is allowed only in HTML content and must resolve to a typed text value; the compiler rejects use in attributes or with non-text values using `E-VIEW-040`. Ordinary `{source}` interpolation remains escaped. The function returns a `String`, but the template form renders it only through the Markdown renderer, which escapes raw HTML and restricts link destinations; there is no general raw-HTML output switch. `render_markdown(source)` can also be used in Zelyra expressions, but ordinary HTML interpolation escapes it like any other string.
+
+File access remains explicit: a Markdown file must be read through the existing `FileSystem` capability and project path rules. Markdown rendering itself does not load files or make network requests.
 
 ## 11. Forms
 

@@ -581,9 +581,15 @@ abgeschlossen.
   wiederholen; das Skript entfernt geerbte Datenbank-URLs aus der Umgebung und
   löscht das temporäre Gerüst. Es startet weder den HTTP-Ablauf noch eine
   Datenbankverbindung. Das Gerüst ist weiterhin keine vollständige Migration:
-  der letzte Source-Only-Lauf meldet nun 2.229 Befunde (1.367 manuell/ungelöst,
-  862 teilweise) in 565 Quelldateien. Diese Zahlen beschreiben
-  Analysebefunde und keine Zahl migrierter Funktionen. Laravel,
+  eine frische Generierung mit `--all-supported` bestand am 21.10.2026
+  `zelyra check` für das Gerüst `main.zyl`, erzeugte aber keinen Routenablauf
+  (`no_complete_supported_workflow_found`). Sie übersetzte zwei statische
+  Darstellungskomponenten, von denen keine mit einer Route verbunden ist. Der
+  Bericht enthält 2.268 Befunde (1.391 manuell/ungelöst und 877 teilweise) in
+  575 Quelldateien. Das sind Analysebefunde, keine Zahl migrierter Funktionen.
+  Eine eigenständige übersetzte Erfolgsansicht wird nur dann wiederverwendet,
+  wenn der eng geprüfte Abmeldeablauf generiert wird; dieser Ablauf war beim
+  vollständigen Projektlauf nicht zulässig. Laravel,
   Composer-Pakete, PHP-Controller, Blade-Laufzeitdateien und Zugangsdaten werden
   nicht kopiert. Der Source-Only-Integrationstest vergleicht den unabhängig
   durchlaufenen PHP-Dateibaum mit `SOURCE_FILE_PLAN.json` und
@@ -625,22 +631,7 @@ abgeschlossen.
   unterstützte Bytecode-Operationen fail-closed scheitern und der bisherige
   Standard unverändert bleiben. Ziel ist portabler geprüfter Bytecode, keine
   native Maschinencodegenerierung.
-- [~] **1.3.0 — bestätigte Web-/Compilerlücken:** SQL-geladene
-  `Option<Record>`-Seitendaten, dynamisches `page content_type`, statische
-  `public/`-Assets, begrenztes stdin für erlaubnislistengeprüfte Prozesse
-  (`run_process_piped`) und typisierte erfolgreiche API-Antworten über
-  `ApiResponse<T>` sind bereits auf `main` vorhanden. API-Antworten unterstützen
-  deklarierte Status-/Content-Type-Paare, geprüfte Header, OpenAPI und
-  TypeScript-Clients; `HttpResult<T>` bleibt für ausgehende HTTP-Aufrufe.
-  `run_process_piped` führt keinen beliebigen Zelyra-Quelltext aus und stellt
-  keine Web-Sandbox bereit. Parametrisierte `view`-Props bleiben offen; Seiten
-  können aber bereits benannte Layout-Slots für individuelle Head-Inhalte
-  bereitstellen. Projektkataloge `locales/de.json` und `locales/en.json` sowie
-  `data-zelyra-i18n`-/`@i18n:`-Marker lokalisieren benutzerdefinierte
-  Seitentexte bereits. Ein typisierter Ausdruck `t("key")` und deklarative
-  Locale-Routengruppen fehlen noch. Sicheres CommonMark/GFM-Rendering bleibt
-  offen und ist der einzige noch fehlende Punkt des jüngsten Viererberichts.
-  Statisches Asset-Serving ist bereits vorhanden und keine offene Lücke.
+- [~] **1.3.0 — geprüfte Web-/Compilerfunktionen und offene Punkte:** SQL-geladene `Option<Record>`-Seitendaten, dynamisches `page content_type`, statische `public/`-Assets, begrenztes `run_process_piped` für erlaubnislistengeprüfte Prozesse, typisierte erfolgreiche API-Antworten über `ApiResponse<T>`, typisierte Eigenschaften wiederverwendbarer `view`-Layouts sowie begrenztes sicheres CommonMark/GFM-Rendering sind auf `main` umgesetzt. Piped Prozesseingabe führt für sich allein keinen Zelyra-Quelltext aus und stellt keine Web-Sandbox bereit. Geprüfte statische Locale-Referenzen und `/{locale}/...`-Routenauswahl wurden in PR #155 zusammengeführt. `HttpResult<T>` bleibt der Ergebnistyp für ausgehende HTTP-Aufrufe. Übersetzungsaufrufe in beliebigen Ausdrücken, Markdown-Inhaltsverzeichnisse, Pluralregeln und Codehervorhebung bleiben offen.
 
 **Nach 1.3.0 oder bei ausdrücklicher Neubewertung:** Ein natives AOT-Backend
 bleibt optional und hängt von Benchmarks ab. Kein offener Punkt entfällt stillschweigend: Arbeit, deren
@@ -722,7 +713,7 @@ SHA-256-Prüfung.
 - [~] Interpreter und VM teilen Runtime-Semantik und Host-Services teilweise: Reine Standardbibliotheksoperationen sowie Operatoren auf Runtime-Werten verwenden für AST, MIR und Bytecode dieselbe Implementierung. Der Bytecode-Compiler begrenzt Operatoren weiterhin auf seine dokumentierte Teilmenge; die gemeinsamen Helfer erweitern das akzeptierte Bytecode-Format nicht stillschweigend. Host-Services und ausgewählte SQL-/Policy-Helfer sind ebenfalls gemeinsam. Für eine begrenzte Transaktion aus SQL-Audit-Eintrag plus `mail_queue` mit PDF-Anhang gibt es nun einen differentiellen AST/MIR/dekodierter-Bytecode-Nachweis: Der Test vergleicht Transaktionsmodus, SQL-Reihenfolge und sämtliche serialisierten Parameter beider Schreibvorgänge. Abgedeckt ist eine einzelne Mail; mehrere Nachrichten, Fehler-/Rollback-Pfade und andere Transaktionseffekte benötigen weiterhin eigene Paritätstests. Vollständige Capability-/Effektbehandlung, Verträge, breiteres Fehlerverhalten, Ressourcenabrechnung und Modul-APIs benötigen weiterhin einen systematischen Paritätsabgleich.
 - [~] **AST-Laufzeitkonstruktion vereinheitlicht:** Programmausführung und direkte Funktionsausführung verwenden jetzt denselben Interpreter-Konstruktor für Symboltabellen, Schemametadaten, HostServices, Capabilities, Laufzeitrichtlinien, Transaktionen und Ressourcengrenzen. Dadurch entfällt doppelte Sicherheits-/Policy-Verdrahtung, ohne die AST-Auswertungssemantik zu ändern. Die Runtime-Tests bestehen; breitere Backend-Parität und iterative AST-Auswertung bleiben offen.
 - [~] **Gemeinsame Interpreter-Ressourcenlimits:** AST und MIR nutzen jetzt denselben Helfer für Standard- und Maximalaufruftiefe sowie für die begrenzte Worker-Stackgröße; MIR-Parallelzweige verwenden dieselbe Stackregel. Backendlokale Grenzwerte entfallen dadurch, die rekursiven Interpreter werden aber nicht iterativ.
-- [~] **AST-Typprüfung strukturiert:** Kontrollfluss-/Match-Exhaustiveness-Analyse liegt in `runtime/src/type_checker/flow.rs`; Typbeziehungen, Generic-Inferenz, Aliasauflösung und Typannotationsvalidierung liegen in `runtime/src/type_checker/type_relations.rs`. Rückgabe-/Fallthrough-, Loop- und Guard-Regeln sowie die Typregeln blieben unverändert. Gezielte Match-, Generic-Record-/Funktions- und Aliasfehler-Tests sowie Workspace-Tests bestehen. Dies ist interne Strukturierung; weitere Teilung, Flow-Diagnostik und vollständige MIR-/Bytecode-Parität bleiben offen.
+- [~] **AST-Typprüfung strukturiert:** Kontrollfluss-/Match-Exhaustiveness-Analyse liegt in `runtime/src/type_checker/flow.rs`; Typbeziehungen, Generic-Inferenz, Aliasauflösung und Typannotationsvalidierung liegen in `runtime/src/type_checker/type_relations.rs`; die binäre Operator-Typprüfung liegt in `runtime/src/type_checker/expression_operators.rs`; die Aufrufprüfung für Built-ins, Nutzerfunktionen und Konstruktoren liegt in `runtime/src/type_checker/call_expressions.rs`. Rückgabe-/Fallthrough-, Loop-, Guard-, Operator- und Aufrufregeln blieben durch diese Strukturänderungen unverändert. Runtime- und Phase-1-Tests bestehen. Weitere Teilung, Flow-Diagnostik und vollständige MIR-/Bytecode-Parität bleiben offen.
 - [ ] AST-Interpreter als auswählbare Referenz behalten, bis die VM den gesamten unterstützten Sprachumfang korrekt abdeckt. Differential-, Property-, Fuzz-, Sicherheits- und Regressionstests ergänzen.
 - [~] Opt-in-CLI-Ausführung ist für AST, MIR und die unterstützte Bytecode-Teilmenge vorhanden. MIR-/Bytecode-Inspektion, sicheres versioniertes Caching, stabile maschinenlesbare Diagnosen und Studio-Integration bleiben offen, ohne bestehendes CLI-Verhalten zu brechen.
 - [~] Ein reproduzierbarer CPU-Benchmark vergleicht mutable Arrayupdates über AST, MIR und Bytecode; Messaufbau und drei Release-Läufe sind im [Benchmarkbericht](benchmarks/mutable-array-backends.de.md) dokumentiert. I/O-Last, Startzeit, Speicherverbrauch, Durchsatz und Kompilieraufwand bleiben offen.
@@ -1204,7 +1195,10 @@ werden. Details stehen im [Projektlayout-Arbeitsplan](release-plans/1.3.0-projec
   Pagination, APIs, OpenAPI und TypeScript-Client-Erzeugung.
 - [~] Wiederverwendbare Web-Views: benannte Layouts, Seitenkomposition, ein
   validierter Content-Slot und typisierte selbstschließende Komponenten mit
-  Properties sind verfügbar. Benannte Slots mit Fallback-Inhalt, CRUD-View-
+  Properties sind verfügbar. Views können ebenfalls typisierte Properties
+  deklarieren; Seiten übergeben statisch geprüfte Literale oder Werte aus dem
+  Seitenscope, etwa für Titel und Meta-Inhalte. Optionale Properties sind in
+  CRUD- und TableView-Layouts zulässig. Benannte Slots mit Fallback-Inhalt, CRUD-View-
   Überschreibungen und ressourcenspezifische Inhalte für benannte CRUD-Layout-
   Slots sind verfügbar. Statische Slot-Markups dürfen geprüfte Komponenten
   verwenden; datensatzgebundene Slot-Inhalte bleiben offen. Projektlokale

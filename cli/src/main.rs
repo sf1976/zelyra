@@ -1929,6 +1929,33 @@ fn validate_views(path: &str, program: &zelyra_ast::Program) -> bool {
             );
             valid = false;
         }
+        let mut prop_names = HashSet::new();
+        for prop in &view.props {
+            if !prop_names.insert(prop.name.as_str()) {
+                diagnostic_with_span(
+                    path,
+                    "E-VIEW-005",
+                    &format!("duplicate property `{}` in view `{}`", prop.name, view.name),
+                    prop.span,
+                );
+                valid = false;
+            }
+        }
+        let view_bindings = view
+            .props
+            .iter()
+            .map(|prop| (prop.name.clone(), prop.ty.clone()))
+            .collect::<HashMap<_, _>>();
+        if !view.props.is_empty() {
+            valid &= validate_template_expressions(
+                path,
+                &view.html,
+                program,
+                &view_bindings,
+                view.span.line,
+                view.span.column,
+            );
+        }
         let slots = match view_template_slot_invocations(&view.html) {
             Ok(slots) => slots,
             Err(message) => {
@@ -1997,7 +2024,33 @@ fn validate_views(path: &str, program: &zelyra_ast::Program) -> bool {
                 );
                 valid = false;
             }
+            let bindings = page_template_bindings(
+                &page.path,
+                &page.data,
+                &page.inputs,
+                page.page_size,
+                !page.sort.is_empty(),
+                !page.search.is_empty(),
+                &page.filters,
+            );
+            valid &= validate_view_properties(
+                path,
+                program,
+                view,
+                &page.view_props,
+                &bindings,
+                page.span,
+            );
         } else {
+            if !page.view_props.is_empty() {
+                diagnostic_with_span(
+                    path,
+                    "E-VIEW-039",
+                    "page view properties require a `view: ...` declaration",
+                    page.span,
+                );
+                valid = false;
+            }
             match page_layout_slot_invocations(&page.html) {
                 Ok(slots) if !slots.is_empty() => {
                     diagnostic(
@@ -2026,6 +2079,19 @@ fn validate_views(path: &str, program: &zelyra_ast::Program) -> bool {
     for crud in &program.cruds {
         if let Some(layout) = &crud.layout {
             if let Some(view) = program.views.iter().find(|view| view.name == *layout) {
+                if view
+                    .props
+                    .iter()
+                    .any(|prop| !matches!(prop.ty, Type::Option(_)))
+                {
+                    diagnostic_with_span(
+                        path,
+                        "E-VIEW-039",
+                        &format!("view layout `{layout}` has required properties; CRUD layouts can only use optional view properties"),
+                        crud.span,
+                    );
+                    valid = false;
+                }
                 if let Err((slot_index, message)) =
                     validate_crud_layout_slots(view, &crud.layout_slots)
                 {
@@ -2076,7 +2142,21 @@ fn validate_views(path: &str, program: &zelyra_ast::Program) -> bool {
     }
     for tableview in &program.tableviews {
         if let Some(layout) = &tableview.layout {
-            if !program.views.iter().any(|view| view.name == *layout) {
+            if let Some(view) = program.views.iter().find(|view| view.name == *layout) {
+                if view
+                    .props
+                    .iter()
+                    .any(|prop| !matches!(prop.ty, Type::Option(_)))
+                {
+                    diagnostic_with_span(
+                        path,
+                        "E-VIEW-039",
+                        &format!("view layout `{layout}` has required properties; TableView layouts can only use optional view properties"),
+                        tableview.span,
+                    );
+                    valid = false;
+                }
+            } else {
                 diagnostic(
                     path,
                     "E-VIEW-030",
@@ -2094,6 +2174,74 @@ fn validate_views(path: &str, program: &zelyra_ast::Program) -> bool {
     valid
 }
 
+fn validate_view_properties(
+    path: &str,
+    program: &zelyra_ast::Program,
+    view: &zelyra_ast::ViewDef,
+    supplied: &[zelyra_ast::PageViewProp],
+    bindings: &HashMap<String, Type>,
+    fallback_span: zelyra_ast::Span,
+) -> bool {
+    let mut valid = true;
+    let mut supplied_names = HashSet::new();
+    for value in supplied {
+        if !supplied_names.insert(value.name.as_str()) {
+            diagnostic_with_span(
+                path,
+                "E-VIEW-039",
+                &format!("view property `{}` is supplied more than once", value.name),
+                value.span,
+            );
+            valid = false;
+            continue;
+        }
+        let Some(prop) = view.props.iter().find(|prop| prop.name == value.name) else {
+            diagnostic_with_span(
+                path,
+                "E-VIEW-039",
+                &format!("view `{}` has no property `{}`", view.name, value.name),
+                value.span,
+            );
+            valid = false;
+            continue;
+        };
+        let dynamic_type_error = value
+            .value
+            .strip_prefix('{')
+            .and_then(|value| value.strip_suffix('}'))
+            .map(str::trim)
+            .and_then(|expression| resolve_template_type(expression, bindings, program).ok())
+            .filter(|actual| !template_type_compatible(&prop.ty, actual));
+        if dynamic_type_error.is_some() || !component_prop_accepts(program, prop, &value.value) {
+            diagnostic_with_span(
+                path,
+                "E-VIEW-039",
+                &format!(
+                    "value `{}` is incompatible with view property `{}` of type {}",
+                    value.value, prop.name, prop.ty
+                ),
+                value.span,
+            );
+            valid = false;
+        }
+    }
+    for prop in &view.props {
+        if !matches!(prop.ty, Type::Option(_)) && !supplied_names.contains(prop.name.as_str()) {
+            diagnostic_with_span(
+                path,
+                "E-VIEW-039",
+                &format!(
+                    "page using view `{}` is missing required property `{}`",
+                    view.name, prop.name
+                ),
+                fallback_span,
+            );
+            valid = false;
+        }
+    }
+    valid
+}
+
 fn validate_page_data(path: &str, program: &zelyra_ast::Program) -> bool {
     let mut valid = true;
     for page in &program.pages {
@@ -2103,6 +2251,27 @@ fn validate_page_data(path: &str, program: &zelyra_ast::Program) -> bool {
                     path,
                     "E-VIEW-038",
                     &format!("invalid page content type: {message}"),
+                    page.span.line,
+                    page.span.column,
+                );
+                valid = false;
+            }
+            if !content_type.to_ascii_lowercase().starts_with("text/html")
+                && (template_has_translation_reference(&page.html, program)
+                    || page.view.as_deref().is_some_and(|view_name| {
+                        program
+                            .views
+                            .iter()
+                            .find(|view| view.name == view_name)
+                            .is_some_and(|view| {
+                                template_has_translation_reference(&view.html, program)
+                            })
+                    }))
+            {
+                diagnostic(
+                    path,
+                    "E-VIEW-042",
+                    "view translation references require an HTML page response",
                     page.span.line,
                     page.span.column,
                 );
@@ -3623,6 +3792,40 @@ fn template_expressions(html: &str) -> Result<Vec<String>, String> {
     Ok(expressions)
 }
 
+fn template_has_translation_reference(template: &str, program: &zelyra_ast::Program) -> bool {
+    template_tree_has_translation_reference(template, program, &mut HashSet::new())
+}
+
+fn template_tree_has_translation_reference(
+    template: &str,
+    program: &zelyra_ast::Program,
+    visited_components: &mut HashSet<String>,
+) -> bool {
+    if template_expressions(template).is_ok_and(|expressions| {
+        expressions
+            .iter()
+            .any(|expression| template_translation_key(expression).is_some())
+    }) {
+        return true;
+    }
+    component_invocations(template).is_ok_and(|invocations| {
+        invocations.iter().any(|invocation| {
+            program
+                .components
+                .iter()
+                .find(|component| component.name == invocation.name)
+                .is_some_and(|component| {
+                    visited_components.insert(component.name.clone())
+                        && template_tree_has_translation_reference(
+                            &component.html,
+                            program,
+                            visited_components,
+                        )
+                })
+        })
+    })
+}
+
 fn is_template_identifier(expression: &str) -> bool {
     !expression.is_empty()
         && expression.chars().enumerate().all(|(index, character)| {
@@ -3635,11 +3838,39 @@ fn is_template_identifier(expression: &str) -> bool {
 }
 
 fn is_template_expression(expression: &str) -> bool {
+    if let Some(key) = template_translation_key(expression) {
+        return valid_template_translation_key(key);
+    }
     expression
         .strip_prefix("url_encode:")
+        .or_else(|| expression.strip_prefix("render_markdown:"))
         .unwrap_or(expression)
         .split('.')
         .all(is_template_identifier)
+}
+
+fn template_translation_key(expression: &str) -> Option<&str> {
+    expression
+        .strip_prefix("t(\"")
+        .or_else(|| expression.strip_prefix("i18n(\""))
+        .and_then(|key| key.strip_suffix("\")"))
+}
+
+fn valid_template_translation_key(key: &str) -> bool {
+    !key.is_empty()
+        && key.len() <= 128
+        && key
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'.' | b'_' | b'-'))
+}
+
+fn template_interpolation_is_in_html_tag(html: &str, open: usize) -> bool {
+    let before = &html[..open];
+    match (before.rfind('<'), before.rfind('>')) {
+        (Some(open_tag), Some(close_tag)) => open_tag > close_tag,
+        (Some(_), None) => true,
+        _ => false,
+    }
 }
 
 struct TemplateForBlock {
@@ -3860,7 +4091,27 @@ fn validate_template_interpolations(
         }
     };
     let mut valid = true;
+    let mut expression_search_from = 0;
     for expression in expressions {
+        let placeholder = format!("{{{expression}}}");
+        let expression_start = html[expression_search_from..]
+            .find(&placeholder)
+            .map(|offset| expression_search_from + offset)
+            .unwrap_or(expression_search_from);
+        expression_search_from = expression_start.saturating_add(placeholder.len());
+        if let Some(key) = template_translation_key(&expression) {
+            if !valid_template_translation_key(key) {
+                diagnostic(
+                    path,
+                    "E-VIEW-041",
+                    "translation reference must use a non-empty key of at most 128 ASCII letters, digits, dots, underscores, or hyphens",
+                    line,
+                    column,
+                );
+                valid = false;
+            }
+            continue;
+        }
         if !is_template_expression(&expression) {
             diagnostic(
                 path,
@@ -3875,8 +4126,21 @@ fn validate_template_interpolations(
             continue;
         }
         let url_encoded = expression.starts_with("url_encode:");
+        let markdown_rendered = expression.starts_with("render_markdown:");
+        if markdown_rendered && template_interpolation_is_in_html_tag(html, expression_start) {
+            diagnostic(
+                path,
+                "E-VIEW-040",
+                "render_markdown interpolation is only allowed in HTML content, not in an attribute",
+                line,
+                column,
+            );
+            valid = false;
+            continue;
+        }
         let type_expression = expression
             .strip_prefix("url_encode:")
+            .or_else(|| expression.strip_prefix("render_markdown:"))
             .unwrap_or(&expression);
         match resolve_template_type(type_expression, bindings, program) {
             Err(message) => {
@@ -3893,6 +4157,16 @@ fn validate_template_interpolations(
                     path,
                     "E-VIEW-034",
                     &format!("url_encode requires a text value, found `{ty}`"),
+                    line,
+                    column,
+                );
+                valid = false;
+            }
+            Ok(ty) if markdown_rendered && !template_value_is_text(&ty) => {
+                diagnostic(
+                    path,
+                    "E-VIEW-040",
+                    &format!("render_markdown requires a text value, found `{ty}`"),
                     line,
                     column,
                 );
@@ -3920,7 +4194,22 @@ fn validate_component_template(
     column: usize,
     bindings: &HashMap<String, Type>,
 ) -> bool {
-    let mut valid = validate_template_expressions(path, html, program, bindings, line, column);
+    validate_component_template_with_expression_check(
+        path, program, html, line, column, bindings, true,
+    )
+}
+
+fn validate_component_template_with_expression_check(
+    path: &str,
+    program: &zelyra_ast::Program,
+    html: &str,
+    line: usize,
+    column: usize,
+    bindings: &HashMap<String, Type>,
+    check_expressions: bool,
+) -> bool {
+    let mut valid = !check_expressions
+        || validate_template_expressions(path, html, program, bindings, line, column);
     let invocations = match component_invocations(html) {
         Ok(invocations) => invocations,
         Err(message) => {
@@ -4145,6 +4434,22 @@ fn validate_components(path: &str, program: &zelyra_ast::Program) -> bool {
                 .collect(),
         );
     }
+    for view in &program.views {
+        let bindings = view
+            .props
+            .iter()
+            .map(|prop| (prop.name.clone(), prop.ty.clone()))
+            .collect::<HashMap<_, _>>();
+        valid &= validate_component_template_with_expression_check(
+            path,
+            program,
+            &view.html,
+            view.span.line,
+            view.span.column,
+            &bindings,
+            false,
+        );
+    }
     for page in &program.pages {
         let bindings = page_template_bindings(
             &page.path,
@@ -4163,18 +4468,6 @@ fn validate_components(path: &str, program: &zelyra_ast::Program) -> bool {
             page.span.column,
             &bindings,
         );
-        if let Some(view_name) = &page.view {
-            if let Some(view) = program.views.iter().find(|view| view.name == *view_name) {
-                valid &= validate_component_template(
-                    path,
-                    program,
-                    &view.html,
-                    view.span.line,
-                    view.span.column,
-                    &bindings,
-                );
-            }
-        }
     }
     for crud in &program.cruds {
         if let Some(table) = program.tables.iter().find(|table| table.name == crud.table) {
@@ -12898,7 +13191,13 @@ const CRUD_LAYOUT_CONTENT_MARKER: &str = "\u{0}ZELYRA_CRUD_CONTENT\u{0}";
 fn compose_view_html(program: &zelyra_ast::Program, view_name: &str, content: &str) -> String {
     let (default_body, named_slots) =
         split_view_content(content).expect("page view slots are validated before route generation");
-    compose_view_parts(program, view_name, &default_body, &named_slots)
+    compose_view_parts_with_props(
+        program,
+        view_name,
+        &default_body,
+        &named_slots,
+        &HashMap::new(),
+    )
 }
 
 fn compose_view_parts(
@@ -12907,6 +13206,22 @@ fn compose_view_parts(
     default_body: &str,
     named_slots: &HashMap<String, String>,
 ) -> String {
+    compose_view_parts_with_props(
+        program,
+        view_name,
+        default_body,
+        named_slots,
+        &HashMap::new(),
+    )
+}
+
+fn compose_view_parts_with_props(
+    program: &zelyra_ast::Program,
+    view_name: &str,
+    default_body: &str,
+    named_slots: &HashMap<String, String>,
+    supplied_props: &HashMap<String, String>,
+) -> String {
     let view = program
         .views
         .iter()
@@ -12914,26 +13229,57 @@ fn compose_view_parts(
         .expect("page and CRUD views are validated before route generation");
     let slots = view_template_slot_invocations(&view.html).expect("view slots are validated");
     let mut composed = view.html.clone();
-    for slot in slots.into_iter().rev() {
-        let replacement = slot
-            .name
-            .as_deref()
-            .and_then(|name| named_slots.get(name))
-            .map_or_else(
-                || match slot.name {
-                    Some(_) => slot.body.as_deref().unwrap_or(""),
-                    None => default_body,
-                },
-                String::as_str,
-            );
-        composed.replace_range(slot.start..slot.end, replacement);
+    let mut replacements = Vec::with_capacity(slots.len());
+    for (index, slot) in slots.iter().enumerate().rev() {
+        let supplied = slot.name.as_deref().and_then(|name| named_slots.get(name));
+        let replacement = supplied.map_or_else(
+            || match slot.name {
+                Some(_) => slot.body.as_deref().unwrap_or(""),
+                None => default_body,
+            },
+            String::as_str,
+        );
+        let mut replacement = replacement.to_owned();
+        if supplied.is_none() && slot.name.is_some() {
+            replacement = view.props.iter().fold(replacement, |html, prop| {
+                match supplied_props.get(&prop.name) {
+                    Some(value) => render_component_property(html, prop, value),
+                    None => remove_component_property(html, &prop.name),
+                }
+            });
+        }
+        let marker = format!("\0ZELYRA_VIEW_SLOT_{index:08}\0");
+        composed.replace_range(slot.start..slot.end, &marker);
+        replacements.push((marker, replacement));
+    }
+    composed = view.props.iter().fold(composed, |html, prop| {
+        match supplied_props.get(&prop.name) {
+            Some(value) => render_component_property(html, prop, value),
+            None => remove_component_property(html, &prop.name),
+        }
+    });
+    for (marker, replacement) in replacements {
+        composed = composed.replace(&marker, &replacement);
     }
     expand_view_components(program, composed)
 }
 
 fn compose_page_view(program: &zelyra_ast::Program, page: &zelyra_ast::PageDef) -> String {
     if let Some(view_name) = page.view.as_deref() {
-        compose_view_html(program, view_name, &page.html)
+        let (default_body, named_slots) = split_view_content(&page.html)
+            .expect("page view slots are validated before route generation");
+        let supplied_props = page
+            .view_props
+            .iter()
+            .map(|prop| (prop.name.clone(), prop.value.clone()))
+            .collect::<HashMap<_, _>>();
+        compose_view_parts_with_props(
+            program,
+            view_name,
+            &default_body,
+            &named_slots,
+            &supplied_props,
+        )
     } else {
         expand_view_components(program, page.html.clone())
     }
@@ -13117,6 +13463,23 @@ fn render_component_property(
 ) -> String {
     let placeholder = format!("{{{}}}", prop.name);
     let url_encoded_placeholder = format!("{{url_encode:{}}}", prop.name);
+    let markdown_placeholder = format!("{{render_markdown:{}}}", prop.name);
+    if template.contains(&markdown_placeholder) {
+        let replacement = if value.starts_with('{') && value.ends_with('}') {
+            format!(
+                "{{render_markdown:{}}}",
+                value.trim_start_matches('{').trim_end_matches('}')
+            )
+        } else {
+            zelyra_runtime::render_markdown(value).unwrap_or_else(|error| {
+                format!(
+                    "<div class=\"z-alert z-alert--danger\" role=\"alert\">Markdown rendering failed: {}</div>",
+                    html_escape(&error)
+                )
+            })
+        };
+        return template.replace(&markdown_placeholder, &replacement);
+    }
     if template.contains(&url_encoded_placeholder) {
         let encoded_value = if value.starts_with('{') && value.ends_with('}') {
             format!(

@@ -509,6 +509,7 @@ struct Invoice { number: String customer: String }
 view InvoicePrint {
     html { <html><body><h1>Rechnung {number}</h1><p>{customer}</p><slot /></body></html> }
 }
+
 fn main() {
     invoice = Invoice { number: "R-104", customer: "<script>alert(1)</script>" }
     document = render_pdf("InvoicePrint", invoice)
@@ -520,6 +521,25 @@ fn main() {
     let output = execute(&program).unwrap();
     let length = output[0].parse::<usize>().unwrap();
     assert!(length > 500, "expected a non-empty PDF document");
+}
+
+#[test]
+fn render_markdown_is_a_typed_pure_builtin() {
+    let source = r##"
+        fn main() {
+            print(render_markdown("# Guide\n\n**safe**"))
+        }
+    "##;
+    let program = parse(&lex(source).unwrap()).unwrap();
+    check(&program).unwrap_or_else(|errors| panic!("Markdown check failed: {errors:?}"));
+    let output = execute(&program).unwrap();
+    assert_eq!(
+        output,
+        ["<h1 id=\"guide\">Guide</h1>\n<p><strong>safe</strong></p>\n"]
+    );
+
+    let invalid = parse(&lex("fn main() { render_markdown(42) }").unwrap()).unwrap();
+    assert!(check(&invalid).is_err());
 }
 
 #[test]
@@ -552,6 +572,24 @@ fn pdf_view_templates_expand_zelyra_collection_blocks() {
     assert!(pdf
         .windows(b"Hosting".len())
         .any(|window| window == b"Hosting"));
+}
+
+#[test]
+fn pdf_view_markdown_interpolation_uses_the_safe_renderer() {
+    let data = Value::Object {
+        type_name: "Article".into(),
+        type_args: Vec::new(),
+        fields: HashMap::from([(
+            "body".into(),
+            Value::String("# Help\n\n<script>alert(1)</script>\n\n**safe**".into()),
+        )]),
+    };
+    let rendered =
+        interpolate_pdf_data("<article>{render_markdown:body}</article>", &data).unwrap();
+    assert!(rendered.contains("<h1 id=\"help\">Help</h1>"));
+    assert!(rendered.contains("<strong>safe</strong>"), "{rendered}");
+    assert!(!rendered.contains("<script"));
+    assert!(rendered.contains("&lt;script&gt;alert(1)&lt;/script&gt;"));
 }
 
 #[test]

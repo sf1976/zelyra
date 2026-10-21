@@ -13,6 +13,7 @@ pub fn is_pure_builtin(name: &str) -> bool {
     matches!(
         name,
         "assert"
+            | "render_markdown"
             | "Some"
             | "None"
             | "Ok"
@@ -135,6 +136,19 @@ pub fn execute_pure_builtin(
     span: Span,
 ) -> Result<Value, RuntimeError> {
     match name {
+        "render_markdown" if arguments.len() == 1 => match &arguments[0] {
+            Value::String(source) => render_markdown(source)
+                .map(Value::String)
+                .map_err(|error| builtin_error(span, error)),
+            other => Err(builtin_error(
+                span,
+                format!("render_markdown expects String, found {}", other.ty()),
+            )),
+        },
+        "render_markdown" => Err(builtin_error(
+            span,
+            "render_markdown expects exactly one String and no type arguments",
+        )),
         "assert" if (1..=2).contains(&arguments.len()) => match arguments.as_slice() {
             [Value::Bool(true)] | [Value::Bool(true), Value::String(_)] => Ok(Value::Unit),
             [Value::Bool(false)] => Err(builtin_error(span, "assertion failed")),

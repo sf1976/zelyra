@@ -851,6 +851,65 @@ page "/customers" {
 }
 ~~~
 
+Eigene Seiten können Text aus den Projektkatalogen `locales/de.json` und
+`locales/en.json` direkt in Text- oder Attributpositionen einsetzen:
+
+~~~zelyra
+page "/" {
+    html {
+        <h1>{t("site.home.title")}</h1>
+        <p>{i18n("site.home.intro")}</p>
+        <a title='{t("site.home.help")}'>Hilfe</a>
+    }
+}
+~~~
+
+`t("key")` und `i18n("key")` sind statische View-Übersetzungsreferenzen.
+Der Schlüssel darf bis zu 128 ASCII-Buchstaben, Ziffern, Punkte, Unterstriche
+und Bindestriche enthalten und wird beim Übersetzen HTML-escaped. Die gewählte
+Projekt-UI-Sprache bestimmt den Katalog; fehlt ein projektspezifischer
+deutscher Eintrag, greift der englische Katalog als Fallback. Ein unbekannter
+Schlüssel wird als fehlende Übersetzung ausgegeben. Für eine URL-basierte
+Sprachauswahl muss der erste Routenabschnitt ausdrücklich `{locale}` heißen,
+zum Beispiel `page "/{locale}/vergleich"`. Zelyra akzeptiert dort nur `de` und
+`en`; andere Werte liefern 404. Routen ohne diesen Präfix verwenden die
+konfigurierte Projekt-UI-Sprache. Pluralregeln sind nicht implementiert.
+
+### Wiederverwendbare Views mit typisierten Eigenschaften
+
+Ein `view` kann typisierte Eigenschaften für Seitentitel, Beschreibungen und
+weitere gemeinsame Layoutdaten deklarieren. Jede Seite übergibt ihre Werte an
+der `view`-Angabe; optionale Eigenschaften dürfen ausgelassen werden:
+
+~~~zelyra
+view SiteShell {
+    props { title: String description: String? }
+    html {
+        <html>
+            <head>
+                <title>{title}</title>
+                <meta name="description" content="{description}" />
+                <slot name="head" />
+            </head>
+            <body><main><slot /></main></body>
+        </html>
+    }
+}
+
+page "/handbuch" {
+    view: SiteShell(title: "Zelyra Handbuch", description: "Technische Referenz")
+    html { <h1>Handbuch</h1> }
+}
+~~~
+
+Die View-Eigenschaften werden vor der Slot-Komposition typgeprüft; fehlende,
+unbekannte oder unpassende Werte erzeugen `E-VIEW-039`. Dynamische Werte können
+aus typisierten Seitenparametern oder `load`-Daten stammen, beispielsweise
+`title: "{page_title}"`; die Ausgabe bleibt HTML-escaped. Ein optionaler
+View-Parameter kann auch in einem CRUD- oder TableView-Layout verwendet werden
+und wird dort leer gelassen. Erforderliche View-Parameter sind auf Seiten
+verbindlich und für CRUD-/TableView-Layouts nicht zulässig.
+
 Seiten antworten standardmäßig mit `text/html; charset=utf-8`. Für XML-Feeds
 und vergleichbare Textantworten kann ein geprüfter Medientyp angegeben werden:
 
@@ -962,6 +1021,27 @@ page "/dashboard" {
 ~~~
 
 *Hinweis:* Verschachtelte Komponenten-Slots innerhalb einer Komponentenverwendung benötigen nicht fälschlich ein übergeordnetes Seiten-`view:`-Layout.
+
+### Markdown in HTML-Views
+
+Die reine Funktion `render_markdown(source)` erzeugt sicheres HTML aus CommonMark mit GFM-Tabellen, Durchstreichungen, Task-Listen und Fußnoten. Überschriften erhalten stabile IDs; doppelte Überschriften bekommen einen eindeutigen Suffix. Eingebettetes HTML wird als Text escaped und nie als Markup ausgeführt. Links dürfen HTTP(S), Mailto und relative URLs verwenden; Bilder nur relative URLs, damit kein fremder Host beim Anzeigen nachgeladen wird. Andere Link-Schemes werden nicht als Links gerendert. Die Quelle ist auf 1 MiB pro Aufruf begrenzt.
+
+In einem HTML-Template wird Markdown ausdrücklich als Inhalt gerendert:
+
+~~~zelyra
+component HelpArticle {
+    props { source: String }
+    html {
+        <article class="help-article">
+            {render_markdown:source}
+        </article>
+    }
+}
+~~~
+
+`render_markdown:source` ist nur in HTML-Inhalt erlaubt und muss auf einen typisierten Textwert aufgelöst werden; der Compiler weist die Verwendung in Attributen oder mit Nicht-Textwerten mit `E-VIEW-040` zurück. Normale `{source}`-Interpolation bleibt escaped. Die Funktion liefert zwar einen `String`, doch die Template-Form rendert ihn nur mit dem Markdown-Renderer, der rohes HTML als Text ausgibt und Linkziele begrenzt; es gibt keinen allgemeinen Raw-HTML-Ausgabeschalter. `render_markdown(source)` lässt sich auch in Zelyra-Ausdrücken verwenden, wird bei gewöhnlicher HTML-Interpolation aber wie jeder String escaped.
+
+Dateizugriff bleibt explizit: Eine Markdown-Datei muss über die vorhandene `FileSystem`-Capability und die Projektpfadregeln gelesen werden. Das Markdown-Rendering selbst lädt keine Dateien nach und erzeugt keine Netzwerkzugriffe.
 
 ## 11. Formulare
 

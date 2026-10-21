@@ -529,9 +529,15 @@ security and compatibility gates stated for that milestone.
   the script strips ambient database URLs and removes its temporary scaffold.
   This check does not run the generated HTTP workflow or connect to a database.
   The scaffold
-  remains an incomplete migration: the latest source-only rerun reports 2,263
-  findings (1,387 manual/unresolved and 876 partial across 572 source files).
-  These are analysis findings, not a migrated-feature count.
+  remains an incomplete migration: a fresh `--all-supported` generation on
+  2026-10-21 passed `zelyra check` for its `main.zyl` scaffold, but generated no
+  route workflow (`no_complete_supported_workflow_found`). It translated two
+  static presentation components, neither wired to a route. The report lists
+  2,268 findings (1,391 manual/unresolved and 877 partial across 575 source
+  files). These are analysis findings, not a migrated-feature count. A
+  standalone translated success component is reused only when the narrowly
+  verified unsubscribe workflow is generated; that workflow was not eligible
+  in this full-project run.
   Laravel, Composer packages, PHP controllers, Blade runtime files, and source
   credentials are not copied. The source-only integration check compares an
   independently traversed PHP source tree with `SOURCE_FILE_PLAN.json` and
@@ -575,21 +581,7 @@ security and compatibility gates stated for that milestone.
   completion by switching the default early. This milestone targets portable
   verified Bytecode, not native machine-code generation.
 
-- [~] **1.3.0 — confirmed web/compiler gaps:** SQL-loaded `Option<Record>` page
-  data, dynamic `page content_type`, static `public/` assets, bounded
-  `run_process_piped` stdin for allowlisted processes, and typed successful API
-  responses via `ApiResponse<T>` are implemented on `main`. API responses
-  support declared status/content-type pairs, checked headers, OpenAPI, and
-  TypeScript-client output; `HttpResult<T>` remains for outbound HTTP calls.
-  `run_process_piped` does not execute arbitrary Zelyra source or provide a web
-  sandbox. Parameterized `view` props remain open, although pages can already
-  provide named layout slots for page-specific head content. Project
-  `locales/de.json` and `locales/en.json` catalogs plus
-  `data-zelyra-i18n`/`@i18n:` markers already localize custom page text; a typed
-  `t("key")` expression and declarative locale-route grouping remain open.
-  Safe CommonMark/GFM rendering remains open and is the only still-missing item
-  in the latest four-point report. Static asset serving is already present and
-  is not an open gap.
+- [~] **1.3.0 — verified web/compiler capabilities and remaining gaps:** SQL-loaded `Option<Record>` page data, dynamic `page content_type`, static `public/` assets, bounded `run_process_piped` for allowlisted processes, typed successful API responses via `ApiResponse<T>`, typed properties for reusable `view` layouts, and bounded safe CommonMark/GFM rendering are implemented on `main`. Piped process input does not itself execute Zelyra source or provide a web sandbox. Checked static locale references and `/{locale}/...` route selection were merged in PR #155. `HttpResult<T>` remains the result type for outbound HTTP calls. Typed translation calls in arbitrary expressions, Markdown table-of-contents generation, plural rules, and code highlighting remain open.
 
 **Post-1.3.0 or explicitly reprioritized:** a native AOT backend is optional
 and depends on benchmark evidence. No open task is silently dropped: work that cannot meet its release
@@ -673,7 +665,7 @@ semantic parity.
 - [~] Share runtime semantics and host services between the reference AST interpreter and VM. Pure standard-library operations and value-level unary/binary operators now use shared runtime dispatch across AST, MIR, and bytecode execution. Bytecode compilation still restricts operators to its documented subset; broader helpers do not silently expand the accepted bytecode format. Host services and selected SQL/policy helpers are also shared. A bounded transaction mixing a SQL audit insert with a PDF-attachment `mail_queue` now has differential AST/MIR/decoded-bytecode evidence: the test compares transaction mode, SQL order, and complete serialized parameters across both writes. This covers one queued message only; multiple-message, failure/rollback, and other transaction effects still need explicit parity tests. Complete capability/effect handling, contracts, broader error behavior, resource accounting, and module APIs still need a systematic parity pass.
 - [~] **AST runtime construction shared:** Program execution and direct function execution now use one interpreter constructor for symbol tables, schema metadata, HostServices, capabilities, runtime policies, transactions, and resource limits. This removes duplicated security/policy wiring without changing AST evaluation semantics. The runtime suite passes; broader backend parity and iterative AST evaluation remain open.
 - [~] **Shared interpreter resource limits:** AST and MIR now use the same helper for the default and hard-capped call depth and for calculating bounded worker-stack allocation; MIR parallel branches use the same stack policy. This removes backend-local cap literals but does not make the recursive interpreters iterative.
-- [~] **Structured AST type checker:** Control-flow/match-exhaustiveness analysis lives in `runtime/src/type_checker/flow.rs`; type relations, generic inference, alias expansion, and type-annotation validation live in `runtime/src/type_checker/type_relations.rs`. Return/fallthrough, loop, guard, and type rules are unchanged. Focused match, generic record/function, and alias-error tests plus workspace tests pass. This is internal restructuring; further decomposition, flow diagnostics, and complete MIR/bytecode parity remain open.
+- [~] **Structured AST type checker:** Control-flow/match-exhaustiveness analysis lives in `runtime/src/type_checker/flow.rs`; type relations, generic inference, alias expansion, and type-annotation validation live in `runtime/src/type_checker/type_relations.rs`; binary operator checking lives in `runtime/src/type_checker/expression_operators.rs`; built-in, user-function, and constructor call checking lives in `runtime/src/type_checker/call_expressions.rs`. Return/fallthrough, loop, guard, operator, and call rules are unchanged by these structural splits. Runtime and phase-one tests pass. This is internal restructuring; further decomposition, flow diagnostics, and complete MIR/bytecode parity remain open.
 - [ ] Keep the AST interpreter selectable until the VM reaches complete supported-language compatibility. Add differential, property-based, fuzz, security, and regression tests.
 - [~] Opt-in CLI execution is available for AST, MIR, and the supported bytecode subset. MIR/bytecode inspection, safe versioned caching, stable machine-readable diagnostics, and Studio integration remain open without breaking existing CLI behavior.
 - [~] A reproducible CPU benchmark compares mutable array updates across AST, MIR, and Bytecode; its method and three release runs are recorded in the [benchmark report](benchmarks/mutable-array-backends.en.md). I/O workloads, startup, memory, throughput, and compilation cost remain open.
@@ -1093,6 +1085,9 @@ compatibility behavior before changing syntax. See the detailed
   APIs, OpenAPI, and TypeScript client generation.
 - [~] Reusable web views: named layouts, page composition, a validated content
   slot, and typed self-closing components with properties are available.
+  Views also declare typed properties, and pages pass statically checked
+  literal or page-scope values for shared layout data such as titles and meta
+  content. Optional properties may be used by CRUD and TableView layouts.
   Named slots with fallback content, CRUD view overrides, and per-resource
   content for named CRUD-layout slots are available. Static slot markup may
   use checked components; record-bound custom slot content remains open.
