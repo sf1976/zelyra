@@ -2427,6 +2427,27 @@ impl Checker<'_> {
                         args[1].span,
                     );
                     Type::String
+                } else if name == "run_process_piped" {
+                    if args.len() != 4 {
+                        self.error(
+                            expr.span,
+                            "run_process_piped expects command, arguments, stdin, and timeout_ms",
+                        );
+                        return Type::Unknown;
+                    }
+                    let command = self.check_expr(&args[0], scopes);
+                    let arguments = self.check_expr(&args[1], scopes);
+                    let stdin = self.check_expr(&args[2], scopes);
+                    let timeout_ms = self.check_expr(&args[3], scopes);
+                    self.expect_type(&Type::String, &command, args[0].span);
+                    self.expect_type(
+                        &Type::Array(Box::new(Type::String)),
+                        &arguments,
+                        args[1].span,
+                    );
+                    self.expect_type(&Type::String, &stdin, args[2].span);
+                    self.expect_type(&Type::Int, &timeout_ms, args[3].span);
+                    Type::Named("ProcessResult".into())
                 } else if name == "read_text" {
                     if args.len() != 1 {
                         self.error(expr.span, "read_text expects exactly one String path");
@@ -2917,6 +2938,13 @@ impl Checker<'_> {
                 "status" => Some(Type::Int),
                 "headers" => Some(Type::Array(Box::new(Type::String))),
                 "body" => Some(Type::String),
+                _ => None,
+            };
+        }
+        if name == "ProcessResult" {
+            return match field {
+                "exit_code" => Some(Type::Int),
+                "stdout" | "stderr" => Some(Type::String),
                 _ => None,
             };
         }

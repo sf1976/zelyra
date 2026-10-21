@@ -11,7 +11,8 @@ use zelyra_ast::temporal::{
 use zelyra_ast::*;
 
 pub use host::{
-    HostFileMetadata, HostHttpResponse, HostServices, SystemHostServices, HOST_SERVICES_API_VERSION,
+    HostFileMetadata, HostHttpResponse, HostProcessResult, HostServices, SystemHostServices,
+    HOST_SERVICES_API_VERSION,
 };
 
 const BASE64_CHARS: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
@@ -757,6 +758,45 @@ pub fn run_process_with_host_services(
     )
 }
 
+/// Run one explicitly allowlisted process with bounded stdin and output.
+pub fn run_process_piped_with_host_services(
+    command: &str,
+    arguments: &[String],
+    stdin: &str,
+    timeout_ms: u64,
+    policy: Option<&ProcessPolicy>,
+    host_services: &dyn HostServices,
+) -> Result<HostProcessResult, String> {
+    let policy = policy
+        .ok_or_else(|| "process execution denied: no process policy is configured".to_owned())?;
+    if command.is_empty() || command.contains(['\r', '\n']) {
+        return Err("run_process_piped received an invalid command".into());
+    }
+    if !policy
+        .allowed_commands
+        .iter()
+        .any(|allowed| allowed == command)
+    {
+        return Err(format!("process execution denied for command `{command}`"));
+    }
+    if timeout_ms == 0 || policy.timeout_ms == 0 || policy.max_output_bytes == 0 {
+        return Err("process policy requires positive timeout and output limits".into());
+    }
+    if stdin.len() > policy.max_output_bytes {
+        return Err(format!(
+            "process stdin exceeds the {} byte input limit",
+            policy.max_output_bytes
+        ));
+    }
+    host_services.run_process_piped(
+        command,
+        arguments,
+        stdin,
+        timeout_ms.min(policy.timeout_ms),
+        policy.max_output_bytes,
+    )
+}
+
 impl fmt::Display for RuntimeError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}", self.message)
@@ -1127,6 +1167,7 @@ fn is_runtime_builtin(name: &str) -> bool {
             | "http_json"
             | "http_result"
             | "run_process"
+            | "run_process_piped"
             | "read_text"
             | "read_text_result"
             | "write_text"

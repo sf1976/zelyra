@@ -96,6 +96,7 @@ fn check_program(
         "HttpResponse",
         "HttpError",
         "HttpResult",
+        "ProcessResult",
     ]
     .into_iter()
     .map(String::from)

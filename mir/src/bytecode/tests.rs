@@ -7905,3 +7905,51 @@ fn bytecode_verifier_rejects_invalid_embedded_source_step_spans() {
     let errors = verify_bytecode(&bytecode).expect_err("invalid step spans are rejected");
     assert!(errors[0].message.contains("source-step span is invalid"));
 }
+
+#[test]
+fn piped_process_result_executes_consistently_in_bytecode_and_ast() {
+    let source = "fn run() -> String uses Process { return run_process_piped(\"/usr/bin/cat\", [\"-\"], \"hello from stdin\", 1000).stdout } fn main() {}";
+    let ast = parse(&lex(source).unwrap()).unwrap();
+    let (mir, bytecode) = compile_source(source, "run");
+    let grants = HashSet::from(["Process".to_owned()]);
+    let policy = RuntimePolicy {
+        process: Some(ProcessPolicy {
+            allowed_commands: vec!["/usr/bin/cat".into()],
+            timeout_ms: 2_000,
+            max_output_bytes: 128,
+        }),
+        ..RuntimePolicy::default()
+    };
+    let vm = execute_with_host_services_and_policy_captured(
+        &bytecode,
+        Vec::new(),
+        ExecutionLimits::default(),
+        Some(&grants),
+        Some(&policy),
+        Arc::new(SystemHostServices),
+    );
+    let ast_result = zelyra_runtime::execute_function_with_capabilities_and_policies(
+        &ast,
+        "run",
+        Vec::new(),
+        None,
+        Some(&grants),
+        Some(&policy),
+    )
+    .unwrap();
+    assert_eq!(vm.error, None);
+    assert_eq!(vm.value, Some(ast_result));
+    assert_eq!(vm.value, Some(Value::String("hello from stdin".into())));
+
+    let mir_result = execution::execute_function_with_host_services_and_policy(
+        &mir,
+        "run",
+        Vec::new(),
+        ExecutionLimits::default(),
+        Some(&grants),
+        Some(&policy),
+        Arc::new(SystemHostServices),
+    )
+    .unwrap();
+    assert_eq!(mir_result.value, Value::String("hello from stdin".into()));
+}

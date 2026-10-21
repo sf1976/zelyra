@@ -349,8 +349,14 @@ capability.
   `http_json<Req, Res>(method, url, headers, body: Req?) -> Res` decodes a
   successful JSON response. `http_result<Req, Res>(method, url, headers,
   body: Req?) -> HttpResult<Res>` also returns status and headers.
-- `uses Process`: `run_process(command: String, args: String[]) ->
-  ProcessResult` starts an explicitly permitted process without a shell.
+- `uses Process`:
+  `run_process(command: String, args: String[]) -> String` starts an explicitly
+  permitted process without a shell and returns stdout for exit code 0.
+  `run_process_piped(command: String, args: String[], stdin: String,
+  timeout_ms: Int) -> ProcessResult` sends bounded text to stdin and returns
+  `exit_code`, `stdout`, and `stderr`. The command must be in the project
+  process allowlist; the effective timeout is the lower of the argument and
+  policy limits.
 - `uses Database`: `sql<T[]> { SELECT ... }` executes typed queries with bound
   parameters; `transaction { ... }` groups database operations atomically.
 - `uses Email`: `render_pdf(view_name, record_data) -> Bytes` (new in 1.0.7)

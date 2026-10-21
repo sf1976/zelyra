@@ -74,7 +74,11 @@ The supported HostServices effects are `Clock` (`now()`), `Environment`
 `run_process(command, arguments)`. Process execution requires a declared and
 explicitly granted `Process` capability and a runtime policy with an exact
 command allowlist entry, positive timeout, and output limit. The host receives
-separate arguments and does not invoke a shell. FileSystem calls include reads via
+separate arguments and does not invoke a shell.
+`run_process_piped(command, arguments, stdin, timeout_ms)` is also supported;
+it returns `ProcessResult { exit_code, stdout, stderr }`, with timeout capped at
+the project policy and stdin/output bounded by that policy.
+FileSystem calls include reads via
 `read_text(path)` and `read_text_result(path)`, metadata via
 `file_exists(path)`, `dir_exists(path)`, and `file_size(path)`, plus
 directory listing through `list_dir(path)` and write-root-restricted text
