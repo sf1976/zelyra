@@ -599,6 +599,16 @@ Zelyra modules from selected source-backed website behavior and state exactly
 what remains unmigrated. It must not recreate Laravel or claim complete PHP
 translation. The bounded plan is in the linked 1.2.27 work plan.
 
+### 1.2.34 — ordered, wholly guarded migration callbacks
+
+The current importer hardening change statically skips a `Schema::table`
+callback only when its complete supported body is one
+`if (!Schema::hasColumn(...))` guard and an earlier migration has already
+declared that exact column. Mixed or unsupported callbacks remain subject to
+the existing fail-closed review. This improves schema reconstruction for the
+acceptance project; it does not import the guarded callback's skipped fields
+or claim full Laravel parity.
+
 ## Active architecture milestones (1.1.5 through 1.3.0)
 
 These milestones are in progress and unreleased. Items with `[~]` are partially implemented; open subgoals remain explicit. Entries for released versions remain historical evidence.
