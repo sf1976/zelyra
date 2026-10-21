@@ -582,9 +582,13 @@ security and compatibility gates stated for that milestone.
   sandbox. Typed successful API responses are implemented on the active,
   unmerged branch as `ApiResponse<T>` with status/content-type declarations,
   checked headers, OpenAPI, and TypeScript-client support. `HttpResult<T>` still
-  describes responses from outbound HTTP calls. Parameterized `view` props,
-  generic page-level translation lookup, and safe CommonMark/GFM rendering
-  remain open. Static asset serving is already present and is not an open gap.
+  describes responses from outbound HTTP calls. Parameterized `view` props
+  remain open, although pages can already provide named layout slots for
+  page-specific head content. Project `locales/de.json` and `locales/en.json`
+  catalogs plus `data-zelyra-i18n`/`@i18n:` markers already localize custom page
+  text; a typed `t("key")` expression and declarative locale-route grouping
+  remain open. Safe CommonMark/GFM rendering remains open. Static asset serving
+  is already present and is not an open gap.
 
 **Post-1.3.0 or explicitly reprioritized:** a native AOT backend is optional
 and depends on benchmark evidence. No open task is silently dropped: work that cannot meet its release

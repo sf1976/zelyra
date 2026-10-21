@@ -634,10 +634,14 @@ abgeschlossen.
   auf dem aktiven, noch nicht zusammengeführten Branch als `ApiResponse<T>` mit
   Status-/Content-Type-Deklarationen, geprüften Headern, OpenAPI- und
   TypeScript-Client-Unterstützung umgesetzt. `HttpResult<T>` beschreibt weiter
-  Antworten ausgehender HTTP-Aufrufe. Parametrisierte `view`-Props, eine
-  allgemeine Übersetzungssuche für Seiten und sicheres CommonMark/GFM-Rendering
-  bleiben offen. Statisches Asset-Serving ist bereits implementiert und keine
-  offene Lücke.
+  Antworten ausgehender HTTP-Aufrufe. Parametrisierte `view`-Props bleiben
+  offen; Seiten können aber bereits benannte Layout-Slots für individuelle
+  Head-Inhalte bereitstellen. Projektkataloge `locales/de.json` und
+  `locales/en.json` sowie `data-zelyra-i18n`-/`@i18n:`-Marker lokalisieren
+  benutzerdefinierte Seitentexte bereits. Ein typisierter Ausdruck
+  `t("key")` und deklarative Locale-Routengruppen fehlen noch. Sicheres
+  CommonMark/GFM-Rendering bleibt offen. Statisches Asset-Serving ist bereits
+  vorhanden und keine offene Lücke.
 
 **Nach 1.3.0 oder bei ausdrücklicher Neubewertung:** Ein natives AOT-Backend
 bleibt optional und hängt von Benchmarks ab. Kein offener Punkt entfällt stillschweigend: Arbeit, deren
