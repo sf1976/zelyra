@@ -4,6 +4,7 @@
 //! lowering, CLI checks, and source-mapped editor type information.
 use super::*;
 mod enum_constructors;
+mod expression_operators;
 mod expressions;
 mod flow;
 mod patterns;
