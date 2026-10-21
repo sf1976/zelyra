@@ -1729,6 +1729,7 @@ impl WebApp {
     ) -> Response {
         let request_id = request_id(request);
         let mut correlated_request = request.clone();
+        let request_language = self.language_for_request(&correlated_request);
         correlated_request
             .headers
             .insert("x-request-id".into(), request_id.clone());
@@ -1739,13 +1740,13 @@ impl WebApp {
             && !self.valid_schedule_probe(&correlated_request)
         {
             let title = framework_text_with_catalog(
-                self.ui_language,
+                request_language,
                 "400 Bad Request",
                 &self.project_ui_catalogs,
             )
             .unwrap_or_default();
             let message = framework_text_with_catalog(
-                self.ui_language,
+                request_language,
                 "This request host is not allowed.",
                 &self.project_ui_catalogs,
             )
@@ -1767,7 +1768,7 @@ impl WebApp {
                     response.body = render_default_application_shell(
                         &response.body,
                         &context,
-                        self.ui_language,
+                        request_language,
                     );
                 }
             }
@@ -1789,14 +1790,14 @@ impl WebApp {
             response.body = append_learning_assistant(
                 &response.body,
                 &correlated_request.path,
-                self.ui_language,
+                request_language,
                 generated_crud,
             );
         }
         if response.content_type.starts_with("text/html") {
             response.body = localize_html_with_catalog(
                 &response.body,
-                self.ui_language,
+                request_language,
                 &self.project_ui_catalogs,
             );
         }
@@ -1805,6 +1806,19 @@ impl WebApp {
             .retain(|(name, _)| !name.eq_ignore_ascii_case("x-request-id"));
         response.headers.push(("X-Request-ID".into(), request_id));
         response
+    }
+
+    fn language_for_request(&self, request: &Request) -> UiLanguage {
+        self.routes
+            .iter()
+            .filter(|route| route_has_locale_prefix(&route.path))
+            .find_map(|route| {
+                let params = match_path(&route.path, &request.path)?;
+                params
+                    .get("locale")
+                    .and_then(|locale| UiLanguage::parse(locale))
+            })
+            .unwrap_or(self.ui_language)
     }
 
     fn dispatch_inner(
@@ -2557,7 +2571,7 @@ impl WebApp {
                 &request.method,
                 &request.target,
                 self.database_url.as_deref(),
-                self.ui_language,
+                self.language_for_request(request),
                 &self.project_ui_catalogs,
             );
         if response.status == 200 {
@@ -6358,6 +6372,17 @@ impl Router {
         let path = target.split_once('?').map_or(target, |(path, _)| path);
         for route in &self.routes {
             if let Some(params) = match_path(&route.path, path) {
+                let route_language = if route_has_locale_prefix(&route.path) {
+                    let Some(route_language) = params
+                        .get("locale")
+                        .and_then(|locale| UiLanguage::parse(locale))
+                    else {
+                        return Response::html(404, "<h1>404 Not Found</h1>");
+                    };
+                    route_language
+                } else {
+                    language
+                };
                 let query_string = target.split_once('?').map_or("", |(_, query)| query);
                 let query_values = match parse_urlencoded(query_string) {
                     Ok(values) => values,
@@ -6395,11 +6420,17 @@ impl Router {
                         );
                     }
                 };
-                let html =
-                    render_page_with_language(route, path, &params, &query_values, &data, language);
+                let html = render_page_with_language(
+                    route,
+                    path,
+                    &params,
+                    &query_values,
+                    &data,
+                    route_language,
+                );
                 return Response::html(
                     200,
-                    localize_html_with_catalog(&html, language, project_catalogs),
+                    localize_html_with_catalog(&html, route_language, project_catalogs),
                 );
             }
         }
@@ -14040,6 +14071,10 @@ fn match_path(pattern: &str, path: &str) -> Option<HashMap<String, String>> {
     Some(params)
 }
 
+fn route_has_locale_prefix(pattern: &str) -> bool {
+    path_parts(pattern).first().copied() == Some("{locale}")
+}
+
 fn path_parts(path: &str) -> Vec<&str> {
     path.trim_matches('/')
         .split('/')
@@ -15213,6 +15248,15 @@ fn render_interpolations(
             return rendered;
         };
         let name = &after_open[..close];
+        if let Some(key) = template_translation_key(name) {
+            if i18n::valid_catalog_key(key) {
+                rendered.push_str(&i18n::reference(key));
+            } else {
+                rendered.push_str("[missing translation]");
+            }
+            rest = &after_open[close + 1..];
+            continue;
+        }
         let markdown_source = name.strip_prefix("render_markdown:");
         let url_encoded = name.starts_with("url_encode:");
         let lookup_name = name.strip_prefix("url_encode:").unwrap_or(name);
@@ -15251,6 +15295,13 @@ fn render_interpolations(
     }
     rendered.push_str(rest);
     rendered
+}
+
+fn template_translation_key(expression: &str) -> Option<&str> {
+    expression
+        .strip_prefix("t(\"")
+        .or_else(|| expression.strip_prefix("i18n(\""))
+        .and_then(|key| key.strip_suffix("\")"))
 }
 
 fn hex_encode(bytes: &[u8]) -> String {

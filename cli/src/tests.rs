@@ -2210,6 +2210,40 @@ fn validates_typed_page_data_field_bindings() {
 }
 
 #[test]
+fn validates_static_translation_references_in_view_text_and_attributes() {
+    let source = r#"
+        page "/" {
+            html {
+                <main title='{t("site.home.title")}'>
+                    <h1>{t("site.home.title")}</h1>
+                    <p>{i18n("site.home.intro")}</p>
+                </main>
+            }
+        }
+    "#;
+    let program = parse(&lex(source).unwrap()).unwrap();
+    assert!(validate_components("localized-page.zyl", &program));
+
+    let invalid = r#"
+        page "/" { html { <h1>{t("bad key")}</h1> } }
+    "#;
+    let program = parse(&lex(invalid).unwrap()).unwrap();
+    assert!(!validate_components("invalid-locale-key.zyl", &program));
+
+    let invalid_media_type = r#"
+        component FeedTitle {
+            html { <title>{t("site.feed.title")}</title> }
+        }
+        page "/feed.xml" {
+            content_type: "application/xml; charset=utf-8"
+            html { <feed><FeedTitle /></feed> }
+        }
+    "#;
+    let program = parse(&lex(invalid_media_type).unwrap()).unwrap();
+    assert!(!validate_page_data("localized-xml.zyl", &program));
+}
+
+#[test]
 fn validates_optional_typed_page_data_for_missing_detail_rows() {
     let source = r#"
         table packages { id: Id primary auto slug: String(120) required name: String(200) required }

@@ -851,6 +851,30 @@ page "/customers" {
 }
 ~~~
 
+Eigene Seiten können Text aus den Projektkatalogen `locales/de.json` und
+`locales/en.json` direkt in Text- oder Attributpositionen einsetzen:
+
+~~~zelyra
+page "/" {
+    html {
+        <h1>{t("site.home.title")}</h1>
+        <p>{i18n("site.home.intro")}</p>
+        <a title='{t("site.home.help")}'>Hilfe</a>
+    }
+}
+~~~
+
+`t("key")` und `i18n("key")` sind statische View-Übersetzungsreferenzen.
+Der Schlüssel darf bis zu 128 ASCII-Buchstaben, Ziffern, Punkte, Unterstriche
+und Bindestriche enthalten und wird beim Übersetzen HTML-escaped. Die gewählte
+Projekt-UI-Sprache bestimmt den Katalog; fehlt ein projektspezifischer
+deutscher Eintrag, greift der englische Katalog als Fallback. Ein unbekannter
+Schlüssel wird als fehlende Übersetzung ausgegeben. Für eine URL-basierte
+Sprachauswahl muss der erste Routenabschnitt ausdrücklich `{locale}` heißen,
+zum Beispiel `page "/{locale}/vergleich"`. Zelyra akzeptiert dort nur `de` und
+`en`; andere Werte liefern 404. Routen ohne diesen Präfix verwenden die
+konfigurierte Projekt-UI-Sprache. Pluralregeln sind nicht implementiert.
+
 ### Wiederverwendbare Views mit typisierten Eigenschaften
 
 Ein `view` kann typisierte Eigenschaften für Seitentitel, Beschreibungen und
