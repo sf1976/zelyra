@@ -1022,6 +1022,27 @@ page "/dashboard" {
 
 *Hinweis:* Verschachtelte Komponenten-Slots innerhalb einer Komponentenverwendung benötigen nicht fälschlich ein übergeordnetes Seiten-`view:`-Layout.
 
+### Markdown in HTML-Views
+
+Die reine Funktion `render_markdown(source)` erzeugt sicheres HTML aus CommonMark mit GFM-Tabellen, Durchstreichungen, Task-Listen und Fußnoten. Überschriften erhalten stabile IDs; doppelte Überschriften bekommen einen eindeutigen Suffix. Eingebettetes HTML wird als Text escaped und nie als Markup ausgeführt. Links dürfen HTTP(S), Mailto und relative URLs verwenden; Bilder nur relative URLs, damit kein fremder Host beim Anzeigen nachgeladen wird. Andere Link-Schemes werden nicht als Links gerendert. Die Quelle ist auf 1 MiB pro Aufruf begrenzt.
+
+In einem HTML-Template wird Markdown ausdrücklich als Inhalt gerendert:
+
+~~~zelyra
+component HelpArticle {
+    props { source: String }
+    html {
+        <article class="help-article">
+            {render_markdown:source}
+        </article>
+    }
+}
+~~~
+
+`render_markdown:source` ist nur in HTML-Inhalt erlaubt und muss auf einen typisierten Textwert aufgelöst werden; der Compiler weist die Verwendung in Attributen oder mit Nicht-Textwerten mit `E-VIEW-040` zurück. Normale `{source}`-Interpolation bleibt escaped. Die Funktion liefert zwar einen `String`, doch die Template-Form rendert ihn nur mit dem Markdown-Renderer, der rohes HTML als Text ausgibt und Linkziele begrenzt; es gibt keinen allgemeinen Raw-HTML-Ausgabeschalter. `render_markdown(source)` lässt sich auch in Zelyra-Ausdrücken verwenden, wird bei gewöhnlicher HTML-Interpolation aber wie jeder String escaped.
+
+Dateizugriff bleibt explizit: Eine Markdown-Datei muss über die vorhandene `FileSystem`-Capability und die Projektpfadregeln gelesen werden. Das Markdown-Rendering selbst lädt keine Dateien nach und erzeugt keine Netzwerkzugriffe.
+
 ## 11. Formulare
 
 ✅ Formulare können Regeln aus Tabellen übernehmen:

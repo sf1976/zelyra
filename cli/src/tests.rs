@@ -2682,6 +2682,37 @@ fn rejects_url_encode_component_interpolation_on_non_text_values() {
 }
 
 #[test]
+fn markdown_template_interpolation_is_typed_and_content_only() {
+    let valid = r#"
+        component HelpArticle {
+            props { markdown: String }
+            html { <article>{render_markdown:markdown}</article> }
+        }
+    "#;
+    let program = parse(&lex(valid).unwrap()).unwrap();
+    assert!(validate_components("markdown.zyl", &program));
+    let dynamic = render_view_component(&program.components[0], "markdown=\"{doc.body}\"", None);
+    assert!(dynamic.contains("{render_markdown:doc.body}"));
+    let static_html = render_view_component(
+        &program.components[0],
+        "markdown=\"<script>alert(1)</script>\"",
+        None,
+    );
+    assert!(!static_html.contains("<script"));
+
+    let invalid_type = valid.replace("markdown: String", "markdown: Int");
+    let program = parse(&lex(&invalid_type).unwrap()).unwrap();
+    assert!(!validate_components("markdown.zyl", &program));
+
+    let invalid_attribute = valid.replace(
+        "<article>{render_markdown:markdown}</article>",
+        "<article title=\"{render_markdown:markdown}\">Help</article>",
+    );
+    let program = parse(&lex(&invalid_attribute).unwrap()).unwrap();
+    assert!(!validate_components("markdown.zyl", &program));
+}
+
+#[test]
 fn rejects_route_values_with_an_incompatible_component_property_type() {
     let source = r#"
         component Counter {

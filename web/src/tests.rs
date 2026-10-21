@@ -1919,6 +1919,24 @@ fn locale_prefix_selects_catalog_for_shared_view_and_rejects_unknown_locale() {
 }
 
 #[test]
+fn markdown_template_interpolation_escapes_raw_html_and_uses_safe_commonmark() {
+    let params = HashMap::new();
+    let data = HashMap::from([(
+        "content.body".into(),
+        "# Help\n\n<script>alert(1)</script>\n\n**safe**".into(),
+    )]);
+    let rendered = render_interpolations(
+        "<article>{render_markdown:content.body}</article>",
+        &params,
+        &data,
+    );
+    assert!(rendered.contains("<h1 id=\"help\">Help</h1>"));
+    assert!(rendered.contains("<strong>safe</strong>"));
+    assert!(!rendered.contains("<script"));
+    assert!(rendered.contains("&lt;script&gt;alert(1)&lt;/script&gt;"));
+}
+
+#[test]
 fn default_application_shell_uses_the_shared_mobile_navigation_contract() {
     let context = DefaultUiContext {
         current_path: "/invoices".into(),
