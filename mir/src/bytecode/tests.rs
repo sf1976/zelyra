@@ -295,6 +295,32 @@ fn compile_source(source: &str, entry: &str) -> (MirProgram, BytecodeProgram) {
 }
 
 #[test]
+fn bytecode_v28_roundtrips_typed_view_properties() {
+    let source = r#"
+        view InvoiceShell {
+            props {
+                title: String
+                description: String?
+            }
+            html {
+                <title>{title}</title>
+                <slot />
+            }
+        }
+        fn main() {}
+    "#;
+    let (_, bytecode) = compile_source(source, "main");
+    assert_eq!(bytecode.version, 28);
+    assert_eq!(bytecode.views.len(), 1);
+    let original_view = bytecode.views[0].clone();
+    assert_eq!(original_view.props.len(), 2);
+
+    let decoded = decode(&encode(&bytecode).expect("bytecode encodes"))
+        .expect("bytecode with typed view properties decodes");
+    assert_eq!(decoded.views, [original_view]);
+}
+
+#[test]
 fn backend_differential_regression_covers_tuples_records_pipelines_and_match() {
     let cases = [
         (

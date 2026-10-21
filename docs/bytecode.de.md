@@ -1,4 +1,4 @@
-# Experimentelles Zelyra-Bytecode v27
+# Experimentelles Zelyra-Bytecode v28
 
 `zelyra-mir::bytecode` bietet das erste ausführbare Bytecode-Backend für
 bereits typgeprüfte und verifizierte MIR. Der AST-Interpreter bleibt die Referenzimplementierung und das normale
@@ -245,9 +245,12 @@ durch weitere Budgetläufe abgedeckt. Reine SQL-Transaktionsblöcke und parallel
 fehlerhafte oder handgebaute Artefakte begrenzt die VM die Ausführung zusätzlich
 auf 10.000.000 Befehle.
 
-`BYTECODE_VERSION` bezeichnet Version `27` des deterministischen Binärformats.
-Version 27 bettet Quellschrittpositionen in Instruktionsmetadaten ein und
-behält für aufeinanderfolgende Quellschritte eine separate Step-Operation bei.
+`BYTECODE_VERSION` bezeichnet Version `28` des deterministischen Binärformats.
+Version 28 ergänzt serialisierte View-Definitionen um typisierte Eigenschaften
+(Name, Typ und Quellposition), damit eingebettete Views ihren geprüften
+Eigenschaftsvertrag behalten. Die Quellschrittmetadaten aus Version 27 bleiben
+erhalten: Sie betten Quellschrittpositionen in Instruktionsmetadaten ein und
+behalten für aufeinanderfolgende Quellschritte eine separate Step-Operation bei.
 Version 26 führte explizite Quellschrittmarkierungen ein. Version 25 ergänzte die
 verifizierte mutable Array-Pop-Instruktion und typisierte strukturelle
 Array-/Tuple-/Option-/Result-Gleichheitsoperationen.
