@@ -18,6 +18,7 @@ impl<'program, 'services> Interpreter<'program, 'services> {
         span: Span,
     ) -> Result<Value, RuntimeError> {
         let function = self
+            .program_context
             .functions
             .get(name)
             .copied()
@@ -95,7 +96,7 @@ impl<'program, 'services> Interpreter<'program, 'services> {
             .as_ref()
             .map(|ty| self.runtime_alias_type(&substitute_generic_type(ty, &substitutions), span))
             .transpose()?;
-        if let Some(grants) = &self.granted_capabilities {
+        if let Some(grants) = &self.execution_context.granted_capabilities {
             if let Some(capability) = function
                 .capabilities
                 .iter()

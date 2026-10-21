@@ -20,6 +20,7 @@ impl<'program, 'services> Interpreter<'program, 'services> {
             ));
         }
         if self
+            .execution_context
             .granted_capabilities
             .as_ref()
             .is_some_and(|grants| !project_grants_capability(grants, capability))
@@ -33,7 +34,8 @@ impl<'program, 'services> Interpreter<'program, 'services> {
     }
 
     pub(crate) fn filesystem_roots(&self, write: bool) -> Vec<PathBuf> {
-        self.filesystem_policy
+        self.execution_context
+            .filesystem_policy
             .as_ref()
             .map_or_else(Vec::new, |policy| {
                 if write {
@@ -53,12 +55,12 @@ impl<'program, 'services> Interpreter<'program, 'services> {
         allow_missing: bool,
     ) -> Result<PathBuf, RuntimeError> {
         resolve_filesystem_path_rule(
-            self.filesystem_policy.as_ref(),
+            self.execution_context.filesystem_policy.as_ref(),
             path,
             roots,
             operation,
             allow_missing,
-            Some(self.host_services.as_ref()),
+            Some(self.execution_context.host_services.as_ref()),
         )
         .map_err(|message| self.runtime_error(span, message))
     }
@@ -76,8 +78,8 @@ impl<'program, 'services> Interpreter<'program, 'services> {
             url,
             request_headers,
             request_body,
-            self.network_policy.as_ref(),
-            self.host_services.as_ref(),
+            self.execution_context.network_policy.as_ref(),
+            self.execution_context.host_services.as_ref(),
         )
         .map_err(|error| self.runtime_error(span, error))?;
         http_response_value_from_host(response).map_err(|error| self.runtime_error(span, error))
@@ -212,8 +214,8 @@ impl<'program, 'services> Interpreter<'program, 'services> {
         run_process_with_host_services(
             command,
             arguments,
-            self.process_policy.as_ref(),
-            self.host_services.as_ref(),
+            self.execution_context.process_policy.as_ref(),
+            self.execution_context.host_services.as_ref(),
         )
         .map_err(|error| self.runtime_error(span, error))
     }
@@ -231,8 +233,8 @@ impl<'program, 'services> Interpreter<'program, 'services> {
             arguments,
             stdin,
             timeout_ms,
-            self.process_policy.as_ref(),
-            self.host_services.as_ref(),
+            self.execution_context.process_policy.as_ref(),
+            self.execution_context.host_services.as_ref(),
         )
         .map_err(|error| self.runtime_error(span, error))
     }

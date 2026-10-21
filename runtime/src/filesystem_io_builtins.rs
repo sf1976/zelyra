@@ -45,6 +45,7 @@ impl<'program, 'services> Interpreter<'program, 'services> {
                 let path = self.resolve_filesystem_path(
                     &path,
                     &self
+                        .execution_context
                         .filesystem_policy
                         .as_ref()
                         .map_or_else(Vec::new, |policy| policy.read_roots.clone()),
@@ -52,7 +53,8 @@ impl<'program, 'services> Interpreter<'program, 'services> {
                     span,
                     false,
                 )?;
-                self.host_services
+                self.execution_context
+                    .host_services
                     .read_text(&path)
                     .map_err(|error| {
                         self.runtime_error(span, format!("file-system read failed: {error}"))
@@ -68,11 +70,13 @@ impl<'program, 'services> Interpreter<'program, 'services> {
                 let outcome = match path_value {
                     Value::String(path) if !path.is_empty() => {
                         let roots = self
+                            .execution_context
                             .filesystem_policy
                             .as_ref()
                             .map_or_else(Vec::new, |policy| policy.read_roots.clone());
                         match self.resolve_filesystem_path(&path, &roots, "read", span, false) {
                             Ok(path) => self
+                                .execution_context
                                 .host_services
                                 .read_text(&path)
                                 .map_err(|error| format!("file-system read failed: {error}")),
@@ -106,11 +110,13 @@ impl<'program, 'services> Interpreter<'program, 'services> {
                     );
                 }
                 let roots = self
+                    .execution_context
                     .filesystem_policy
                     .as_ref()
                     .map_or_else(Vec::new, |policy| policy.write_roots.clone());
                 let path = self.resolve_filesystem_path(&path, &roots, "write", span, true)?;
-                self.host_services
+                self.execution_context
+                    .host_services
                     .write_text(&path, &content)
                     .map_err(|error| {
                         self.runtime_error(span, format!("file-system write failed: {error}"))
@@ -129,11 +135,13 @@ impl<'program, 'services> Interpreter<'program, 'services> {
                 let outcome = match (path_value, content_value) {
                     (Value::String(path), Value::String(content)) if !path.is_empty() => {
                         let roots = self
+                            .execution_context
                             .filesystem_policy
                             .as_ref()
                             .map_or_else(Vec::new, |policy| policy.write_roots.clone());
                         match self.resolve_filesystem_path(&path, &roots, "write", span, true) {
                             Ok(path) => self
+                                .execution_context
                                 .host_services
                                 .write_text(&path, &content)
                                 .map_err(|error| format!("file-system write failed: {error}")),
@@ -175,13 +183,18 @@ impl<'program, 'services> Interpreter<'program, 'services> {
                         .map_err(|error| error.message)
                         .and_then(|target| {
                             let operation = match name {
-                                "write_text_new_result" => {
-                                    self.host_services.write_text_new(&target, &content)
-                                }
-                                "atomic_write_text_result" => {
-                                    self.host_services.atomic_write_text(&target, &content)
-                                }
-                                _ => self.host_services.append_text(&target, &content),
+                                "write_text_new_result" => self
+                                    .execution_context
+                                    .host_services
+                                    .write_text_new(&target, &content),
+                                "atomic_write_text_result" => self
+                                    .execution_context
+                                    .host_services
+                                    .atomic_write_text(&target, &content),
+                                _ => self
+                                    .execution_context
+                                    .host_services
+                                    .append_text(&target, &content),
                             };
                             operation.map_err(|error| format!("file-system {name} failed: {error}"))
                         }),
@@ -210,7 +223,8 @@ impl<'program, 'services> Interpreter<'program, 'services> {
                         if !source.is_empty() && !destination.is_empty() =>
                     {
                         let source_roots = if name == "copy_file_new_result" {
-                            self.filesystem_policy
+                            self.execution_context
+                                .filesystem_policy
                                 .as_ref()
                                 .map_or_else(Vec::new, |policy| policy.read_roots.clone())
                         } else {
@@ -236,10 +250,12 @@ impl<'program, 'services> Interpreter<'program, 'services> {
                             .map_err(|error| error.message)
                             .and_then(|destination_path| {
                                 let operation = if name == "copy_file_new_result" {
-                                    self.host_services
+                                    self.execution_context
+                                        .host_services
                                         .copy_file_new(&source_path, &destination_path)
                                 } else {
-                                    self.host_services
+                                    self.execution_context
+                                        .host_services
                                         .rename_file_new(&source_path, &destination_path)
                                 };
                                 operation
@@ -268,12 +284,15 @@ impl<'program, 'services> Interpreter<'program, 'services> {
                         let roots = self.filesystem_roots(true);
                         self.resolve_filesystem_path(&path, &roots, "delete", span, false)
                             .and_then(|path| {
-                                self.host_services.remove_file(&path).map_err(|error| {
-                                    self.runtime_error(
-                                        span,
-                                        format!("file-system delete failed: {error}"),
-                                    )
-                                })
+                                self.execution_context
+                                    .host_services
+                                    .remove_file(&path)
+                                    .map_err(|error| {
+                                        self.runtime_error(
+                                            span,
+                                            format!("file-system delete failed: {error}"),
+                                        )
+                                    })
                             })
                     }
                     Value::String(_) => {
@@ -305,11 +324,13 @@ impl<'program, 'services> Interpreter<'program, 'services> {
                     );
                 }
                 let roots = self
+                    .execution_context
                     .filesystem_policy
                     .as_ref()
                     .map_or_else(Vec::new, |policy| policy.read_roots.clone());
                 let path = self.resolve_filesystem_path(&path, &roots, "list", span, false)?;
                 let mut entries = self
+                    .execution_context
                     .host_services
                     .list_directory(&path)
                     .map_err(|error| {

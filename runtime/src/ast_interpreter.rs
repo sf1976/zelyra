@@ -47,8 +47,7 @@ enum Flow {
 }
 
 pub(super) struct AstInterpreter<'program, 'services> {
-    pub(super) functions: HashMap<String, &'program Function>,
-    pub(super) view_definitions: HashMap<String, ViewDef>,
+    pub(super) program_context: Arc<ProgramContext<'program>>,
     pub(super) output: Vec<String>,
     pub(super) next_class_object_id: Arc<AtomicU64>,
     pub(super) parallel_worker: bool,
@@ -61,20 +60,8 @@ pub(super) struct AstInterpreter<'program, 'services> {
     /// A request-owned transaction query bridge. Its borrow is scoped to one
     /// synchronous execution and is never cloned into parallel workers.
     pub(super) transactional_query: Option<&'services mut TransactionalQuery<'services>>,
-    pub(super) storage_schema: Result<zelyra_database::Schema, Vec<zelyra_database::SchemaError>>,
     pub(super) storage_checked: bool,
-    pub(super) scoped_tables: Vec<String>,
-    pub(super) granted_capabilities: Option<HashSet<String>>,
-    pub(super) filesystem_policy: Option<FileSystemPolicy>,
-    pub(super) network_policy: Option<NetworkPolicy>,
-    pub(super) process_policy: Option<ProcessPolicy>,
-    pub(super) mail_policy: Option<MailPolicy>,
-    pub(super) package_settings: Option<PackageSettings>,
-    pub(super) host_services: Arc<dyn HostServices>,
-    pub(super) record_definitions: HashMap<String, RecordDef>,
-    pub(super) sql_record_definitions: HashMap<String, RecordDef>,
-    pub(super) type_aliases: HashMap<String, Type>,
-    pub(super) enum_definitions: HashMap<String, zelyra_ast::EnumDef>,
+    pub(super) execution_context: ExecutionContext,
     pub(super) active_capabilities: Vec<HashSet<String>>,
     pub(super) active_type_substitutions: Vec<HashMap<String, Type>>,
 }
@@ -82,6 +69,135 @@ pub(super) struct AstInterpreter<'program, 'services> {
 pub(super) type TransactionalQuery<'services> = dyn FnMut(&zelyra_database::Query) -> Result<zelyra_database::QueryResult, String>
     + Send
     + 'services;
+
+/// Immutable symbols and schema metadata derived from one checked program.
+/// Parallel workers share this context instead of cloning all declarations.
+pub(super) struct ProgramContext<'program> {
+    pub(super) functions: HashMap<String, &'program Function>,
+    pub(super) view_definitions: HashMap<String, &'program ViewDef>,
+    pub(super) storage_schema: Result<zelyra_database::Schema, Vec<zelyra_database::SchemaError>>,
+    pub(super) scoped_tables: Vec<String>,
+    pub(super) record_definitions: HashMap<String, RecordDef>,
+    pub(super) sql_record_definitions: HashMap<String, RecordDef>,
+    pub(super) type_aliases: HashMap<String, Type>,
+    pub(super) runtime_type_aliases: HashMap<String, Type>,
+    pub(super) enum_definitions: HashMap<String, zelyra_ast::EnumDef>,
+}
+
+impl<'program> ProgramContext<'program> {
+    fn from_program(program: &'program Program) -> Self {
+        let record_definitions = program
+            .records
+            .iter()
+            .map(|record| (record.name.clone(), record.clone()))
+            .collect::<HashMap<_, _>>();
+        let type_aliases = program
+            .types
+            .iter()
+            .map(|definition| (definition.name.clone(), definition.target.clone()))
+            .collect::<HashMap<_, _>>();
+        let enum_definitions = program
+            .enums
+            .iter()
+            .map(|definition| (definition.name.clone(), definition.clone()))
+            .collect::<HashMap<_, _>>();
+        let runtime_type_aliases =
+            runtime_type_aliases(&record_definitions, &type_aliases, &enum_definitions);
+        Self {
+            functions: program
+                .functions
+                .iter()
+                .map(|function| (function.name.clone(), function))
+                .collect(),
+            view_definitions: program
+                .views
+                .iter()
+                .map(|view| (view.name.clone(), view))
+                .collect(),
+            storage_schema: zelyra_database::build_schema(program),
+            scoped_tables: program
+                .tables
+                .iter()
+                .filter(|table| table.tenant_scope.is_some())
+                .map(|table| table.name.clone())
+                .collect(),
+            sql_record_definitions: sql_results::definitions(program),
+            record_definitions,
+            type_aliases,
+            runtime_type_aliases,
+            enum_definitions,
+        }
+    }
+
+    pub(super) fn from_parts(
+        records: &[RecordDef],
+        aliases: &[TypeDef],
+        enums: &[zelyra_ast::EnumDef],
+    ) -> Self {
+        let record_definitions = records
+            .iter()
+            .cloned()
+            .map(|record| (record.name.clone(), record))
+            .collect::<HashMap<_, _>>();
+        let type_aliases = aliases
+            .iter()
+            .map(|definition| (definition.name.clone(), definition.target.clone()))
+            .collect::<HashMap<_, _>>();
+        let enum_definitions = enums
+            .iter()
+            .cloned()
+            .map(|definition| (definition.name.clone(), definition))
+            .collect::<HashMap<_, _>>();
+        let runtime_type_aliases =
+            runtime_type_aliases(&record_definitions, &type_aliases, &enum_definitions);
+        Self {
+            functions: HashMap::new(),
+            view_definitions: HashMap::new(),
+            storage_schema: Ok(zelyra_database::Schema {
+                database: None,
+                tables: Vec::new(),
+            }),
+            scoped_tables: Vec::new(),
+            record_definitions,
+            sql_record_definitions: HashMap::new(),
+            type_aliases,
+            runtime_type_aliases,
+            enum_definitions,
+        }
+    }
+}
+
+fn runtime_type_aliases(
+    records: &HashMap<String, RecordDef>,
+    declared_aliases: &HashMap<String, Type>,
+    enums: &HashMap<String, zelyra_ast::EnumDef>,
+) -> HashMap<String, Type> {
+    let mut aliases = HashMap::from([
+        ("Id".into(), Type::Int),
+        ("Money".into(), Type::Decimal),
+        ("Email".into(), Type::String),
+        ("Url".into(), Type::String),
+        ("Uuid".into(), Type::String),
+        ("FileRef".into(), Type::String),
+    ]);
+    aliases.retain(|name, _| !records.contains_key(name) && !enums.contains_key(name));
+    aliases.extend(declared_aliases.clone());
+    aliases
+}
+
+/// Host access and the policies that constrain it for one AST execution.
+/// Parallel workers clone this context as a unit so they cannot silently
+/// diverge in capability grants or provider policy.
+#[derive(Clone)]
+pub(super) struct ExecutionContext {
+    pub(super) granted_capabilities: Option<HashSet<String>>,
+    pub(super) filesystem_policy: Option<FileSystemPolicy>,
+    pub(super) network_policy: Option<NetworkPolicy>,
+    pub(super) process_policy: Option<ProcessPolicy>,
+    pub(super) mail_policy: Option<MailPolicy>,
+    pub(super) package_settings: Option<PackageSettings>,
+    pub(super) host_services: Arc<dyn HostServices>,
+}
 
 /// Per-execution host resources shared by every AST entry point.
 pub(super) struct RuntimeServices<'services> {
@@ -102,16 +218,7 @@ impl<'program, 'services> AstInterpreter<'program, 'services> {
         services: RuntimeServices<'services>,
     ) -> Self {
         Self {
-            functions: program
-                .functions
-                .iter()
-                .map(|function| (function.name.clone(), function))
-                .collect(),
-            view_definitions: program
-                .views
-                .iter()
-                .map(|view| (view.name.clone(), view.clone()))
-                .collect(),
+            program_context: Arc::new(ProgramContext::from_program(program)),
             output: Vec::new(),
             next_class_object_id: Arc::new(AtomicU64::new(1)),
             parallel_worker: false,
@@ -123,56 +230,24 @@ impl<'program, 'services> AstInterpreter<'program, 'services> {
             database_url,
             database_transaction: services.database_transaction,
             transactional_query: services.transactional_query,
-            storage_schema: zelyra_database::build_schema(program),
             storage_checked: false,
-            scoped_tables: program
-                .tables
-                .iter()
-                .filter(|table| table.tenant_scope.is_some())
-                .map(|table| table.name.clone())
-                .collect(),
-            granted_capabilities,
-            filesystem_policy: policy.as_ref().and_then(|policy| policy.filesystem.clone()),
-            network_policy: policy.as_ref().and_then(|policy| policy.network.clone()),
-            process_policy: policy.as_ref().and_then(|policy| policy.process.clone()),
-            mail_policy: policy.as_ref().and_then(|policy| policy.mail.clone()),
-            package_settings: policy.and_then(|policy| policy.package_settings),
-            host_services: services.host_services,
-            sql_record_definitions: sql_results::definitions(program),
-            record_definitions: program
-                .records
-                .iter()
-                .map(|record| (record.name.clone(), record.clone()))
-                .collect(),
-            type_aliases: program
-                .types
-                .iter()
-                .map(|definition| (definition.name.clone(), definition.target.clone()))
-                .collect(),
-            enum_definitions: program
-                .enums
-                .iter()
-                .map(|definition| (definition.name.clone(), definition.clone()))
-                .collect(),
+            execution_context: ExecutionContext {
+                granted_capabilities,
+                filesystem_policy: policy.as_ref().and_then(|policy| policy.filesystem.clone()),
+                network_policy: policy.as_ref().and_then(|policy| policy.network.clone()),
+                process_policy: policy.as_ref().and_then(|policy| policy.process.clone()),
+                mail_policy: policy.as_ref().and_then(|policy| policy.mail.clone()),
+                package_settings: policy.and_then(|policy| policy.package_settings),
+                host_services: services.host_services,
+            },
             active_capabilities: Vec::new(),
             active_type_substitutions: Vec::new(),
         }
     }
 
     pub(super) fn runtime_alias_type(&self, ty: &Type, span: Span) -> Result<Type, RuntimeError> {
-        let mut aliases = HashMap::from([
-            ("Id".into(), Type::Int),
-            ("Money".into(), Type::Decimal),
-            ("Email".into(), Type::String),
-            ("Url".into(), Type::String),
-            ("Uuid".into(), Type::String),
-            ("FileRef".into(), Type::String),
-        ]);
-        aliases.retain(|name, _| {
-            !self.record_definitions.contains_key(name) && !self.enum_definitions.contains_key(name)
-        });
-        aliases.extend(self.type_aliases.clone());
-        expand_type_aliases(ty, &aliases).map_err(|message| self.runtime_error(span, message))
+        expand_type_aliases(ty, &self.program_context.runtime_type_aliases)
+            .map_err(|message| self.runtime_error(span, message))
     }
 
     pub(super) fn ensure_database_storage(&mut self, span: Span) -> Result<(), RuntimeError> {
@@ -180,8 +255,8 @@ impl<'program, 'services> AstInterpreter<'program, 'services> {
             if let Some(url) = &self.database_url {
                 validate_database_storage_with_host(
                     url,
-                    &self.storage_schema,
-                    self.host_services.as_ref(),
+                    &self.program_context.storage_schema,
+                    self.execution_context.host_services.as_ref(),
                     span,
                 )?;
             }

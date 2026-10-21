@@ -977,8 +977,9 @@ fn json_codec_interpreter(
     enums: &[zelyra_ast::EnumDef],
 ) -> Interpreter<'static, 'static> {
     Interpreter {
-        functions: HashMap::new(),
-        view_definitions: HashMap::new(),
+        program_context: Arc::new(ast_interpreter::ProgramContext::from_parts(
+            records, aliases, enums,
+        )),
         output: Vec::new(),
         next_class_object_id: Arc::new(AtomicU64::new(1)),
         parallel_worker: false,
@@ -988,34 +989,16 @@ fn json_codec_interpreter(
         database_url: None,
         database_transaction: None,
         transactional_query: None,
-        storage_schema: Ok(zelyra_database::Schema {
-            database: None,
-            tables: Vec::new(),
-        }),
         storage_checked: false,
-        scoped_tables: Vec::new(),
-        granted_capabilities: None,
-        filesystem_policy: None,
-        network_policy: None,
-        process_policy: None,
-        mail_policy: None,
-        package_settings: None,
-        host_services: Arc::new(SystemHostServices),
-        record_definitions: records
-            .iter()
-            .cloned()
-            .map(|record| (record.name.clone(), record))
-            .collect(),
-        sql_record_definitions: HashMap::new(),
-        type_aliases: aliases
-            .iter()
-            .map(|definition| (definition.name.clone(), definition.target.clone()))
-            .collect(),
-        enum_definitions: enums
-            .iter()
-            .cloned()
-            .map(|definition| (definition.name.clone(), definition))
-            .collect(),
+        execution_context: ast_interpreter::ExecutionContext {
+            granted_capabilities: None,
+            filesystem_policy: None,
+            network_policy: None,
+            process_policy: None,
+            mail_policy: None,
+            package_settings: None,
+            host_services: Arc::new(SystemHostServices),
+        },
         active_capabilities: Vec::new(),
         active_type_substitutions: Vec::new(),
     }
@@ -1450,12 +1433,12 @@ fn transaction_queries(
         };
         match &expression.kind {
             ExprKind::Sql { query, .. } => {
-                check_scoped_sql(query, &interpreter.scoped_tables).map_err(|message| {
-                    RuntimeError {
+                check_scoped_sql(query, &interpreter.program_context.scoped_tables).map_err(
+                    |message| RuntimeError {
                         message,
                         span: expression.span,
-                    }
-                })?;
+                    },
+                )?;
                 let capability = sql_required_capability(query);
                 interpreter.require_runtime_capability(
                     capability,
@@ -1523,7 +1506,7 @@ fn transaction_queries(
                     &evaluated,
                     &argument_spans,
                     expression.span,
-                    interpreter.host_services.as_ref(),
+                    interpreter.execution_context.host_services.as_ref(),
                 )?);
             }
             _ => return Err(RuntimeError {

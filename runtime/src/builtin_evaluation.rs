@@ -38,6 +38,7 @@ impl<'program, 'services> Interpreter<'program, 'services> {
                 }
             };
             let settings = self
+                .execution_context
                 .package_settings
                 .as_ref()
                 .ok_or_else(|| self.runtime_error(span, "package settings are unavailable"))?;
@@ -132,15 +133,15 @@ impl<'program, 'services> Interpreter<'program, 'services> {
                     ));
                 }
             };
-            let view = self
+            let program_context = Arc::clone(&self.program_context);
+            let view = program_context
                 .view_definitions
                 .get(&view_name)
-                .cloned()
                 .ok_or_else(|| {
                     self.runtime_error(args[0].span, format!("unknown PDF view `{view_name}`"))
                 })?;
             let data = self.eval(&args[1], env)?;
-            render_pdf_view(&view, &data)
+            render_pdf_view(view, &data)
                 .map(Value::Bytes)
                 .map_err(|error| self.runtime_error(span, error))
         } else if name == "print" {
@@ -210,9 +211,13 @@ impl<'program, 'services> Interpreter<'program, 'services> {
                     ))
                 }
             };
-            let definition = self.record_definitions.get(&type_name).ok_or_else(|| {
-                self.runtime_error(span, format!("unknown class type `{type_name}`"))
-            })?;
+            let definition = self
+                .program_context
+                .record_definitions
+                .get(&type_name)
+                .ok_or_else(|| {
+                    self.runtime_error(span, format!("unknown class type `{type_name}`"))
+                })?;
             if !definition.is_class {
                 return Err(self.runtime_error(span, "field assignment requires a class instance"));
             }
@@ -296,6 +301,7 @@ impl<'program, 'services> Interpreter<'program, 'services> {
                 ));
             }
             let definition = self
+                .program_context
                 .record_definitions
                 .get(&type_name)
                 .cloned()
@@ -375,9 +381,13 @@ impl<'program, 'services> Interpreter<'program, 'services> {
                     self.runtime_error(span, "record_with expects a record and String field name")
                 );
             };
-            let definition = self.record_definitions.get(&type_name).ok_or_else(|| {
-                self.runtime_error(span, format!("unknown record type `{type_name}`"))
-            })?;
+            let definition = self
+                .program_context
+                .record_definitions
+                .get(&type_name)
+                .ok_or_else(|| {
+                    self.runtime_error(span, format!("unknown record type `{type_name}`"))
+                })?;
             let field = definition
                 .fields
                 .iter()
@@ -1501,9 +1511,9 @@ impl<'program, 'services> Interpreter<'program, 'services> {
             let result = deliver_outbox_message_with_host(
                 &event_id,
                 &payload_json,
-                self.mail_policy.as_ref(),
-                self.network_policy.as_ref(),
-                self.host_services.as_ref(),
+                self.execution_context.mail_policy.as_ref(),
+                self.execution_context.network_policy.as_ref(),
+                self.execution_context.host_services.as_ref(),
             )
             .map(|()| Box::new(Value::Unit))
             .map_err(|error| Box::new(Value::String(error.to_owned())));

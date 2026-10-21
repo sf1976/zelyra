@@ -398,7 +398,8 @@ impl<'program, 'services> Interpreter<'program, 'services> {
                             )
                         })?;
                 } else {
-                    self.host_services
+                    self.execution_context
+                        .host_services
                         .execute_database_batch(&database_url, &queries, true)
                         .map_err(|error| {
                             self.runtime_error(

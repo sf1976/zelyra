@@ -216,13 +216,13 @@ impl<'program, 'services> Interpreter<'program, 'services> {
             ))));
         }
         if let Type::Named(name) = target {
-            if let Some(alias) = self.type_aliases.get(name) {
+            if let Some(alias) = self.program_context.type_aliases.get(name) {
                 return self.json_decode_value(value, alias, span);
             }
             if let Some(definition) = self._enum_definition(name) {
                 return self.json_decode_enum(value, definition, &[], span);
             }
-            if let Some(record) = self.record_definitions.get(name) {
+            if let Some(record) = self.program_context.record_definitions.get(name) {
                 if record.is_class {
                     return Err(self.runtime_error(
                         span,
@@ -252,7 +252,7 @@ impl<'program, 'services> Interpreter<'program, 'services> {
             if let Some(definition) = self._enum_definition(name) {
                 return self.json_decode_enum(value, definition, args, span);
             }
-            if let Some(record) = self.record_definitions.get(name) {
+            if let Some(record) = self.program_context.record_definitions.get(name) {
                 if record.is_class {
                     return Err(self.runtime_error(
                         span,
@@ -440,7 +440,7 @@ impl<'program, 'services> Interpreter<'program, 'services> {
     fn _enum_definition(&self, name: &str) -> Option<&zelyra_ast::EnumDef> {
         // Enum definitions are attached to the source Program; Interpreter keeps
         // their variant names as a compact map to avoid cloning AST nodes.
-        self.enum_definitions.get(name)
+        self.program_context.enum_definitions.get(name)
     }
 
     fn json_decode_string(

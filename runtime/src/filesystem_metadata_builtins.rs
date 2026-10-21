@@ -31,12 +31,16 @@ impl AstInterpreter<'_, '_> {
                     Err(error) => return Some(Err(error)),
                 };
                 let roots = self
+                    .execution_context
                     .filesystem_policy
                     .as_ref()
                     .map_or_else(Vec::new, |policy| policy.read_roots.clone());
                 match self.resolve_filesystem_path(&path, &roots, "read", span, true) {
                     Ok(resolved) => {
-                        let metadata = self.host_services.file_metadata(&resolved);
+                        let metadata = self
+                            .execution_context
+                            .host_services
+                            .file_metadata(&resolved);
                         let exists = metadata.is_ok_and(|metadata| {
                             if name == "file_exists" {
                                 metadata.is_file
@@ -66,6 +70,7 @@ impl AstInterpreter<'_, '_> {
                     Err(error) => return Some(Err(error)),
                 };
                 let roots = self
+                    .execution_context
                     .filesystem_policy
                     .as_ref()
                     .map_or_else(Vec::new, |policy| policy.read_roots.clone());
@@ -74,7 +79,11 @@ impl AstInterpreter<'_, '_> {
                         Ok(resolved) => resolved,
                         Err(error) => return Some(Err(error)),
                     };
-                match self.host_services.file_metadata(&resolved) {
+                match self
+                    .execution_context
+                    .host_services
+                    .file_metadata(&resolved)
+                {
                     Ok(metadata) => Ok(Value::Result(Ok(Box::new(Value::Int(
                         metadata.length as i64,
                     ))))),
