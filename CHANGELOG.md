@@ -1,5 +1,16 @@
 ## Unreleased
 
+- Add the allowlist- and `Process`-capability-gated `run_process_piped` host
+  operation. It bounds stdin by the configured process limit, caps the
+  per-call timeout at the project policy, and returns typed
+  `ProcessResult { exit_code, stdout, stderr }` values consistently from AST,
+  MIR, and bytecode execution. Existing `run_process` behavior is unchanged.
+  / Die durch Allowlist und `Process`-Capability geschützte Host-Operation
+  `run_process_piped` ergänzen. Sie begrenzt stdin durch das konfigurierte
+  Prozesslimit, deckelt das Aufruf-Timeout auf die Projekt-Policy und liefert
+  `ProcessResult { exit_code, stdout, stderr }` konsistent in AST-, MIR- und
+  Bytecode-Ausführung. `run_process` behält sein bisheriges Verhalten.
+
 ## 1.2.33 — 2026-10-21
 
 - Align source-level `--max-steps` accounting across the supported AST, MIR,

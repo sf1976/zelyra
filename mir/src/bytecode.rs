@@ -28,10 +28,10 @@ use zelyra_runtime::{
     inspect_filesystem_copy_source_with_host, inspect_filesystem_delete_path_with_host,
     inspect_filesystem_directory_with_host, inspect_filesystem_path_with_host,
     inspect_filesystem_rename_source_with_host, normalize_map_entries,
-    random_int_with_host_services, render_pdf_view, run_process_with_host_services,
-    uuid_v4_with_host_services, FileSystemPolicy, FunctionValue, HostServices, MailPolicy,
-    NetworkPolicy, PackageSettings, ProcessPolicy, RuntimeError, RuntimePolicy, StepBudget,
-    StepBudgetError, SystemHostServices, Value,
+    random_int_with_host_services, render_pdf_view, run_process_piped_with_host_services,
+    run_process_with_host_services, uuid_v4_with_host_services, FileSystemPolicy, FunctionValue,
+    HostServices, MailPolicy, NetworkPolicy, PackageSettings, ProcessPolicy, RuntimeError,
+    RuntimePolicy, StepBudget, StepBudgetError, SystemHostServices, Value,
 };
 
 mod format;
@@ -1053,6 +1053,25 @@ pub fn verify_bytecode(program: &BytecodeProgram) -> Result<(), Vec<MirError>> {
                     arguments,
                     result_type,
                     ..
+                } if name == "run_process_piped" => {
+                    if *arguments != 4
+                        || result_type != &Type::Named("ProcessResult".into())
+                        || !function
+                            .declared_capabilities
+                            .iter()
+                            .any(|capability| capability == "Process")
+                    {
+                        return Err(vec![bytecode_error(
+                            "bytecode `run_process_piped` builtin has invalid arity, type, or capability",
+                            instruction.span,
+                        )]);
+                    }
+                }
+                BytecodeOp::Builtin {
+                    name,
+                    arguments,
+                    result_type,
+                    ..
                 } if name == "http_get" => {
                     if *arguments != 1
                         || result_type != &Type::String
@@ -1785,6 +1804,7 @@ fn bytecode_host_call_security(name: &str) -> Option<(&'static str, &'static str
             Some(("FileSystem", "file-system write access", 2))
         }
         "run_process" => Some(("Process", "process execution", 2)),
+        "run_process_piped" => Some(("Process", "process execution", 4)),
         "http_get" => Some(("Network", "network access", 1)),
         "http_request" | "http_json" | "http_result" => Some(("Network", "network access", 4)),
         "mail_deliver" => Some(("Email", "email delivery", 2)),
@@ -4089,6 +4109,73 @@ fn execute_vm_builtin(
             )
             .map(Value::String)
             .map_err(|error| runtime_error(span, error))
+        }
+        "run_process_piped" => {
+            if arguments.len() != 4 || result_type != &Type::Named("ProcessResult".into()) {
+                return Err(runtime_error(
+                    span,
+                    "run_process_piped expects command, arguments, stdin, and timeout_ms",
+                ));
+            }
+            require_capability("Process", "process execution")?;
+            let Value::String(command) = &arguments[0] else {
+                return Err(runtime_error(
+                    span,
+                    "run_process_piped expects a String command",
+                ));
+            };
+            let Value::Array(argument_values) = &arguments[1] else {
+                return Err(runtime_error(
+                    span,
+                    "run_process_piped expects String[] arguments",
+                ));
+            };
+            let command_arguments = argument_values
+                .iter()
+                .map(|argument| match argument {
+                    Value::String(value) => Ok(value.clone()),
+                    _ => Err(runtime_error(
+                        span,
+                        "run_process_piped expects String[] arguments",
+                    )),
+                })
+                .collect::<Result<Vec<_>, _>>()?;
+            let Value::String(stdin) = &arguments[2] else {
+                return Err(runtime_error(
+                    span,
+                    "run_process_piped expects String stdin",
+                ));
+            };
+            let Value::Int(timeout) = &arguments[3] else {
+                return Err(runtime_error(
+                    span,
+                    "run_process_piped expects Int timeout_ms",
+                ));
+            };
+            let timeout = u64::try_from(*timeout)
+                .ok()
+                .filter(|timeout| *timeout > 0)
+                .ok_or_else(|| {
+                    runtime_error(span, "run_process_piped timeout_ms must be positive")
+                })?;
+            let result = run_process_piped_with_host_services(
+                command,
+                &command_arguments,
+                stdin,
+                timeout,
+                context.process_policy,
+                context.host_services,
+            )
+            .map_err(|error| runtime_error(span, error))?;
+            Ok(Value::Object {
+                type_name: "ProcessResult".into(),
+                type_args: Vec::new(),
+                fields: HashMap::from([
+                    ("exit_code".into(), Value::Int(i64::from(result.exit_code))),
+                    ("stdout".into(), Value::String(result.stdout)),
+                    ("stderr".into(), Value::String(result.stderr)),
+                ]),
+            })
         }
         "file_exists" | "dir_exists" => {
             if arguments.len() != 1 || result_type != &Type::Bool {

@@ -217,4 +217,23 @@ impl<'program, 'services> Interpreter<'program, 'services> {
         )
         .map_err(|error| self.runtime_error(span, error))
     }
+
+    pub(crate) fn run_process_piped(
+        &self,
+        command: &str,
+        arguments: &[String],
+        stdin: &str,
+        timeout_ms: u64,
+        span: Span,
+    ) -> Result<HostProcessResult, RuntimeError> {
+        run_process_piped_with_host_services(
+            command,
+            arguments,
+            stdin,
+            timeout_ms,
+            self.process_policy.as_ref(),
+            self.host_services.as_ref(),
+        )
+        .map_err(|error| self.runtime_error(span, error))
+    }
 }

@@ -1667,6 +1667,7 @@ impl Machine<'_> {
                     | "uuid_v4"
                     | "read_console"
                     | "run_process"
+                    | "run_process_piped"
                     | "read_text"
                     | "read_text_result"
                     | "file_exists"
@@ -2642,6 +2643,77 @@ impl Machine<'_> {
                     )
                     .map_err(|error| runtime_error(span, error))?;
                 Ok(Value::String(output))
+            }
+            "run_process_piped" => {
+                if args.len() != 4 {
+                    return Err(runtime_error(
+                        span,
+                        "run_process_piped expects command, arguments, stdin, and timeout_ms",
+                    ));
+                }
+                self.require_host_capability("Process", "process execution", span)?;
+                let command = self.expression(args[0], locals, depth, span)?;
+                let arguments = self.expression(args[1], locals, depth, span)?;
+                let stdin = self.expression(args[2], locals, depth, span)?;
+                let timeout = self.expression(args[3], locals, depth, span)?;
+                let Value::String(command) = command else {
+                    return Err(runtime_error(
+                        span,
+                        "run_process_piped expects a String command",
+                    ));
+                };
+                let Value::Array(arguments) = arguments else {
+                    return Err(runtime_error(
+                        span,
+                        "run_process_piped expects String[] arguments",
+                    ));
+                };
+                let arguments = arguments
+                    .into_iter()
+                    .map(|argument| match argument {
+                        Value::String(value) => Ok(value),
+                        _ => Err(runtime_error(
+                            span,
+                            "run_process_piped expects String[] arguments",
+                        )),
+                    })
+                    .collect::<Result<Vec<_>, _>>()?;
+                let Value::String(stdin) = stdin else {
+                    return Err(runtime_error(
+                        span,
+                        "run_process_piped expects String stdin",
+                    ));
+                };
+                let Value::Int(timeout) = timeout else {
+                    return Err(runtime_error(
+                        span,
+                        "run_process_piped expects Int timeout_ms",
+                    ));
+                };
+                let timeout = u64::try_from(timeout)
+                    .ok()
+                    .filter(|timeout| *timeout > 0)
+                    .ok_or_else(|| {
+                        runtime_error(span, "run_process_piped timeout_ms must be positive")
+                    })?;
+                let result = zelyra_runtime::run_process_piped_with_host_services(
+                    &command,
+                    &arguments,
+                    &stdin,
+                    timeout,
+                    self.process_policy.as_ref(),
+                    self.host_services.as_ref(),
+                )
+                .map_err(|error| runtime_error(span, error))?;
+                Ok(Value::Object {
+                    type_name: "ProcessResult".into(),
+                    type_args: Vec::new(),
+                    fields: HashMap::from([
+                        ("exit_code".into(), Value::Int(i64::from(result.exit_code))),
+                        ("stdout".into(), Value::String(result.stdout)),
+                        ("stderr".into(), Value::String(result.stderr)),
+                    ]),
+                })
             }
             _ => unreachable!("host builtin name was validated"),
         }
