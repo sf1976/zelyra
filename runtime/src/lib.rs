@@ -971,11 +971,11 @@ pub fn decode_tagged_result_json(
         .json_decode_tagged_result(source, ok_type, error_type, span)
 }
 
-fn json_codec_interpreter(
-    records: &[RecordDef],
+fn json_codec_interpreter<'program>(
+    records: &'program [RecordDef],
     aliases: &[TypeDef],
-    enums: &[zelyra_ast::EnumDef],
-) -> Interpreter<'static, 'static> {
+    enums: &'program [zelyra_ast::EnumDef],
+) -> Interpreter<'program, 'static> {
     Interpreter {
         program_context: Arc::new(ast_interpreter::ProgramContext::from_parts(
             records, aliases, enums,

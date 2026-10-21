@@ -438,9 +438,9 @@ impl<'program, 'services> Interpreter<'program, 'services> {
     }
 
     fn _enum_definition(&self, name: &str) -> Option<&zelyra_ast::EnumDef> {
-        // Enum definitions are attached to the source Program; Interpreter keeps
-        // their variant names as a compact map to avoid cloning AST nodes.
-        self.program_context.enum_definitions.get(name)
+        // Enum definitions remain in the source Program and are indexed by the
+        // shared ProgramContext without cloning their AST nodes.
+        self.program_context.enum_definitions.get(name).copied()
     }
 
     fn json_decode_string(
