@@ -2549,6 +2549,49 @@ fn ast_sql_uses_the_borrowed_request_transaction_for_each_query() {
 }
 
 #[test]
+fn guarded_action_runs_guard_and_handler_in_one_interpreter_and_short_circuits() {
+    let program = parse(
+        &lex(
+            "fn guard(value: Int) -> Bool { print(\"guard\") return value > 0 } fn action(value: Int) -> Int { print(\"action\") return value + 1 } fn main() {}",
+        )
+        .unwrap(),
+    )
+    .unwrap();
+    check(&program).expect("guard and handler must be valid typed functions");
+
+    let mut query = |_query: &zelyra_database::Query| Ok(zelyra_database::QueryResult::default());
+    let accepted = execute_guarded_function_captured_with_transactional_query(
+        &program,
+        "guard",
+        "action",
+        vec![Value::Int(0)],
+        "mariadb://zelyra:zelyra@127.0.0.1/zelyra",
+        None,
+        None,
+        &mut query,
+    );
+    assert!(accepted.error.is_none(), "{:?}", accepted.error);
+    assert!(!accepted.guard_rejected);
+    assert_eq!(accepted.value, Some(Value::Int(1)));
+    assert_eq!(accepted.output, ["guard", "action"]);
+
+    let rejected = execute_guarded_function_captured_with_transactional_query(
+        &program,
+        "guard",
+        "action",
+        vec![Value::Int(1)],
+        "mariadb://zelyra:zelyra@127.0.0.1/zelyra",
+        None,
+        None,
+        &mut query,
+    );
+    assert!(rejected.error.is_none(), "{:?}", rejected.error);
+    assert!(rejected.guard_rejected);
+    assert_eq!(rejected.value, None);
+    assert_eq!(rejected.output, ["guard"]);
+}
+
+#[test]
 fn borrowed_request_transaction_bridge_runs_transaction_blocks_in_the_outer_transaction() {
     let transaction_program = parse(
         &lex("table invoices { id: Id primary auto status: String required } fn main() uses Database(write) { transaction { sql { UPDATE invoices SET status = 'locked' WHERE id = 1 } } }").unwrap(),

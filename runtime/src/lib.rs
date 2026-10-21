@@ -222,7 +222,8 @@ pub use ast_interpreter::execution_api::{
     execute_function_captured_with_transactional_query, execute_function_with_capabilities,
     execute_function_with_capabilities_and_filesystem_policy,
     execute_function_with_capabilities_and_policies,
-    execute_function_with_host_services_and_capabilities_and_policies, execute_with_capabilities,
+    execute_function_with_host_services_and_capabilities_and_policies,
+    execute_guarded_function_captured_with_transactional_query, execute_with_capabilities,
     execute_with_capabilities_and_filesystem_policy, execute_with_capabilities_and_policies,
     execute_with_database, execute_with_database_and_capabilities,
     execute_with_database_and_capabilities_and_filesystem_policy,
@@ -918,6 +919,19 @@ pub struct FunctionExecutionOutcome {
     pub output: Vec<String>,
     pub value: Option<Value>,
     pub error: Option<RuntimeError>,
+}
+
+/// Captured result of a CRUD action whose guard and handler were evaluated by
+/// one AST interpreter instance.
+#[derive(Debug)]
+pub struct GuardedFunctionExecutionOutcome {
+    pub output: Vec<String>,
+    pub value: Option<Value>,
+    pub error: Option<RuntimeError>,
+    /// Distinguishes guard failures from handler failures for framework errors.
+    pub failed_in_guard: bool,
+    /// `true` means the guard returned `Bool(true)` and the handler was skipped.
+    pub guard_rejected: bool,
 }
 
 pub fn encode_json_value(value: &Value, span: Span) -> Result<String, RuntimeError> {

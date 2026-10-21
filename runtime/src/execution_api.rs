@@ -369,6 +369,84 @@ pub fn execute_function_captured_with_transactional_query<'services>(
     }
 }
 
+/// Evaluate a CRUD action guard and, when it allows the operation, its handler
+/// using one interpreter. The guard runs under its declared capability set;
+/// the handler's SQL uses the caller-owned request transaction.
+#[allow(clippy::too_many_arguments)]
+pub fn execute_guarded_function_captured_with_transactional_query<'services>(
+    program: &Program,
+    guard_name: &str,
+    function_name: &str,
+    args: Vec<Value>,
+    database_url: &str,
+    grants: Option<&HashSet<String>>,
+    policy: Option<&RuntimePolicy>,
+    query: &'services mut (dyn FnMut(
+        &zelyra_database::Query,
+    ) -> Result<zelyra_database::QueryResult, String>
+                        + Send
+                        + 'services),
+) -> GuardedFunctionExecutionOutcome {
+    let depth = effective_function_call_depth(policy.and_then(|policy| policy.max_stack_depth));
+    let result = run_on_runtime_stack(runtime_stack_size_for_depth(depth), move || {
+        let mut interpreter = Interpreter::new(
+            program,
+            Some(database_url.to_owned()),
+            grants.cloned(),
+            policy.cloned(),
+            RuntimeServices {
+                host_services: Arc::new(SystemHostServices),
+                database_transaction: None,
+                transactional_query: None,
+            },
+        );
+        let mut guard_rejected = false;
+        let mut value = None;
+        let mut error = None;
+        let mut failed_in_guard = false;
+        match interpreter.call(guard_name, args.clone(), Span::default()) {
+            Ok(Value::Bool(true)) => guard_rejected = true,
+            Ok(_) => {}
+            Err(runtime_error) => {
+                error = Some(runtime_error);
+                failed_in_guard = true;
+            }
+        }
+        if !guard_rejected && error.is_none() {
+            interpreter.transactional_query = Some(query);
+            match interpreter.call(function_name, args, Span::default()) {
+                Ok(result) => value = Some(result),
+                Err(runtime_error) => error = Some(runtime_error),
+            }
+        }
+        Ok((
+            interpreter.output,
+            value,
+            error,
+            guard_rejected,
+            failed_in_guard,
+        ))
+    });
+    match result {
+        Ok((output, value, error, guard_rejected, failed_in_guard)) => {
+            GuardedFunctionExecutionOutcome {
+                output,
+                value,
+                error,
+                guard_rejected,
+                failed_in_guard,
+            }
+        }
+        Err(error) => GuardedFunctionExecutionOutcome {
+            output: Vec::new(),
+            value: None,
+            error: Some(error),
+            guard_rejected: false,
+            failed_in_guard: false,
+        },
+    }
+}
+
 /// Execute one function with an interactive MariaDB transaction shared by all
 /// database operations in that function. The caller owns transaction lifetime.
 pub fn execute_function_captured_with_mariadb_transaction(
