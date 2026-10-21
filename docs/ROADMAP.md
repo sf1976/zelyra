@@ -679,6 +679,9 @@ check verifies `/favicon.ico` was copied byte-for-byte and the generated
 scaffold passes `zelyra check`. This does not translate dynamic responses,
 middleware, route groups, PHP logic, or arbitrary controller routes. It is a
 small route-import slice, not Laravel compatibility.
+On code head `3d12d9b1`, workspace tests, Clippy, formatting, handbook
+validation, and release-metadata validation passed. The PR's external CI and
+release-artifact jobs are still running; no release has been published.
 
 ## Active architecture milestones (1.1.5 through 1.3.0)
 
