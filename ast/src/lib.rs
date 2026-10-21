@@ -511,6 +511,7 @@ pub struct PageDef {
     pub path: String,
     pub html: String,
     pub view: Option<String>,
+    pub content_type: Option<String>,
     pub inputs: Vec<PageInputDef>,
     pub page_size: Option<u32>,
     pub sort: Vec<String>,

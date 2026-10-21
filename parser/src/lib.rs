@@ -1622,6 +1622,7 @@ impl<'a> Parser<'a> {
         self.expect(TokenKind::LBrace, "`{` after page path")?;
         let mut html = None;
         let mut view = None;
+        let mut content_type = None;
         let mut inputs = Vec::new();
         let mut page_size = None;
         let mut sort = Vec::new();
@@ -1652,6 +1653,14 @@ impl<'a> Parser<'a> {
                 self.advance();
                 self.expect(TokenKind::Colon, "`:` after `view`")?;
                 view = Some(self.ident("view name")?.0);
+            } else if matches!(&self.current().kind, TokenKind::Ident(name) if name == "content_type")
+            {
+                self.advance();
+                self.expect(TokenKind::Colon, "`:` after `content_type`")?;
+                let value = self.string_value("page content type")?;
+                if content_type.replace(value).is_some() {
+                    return self.error("page `content_type` may only be declared once");
+                }
             } else if self.at(&TokenKind::Paginated) {
                 self.advance();
                 let value = match self.current().kind.clone() {
@@ -1737,7 +1746,7 @@ impl<'a> Parser<'a> {
                 self.advance();
                 permissions.push(self.string_value("permission")?);
             } else {
-                return self.error("expected `load`, `html`, `view`, `paginated`, `sort`, `search`, `filter`, `requires auth`, or `permits` in page definition");
+                return self.error("expected `load`, `html`, `view`, `content_type`, `paginated`, `sort`, `search`, `filter`, `requires auth`, or `permits` in page definition");
             }
             self.skip_newlines();
         }
@@ -1749,6 +1758,7 @@ impl<'a> Parser<'a> {
             path,
             html,
             view,
+            content_type,
             inputs,
             page_size,
             sort,
@@ -5512,6 +5522,21 @@ mod tests {
         assert_eq!(program.pages.len(), 1);
         assert_eq!(program.pages[0].path, "/hello/{name}");
         assert!(program.pages[0].html.contains("{name}"));
+    }
+
+    #[test]
+    fn parses_page_content_type() {
+        let source = r#"
+            page "/sitemap.xml" {
+                content_type: "application/xml; charset=utf-8"
+                html { <urlset><url><loc>https://example.test/</loc></url></urlset> }
+            }
+        "#;
+        let program = parse(&lex(source).unwrap()).unwrap();
+        assert_eq!(
+            program.pages[0].content_type.as_deref(),
+            Some("application/xml; charset=utf-8")
+        );
     }
 
     #[test]

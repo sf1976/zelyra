@@ -576,9 +576,9 @@ security and compatibility gates stated for that milestone.
   verified Bytecode, not native machine-code generation.
 
 - [ ] **1.3.0 — confirmed web/compiler gaps:** Accept SQL-loaded `Option<Record>`
-  page data (the CLI validator currently rejects it although web routing already
-  models missing optional rows); add explicit dynamic response content types for
-  pages and a typed server API response contract; add bounded, sanitized
+  page data (the CLI validator fix is on the active unmerged feature branch);
+  finish and merge explicit dynamic page response content types, add a typed
+  server API response contract; add bounded, sanitized
   CommonMark/GFM rendering; and add stdin piping to the existing allowlisted,
   timeout/output-bounded Process capability. API `HttpResult<T>` currently models
   responses received by outbound HTTP calls, not status/header returns from a

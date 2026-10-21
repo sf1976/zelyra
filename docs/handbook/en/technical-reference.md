@@ -786,6 +786,25 @@ page "/customers" {
 }
 ~~~
 
+Pages return `text/html; charset=utf-8` by default. A page can declare another
+validated media type for XML feeds and similar text responses:
+
+~~~zelyra
+page "/sitemap.xml" {
+    content_type: "application/xml; charset=utf-8"
+    html {
+        <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+            <url><loc>https://example.test/</loc></url>
+        </urlset>
+    }
+}
+~~~
+
+`content_type` changes the HTTP response header only. The body still uses the
+checked page template and escaped interpolations; wildcard types and invalid
+header values are rejected. Non-HTML responses do not receive the application
+shell or UI CSS injection.
+
 ### Declarative web query controls: Search, sort, pagination, and filter
 
 Pages can declare typed query inputs for explicit SQL:

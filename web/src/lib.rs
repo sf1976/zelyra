@@ -255,6 +255,21 @@ pub struct Response {
     pub headers: Vec<(String, String)>,
 }
 
+/// Validates a project-declared dynamic page media type before it is used as
+/// an HTTP response header. Wildcard media types are not response types.
+pub fn validate_page_content_type(value: &str) -> Result<(), String> {
+    if value.bytes().any(|byte| byte.is_ascii_control()) {
+        return Err("page content type must not contain control characters".into());
+    }
+    let parsed = value
+        .parse::<mime::Mime>()
+        .map_err(|_| "page content type must be a valid media type".to_owned())?;
+    if parsed.type_() == mime::STAR || parsed.subtype() == mime::STAR {
+        return Err("page content type must not use wildcard media types".into());
+    }
+    Ok(())
+}
+
 impl Response {
     pub fn html(status: u16, body: impl Into<String>) -> Self {
         Self {
@@ -1209,6 +1224,7 @@ fn new_request_id() -> String {
 #[derive(Clone, Debug)]
 pub struct WebApp {
     pub routes: Vec<Route>,
+    page_content_types: HashMap<String, String>,
     pub apis: Vec<ApiRoute>,
     pub forms: Vec<FormRoute>,
     validation_program: Option<Arc<Program>>,
@@ -1247,6 +1263,7 @@ impl WebApp {
     pub fn new(routes: Vec<Route>, forms: Vec<FormRoute>) -> Self {
         Self {
             routes,
+            page_content_types: HashMap::new(),
             apis: Vec::new(),
             forms,
             validation_program: None,
@@ -1351,6 +1368,7 @@ impl WebApp {
     ) -> Self {
         Self {
             routes,
+            page_content_types: HashMap::new(),
             apis: Vec::new(),
             forms,
             validation_program: None,
@@ -1536,6 +1554,19 @@ impl WebApp {
     pub fn with_project_ui_catalogs(mut self, catalogs: ProjectUiCatalogs) -> Self {
         self.project_ui_catalogs = catalogs;
         self
+    }
+
+    /// Configures response media types for declared pages. Each value is
+    /// validated before being stored, so it cannot inject response headers.
+    pub fn with_page_content_types(
+        mut self,
+        content_types: HashMap<String, String>,
+    ) -> Result<Self, HttpError> {
+        for value in content_types.values() {
+            validate_page_content_type(value).map_err(|message| HttpError { message })?;
+        }
+        self.page_content_types = content_types;
+        Ok(self)
     }
 
     fn default_ui_context(&self, request: &Request) -> Option<DefaultUiContext> {
@@ -2521,7 +2552,7 @@ impl WebApp {
                 break;
             }
         }
-        let response = Router::new(self.routes.clone())
+        let mut response = Router::new(self.routes.clone())
             .dispatch_with_database_language_and_catalogs(
                 &request.method,
                 &request.target,
@@ -2529,6 +2560,17 @@ impl WebApp {
                 self.ui_language,
                 &self.project_ui_catalogs,
             );
+        if response.status == 200 {
+            if let Some(route) = self
+                .routes
+                .iter()
+                .find(|route| match_path(&route.path, &request.path).is_some())
+            {
+                if let Some(content_type) = self.page_content_types.get(&route.path) {
+                    response.content_type.clone_from(content_type);
+                }
+            }
+        }
         if matches!(response.status, 404 | 405) && !declared_route_matched {
             if let Some(static_response) = self.dispatch_public_file(request) {
                 return static_response;
