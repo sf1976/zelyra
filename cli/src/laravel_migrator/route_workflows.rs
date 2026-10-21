@@ -5,11 +5,151 @@
 
 use super::{compiled_regex, is_safe_table_identifier, PhpSourceMap};
 use serde_json::{json, Value};
-use std::{fs, path::Path};
+use std::{
+    fs,
+    path::{Component, Path},
+};
 
 pub(super) struct GeneratedWorkflow {
     pub(super) source: String,
     pub(super) report: Value,
+}
+
+/// Find Laravel GET routes whose complete closure returns one literal file
+/// beneath `public/`. The importer copies the asset into Zelyra's `public/`
+/// tree; the static asset server then serves it at the same origin-relative
+/// URL without generating PHP or a second route handler.
+pub(super) fn static_public_file_routes(root: &Path, graph: &Value) -> Vec<Value> {
+    let mut routes = Vec::new();
+    let mut sources = std::collections::BTreeMap::<String, String>::new();
+    let route_prefix = compiled_regex(
+        r#"(?is)^\s*Route::get\s*\(\s*(?:'([^']+)'|"([^"]+)")\s*,\s*function\s*\(\s*\)\s*\{"#,
+        "literal Laravel public-file route regex",
+    );
+    let file_return = compiled_regex(
+        r#"(?is)^\s*return\s+response\s*\(\s*\)\s*->\s*file\s*\(\s*public_path\s*\(\s*(?:'([^']+)'|"([^"]+)")\s*\)\s*\)\s*;\s*$"#,
+        "literal Laravel public-file response regex",
+    );
+
+    for route in graph["nodes"].as_array().into_iter().flatten() {
+        if route["kind"] != "route" {
+            continue;
+        }
+        let (Some(file), Some(route_name), Some(start)) = (
+            route["file"].as_str(),
+            route["name"].as_str(),
+            route["source_span"]["start"]["byte_offset"].as_u64(),
+        ) else {
+            continue;
+        };
+        let Some((method, declared_path)) = route_name.split_once(' ') else {
+            continue;
+        };
+        if !method.eq_ignore_ascii_case("get")
+            || route["route_context"]["effective_path"].as_str() != Some(declared_path)
+            || !safe_static_route_path(declared_path)
+            || route["route_context"]["middleware_complete"] != true
+            || route["route_context"]["groups"]
+                .as_array()
+                .is_none_or(|groups| !groups.is_empty())
+            || route["route_context"]["inherited_middleware"]
+                .as_array()
+                .is_none_or(|middleware| !middleware.is_empty())
+            || route["route_context"]["route_middleware"]
+                .as_array()
+                .is_none_or(|middleware| !middleware.is_empty())
+        {
+            continue;
+        }
+        let source = sources.entry(file.to_owned()).or_insert_with(|| {
+            safe_source_path(root, file)
+                .and_then(|path| fs::read_to_string(path).ok())
+                .unwrap_or_default()
+        });
+        let start = start as usize;
+        if start >= source.len() || !source.is_char_boundary(start) {
+            continue;
+        }
+        let source_map = PhpSourceMap::new(source);
+        if !source_map.is_code(start) {
+            continue;
+        }
+        let tail = &source[start..];
+        let Some(prefix) = route_prefix.captures(tail) else {
+            continue;
+        };
+        let matched_path = prefix
+            .get(1)
+            .or_else(|| prefix.get(2))
+            .map(|value| value.as_str());
+        if matched_path != Some(declared_path) {
+            continue;
+        }
+        let closure_open = start + prefix.get(0).expect("matched route prefix").end() - 1;
+        let Some(closure_close) =
+            super::graph::matching_brace(source.as_bytes(), &source_map, closure_open)
+        else {
+            continue;
+        };
+        let body = source_map.without_comments(&source[closure_open + 1..closure_close]);
+        let Some(response) = file_return.captures(&body) else {
+            continue;
+        };
+        let relative = response
+            .get(1)
+            .or_else(|| response.get(2))
+            .expect("matched public path")
+            .as_str();
+        if !safe_public_relative_path(relative) || declared_path != format!("/{relative}") {
+            continue;
+        }
+        let suffix = source[closure_close + 1..].trim_start();
+        let Some(suffix) = suffix.strip_prefix(')') else {
+            continue;
+        };
+        let Some(suffix) = suffix.trim_start().strip_prefix(';') else {
+            continue;
+        };
+        if suffix.starts_with("->") {
+            continue;
+        }
+        let source_span = route["source_span"].clone();
+        routes.push(json!({
+            "route": declared_path,
+            "method": "GET",
+            "source_file": file,
+            "source_span": source_span,
+            "public_file": format!("public/{relative}"),
+            "status": "candidate_static_public_asset",
+            "mapping": "copied_to_zelyra_public_and_served_at_same_path",
+            "php_executed": false
+        }));
+    }
+    routes.sort_by(|left, right| left["route"].as_str().cmp(&right["route"].as_str()));
+    routes
+}
+
+fn safe_static_route_path(path: &str) -> bool {
+    path.starts_with('/')
+        && !path.starts_with("//")
+        && !path.chars().any(|character| {
+            character.is_ascii_control()
+                || character.is_whitespace()
+                || matches!(character, '?' | '#' | '{' | '}' | '\\' | '%')
+        })
+        && !path.split('/').any(|part| part == "." || part == "..")
+}
+
+fn safe_public_relative_path(path: &str) -> bool {
+    !path.is_empty()
+        && !Path::new(path).is_absolute()
+        && !path.contains(['\\', '%'])
+        && path
+            .split('/')
+            .all(|part| !part.is_empty() && part != "." && part != "..")
+        && Path::new(path)
+            .components()
+            .all(|part| matches!(part, Component::Normal(_)))
 }
 
 pub(super) fn grant_schema_access(source: &str, table: &str, module: &str) -> Option<String> {
@@ -283,14 +423,21 @@ fn is_ident_byte(byte: u8) -> bool {
 
 fn safe_source_path(root: &Path, relative: &str) -> Option<std::path::PathBuf> {
     let relative = Path::new(relative);
-    if relative
-        .components()
-        .any(|component| !matches!(component, std::path::Component::Normal(_)))
-    {
-        return None;
-    }
-    let candidate = root.join(relative);
     let canonical_root = fs::canonicalize(root).ok()?;
+    let mut candidate = root.to_path_buf();
+    for component in relative.components() {
+        let std::path::Component::Normal(segment) = component else {
+            return None;
+        };
+        candidate.push(segment);
+        if fs::symlink_metadata(&candidate)
+            .ok()?
+            .file_type()
+            .is_symlink()
+        {
+            return None;
+        }
+    }
     let canonical = fs::canonicalize(candidate).ok()?;
     canonical.starts_with(canonical_root).then_some(canonical)
 }
@@ -473,6 +620,85 @@ class PublicUnsubscribeController {
         return view('public.done');
     }
 }"#;
+
+    fn asset_route_graph(source: &str, path: &str, groups: Value) -> Value {
+        let start = source.find("Route::get").expect("fixture route") as u64;
+        json!({"nodes": [{
+            "kind": "route",
+            "file": "routes/web.php",
+            "name": format!("get {path}"),
+            "route_context": {
+                "effective_path": path,
+                "middleware_complete": true,
+                "groups": groups,
+                "inherited_middleware": [],
+                "route_middleware": []
+            },
+            "source_span": {"start": {"byte_offset": start}}
+        }]})
+    }
+
+    #[test]
+    fn maps_exact_public_file_route_to_static_asset_candidate() {
+        let root = std::env::temp_dir().join(format!(
+            "zelyra-static-asset-route-{}-{}",
+            std::process::id(),
+            std::thread::current().name().unwrap_or("test")
+        ));
+        let _ = fs::remove_dir_all(&root);
+        fs::create_dir_all(root.join("routes")).unwrap();
+        let source = "<?php\nRoute::get('/favicon.ico', function () {\n    return response()->file(public_path('favicon.ico'));\n});\n";
+        fs::write(root.join("routes/web.php"), source).unwrap();
+        let graph = asset_route_graph(source, "/favicon.ico", json!([]));
+        let routes = static_public_file_routes(&root, &graph);
+        assert_eq!(routes.len(), 1);
+        assert_eq!(routes[0]["route"], "/favicon.ico");
+        assert_eq!(routes[0]["public_file"], "public/favicon.ico");
+        assert_eq!(routes[0]["status"], "candidate_static_public_asset");
+        assert_eq!(routes[0]["php_executed"], false);
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn rejects_dynamic_middleware_wrapped_and_path_mismatched_file_routes() {
+        let root = std::env::temp_dir().join(format!(
+            "zelyra-static-asset-route-reject-{}-{}",
+            std::process::id(),
+            std::thread::current().name().unwrap_or("test")
+        ));
+        let _ = fs::remove_dir_all(&root);
+        fs::create_dir_all(root.join("routes")).unwrap();
+        let cases = [
+            (
+                "<?php\nRoute::get('/file.txt', function () { return response()->file(public_path($file)); });\n",
+                "/file.txt",
+                json!([]),
+            ),
+            (
+                "<?php\nRoute::get('/file.txt', function () { return response()->file(public_path('file.txt')); })->middleware('auth');\n",
+                "/file.txt",
+                json!([]),
+            ),
+            (
+                "<?php\nRoute::get('/file.txt', function () { return response()->file(public_path('other.txt')); });\n",
+                "/file.txt",
+                json!([]),
+            ),
+            (
+                "<?php\nRoute::get('/file.txt', function () { return response()->file(public_path('file.txt')); });\n",
+                "/file.txt",
+                json!(["auth"]),
+            ),
+        ];
+        for (source, path, groups) in cases {
+            fs::write(root.join("routes/web.php"), source).unwrap();
+            assert!(
+                static_public_file_routes(&root, &asset_route_graph(source, path, groups))
+                    .is_empty()
+            );
+        }
+        fs::remove_dir_all(root).unwrap();
+    }
 
     #[test]
     fn recognizes_only_matching_hashed_route_token_and_idempotent_write() {

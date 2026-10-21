@@ -839,10 +839,20 @@ pub(super) fn render_view_translation_markdown(report: &Value) -> String {
 /// Copy only referenced, regular files beneath the Laravel public directory.
 /// Source paths stay project-relative in reports; symlinks and oversized files
 /// are recorded as unresolved rather than followed or copied.
+#[cfg(test)]
 pub(super) fn copy_referenced_assets(
     source_root: &Path,
     output_root: &Path,
     report: &mut Value,
+) -> Value {
+    copy_referenced_assets_with_paths(source_root, output_root, report, &[])
+}
+
+pub(super) fn copy_referenced_assets_with_paths(
+    source_root: &Path,
+    output_root: &Path,
+    report: &mut Value,
+    additional_paths: &[String],
 ) -> Value {
     let public_root = source_root.join("public");
     let public_metadata = fs::symlink_metadata(&public_root);
@@ -860,6 +870,7 @@ pub(super) fn copy_referenced_assets(
         .filter_map(|entry| entry["project_file"].as_str())
         .map(str::to_owned)
         .collect::<BTreeSet<_>>();
+    unique_paths.extend(additional_paths.iter().cloned());
     let mut copied_bytes = 0_u64;
     let mut copied_paths = BTreeSet::new();
     for project_file in std::mem::take(&mut unique_paths) {

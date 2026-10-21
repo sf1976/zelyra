@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import json
+import hashlib
 import os
 import subprocess
 import sys
@@ -157,6 +158,49 @@ def check_import_coverage(output: Path) -> bool:
     return True
 
 
+def check_static_asset_routes(source: Path, output: Path) -> bool:
+    try:
+        routes = json.loads((output / "STATIC_ASSET_ROUTES.json").read_text(encoding="utf-8"))
+        asset_report = json.loads((output / "ASSET_COPY.json").read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as error:
+        print(f"error: static asset route report cannot be read: {error}", file=sys.stderr)
+        return False
+    favicon = next(
+        (route for route in routes if isinstance(route, dict) and route.get("route") == "/favicon.ico"),
+        None,
+    )
+    copied = next(
+        (
+            asset
+            for asset in asset_report.get("assets", [])
+            if isinstance(asset, dict) and asset.get("project_file") == "public/favicon.ico"
+        ),
+        None,
+    )
+    source_asset = source / "public/favicon.ico"
+    imported_asset = output / "public/favicon.ico"
+    if (
+        not isinstance(favicon, dict)
+        or favicon.get("status") != "generated_static_public_asset_route"
+        or favicon.get("asset_copy_status") != "copied_and_served_at_route_path"
+        or copied is None
+        or copied.get("status") != "copied"
+        or source_asset.is_symlink()
+        or imported_asset.is_symlink()
+        or not source_asset.is_file()
+        or not imported_asset.is_file()
+        or hashlib.sha256(source_asset.read_bytes()).digest()
+        != hashlib.sha256(imported_asset.read_bytes()).digest()
+    ):
+        print(
+            "error: Laravel /favicon.ico route was not copied byte-for-byte into the Zelyra public asset path",
+            file=sys.stderr,
+        )
+        return False
+    print("Laravel /favicon.ico is mapped to the same-origin Zelyra static asset path.")
+    return True
+
+
 def main() -> int:
     if len(sys.argv) != 2:
         print(
@@ -203,6 +247,8 @@ def main() -> int:
         if not check_source_file_inventory(source, output):
             return 1
         if not check_import_coverage(output):
+            return 1
+        if not check_static_asset_routes(source, output):
             return 1
 
         check = subprocess.run(
