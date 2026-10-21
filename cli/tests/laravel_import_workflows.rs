@@ -64,7 +64,7 @@ fn laravel_import_generates_and_compiler_checks_verified_unsubscribe_workflow() 
     );
     tree.write(
         "laravel/app/Migrations/create_suppressions.php",
-        "<?php\nSchema::create('suppressions', function (Blueprint $table) {\n $table->id();\n $table->string('token_hash', 64);\n $table->timestamp('unsubscribed_at')->nullable();\n});\n",
+        "<?php\nSchema::create('tenants', function (Blueprint $table) { $table->id(); $table->string('name'); });\nSchema::create('suppressions', function (Blueprint $table) {\n $table->id();\n $table->foreignId('tenant_id')->constrained('tenants');\n $table->string('token_hash', 64)->unique();\n $table->timestamp('unsubscribed_at')->nullable();\n});\n",
     );
     tree.write(
         "laravel/resources/views/public/confirm.blade.php",
@@ -91,13 +91,18 @@ fn laravel_import_generates_and_compiler_checks_verified_unsubscribe_workflow() 
 
     let selection_path = output.join("GENERATION_SELECTION.json");
     let selection = fs::read_to_string(selection_path).expect("read generation selection");
-    assert!(selection.contains("generated_checked_token_unsubscribe_module"));
+    assert!(selection.contains("generated_scoped_public_token_unsubscribe_module"));
     assert!(selection.contains("src/imported_public_unsubscribe.zyl"));
     let workflow_path = output.join("src/imported_public_unsubscribe.zyl");
     let workflow = fs::read_to_string(workflow_path).expect("read generated workflow");
-    assert!(workflow.contains("verify sql<Int[]>"));
+    assert!(workflow.contains("public_token {"));
+    assert!(workflow.contains("hash_field: token_hash"));
+    assert!(workflow.contains("timestamp_field: unsubscribed_at"));
     assert!(workflow.contains("require_match"));
-    assert!(workflow.contains("COALESCE(unsubscribed_at, CURRENT_TIMESTAMP)"));
+    assert!(!workflow.contains("UPDATE suppressions"));
+    let schema = fs::read_to_string(output.join("src/imported_schema.zyl"))
+        .expect("read generated scoped schema");
+    assert!(schema.contains("table suppressions scoped by tenant_id: TenantId"));
 
     let checked = Command::new(env!("CARGO_BIN_EXE_zelyra"))
         .args([

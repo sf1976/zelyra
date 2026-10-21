@@ -112,6 +112,20 @@ pub fn check_program(program: &zelyra_ast::Program, schema: &Schema) -> Result<(
                 span: form.span,
             });
         }
+        let valid_public_token_form = if let Some(public_token) = &form.public_token {
+            match validate_public_token_form(form, program) {
+                Ok(()) => true,
+                Err(message) => {
+                    errors.push(FormError {
+                        message,
+                        span: public_token.span,
+                    });
+                    false
+                }
+            }
+        } else {
+            false
+        };
         if let Some(verify) = &form.verify {
             if form.post_only {
                 errors.push(FormError {
@@ -302,6 +316,12 @@ pub fn check_program(program: &zelyra_ast::Program, schema: &Schema) -> Result<(
                 check_file_field(field, false, &mut errors);
             }
             if action.require_match {
+                if valid_public_token_form {
+                    // This form variant uses the dedicated runtime token
+                    // resolver; its SQL is generated internally and tied to
+                    // the globally unique token row.
+                    continue;
+                }
                 let first_query = action
                     .statements
                     .first()
@@ -468,6 +488,107 @@ pub fn check_program(program: &zelyra_ast::Program, schema: &Schema) -> Result<(
     } else {
         Err(errors)
     }
+}
+
+pub fn validate_public_token_form(
+    form: &FormDef,
+    program: &zelyra_ast::Program,
+) -> Result<(), String> {
+    let token = form
+        .public_token
+        .as_ref()
+        .ok_or_else(|| "public token form metadata is missing".to_owned())?;
+    let table_name = form
+        .table
+        .as_deref()
+        .ok_or_else(|| "public token forms must target a declared table".to_owned())?;
+    let table = program
+        .tables
+        .iter()
+        .find(|table| table.name == table_name)
+        .ok_or_else(|| format!("public token table `{table_name}` is not declared"))?;
+    if table.tenant_scope.is_none() {
+        return Err("public token forms are only for tenant-scoped tables".into());
+    }
+    let hash = table
+        .columns
+        .iter()
+        .find(|column| column.name == token.hash_field)
+        .ok_or_else(|| {
+            format!(
+                "public token hash field `{}` is not declared",
+                token.hash_field
+            )
+        })?;
+    if hash.ty != Type::String
+        || hash.length != Some(64)
+        || !hash.required
+        || !hash.unique
+        || hash.unique_within_tenant
+    {
+        return Err(format!(
+            "public token hash field `{}` must be a required, globally unique String(64) column",
+            token.hash_field
+        ));
+    }
+    let timestamp = table
+        .columns
+        .iter()
+        .find(|column| column.name == token.timestamp_field)
+        .ok_or_else(|| {
+            format!(
+                "public token timestamp field `{}` is not declared",
+                token.timestamp_field
+            )
+        })?;
+    if timestamp.ty != Type::Option(Box::new(Type::Timestamp)) {
+        return Err(format!(
+            "public token timestamp field `{}` must have type Timestamp?",
+            token.timestamp_field
+        ));
+    }
+    if form.verify.is_some() || !form.fields.is_empty() {
+        return Err(
+            "public token forms use the checked token lookup and do not accept custom verify queries or fields".into(),
+        );
+    }
+    let path = form.path.as_deref().ok_or_else(|| {
+        "public token forms require an explicit route with one token parameter".to_owned()
+    })?;
+    let (prefix, remainder) = path
+        .split_once('{')
+        .ok_or_else(|| "public token route must contain one `{token}` path parameter".to_owned())?;
+    let (parameter, suffix) = remainder
+        .split_once('}')
+        .ok_or_else(|| "public token route has an unterminated path parameter".to_owned())?;
+    if prefix.is_empty()
+        || !prefix.ends_with('/')
+        || parameter.is_empty()
+        || !parameter
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || byte == b'_')
+        || suffix.contains(['{', '}'])
+    {
+        return Err("public token route must contain exactly one named path parameter".into());
+    }
+    if form.actions.len() != 1 {
+        return Err("public token forms require exactly one confirmation action".into());
+    }
+    let action = &form.actions[0];
+    if !action.require_match
+        || action.confirm_page.is_none()
+        || action.success.is_none()
+        || action.redirect.is_none()
+        || !action.statements.is_empty()
+        || action.execute_body.is_some()
+        || action.guard.is_some()
+        || !action.fields.is_empty()
+    {
+        return Err(
+            "public token action must be a checked confirmation with success and redirect, and cannot contain SQL, typed code, fields, or guards".into(),
+        );
+    }
+    Ok(())
 }
 
 fn check_file_field(field: &FormField, can_receive_file: bool, errors: &mut Vec<FormError>) {
@@ -1255,6 +1376,7 @@ mod tests {
             path: None,
             post_only: false,
             verify: None,
+            public_token: None,
             fields: vec![
                 field("name", Type::String, true, Some(5)),
                 field("email", Type::Named("Email".into()), true, None),
@@ -1612,6 +1734,7 @@ mod tests {
                 path: None,
                 post_only: false,
                 verify: None,
+                public_token: None,
                 fields: vec![document],
                 actions: vec![zelyra_ast::FormAction {
                     name: "save".into(),
@@ -1780,6 +1903,7 @@ mod tests {
                 path: None,
                 post_only: false,
                 verify: None,
+                public_token: None,
                 fields: files,
                 actions: Vec::new(),
                 span: Span::default(),
@@ -2046,6 +2170,7 @@ mod tests {
             path: None,
             post_only: false,
             verify: None,
+            public_token: None,
             fields: vec![name, amount],
             actions: Vec::new(),
             span: Span::default(),
@@ -2089,6 +2214,7 @@ mod tests {
                 path: None,
                 post_only: false,
                 verify: None,
+                public_token: None,
                 fields: vec![invalid, inverted],
                 actions: Vec::new(),
                 span: Span::default(),
@@ -2119,6 +2245,7 @@ mod tests {
             path: None,
             post_only: false,
             verify: None,
+            public_token: None,
             fields: vec![status],
             actions: Vec::new(),
             span: Span::default(),
@@ -2148,6 +2275,7 @@ mod tests {
                 path: None,
                 post_only: false,
                 verify: None,
+                public_token: None,
                 fields: vec![invalid],
                 actions: Vec::new(),
                 span: Span::default(),
@@ -2186,6 +2314,7 @@ mod tests {
             path: None,
             post_only: false,
             verify: None,
+            public_token: None,
             fields: vec![FormField {
                 name: "name".into(),
                 ty: None,

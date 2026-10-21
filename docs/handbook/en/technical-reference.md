@@ -1068,6 +1068,41 @@ An executable MariaDB example is in
 the isolated database/browser-flow check is
 [`tests/mariadb-form-route-e2e.sh`](../../tests/mariadb-form-route-e2e.sh).
 
+For a public bearer link to a tenant-scoped row, forms also support the
+deliberately narrow `public_token` declaration. Store the token as a SHA-256
+hash in a `String(64) required unique` column; the route carries the raw token.
+Zelyra resolves the hash internally to exactly one row and updates only that
+row's primary and tenant keys. A hash unique only within one tenant is not
+accepted. The confirmation action cannot contain application SQL or handler
+statements:
+
+~~~zelyra
+form PublicUnsubscribe -> suppressions {
+    route: "/unsubscribe/{token}"
+    public_token {
+        hash_field: token_hash
+        timestamp_field: unsubscribed_at
+    }
+    action unsubscribe {
+        require_match
+        label: "Unsubscribe"
+        confirm_page {
+            title: "Confirm unsubscribe"
+            message: "Stop these emails?"
+            submit: "Unsubscribe"
+        }
+        success "Unsubscribe saved"
+        redirect "/unsubscribe/done"
+    }
+}
+~~~
+
+The target must be declared with `scoped by`, and `timestamp_field` must be
+`Timestamp?`. GET checks the token before rendering. POST checks CSRF and
+performs the idempotent timestamp update transactionally. Token responses,
+including errors, use `Cache-Control: no-store`. This primitive is not a
+general CRUD action and can only set the declared timestamp column.
+
 Database-backed action:
 
 ~~~zelyra

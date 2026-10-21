@@ -4,7 +4,6 @@
 from __future__ import annotations
 
 import html
-import json
 import os
 import re
 import secrets
@@ -123,43 +122,17 @@ def main() -> int:
                 return generated.returncode
             workflow_path = scaffold / "src/imported_public_unsubscribe.zyl"
             if not workflow_path.is_file():
-                schema = (scaffold / "src/imported_schema.zyl").read_text(encoding="utf-8")
-                readme = (scaffold / "README.md").read_text(encoding="utf-8")
-                routes = subprocess.run(
-                    [str(binary), "routes", str(scaffold / "main.zyl"), "--format", "json"],
-                    env=environment,
-                    capture_output=True,
-                    text=True,
-                    check=False,
+                raise RuntimeError(
+                    "the globally unique tenant-scoped public unsubscribe workflow was not generated"
                 )
-                if routes.returncode:
-                    print(routes.stderr, file=sys.stderr, end="")
-                    return routes.returncode
-                if "table csv_mailer_suppressions scoped by tenant_id: TenantId" not in schema:
-                    raise RuntimeError("suppression schema lost its statically proven tenant scope")
-                if "Tenant-scoped public workflows require manual implementation" not in readme:
-                    raise RuntimeError("scaffold did not explain the blocked cross-tenant workflow")
-                route_entries = json.loads(routes.stdout).get("routes", [])
-                if any(
-                    isinstance(route, dict)
-                    and route.get("path") in (
-                        "/csv-mailer/abmelden/{token}",
-                        "/csv-mailer/abmelden",
-                    )
-                    for route in route_entries
-                ):
-                    raise RuntimeError("tenant-scoped public SQL workflow was unexpectedly exposed")
-                check = run([str(binary), "check", str(scaffold / "main.zyl")], env=environment)
-                if check.returncode:
-                    return check.returncode
-                print(
-                    "Laravel import tenant-boundary E2E passed: the public unsubscribe workflow remains manual because the source table is tenant-scoped and no authenticated tenant context exists. No database or mail transport was used."
-                )
-                return 0
             if shutil.which("docker") is None:
                 print("error: Docker is required for this disposable MariaDB E2E", file=sys.stderr)
                 return 2
             workflow = workflow_path.read_text(encoding="utf-8")
+            if "public_token {" not in workflow or "hash_field: token_hash" not in workflow:
+                raise RuntimeError("generated tenant-scoped workflow omitted its checked public token scope")
+            if "UPDATE csv_mailer_suppressions" in workflow:
+                raise RuntimeError("scoped token workflow emitted application-authored SQL")
             if 'import "src/imported_layouts.zyl" as imported_layouts' not in workflow:
                 raise RuntimeError("generated unsubscribe module omitted its detected shared layout dependency")
             if "view: ImportedAppShell" not in workflow:
@@ -216,7 +189,10 @@ def main() -> int:
             if setup.returncode:
                 return setup.returncode
 
-            tenant = mysql("--execute=INSERT INTO tenants (id, name) VALUES (7, 'Importer E2E')")
+            tenant = mysql(
+                "--execute=INSERT INTO tenants (id, name) VALUES "
+                "(7, 'Importer E2E'), (8, 'Other Tenant E2E')"
+            )
             if tenant.returncode:
                 print(tenant.stderr, file=sys.stderr, end="")
                 return tenant.returncode
@@ -228,6 +204,15 @@ def main() -> int:
             if seed.returncode:
                 print(seed.stderr, file=sys.stderr, end="")
                 return seed.returncode
+            other_token = secrets.token_hex(32)
+            other_seed = mysql(
+                "--execute="
+                "INSERT INTO csv_mailer_suppressions (tenant_id, email, token_hash, token) "
+                f"VALUES (8, 'other-tenant@example.test', SHA2('{other_token}', 256), '{other_token}')"
+            )
+            if other_seed.returncode:
+                print(other_seed.stderr, file=sys.stderr, end="")
+                return other_seed.returncode
 
             server = subprocess.Popen(
                 [str(binary), "serve", str(scaffold / "main.zyl"), f"127.0.0.1:{http_port}"],
@@ -260,6 +245,8 @@ def main() -> int:
             invalid = f"{base}/csv-mailer/abmelden/{'0' * 64}"
             if request(invalid)[0] != 404:
                 raise RuntimeError("invalid GET token was not rejected with HTTP 404")
+            if request(invalid)[1].get("Cache-Control", "").lower() != "no-store":
+                raise RuntimeError("invalid token response did not send Cache-Control: no-store")
 
             csrf_match = re.search(rb'name="_zelyra_csrf" value="([^"]+)"', page)
             if not csrf_match:
@@ -270,12 +257,28 @@ def main() -> int:
             invalid_status = request(invalid, method="POST", body=fields, origin=origin)[0]
             if invalid_status != 404:
                 raise RuntimeError(f"invalid POST token returned HTTP {invalid_status}, expected 404")
+            bad_csrf_status, bad_csrf_headers, _ = request(
+                route,
+                method="POST",
+                body=urllib.parse.urlencode({"_zelyra_csrf": "invalid"}).encode("ascii"),
+                origin=origin,
+            )
+            if bad_csrf_status != 403:
+                raise RuntimeError(f"invalid CSRF token returned HTTP {bad_csrf_status}, expected 403")
+            if bad_csrf_headers.get("Cache-Control", "").lower() != "no-store":
+                raise RuntimeError("CSRF failure did not send Cache-Control: no-store")
             before = mysql(
                 "--execute=SELECT unsubscribed_at IS NULL FROM csv_mailer_suppressions "
                 f"WHERE token_hash = SHA2('{token}', 256)"
             ).stdout.strip()
             if before != "1":
                 raise RuntimeError("invalid POST changed the suppression row")
+            other_before = mysql(
+                "--execute=SELECT unsubscribed_at IS NULL FROM csv_mailer_suppressions "
+                f"WHERE token_hash = SHA2('{other_token}', 256)"
+            ).stdout.strip()
+            if other_before != "1":
+                raise RuntimeError("precondition failed: other-tenant row was already unsubscribed")
 
             status = request(route, method="POST", body=fields, origin=origin)[0]
             if status not in (302, 303):
@@ -286,6 +289,12 @@ def main() -> int:
             ).stdout.strip()
             if not first_time:
                 raise RuntimeError("valid POST did not persist the unsubscribe timestamp")
+            other_after = mysql(
+                "--execute=SELECT unsubscribed_at IS NULL FROM csv_mailer_suppressions "
+                f"WHERE token_hash = SHA2('{other_token}', 256)"
+            ).stdout.strip()
+            if other_after != "1":
+                raise RuntimeError("public token POST changed a row belonging to another tenant")
 
             second_page = request(route)
             second_csrf_match = re.search(

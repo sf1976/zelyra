@@ -215,14 +215,29 @@ def main() -> int:
 
         workflow = output / "src/imported_public_unsubscribe.zyl"
         layout = output / "src/imported_layouts.zyl"
-        if workflow.is_file():
-            workflow_source = workflow.read_text(encoding="utf-8")
-            if not layout.is_file() or 'import "src/imported_layouts.zyl" as imported_layouts' not in workflow_source:
-                print("error: generated public workflow does not depend on the detected shared layout", file=sys.stderr)
-                return 1
-            if "view: ImportedAppShell" not in workflow_source:
-                print("error: generated public success page does not use ImportedAppShell", file=sys.stderr)
-                return 1
+        views = output / "src/imported_views.zyl"
+        if not workflow.is_file():
+            print("error: tenant-scoped unsubscribe workflow was not generated", file=sys.stderr)
+            return 1
+        workflow_source = workflow.read_text(encoding="utf-8")
+        if not layout.is_file() or 'import "src/imported_layouts.zyl" as imported_layouts' not in workflow_source:
+            print("error: generated public workflow does not depend on the detected shared layout", file=sys.stderr)
+            return 1
+        if "view: ImportedAppShell" not in workflow_source:
+            print("error: generated public success page does not use ImportedAppShell", file=sys.stderr)
+            return 1
+        if "public_token {" not in workflow_source or "hash_field: token_hash" not in workflow_source:
+            print("error: generated tenant-scoped unsubscribe workflow lacks its checked token binding", file=sys.stderr)
+            return 1
+        if "UPDATE csv_mailer_suppressions" in workflow_source:
+            print("error: unsubscribe workflow contains unscoped application SQL", file=sys.stderr)
+            return 1
+        if "<PublicCsvMailerUnsubscribed />" in workflow_source and (
+            not views.is_file()
+            or 'import "src/imported_views.zyl" as imported_views' not in workflow_source
+        ):
+            print("error: generated success component is missing its declared module dependency", file=sys.stderr)
+            return 1
 
         routes = subprocess.run(
             [str(binary), "routes", str(output / "main.zyl"), "--format", "json"],
@@ -263,8 +278,12 @@ def main() -> int:
         if "table csv_mailer_suppressions scoped by tenant_id: TenantId" not in schema_source:
             print("error: imported tenant suppression data is missing its declared tenant scope", file=sys.stderr)
             return 1
-        if (output / "src/imported_public_unsubscribe.zyl").exists():
-            print("error: public unsubscribe SQL must not bypass tenant isolation", file=sys.stderr)
+        if not any(
+            entry.get("path") == "/csv-mailer/abmelden/{token}"
+            for entry in route_entries
+            if isinstance(entry, dict)
+        ):
+            print("error: generated route inventory omits the tenant-scoped unsubscribe route", file=sys.stderr)
             return 1
 
         identity_entry = output / "packages/imported_identity/src/lib.zyl"

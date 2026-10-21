@@ -220,6 +220,61 @@ fn compiler_scope_gate_rejects_sql_touching_declared_tenant_tables() {
 }
 
 #[test]
+fn compiler_accepts_only_tightly_scoped_public_token_forms() {
+    let valid = r#"
+        type TenantId = Id
+        table tenants { id: Id primary auto }
+        table suppressions scoped by tenant_id: TenantId {
+            id: Id primary auto
+            tenant_id: TenantId required references tenants
+            token_hash: String(64) required unique
+            unsubscribed_at: Timestamp?
+        }
+        form PublicUnsubscribe -> suppressions {
+            route: "/unsubscribe/{token}"
+            public_token {
+                hash_field: token_hash
+                timestamp_field: unsubscribed_at
+            }
+            action unsubscribe {
+                require_match
+                label: "Unsubscribe"
+                confirm_page {
+                    title: "Confirm"
+                    message: "Stop these messages?"
+                    submit: "Unsubscribe"
+                }
+                success "Saved"
+                redirect "/unsubscribe/done"
+            }
+        }
+        fn main() {}
+    "#;
+    let program = zelyra_parser::parse(&zelyra_lexer::lex(valid).unwrap()).unwrap();
+    let schema = build_schema(&program).unwrap();
+    assert!(validate_tenant_access_boundaries(
+        "main.zyl", &program, &schema
+    ));
+
+    for invalid in [
+        valid.replace("token_hash: String(64) required unique", "token_hash: String(64) required"),
+        valid.replace("Timestamp?", "String?"),
+        valid.replace("route: \"/unsubscribe/{token}\"", "route: \"/unsubscribe/{token}/{other}\""),
+        valid.replace(
+            "success \"Saved\"",
+            "sql { UPDATE suppressions SET tenant_id = :tenant_id }\n                success \"Saved\"",
+        ),
+    ] {
+        let program = zelyra_parser::parse(&zelyra_lexer::lex(&invalid).unwrap()).unwrap();
+        let schema = build_schema(&program).unwrap();
+        assert!(
+            !validate_tenant_access_boundaries("main.zyl", &program, &schema),
+            "invalid public-token form passed compiler scope validation: {invalid}"
+        );
+    }
+}
+
+#[test]
 fn compiler_scope_gate_rejects_tableviews_reading_tenant_tables() {
     let source = r#"
         type TenantId = Id

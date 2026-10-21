@@ -2250,6 +2250,7 @@ impl<'a> Parser<'a> {
         let mut post_only = false;
         let mut post_only_declared = false;
         let mut verify = None;
+        let mut public_token = None;
         let mut fields = Vec::new();
         let mut actions = Vec::new();
         self.skip_newlines();
@@ -2291,6 +2292,54 @@ impl<'a> Parser<'a> {
                     });
                 }
                 verify = Some(expression);
+            } else if self.at_word("public_token") {
+                let marker = self.advance();
+                if public_token.is_some() {
+                    return Err(ParseError {
+                        message: "duplicate `public_token` block in form".into(),
+                        span: marker.span,
+                    });
+                }
+                self.expect(TokenKind::LBrace, "`{` after `public_token`")?;
+                let mut hash_field = None;
+                let mut timestamp_field = None;
+                self.skip_newlines();
+                while !self.at(&TokenKind::RBrace) && !self.at(&TokenKind::Eof) {
+                    let (property, property_span) = self.ident("public token property")?;
+                    self.expect(TokenKind::Colon, "`:` after public token property")?;
+                    let value = self.field_ident("public token field")?.0;
+                    let target = match property.as_str() {
+                        "hash_field" => &mut hash_field,
+                        "timestamp_field" => &mut timestamp_field,
+                        _ => {
+                            return Err(ParseError {
+                                message: format!("unknown public token property `{property}`"),
+                                span: property_span,
+                            })
+                        }
+                    };
+                    if target.replace(value).is_some() {
+                        return Err(ParseError {
+                            message: format!("duplicate `{property}` in public token block"),
+                            span: property_span,
+                        });
+                    }
+                    self.skip_newlines();
+                }
+                let end = self.expect(TokenKind::RBrace, "`}` after public token block")?;
+                let (Some(hash_field), Some(timestamp_field)) = (hash_field, timestamp_field)
+                else {
+                    return Err(ParseError {
+                        message: "`public_token` requires `hash_field` and `timestamp_field`"
+                            .into(),
+                        span: marker.span.join(end),
+                    });
+                };
+                public_token = Some(PublicTokenFormDef {
+                    hash_field,
+                    timestamp_field,
+                    span: marker.span.join(end),
+                });
             } else if self.at(&TokenKind::Field) {
                 fields.push(self.form_field()?);
             } else if self.at(&TokenKind::Fields) {
@@ -2338,6 +2387,7 @@ impl<'a> Parser<'a> {
             path,
             post_only,
             verify,
+            public_token,
             fields,
             actions,
             span: start.join(end),
@@ -6300,6 +6350,50 @@ mod tests {
         assert_eq!(program.forms[1].table.as_deref(), Some("customers"));
         assert_eq!(program.forms[1].path.as_deref(), Some("/customers/new"));
         assert_eq!(program.forms[1].fields.len(), 2);
+    }
+
+    #[test]
+    fn parses_public_token_form_scope() {
+        let source = r#"
+            form PublicUnsubscribe -> suppressions {
+                route: "/unsubscribe/{token}"
+                public_token {
+                    hash_field: token_hash
+                    timestamp_field: unsubscribed_at
+                }
+                action unsubscribe {
+                    require_match
+                    label: "Unsubscribe"
+                    confirm_page {
+                        title: "Confirm"
+                        message: "Stop these messages?"
+                        submit: "Unsubscribe"
+                    }
+                    success "Saved"
+                    redirect "/unsubscribe/done"
+                }
+            }
+        "#;
+        let program = parse(&lex(source).unwrap()).unwrap();
+        let token = program.forms[0]
+            .public_token
+            .as_ref()
+            .expect("public token scope was parsed");
+        assert_eq!(token.hash_field, "token_hash");
+        assert_eq!(token.timestamp_field, "unsubscribed_at");
+        assert_eq!(program.forms[0].actions[0].name, "unsubscribe");
+        assert!(program.forms[0].actions[0].require_match);
+    }
+
+    #[test]
+    fn rejects_incomplete_and_duplicate_public_token_properties() {
+        for source in [
+            "form F { public_token { hash_field: token_hash } }",
+            "form F { public_token { hash_field: token_hash timestamp_field: done timestamp_field: other } }",
+            "form F { public_token { hash_field: token_hash timestamp_field: done } public_token { hash_field: x timestamp_field: y } }",
+        ] {
+            assert!(parse(&lex(source).unwrap()).is_err(), "accepted {source}");
+        }
     }
 
     #[test]

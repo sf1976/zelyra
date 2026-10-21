@@ -9950,6 +9950,17 @@ fn validate_tenant_access_boundaries(
     };
 
     for form in &program.forms {
+        if let Some(public_token) = &form.public_token {
+            if let Err(message) = zelyra_forms::validate_public_token_form(form, program) {
+                diagnostic_with_span(path, "E-FORM-010", &message, public_token.span);
+                valid = false;
+            }
+            // A valid public-token form is executed by a dedicated runtime
+            // path that resolves one globally unique token and scopes all
+            // reads and writes to the resulting row and tenant key. It never
+            // executes user-provided SQL.
+            continue;
+        }
         if form.table.as_ref().is_some_and(|table| {
             protected_tables
                 .iter()
@@ -11788,6 +11799,7 @@ fn generated_crud_form(
             path: None,
             post_only: false,
             verify: None,
+            public_token: None,
             fields,
             actions: vec![zelyra_ast::FormAction {
                 name: "save".into(),
@@ -11911,6 +11923,7 @@ fn generated_crud_action(
                 path: None,
                 post_only: false,
                 verify: None,
+                public_token: None,
                 fields: action.fields.clone(),
                 actions: vec![action.clone()],
                 span: action.span,
