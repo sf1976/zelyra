@@ -1,4 +1,4 @@
-# Experimentelles Zelyra-Bytecode v29
+# Experimentelles Zelyra-Bytecode v30
 
 `zelyra-mir::bytecode` bietet das erste ausführbare Bytecode-Backend für
 bereits typgeprüfte und verifizierte MIR. Der AST-Interpreter bleibt die Referenzimplementierung und das normale
@@ -321,9 +321,11 @@ Regressionstests und Startfälle für diese vier Bereiche vergleichen AST, MIR
 und serialisierten Bytecode. Das vergrößert die geprüfte Teilmenge, belegt aber
 keine vollständige Backendparität.
 
-## Format v29
+## Format v30
 
-Bytecode v29 enthält `ArrayIndexCheck`. Bei `mutable_array[index] += rhs`
-validiert die VM das linke Arrayziel vor Auswertung von `rhs`; dadurch bleiben
-Seiteneffekte und Fehlerreihenfolge mit AST und MIR identisch. v29-Artefakte
+Bytecode v30 enthält `ArrayIndexAddInt` für `mutable_array[index] += <Int-Literal>`.
+Die VM prüft den Index vor dem Schrittbudget der rechten Seite und führt danach
+Addition und Aktualisierung in einer Instruktion aus. Andere rechte Ausdrücke
+verwenden weiterhin `ArrayIndexCheck` vor ihrer Auswertung. Dadurch bleiben
+Fehler- und Seiteneffektreihenfolge mit AST und MIR erhalten. v30-Artefakte
 sind nicht mit älteren Decodern kompatibel.

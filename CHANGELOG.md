@@ -1,5 +1,22 @@
 ## Unreleased
 
+- Specialize mutable array `Int` index updates with integer-literal increments
+  into one verifier-checked Bytecode operation. The operation checks bounds
+  before charging the right-hand source step, preserving AST/MIR error order;
+  other right-hand expressions retain the general checked path. Advance the
+  experimental Bytecode artifact format to v30. A 20,000-element,
+  100,000-update benchmark measured a 13% lower pinned Bytecode median on this
+  host (34.0 ms to 29.4 ms); this result is workload-specific and does not
+  claim general Bytecode superiority. / Veränderbare Array-`Int`-Updates mit
+  ganzzahligen Literalen in eine verifiergeprüfte Bytecode-Instruktion
+  zusammenfassen. Die Instruktion prüft Grenzen vor dem Schrittbudget des
+  rechten Ausdrucks und erhält so die Fehlerreihenfolge von AST/MIR; andere
+  rechte Ausdrücke verwenden weiter den allgemeinen geprüften Ablauf. Das
+  experimentelle Bytecode-Artefaktformat auf v30 erhöhen. Ein Benchmark mit
+  20.000 Elementen und 100.000 Updates maß auf diesem Rechner einen um 13 %
+  niedrigeren gepinnten Bytecode-Median (34,0 ms auf 29,4 ms); das gilt nur für
+  diese Arbeitslast und belegt keinen allgemeinen Bytecode-Leistungsvorteil.
+
 ## 1.2.47 — 2026-10-22
 
 - Validate host-provided arguments against resolved function parameter and

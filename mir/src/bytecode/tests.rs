@@ -1744,6 +1744,18 @@ fn mutable_array_index_errors_match_ast_mir_and_decoded_bytecode() {
         let ast = parse(&lex(source).expect("source lexes")).expect("source parses");
         let mir = crate::lower(&ast).expect("source type-checks and lowers");
         let bytecode = compile(&mir, "main").expect("main function compiles");
+        if source.contains("+= 3") {
+            assert!(
+                bytecode.functions[bytecode.entry]
+                    .code
+                    .iter()
+                    .any(|instruction| matches!(
+                        instruction.operation,
+                        BytecodeOp::ArrayIndexAddInt { .. }
+                    )),
+                "literal compound assignment uses the fused checked-literal operation"
+            );
+        }
         let bytecode = decode(&encode(&bytecode).expect("bytecode encodes"))
             .expect("bytecode verifies after decoding");
 
@@ -1760,6 +1772,65 @@ fn mutable_array_index_errors_match_ast_mir_and_decoded_bytecode() {
         assert_eq!(ast_error.message, bytecode_error.message);
         assert_eq!(ast_error.span, mir_error.span);
         assert_eq!(ast_error.span, bytecode_error.span);
+    }
+}
+
+#[test]
+fn fused_array_literal_check_preserves_index_error_before_rhs_step_budget() {
+    let source = "fn main() { mutable values: Int[] = [1] values[2] += 3 }";
+    let ast = parse(&lex(source).expect("source lexes")).expect("source parses");
+    let mir = crate::lower(&ast).expect("source type-checks and lowers");
+    let bytecode = compile(&mir, "main").expect("main function compiles");
+    let bytecode = decode(&encode(&bytecode).expect("bytecode encodes"))
+        .expect("bytecode verifies after decoding");
+
+    for max_steps in 0..16 {
+        let policy = zelyra_runtime::RuntimePolicy {
+            step_budget: Some(max_steps),
+            ..zelyra_runtime::RuntimePolicy::default()
+        };
+        let ast_error = zelyra_runtime::execute_function_with_capabilities_and_policies(
+            &ast,
+            "main",
+            Vec::new(),
+            None,
+            None,
+            Some(&policy),
+        )
+        .expect_err("invalid index or exhausted budget must fail");
+        let mir_error = execution::execute_function(
+            &mir,
+            "main",
+            Vec::new(),
+            ExecutionLimits {
+                max_steps,
+                ..ExecutionLimits::default()
+            },
+        )
+        .expect_err("invalid index or exhausted budget must fail");
+        let bytecode_error = execute(
+            &bytecode,
+            Vec::new(),
+            ExecutionLimits {
+                max_steps,
+                ..ExecutionLimits::default()
+            },
+        )
+        .expect_err("invalid index or exhausted budget must fail");
+
+        assert_eq!(
+            ast_error.message, mir_error.message,
+            "step budget {max_steps}"
+        );
+        assert_eq!(
+            ast_error.message, bytecode_error.message,
+            "step budget {max_steps}"
+        );
+        assert_eq!(ast_error.span, mir_error.span, "step budget {max_steps}");
+        assert_eq!(
+            ast_error.span, bytecode_error.span,
+            "step budget {max_steps}"
+        );
     }
 }
 
@@ -6071,6 +6142,12 @@ fn add_at(initial: Int, position: Int, amount: Int) -> Int {
     return values[0] + values[1]
 }
 
+fn add_literal(initial: Int, position: Int) -> Int {
+    mutable values: Int[] = [initial, 2]
+    values[position] += 3
+    return values[0] + values[1]
+}
+
 fn set_at(initial: Int, position: Int, replacement: Int) -> Int {
     mutable values: Int[] = [initial, 2]
     values[position] = replacement
@@ -6079,8 +6156,11 @@ fn set_at(initial: Int, position: Int, replacement: Int) -> Int {
 fn main() {}
 "#;
     let (mir, add_code) = compile_source(source, "add_at");
+    let literal_code = compile(&mir, "add_literal").expect("literal update compiles");
     let set_code = compile(&mir, "set_at").expect("set-index function compiles");
     let add_code = decode(&encode(&add_code).expect("encode add-index function")).unwrap();
+    let literal_code =
+        decode(&encode(&literal_code).expect("encode literal add-index function")).unwrap();
     let set_code = decode(&encode(&set_code).expect("encode set-index function")).unwrap();
 
     for (entry, code) in [("add_at", &add_code), ("set_at", &set_code)] {
@@ -6100,6 +6180,45 @@ fn main() {}
             assert_eq!(actual.value, reference.value);
         }
     }
+
+    for arguments in [
+        vec![Value::Int(5), Value::Int(0)],
+        vec![Value::Int(-7), Value::Int(1)],
+    ] {
+        let reference = execution::execute_function(
+            &mir,
+            "add_literal",
+            arguments.clone(),
+            ExecutionLimits::default(),
+        )
+        .expect("AST reference literal update");
+        let actual = execute(&literal_code, arguments, ExecutionLimits::default())
+            .expect("bytecode literal update");
+        assert_eq!(actual.value, reference.value);
+    }
+
+    let overflow_arguments = vec![Value::Int(i64::MAX), Value::Int(0)];
+    let ast = parse(&lex(source).expect("source lexes")).expect("source parses");
+    let ast_error =
+        zelyra_runtime::execute_function(&ast, "add_literal", overflow_arguments.clone(), None)
+            .expect_err("literal increment overflows at the signed integer limit");
+    let mir_error = execution::execute_function(
+        &mir,
+        "add_literal",
+        overflow_arguments.clone(),
+        ExecutionLimits::default(),
+    )
+    .expect_err("MIR reports literal increment overflow");
+    let bytecode_error = execute(
+        &literal_code,
+        overflow_arguments,
+        ExecutionLimits::default(),
+    )
+    .expect_err("Bytecode reports literal increment overflow");
+    assert_eq!(ast_error.message, mir_error.message);
+    assert_eq!(ast_error.message, bytecode_error.message);
+    assert_eq!(ast_error.span, mir_error.span);
+    assert_eq!(ast_error.span, bytecode_error.span);
 
     let arguments = vec![Value::Int(5), Value::Int(8), Value::Int(1)];
     let expected = execution::execute_function(
@@ -6177,29 +6296,34 @@ fn bytecode_verifier_rejects_pop_mut_on_an_immutable_local() {
 
 #[test]
 fn bytecode_verifier_rejects_array_index_check_on_an_immutable_local() {
-    let source = "fn main() { mutable values: Int[] = [1] values[0] += 1 }";
-    let (_mir, mut bytecode) = compile_source(source, "main");
-    let function = &mut bytecode.functions[bytecode.entry];
-    let target = function
-        .code
-        .iter()
-        .find_map(|instruction| match &instruction.operation {
-            BytecodeOp::ArrayIndexCheck { local } => Some(*local),
-            _ => None,
-        })
-        .expect("compound indexed assignment emits a checked target");
-    let target_mutability = function
-        .local_mutability
-        .iter_mut()
-        .find(|(local, _)| *local == target)
-        .expect("array target has local mutability metadata");
-    target_mutability.1 = false;
+    for (source, is_fused) in [
+        ("fn rhs() -> Int { return 1 } fn main() { mutable values: Int[] = [1] values[0] += rhs() }", false),
+        ("fn main() { mutable values: Int[] = [1] values[0] += 1 }", true),
+    ] {
+        let (_mir, mut bytecode) = compile_source(source, "main");
+        let function = &mut bytecode.functions[bytecode.entry];
+        let target = function
+            .code
+            .iter()
+            .find_map(|instruction| match &instruction.operation {
+                BytecodeOp::ArrayIndexCheck { local } if !is_fused => Some(*local),
+                BytecodeOp::ArrayIndexAddInt { local, .. } if is_fused => Some(*local),
+                _ => None,
+            })
+            .expect("compound indexed assignment emits a checked target");
+        let target_mutability = function
+            .local_mutability
+            .iter_mut()
+            .find(|(local, _)| *local == target)
+            .expect("array target has local mutability metadata");
+        target_mutability.1 = false;
 
-    let errors = verify_bytecode(&bytecode)
-        .expect_err("a mutated artifact cannot prepare an immutable array target");
-    assert!(errors.iter().any(|error| error
-        .message
-        .contains("array index check requires a mutable local")));
+        let errors = verify_bytecode(&bytecode)
+            .expect_err("a mutated artifact cannot prepare an immutable array target");
+        assert!(errors.iter().any(|error| error
+            .message
+            .contains("array index check requires a mutable local")));
+    }
 }
 
 #[test]

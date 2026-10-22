@@ -39,7 +39,7 @@ pub use format::{decode, decode_with_limits, encode, encode_with_limits, Bytecod
 mod compiler;
 pub use compiler::compile;
 
-pub const BYTECODE_VERSION: u16 = 29;
+pub const BYTECODE_VERSION: u16 = 30;
 const MAX_BYTECODE_OPERATIONS_PER_EXECUTION: usize = 10_000_000;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -155,6 +155,12 @@ pub enum BytecodeOp {
     /// Leaves the index on the stack for the following `ArrayIndexAssign`.
     ArrayIndexCheck {
         local: LocalId,
+    },
+    /// Checks and updates an indexed Int target with a literal delta.
+    /// The RHS source step is charged after the bounds check to preserve error ordering.
+    ArrayIndexAddInt {
+        local: LocalId,
+        value: i64,
     },
     /// Append one checked element to a compiler-generated collection result.
     ArrayAppend {
@@ -515,7 +521,9 @@ pub fn verify_bytecode(program: &BytecodeProgram) -> Result<(), Vec<MirError>> {
             .map(|(local, _, _)| *local)
             .collect::<HashSet<_>>();
         for (instruction_index, instruction) in function.code.iter().enumerate() {
-            if let BytecodeOp::ArrayIndexCheck { local } = &instruction.operation {
+            if let BytecodeOp::ArrayIndexCheck { local }
+            | BytecodeOp::ArrayIndexAddInt { local, .. } = &instruction.operation
+            {
                 if local_mutability.get(local) != Some(&true) {
                     return Err(vec![bytecode_error(
                         "bytecode array index check requires a mutable local",
@@ -1621,6 +1629,11 @@ fn verify_function(function: &BytecodeFunction, span: Span) -> Result<usize, Vec
                 require_stack(height, 1, instruction.span)?;
                 vec![pc + 1]
             }
+            BytecodeOp::ArrayIndexAddInt { .. } => {
+                require_stack(height, 1, instruction.span)?;
+                next_height -= 1;
+                vec![pc + 1]
+            }
             BytecodeOp::ArrayAppend { .. } => {
                 require_stack(height, 1, instruction.span)?;
                 next_height -= 1;
@@ -2175,14 +2188,18 @@ fn execute_bytecode_entry(
                     "bytecode operation safety limit exceeded",
                 ));
             }
-            if let Some(span) = instruction.source_step_span {
-                charge_bytecode_step(
-                    span,
-                    shared_budget_active,
-                    &shared_steps,
-                    &mut local_steps,
-                    limits.max_steps,
-                )?;
+            let defer_source_step =
+                matches!(instruction.operation, BytecodeOp::ArrayIndexAddInt { .. });
+            if !defer_source_step {
+                if let Some(span) = instruction.source_step_span {
+                    charge_bytecode_step(
+                        span,
+                        shared_budget_active,
+                        &shared_steps,
+                        &mut local_steps,
+                        limits.max_steps,
+                    )?;
+                }
             }
             if matches!(instruction.operation, BytecodeOp::Step) {
                 charge_bytecode_step(
@@ -2815,6 +2832,82 @@ fn execute_bytecode_entry(
                         }
                     };
                     array_assignment_index(index, values_len, instruction.span)?;
+                }
+                BytecodeOp::ArrayIndexAddInt { local, value } => {
+                    let index = stack.last().cloned().ok_or_else(|| {
+                        runtime_error(instruction.span, "bytecode array index stack underflow")
+                    })?;
+                    let values_len = match frame.locals.get(&local) {
+                        Some(Value::Array(values)) => values.len(),
+                        Some(other) => {
+                            return Err(runtime_error(
+                                instruction.span,
+                                format!("indexed assignment requires Array, got `{}`", other.ty()),
+                            ));
+                        }
+                        None => {
+                            return Err(runtime_error(
+                                instruction.span,
+                                "bytecode indexed assignment targets an uninitialized local",
+                            ));
+                        }
+                    };
+                    let index = array_assignment_index(index, values_len, instruction.span)?;
+                    if let Some(span) = instruction.source_step_span {
+                        charge_bytecode_step(
+                            span,
+                            shared_budget_active,
+                            &shared_steps,
+                            &mut local_steps,
+                            limits.max_steps,
+                        )?;
+                    }
+                    let current = match frame.locals.get(&local) {
+                        Some(Value::Array(values)) => {
+                            values.get(index).cloned().ok_or_else(|| {
+                                runtime_error(
+                                    instruction.span,
+                                    "bytecode mutable array index is out of bounds",
+                                )
+                            })?
+                        }
+                        _ => {
+                            return Err(runtime_error(
+                                instruction.span,
+                                "bytecode array update target changed during evaluation",
+                            ));
+                        }
+                    };
+                    let updated = evaluate_binary(
+                        current.clone(),
+                        BinaryOp::Add,
+                        Value::Int(value),
+                        instruction.span,
+                    )?;
+                    if !runtime_type_matches(&current.ty(), &updated.ty()) {
+                        return Err(runtime_error(
+                            instruction.span,
+                            format!(
+                                "bytecode array update expected `{}`, got `{}`",
+                                current.ty(),
+                                updated.ty()
+                            ),
+                        ));
+                    }
+                    let Some(Value::Array(values)) = frame.locals.get_mut(&local) else {
+                        return Err(runtime_error(
+                            instruction.span,
+                            "bytecode array update target changed during evaluation",
+                        ));
+                    };
+                    let Some(element) = values.get_mut(index) else {
+                        return Err(runtime_error(
+                            instruction.span,
+                            "bytecode mutable array index is out of bounds",
+                        ));
+                    };
+                    *element = updated;
+                    stack.pop();
                 }
                 BytecodeOp::ArrayAppend {
                     local,
