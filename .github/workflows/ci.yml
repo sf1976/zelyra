@@ -32,12 +32,14 @@ jobs:
         run: git diff --exit-code -- cli/assets/editor.js cli/assets/editor.css
 
   coverage-guided-fuzz:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
-      - name: Install Clang
-        run: sudo apt-get update && sudo apt-get install --yes clang
+      - name: Verify runner-provided Clang
+        run: |
+          command -v clang-18
+          clang-18 --version
       - name: Install nightly Rust toolchain
         uses: dtolnay/rust-toolchain@master
         with:
@@ -47,7 +49,7 @@ jobs:
         run: cargo install --locked --version 0.13.2 cargo-fuzz
       - name: Run bounded coverage-guided fuzz targets
         env:
-          CC: clang
+          CC: clang-18
         run: |
           for target in lexer_parser sql_binder template_renderer http_request multipart_decoder bytecode_decode backend_differential; do
             cargo +nightly fuzz run "$target" "fuzz/corpus/$target" -- \
