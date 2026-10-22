@@ -30,6 +30,31 @@ Wiederverwendbare Geschäfts- und Integrationsmodule (unter anderem Auth,
 ODBC, CSV, PDF und Excel) sind Roadmap-Ziele; das Paketformat allein stellt
 diese Funktionen nicht bereit.
 
+## Was in ein wiederverwendbares Paket gehört
+
+Ein Paket soll eine wiederkehrende Geschäftsfähigkeit mit einem klaren,
+typisierten Vertrag bereitstellen. Es soll nicht jede Sonderregel eines
+einzelnen Kunden oder Projekts vorwegnehmen. Ein guter Kandidat lässt sich in
+mehreren Anwendungen mit denselben fachlichen Grundbegriffen einsetzen und
+bleibt durch explizite Parameter und Einstellungen anpassbar.
+
+Beispiele für wiederverwendbare Fähigkeiten sind eine nachvollziehbare
+Berechnung von Rechnungspositionen oder ein ausdrücklich zugeordnetes
+CSV-Importformat. Ein nur für ein Projekt geltender Freigabeschritt, eine
+besondere Formularbeschriftung oder eine kundenspezifische Ausnahme bleibt im
+Anwendungscode. Steuerrecht, Nummernkreise und Buchungsabläufe werden nicht
+stillschweigend als universelle Paketstandards festgelegt. Wenn sich dieselbe
+fachliche Anforderung in weiteren Projekten wiederholt, kann sie später als
+konfigurierbare Paketfunktion herausgelöst werden.
+
+Die Prüfung bestehender Laravel-Projekte dient dazu, wiederkehrende Abläufe und
+Lücken in Zelyras Sprache sichtbar zu machen. Der Importer soll diese Abläufe
+analysieren und passende Zelyra-Modelle oder Pakete nahelegen; er soll weder
+Laravel-Code samt Sonderfällen in Pakete kopieren noch jede gefundene Klasse
+automatisch zu einem Paket machen. Paketcode bleibt gewöhnlicher geprüfter
+Zelyra-Code und unterliegt denselben Typ-, Effekt-, Capability- und
+Laufzeitregeln wie die Anwendung.
+
 ## Modulübersicht
 
 ```sh
