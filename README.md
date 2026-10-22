@@ -11,23 +11,34 @@ for database-backed business and web applications. It brings schema-aware SQL,
 forms, CRUD, views, and application logic together while keeping ordinary code
 and native SQL available.
 
-> **Release 1.2.26 · language compatibility line: 0.1** · [GitHub release](https://github.com/sf1976/zelyra/releases/tag/v1.2.26)
+> **Release 1.2.48 · language compatibility line: 0.1** · [GitHub release](https://github.com/sf1976/zelyra/releases/tag/v1.2.48)
 >
 > Compiler checks and the verifier cover defined scopes. They do not prove arbitrary applications correct. Review the documented support and limits for each workflow before deployment.
 
-Zelyra 1.2.26 adds `zelyra console`, an incremental AST language console with persistent typed bindings and a rollback-by-default MariaDB/MySQL sandbox. See the [1.2.26 release notes](docs/release-notes/1.2.26.en.md) and [language console guide](docs/language-console.en.md). Earlier releases added durable packages, a resident scheduler, and confined `public/` assets.
-The language compatibility line remains `0.1`; compiler releases do not change it automatically. “Prove correctness” is a design goal: the verifier distinguishes proven, runtime-checked, and unproven scopes, but is not a general-purpose theorem prover.
+Zelyra 1.2.48 advances the experimental Bytecode backend to v30, fusing
+verified literal-increment array updates into a single operation. Earlier
+1.2.x releases added typed CRUD domain actions, compiler-checked file uploads,
+computed table fields, business number series, a Laravel website importer,
+`zelyra db console` and `zelyra db query`, reusable billing packages, and
+typed CSV conversion. See the [1.2.48 release notes](docs/release-notes/1.2.48.en.md)
+and the [changelog](CHANGELOG.md) for all releases since 1.2.26.
+The language compatibility line remains `0.1`; compiler releases do not change
+it automatically. "Prove correctness" is a design goal: the verifier
+distinguishes proven, runtime-checked, and unproven scopes, but is not a
+general-purpose theorem prover.
 
 ## What Zelyra provides
 
-Zelyra connects its language, compiler, database, web application, and Studio in
-one workflow. Release 1.2.6 retains the previous capabilities and adds safe
-recovery for package operations:
+Zelyra connects its language, compiler, database, web application, and Studio
+in one workflow:
 
 - statically checked business logic and schema-aware SQL;
 - MariaDB as the primary runtime, plus verified MySQL and PostgreSQL workflows;
-- generated forms, table views, CRUD, relationships, and APIs;
-- the expanded 1.0.3 standard library for math, text, arrays, sets, maps, date
+- generated CRUD resources with list, detail, create/edit forms, and a
+  CSRF-protected delete confirmation; `permits delete` protects the endpoint
+  and its UI, while optional soft delete supports archive and restore;
+- relationships, typed APIs, and schema-aware forms;
+- the expanded standard library for math, text, arrays, sets, maps, date
   arithmetic, parsing, encodings, and paths, plus `|>` pipelines and flat
   `else if` chains;
 - offline Studio with CodeMirror 6, compiler diagnostics and language services,
@@ -40,6 +51,34 @@ recovery for package operations:
 - Zelyra UI with compiler-checked components, generated CRUD styling,
   light/dark themes, compact density, local asset delivery, print styles, and
   text-equivalent bar, line, and donut charts;
+- typed CRUD domain actions with compiler-checked `row` and `session` contexts,
+  pure guards, explicit capabilities, and a shared locked request transaction;
+- compiler-checked `File` form fields with bounded multipart uploads, private
+  tenant-scoped storage, opaque `FileRef` values, authorized downloads,
+  replacement/deletion cleanup, and checksum-verified backup/restore;
+- compiler-checked `compute(expr)` table fields for generated CRUD and
+  validated API mutations, recomputed on the server before persistence;
+- declared tenant-aware business number series with
+  `auto_sequence("KD-{0001}")` and optional UTC-year scopes;
+- typed scalar ID references with `references <table>`, tenant-scoped
+  composite foreign keys, and cross-tenant rejection;
+- checked table invariants for declarative forms, generated CRUD writes, and
+  API inputs, with row-conditioned edit/delete permissions and lifecycle guards;
+- direct `has_many` child collections in generated CRUD forms with bounded
+  rows, child-specific validation, and transactional parent/child writes;
+- authenticated API validation for tenant-scoped tables with session-derived
+  tenant context and typed handler parameters;
+- `zelyra db console` for MariaDB/MySQL and PostgreSQL clients, and
+  `zelyra db query` with read-only transactions, SQL parameter binding, and
+  table/JSON/CSV output;
+- `zelyra console` with persistent typed bindings, an incremental AST parser,
+  a MariaDB/MySQL transaction sandbox, and hardened DDL rejection;
+- a read-only-first Laravel website importer with source-graph analysis,
+  schema candidates, authentication modules, static Blade page routes,
+  view dependency resolution, live database schema comparison, and typed
+  CSV/temporal conversion for reusable package output;
+- reusable billing package primitives for line net/tax/gross calculations
+  with Decimal scale, fractional tax rate, and rounding mode;
 - an invoice tutorial with repeatable sample data, available-port selection,
   isolated Compose volumes, a task-focused home page, date-only invoice input,
   server-assigned invoice numbers, and complete English and German guides;
@@ -58,11 +97,17 @@ recovery for package operations:
 - offline local packages with SemVer compatibility, deterministic source locks,
   explicit imports, checked package plans/bundles, typed settings, and
   `zelyra module init`; reusable bounded CSV import/export examples;
+- canonical `--layout standard` project structure with compiler-checked roots
+  and `strict_architecture` declaration placement;
+- composable, type-checked extension points for generated CRUD and TableView
+  surfaces: content regions, field help, row actions, and supporting cell content;
 - if expressions, record updates, typed lambdas, guarded nested patterns,
   tuples, string interpolation, and opt-in mutable local arrays;
   `--max-steps` stops unbounded evaluation with a source diagnostic;
-- release limits are listed in the [1.2.26 release notes](docs/release-notes/1.2.26.en.md);
-  a general transactional job and query system is not included yet;
+- three execution backends — AST (default), MIR, and experimental verified
+  Bytecode (v30) — with aligned diagnostics, step budgets, and differential
+  coverage;
+- release limits are listed in the [1.2.48 release notes](docs/release-notes/1.2.48.en.md);
 - local text-PDF rendering and checked PDF outbox attachments with byte and
   row limits. The renderer does not preserve CSS layout, images, or charts;
   use browser print for graphical documents.
@@ -141,7 +186,9 @@ other settings.
 | Understand database support | [Database support matrix](docs/database-support.en.md) · [German](docs/database-support.de.md) |
 | Use the local editor or preview a safe regex edit | [Zelyra Studio](docs/web-editor.en.md) · [Text edit command](docs/text-edit.en.md) |
 | Use Zelyra UI | [Components, forms, themes, print, charts, and email reference](docs/ui.en.md) · [Deutsch](docs/ui.de.md) |
-| Review current and planned work | [Roadmap](docs/ROADMAP.md) · [1.0.7 release notes](docs/release-notes/1.0.7.en.md) |
+| Use the interactive language console | [Language console guide](docs/language-console.en.md) · [Deutsch](docs/language-console.de.md) |
+| Review implemented capabilities and their limits | [Implemented features](docs/implemented.en.md) · [Deutsch](docs/implemented.de.md) |
+| Review current and planned work | [Roadmap](docs/ROADMAP.md) · [1.2.48 release notes](docs/release-notes/1.2.48.en.md) |
 | Read the design direction | [Manifesto](docs/MANIFESTO.md) · [AI-native architecture](docs/architecture/ai-native-development.md) · [Readable regex text-edit design](docs/design/readable-regex-text-editing.en.md) |
 | See exact release changes | [Changelog](CHANGELOG.md) · [GitHub releases](https://github.com/sf1976/zelyra/releases) |
 

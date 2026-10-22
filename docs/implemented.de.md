@@ -1,6 +1,6 @@
-# In Zelyra 1.1.0 umgesetzt
+# In Zelyra 1.2.48 umgesetzt
 
-**Stand:** Release `v1.1.0` · Sprachkompatibilitätslinie `0.1` · 2026-10-15
+**Stand:** Release `v1.2.48` · Sprachkompatibilitätslinie `0.1` · 2026-10-22
 **Reifegrad:** veröffentlicht; Eignung und dokumentierte Grenzen sind je Ablauf zu prüfen
 
 Diese Übersicht beschreibt den aktuellen Entwicklungsstand nach
@@ -8,7 +8,24 @@ Anwendungsbereichen. Sie unterscheidet verfügbare Funktionen von begrenzten
 oder experimentellen Bereichen; sie behauptet weder universelle
 Datenbankportabilität noch Fehlerfreiheit beliebiger Anwendungen.
 
-## Änderungen in 1.0.3–1.1.0
+## Ausgewählte Änderungen seit 1.1.0
+
+- **1.2.48:** Das experimentelle Bytecode-Backend kann
+  `mutable_array[index] += <Int-Literal>` als einzelne verifiergeprüfte
+  Operation ausführen; das versionierte Artefaktformat ist v30. Ein einzelner
+  Benchmark maß für diese Arbeitslast 12,8 % weniger Medianzeit. AST bleibt
+  Referenz- und Standardbackend. Siehe
+  [Release-Notizen 1.2.48](release-notes/1.2.48.de.md).
+- **1.2.x:** Die Serie ergänzt unter anderem typisierte CRUD-Aktionen,
+  geprüfte Uploads, berechnete Tabellenfelder, mandantengebundene
+  Geschäftsnummern, Tabelleninvarianten und CRUD-Kindzeilen, Datenbankkonsole
+  und schreibgeschützte SQL-Abfragen, einen begrenzten Laravel-Importer,
+  Decimal-Abrechnungsbausteine sowie typisierte CSV-Konvertierung. Die
+  jeweiligen Release-Notizen benennen Umfang und Grenzen jeder Funktion.
+- **1.1.x:** Offline-Studio und eigenständiger LSP wurden ausgebaut; die
+  [Release-Notizen](release-notes/) dokumentieren die einzelnen Versionen.
+
+## Frühere Änderungen in 1.0.3–1.1.0
 
 - **1.1.0:** Offline-Studio mit eingebettetem CodeMirror 6, gemeinsamem
   compilerbasiertem Sprachdienst, eigenständigem LSP, Typed-Hole-Hilfe,
@@ -49,10 +66,11 @@ Die Release-Notizen dokumentieren historische Änderungen; die
 [Handbuch](handbook/de/handbuch.md) beschreiben die akzeptierte Syntax und ihre
 Grenzen.
 
-## Was Zelyra 1.1.0 bietet
+## Was Zelyra 1.2.48 bietet
 
-Das Studio 1.1.0 bettet seine Laufzeit-Assets in die CLI ein. Analyseaufträge
-sind begrenzt und versioniert, aber nicht kooperativ abbrechbar. Rename
+Das Studio, erstmals in 1.1.0 veröffentlicht, bettet seine Laufzeit-Assets in
+die CLI ein. Analyseaufträge sind begrenzt und versioniert, aber nicht
+kooperativ abbrechbar. Rename
 unterstützt aufgelöste Symbolarten und weist mehrdeutige oder nicht auflösbare
 Verwendungen zurück. PDF-Rendering ist textorientiert und bildet CSS, Bilder
 oder Diagramme nicht nach. Das Editor-Bundle misst 560.316 Byte (547,2 KiB)
@@ -357,7 +375,10 @@ bestanden. Einzelheiten stehen im
 Geprüfte Datenbankabläufe und ihre Grenzen stehen in der
 [Datenbankmatrix](database-support.de.md). Automatisierte Prüfungen belegen
 nur die jeweils geprüften Bereiche und nicht die Korrektheit beliebiger
-Anwendungen.
+Anwendungen. Das aktuelle stabile Release `v1.2.48` wurde am 22.10.2026
+veröffentlicht. Seine Release-Seite enthält Linux- und Windows-Archive,
+Prüfsummen und SPDX-SBOMs; die konkrete Änderung und ihr begrenzter
+Benchmarkumfang stehen in den [Release-Notizen 1.2.48](release-notes/1.2.48.de.md).
 
 Diese Übersicht wird angepasst, wenn sich ausgelieferte Funktionen oder ihre
 Nachweise ändern. Ein Spezifikations- oder Roadmap-Eintrag allein wird hier

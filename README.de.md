@@ -11,23 +11,36 @@ Business-, Datenbank- und Webanwendungen. Schemaabhängiges SQL, Formulare,
 CRUD, Views und Geschäftslogik greifen ineinander; gewöhnlicher Programmcode
 und natives SQL bleiben jederzeit möglich.
 
-> **Release 1.2.26 · Sprachkompatibilitätslinie: 0.1** · [GitHub-Release](https://github.com/sf1976/zelyra/releases/tag/v1.2.26)
+> **Release 1.2.48 · Sprachkompatibilitätslinie: 0.1** · [GitHub-Release](https://github.com/sf1976/zelyra/releases/tag/v1.2.48)
 >
 > Die Compilerprüfung und der Verifier decken klar abgegrenzte Bereiche ab. Sie beweisen nicht die Korrektheit beliebiger Anwendungen. Prüfe vor dem Einsatz die unterstützten Abläufe und Grenzen in der jeweiligen Dokumentation.
 
-Zelyra 1.2.26 ergänzt `zelyra console`, eine inkrementelle AST-Sprachkonsole mit persistenten typisierten Bindungen und einer standardmäßig zurückrollenden MariaDB-/MySQL-Sandbox. Siehe die [Release-Notizen 1.2.26](docs/release-notes/1.2.26.de.md) und die [Anleitung zur Sprachkonsole](docs/language-console.de.md). Frühere Releases ergänzten signierte Pakete, den residenten Scheduler und geschützte `public/`-Dateien.
-Die Sprachkompatibilitätslinie bleibt `0.1`; Compiler-Releases ändern sie nicht automatisch. „Korrektheit beweisen“ ist ein Entwicklungsziel: Der Verifier unterscheidet geprüfte, zur Laufzeit geprüfte und nicht bewiesene Bereiche, ist aber kein allgemeiner Theorembeweiser.
+Zelyra 1.2.48 hebt das experimentelle Bytecode-Backend auf v30 und fasst
+verifizierte Literal-Inkrement-Arrayupdates in eine einzelne Instruktion
+zusammen. Frühere 1.2.x-Releases ergänzten typisierte CRUD-Domänenaktionen,
+compilergeprüfte Datei-Uploads, berechnete Tabellenfelder,
+Geschäftsnummernkreise, einen Laravel-Website-Importer,
+`zelyra db console` und `zelyra db query`, wiederverwendbare
+Abrechnungspakete sowie typisierte CSV-Konvertierung. Siehe die
+[Release-Notizen 1.2.48](docs/release-notes/1.2.48.de.md) und das
+[Changelog](CHANGELOG.md) für alle Releases seit 1.2.26.
+Die Sprachkompatibilitätslinie bleibt `0.1`; Compiler-Releases ändern sie
+nicht automatisch. „Korrektheit beweisen" ist ein Entwicklungsziel: Der
+Verifier unterscheidet geprüfte, zur Laufzeit geprüfte und nicht bewiesene
+Bereiche, ist aber kein allgemeiner Theorembeweiser.
 
 ## Was Zelyra bietet
 
 Zelyra verbindet Sprache, Compiler, Datenbank, Webanwendung und Studio in
-einem Arbeitsablauf. Neuere Releases ergänzen die sichere Wiederherstellung
-von Paketoperationen und die interaktive Sprachkonsole:
+einem Arbeitsablauf:
 
 - statisch geprüfte Geschäftslogik und schemaabhängiges SQL;
 - MariaDB als primäre Laufzeit sowie geprüfte MySQL- und PostgreSQL-Abläufe;
-- generierte Formulare, Tabellenansichten, CRUD, Beziehungen und APIs;
-- die erweiterte Standardbibliothek aus 1.0.3 für Mathematik, Text, Arrays,
+- generierte CRUD-Ressourcen mit Liste, Detail, Create-/Edit-Formularen und
+  CSRF-geschütztem Löschdialog; `permits delete` schützt Endpunkt und Anzeige,
+  optionales Soft Delete ermöglicht Archivierung und Wiederherstellung;
+- Beziehungen, typisierte APIs und schemaabhängige Formulare;
+- die erweiterte Standardbibliothek für Mathematik, Text, Arrays,
   Sets, Maps, Datumsrechnung, Parsing, Encodings und Pfade sowie `|>`-Pipelines
   und flache `else if`-Kaskaden;
 - offlinefähiges Studio mit CodeMirror 6, Compilerdiagnostik und Sprachdiensten,
@@ -41,33 +54,73 @@ von Paketoperationen und die interaktive Sprachkonsole:
 - Zelyra UI mit compilergeprüften Komponenten, Gestaltung der erzeugten CRUD-
   Seiten, hellen/dunklen Themes, kompakter Dichte, lokaler Asset-Auslieferung,
   Druckstilen und textuell gleichwertigen Balken-, Linien- und Ringdiagrammen;
+- typisierte CRUD-Domänenaktionen mit compilergeprüften `row`- und `session`-
+  Kontexten, reinen Guards, expliziten Capabilities und einer gemeinsamen
+  gesperrten Request-Transaktion;
+- compilergeprüfte `File`-Formularfelder mit begrenzten Multipart-Uploads,
+  privatem mandantengebundenem Speicher, opaken `FileRef`-Werten, geschützten
+  Downloads, Bereinigung bei Ersetzung/Löschung und prüfsummenvalidiertem
+  Backup/Restore;
+- compilergeprüfte `compute(expr)`-Tabellenfelder für generiertes CRUD und
+  geprüfte API-Mutationen, serverseitig vor dem Speichern neu berechnet;
+- deklarierte mandantengebundene Geschäftsnummernkreise mit
+  `auto_sequence("KD-{0001}")` und optionalem UTC-Jahresscope;
+- typisierte skalare ID-Referenzen mit `references <table>`, mandantengebundene
+  zusammengesetzte Fremdschlüssel und Ablehnung mandantenübergreifender
+  Verknüpfungen;
+- geprüfte Tabelleninvarianten für deklarative Formulare, erzeugte
+  CRUD-Schreibvorgänge und API-Eingaben, mit datensatzabhängigen
+  Bearbeitungs-/Löschrechten und Lifecycle-Guards;
+- direkte `has_many`-Kindsammlungen in erzeugten CRUD-Formularen mit begrenzten
+  Zeilen, kindbezogener Validierung und transaktionalem Eltern-/Kindschreiben;
+- authentifizierte API-Validierung für mandantengebundene Tabellen mit
+  sitzungsbasiertem Mandantenkontext und typisierten Handlerparametern;
+- `zelyra db console` für MariaDB-/MySQL- und PostgreSQL-Clients sowie
+  `zelyra db query` mit standardmäßig schreibgeschützten Transaktionen,
+  SQL-Parameterbindung und Tabellen-/JSON-/CSV-Ausgabe;
+- `zelyra console` mit persistenten typisierten Bindungen, inkrementellem
+  AST-Parser, MariaDB-/MySQL-Transaktionssandbox und gehärteter DDL-Ablehnung;
+- ein zuerst schreibgeschützter Laravel-Website-Importer mit Quellgraphanalyse,
+  Schemakandidaten, Authentifizierungsmodulen, statischen Blade-Seitenrouten,
+  View-Abhängigkeitsauflösung, Live-Datenbankschemavergleich und typisierter
+  CSV-/Temporalkonvertierung für wiederverwendbare Paketausgabe;
+- wiederverwendbare Abrechnungsfunktionen für Netto-/Steuer-/Bruttobeträge
+  mit Decimal-Skala, Steuerquote und Rundungsart;
 - ein Rechnungstutorial mit wiederholbaren Beispieldaten, freier Portwahl,
   isolierten Compose-Volumes, aufgabenorientierter Startseite, reinem Datumsfeld,
   serverseitiger Rechnungsnummer und vollständiger deutscher und englischer
   Quelltexterklärung;
-- CLI-Werkzeuge für Routen, Setup, Diagnose, Datenbank, Audit und SMTP.
+- CLI-Werkzeuge für Routen, Setup, Diagnose, Datenbank, Audit und SMTP;
 - Linux-systemd-Benutzerdienst mit festen Ports, Status/Neustart/Entfernung und
-  geprüftem Portwechsel mit Rollback; kein automatischer Portwechsel.
-- Residente Zeitpläne ausschließlich im aktiven installierten Dienst,
-  idempotente Outbox-Einrichtung und `zelyra schedule status` ohne Host-Cron.
-- Signierte Quellpakete mit explizitem Herausgebervertrauen, Registry-Suche,
-  exakten Updates, Lockfile-Herkunft und portablen Docker-Bundles.
-- Serialisierte Paketmutationen mit versioniertem Transaktionsjournal;
+  geprüftem Portwechsel mit Rollback; kein automatischer Portwechsel;
+- residente Zeitpläne ausschließlich im aktiven installierten Dienst,
+  idempotente Outbox-Einrichtung und `zelyra schedule status` ohne Host-Cron;
+- signierte Quellpakete mit explizitem Herausgebervertrauen, Registry-Suche,
+  exakten Updates, Lockfile-Herkunft und portablen Docker-Bundles;
+- serialisierte Paketmutationen mit versioniertem Transaktionsjournal;
   `zelyra package recover` zeigt eine Vorschau und ändert Dateien erst mit
-  `--apply`.
-- Statische `public/`-Dateien mit MIME-Typen, GET/HEAD, Route-Vorrang und
-  Pfad-/Symlink-Schutz; dokumentierter Apache-/Nginx-Proxybetrieb.
+  `--apply`;
+- statische `public/`-Dateien mit MIME-Typen, GET/HEAD, Route-Vorrang und
+  Pfad-/Symlink-Schutz; dokumentierter Apache-/Nginx-Proxybetrieb;
 - Offline-Lokalpakete mit SemVer-Kompatibilität, deterministischen
   Quell-Lockfiles, ausdrücklichen Importen, geprüften Paketplänen/-bundles,
   typisierten Einstellungen und `zelyra module init`; wiederverwendbare,
-  begrenzte CSV-Import-/Export-Beispiele.
+  begrenzte CSV-Import-/Export-Beispiele;
+- kanonische Projektstruktur mit `--layout standard`, compilergeprüften
+  Wurzeln und `strict_architecture`-Deklarationsplatzierung;
+- zusammensetzbare, typgeprüfte Erweiterungspunkte für erzeugte CRUD- und
+  TableView-Oberflächen: Inhaltsbereiche, Feldhinweise, Zeilenaktionen und
+  Zelleninhalte;
 - If-Ausdrücke, Record-Updates, typisierte Lambdas, geschützte verschachtelte
   Muster, Tupel, Stringinterpolation und ausdrücklich veränderliche lokale
-  Arrays; `--max-steps` stoppt unbeschränkte Auswertung mit quellgenauer Diagnose.
-- Die Grenzen dieses Releases sind in den
-  [Release-Notizen 1.2.26](docs/release-notes/1.2.26.de.md) beschrieben; ein
-  allgemeines transaktionales Job- und Query-System ist noch nicht enthalten.
-- Lokales Text-PDF-Rendering und geprüfte PDF-Outbox-Anhänge mit Größen- und
+  Arrays; `--max-steps` stoppt unbeschränkte Auswertung mit quellgenauer
+  Diagnose;
+- drei Ausführungsbackends — AST (Standard), MIR und experimentell
+  verifiziertes Bytecode (v30) — mit angeglichenen Diagnosen, Schrittbudgets
+  und differenzieller Testabdeckung;
+- die Grenzen dieses Releases sind in den
+  [Release-Notizen 1.2.48](docs/release-notes/1.2.48.de.md) beschrieben;
+- lokales Text-PDF-Rendering und geprüfte PDF-Outbox-Anhänge mit Größen- und
   Zeilenlimits. Das Renderer-PDF übernimmt keine CSS-Layouts, Bilder oder
   Diagramme; für grafische Ausdrucke bleibt die Browser-Druckansicht verfügbar.
 
@@ -150,7 +203,9 @@ weitere Einstellungen stehen in der Umgebungsreferenz.
 | Datenbankunterstützung prüfen möchtest | [Datenbank-Supportmatrix](docs/database-support.de.md) · [English](docs/database-support.en.md) |
 | den lokalen Editor oder sichere Regex-Änderungen nutzen möchtest | [Zelyra Studio](docs/web-editor.de.md) · [Textänderungsbefehl](docs/text-edit.de.md) |
 | Zelyra UI verwenden möchtest | [Komponenten-, Formular-, Theme-, Druck-, Diagramm- und E-Mail-Referenz](docs/ui.de.md) · [English](docs/ui.en.md) |
-| aktuelle und geplante Arbeiten prüfen möchtest | [Roadmap](docs/ROADMAP.de.md) · [Release-Notizen 1.0.7](docs/release-notes/1.0.7.de.md) |
+| die interaktive Sprachkonsole nutzen möchtest | [Anleitung zur Sprachkonsole](docs/language-console.de.md) · [English](docs/language-console.en.md) |
+| den implementierten Umfang und seine Grenzen prüfen möchtest | [Implementierte Funktionen](docs/implemented.de.md) · [English](docs/implemented.en.md) |
+| aktuelle und geplante Arbeiten prüfen möchtest | [Roadmap](docs/ROADMAP.de.md) · [Release-Notizen 1.2.48](docs/release-notes/1.2.48.de.md) |
 | die Entwicklungsrichtung verstehen möchtest | [Manifest](docs/MANIFESTO.de.md) · [KI-native Architektur](docs/architecture/ai-native-development.de.md) · [Entwurf lesbarer Regex-Textbearbeitung](docs/design/readable-regex-text-editing.de.md) |
 | konkrete Release-Änderungen suchst | [Changelog](CHANGELOG.md) · [GitHub-Releases](https://github.com/sf1976/zelyra/releases) |
 
