@@ -1,5 +1,18 @@
 ## Unreleased
 
+## 1.2.42 — 2026-10-22
+
+- Resolve literal Blade layout, include, and local anonymous-component
+  references into a deterministic source-positioned dependency graph. Report
+  unresolved references and composition cycles in `VIEW_LINKS.json` and
+  `VIEW_LAYOUTS.md`. This is static analysis only; it does not translate
+  Blade behavior or connect Laravel routes to Zelyra pages. / Wörtliche
+  Blade-Layout-, Include- und lokale anonyme Komponentenreferenzen zu einem
+  deterministischen Abhängigkeitsgraphen mit Quellpositionen auflösen.
+  Ungelöste Referenzen und Kompositionszyklen in `VIEW_LINKS.json` und
+  `VIEW_LAYOUTS.md` ausweisen. Dies ist nur statische Analyse; Blade-Verhalten
+  und Laravel-Routen werden nicht in Zelyra-Seiten übersetzt.
+
 ## 1.2.41 — 2026-10-22
 
 - Map the narrowly recognized Laravel `GET` route that returns a literal
