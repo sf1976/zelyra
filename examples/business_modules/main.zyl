@@ -189,6 +189,37 @@ fn csv_temporal_demo() {
     }
 }
 
+fn billing_calculation_demo() {
+    amounts = billing::calculate_line_amounts(
+        decimal("3"),
+        decimal("0.05"),
+        decimal("0.19"),
+        2,
+        "half_even"
+    )
+    match amounts {
+        Ok(value) => {
+            assert(value.net == decimal("0.15"), "net total uses explicit scale")
+            assert(value.tax == decimal("0.03"), "tax uses explicit rounding")
+            assert(value.gross == decimal("0.18"), "gross is the rounded net plus rounded tax")
+            print("net=0.15 tax=0.03 gross=0.18")
+        }
+        Err(message) => { print(message) }
+    }
+
+    invalid_mode = billing::calculate_line_amounts(
+        decimal("1"),
+        decimal("1.005"),
+        decimal("0"),
+        2,
+        "unknown"
+    )
+    match invalid_mode {
+        Ok(_) => { print("unexpected rounding mode success") }
+        Err(message) => { print(message) }
+    }
+}
+
 fn main() uses Database(read) {
     print(billing::invoice_count())
 }

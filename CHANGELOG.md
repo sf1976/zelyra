@@ -1,5 +1,16 @@
 ## Unreleased
 
+## 1.2.45 — 2026-10-22
+
+- Add a reusable billing package primitive for line net/tax/gross calculations
+  with caller-selected Decimal scale, fractional tax rate, and rounding mode.
+  Verify matching behavior on AST, MIR, and Bytecode; jurisdiction rules,
+  numbering, and accounting workflows remain application concerns. / Eine
+  wiederverwendbare Abrechnungsfunktion für Netto-, Steuer- und Bruttobeträge
+  mit ausdrücklich gewählter Decimal-Skala, Steuerquote und Rundungsart
+  ergänzen. Gleiches Verhalten für AST, MIR und Bytecode prüfen; Rechtsraum-
+  regeln, Nummernkreise und Buchungsabläufe bleiben Anwendungssache.
+
 ## 1.2.44 — 2026-10-22
 
 - Compare generated Laravel schema candidates with explicitly requested,

@@ -369,6 +369,37 @@ fn reusable_csv_import_package_performs_explicit_date_time_conversion_on_all_bac
 }
 
 #[test]
+fn reusable_billing_package_calculates_line_amounts_on_all_backends() {
+    let entry = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../examples/business_modules/main.zyl");
+    let entry = entry.to_str().unwrap();
+    let checked = run(&["check", entry]);
+    assert!(
+        checked.status.success(),
+        "{}",
+        String::from_utf8_lossy(&checked.stderr)
+    );
+
+    let expected = b"net=0.15 tax=0.03 gross=0.18\nrounding mode must be toward_zero, floor, ceiling, half_up, or half_even\n";
+    for backend in ["ast", "mir", "bytecode"] {
+        let output = run(&[
+            "run",
+            entry,
+            "--entry",
+            "billing_calculation_demo",
+            "--backend",
+            backend,
+        ]);
+        assert!(
+            output.status.success(),
+            "{backend}: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        assert_eq!(output.stdout, expected, "backend {backend}");
+    }
+}
+
+#[test]
 fn run_can_invoke_an_explicit_parameterless_entry_without_running_main() {
     let source = r#"
 fn main() { print("main entry") }
