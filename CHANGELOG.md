@@ -1,5 +1,7 @@
 ## Unreleased
 
+## 1.2.48 — 2026-10-22
+
 - Specialize mutable array `Int` index updates with integer-literal increments
   into one verifier-checked Bytecode operation. The operation checks bounds
   before charging the right-hand source step, preserving AST/MIR error order;
@@ -7,8 +9,8 @@
   experimental Bytecode artifact format to v30. A 20,000-element,
   100,000-update benchmark measured a 12.8% lower pinned Bytecode median on
   this host (33.77 ms to 29.45 ms); this result is workload-specific and does
-  not claim general Bytecode superiority. / Veränderbare Array-`Int`-Updates mit
-  ganzzahligen Literalen in eine verifiergeprüfte Bytecode-Instruktion
+  not claim general Bytecode superiority. / Veränderbare Array-`Int`-Updates
+  mit ganzzahligen Literalen in eine verifiergeprüfte Bytecode-Instruktion
   zusammenfassen. Die Instruktion prüft Grenzen vor dem Schrittbudget des
   rechten Ausdrucks und erhält so die Fehlerreihenfolge von AST/MIR; andere
   rechte Ausdrücke verwenden weiter den allgemeinen geprüften Ablauf. Das
