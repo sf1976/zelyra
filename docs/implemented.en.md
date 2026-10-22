@@ -1,13 +1,28 @@
-# Implemented in Zelyra 1.1.0
+# Implemented in Zelyra 1.2.48
 
-**Snapshot:** release `v1.1.0` · language compatibility line `0.1` · 2026-10-15
+**Snapshot:** release `v1.2.48` · language compatibility line `0.1` · 2026-10-22
 **Maturity:** published; evaluate suitability and documented limits for each workflow
 
 This inventory describes the current development state by area of use. It distinguishes
 available features from bounded or experimental areas; it does not claim
 universal database portability or that arbitrary applications are defect-free.
 
-## Changes in 1.0.3–1.1.0
+## Selected changes since 1.1.0
+
+- **1.2.48:** The experimental Bytecode backend can execute
+  `mutable_array[index] += <Int literal>` as one verifier-checked operation;
+  the versioned artifact format is v30. One benchmark measured 12.8% lower
+  median time for this workload. AST remains the reference and default backend.
+  See the [1.2.48 release notes](release-notes/1.2.48.en.md).
+- **1.2.x:** The series adds, among other work, typed CRUD actions, checked
+  uploads, computed table fields, tenant-scoped business number series, table
+  invariants and CRUD child rows, database console and read-only SQL queries, a
+  bounded Laravel importer, Decimal billing primitives, and typed CSV
+  conversion. Individual release notes state each feature's scope and limits.
+- **1.1.x:** Offline Studio and standalone LSP continued to develop; the
+  [release notes](release-notes/) document each version.
+
+## Earlier changes in 1.0.3–1.1.0
 
 - **1.1.0:** offline embedded Studio with CodeMirror 6, compiler-backed shared
   language services, standalone LSP, typed-hole assistance, verifier status,
@@ -43,10 +58,11 @@ planned work. The [language specification](specification.md),
 [source-authority guide](source-authority.md), and
 [handbook](handbook/en/handbook.md) describe accepted syntax and its limits.
 
-## What Zelyra 1.1.0 provides
+## What Zelyra 1.2.48 provides
 
-The 1.1.0 Studio embeds all runtime assets in the CLI. Its analysis jobs are
-bounded and versioned but are not cooperatively preemptible. Rename supports
+The Studio, first released in 1.1.0, embeds all runtime assets in the CLI. Its
+analysis jobs are bounded and versioned but are not cooperatively preemptible.
+Rename supports
 resolved symbol kinds and rejects ambiguous or unresolved references. PDF
 rendering is text-oriented and does not reproduce CSS, images, or charts. The
 editor bundle is 560,316 bytes (547.2 KiB), below its 600 KiB ceiling; 400 KiB
@@ -323,6 +339,10 @@ package smoke test passed. See the
 Tested database workflows and their limits are in the
 [database support matrix](database-support.en.md). Automated checks establish
 only the areas they exercise; they do not prove arbitrary applications correct.
+The current stable release `v1.2.48` was published on 2026-10-22. Its release
+page contains Linux and Windows archives, checksums, and SPDX SBOMs; the
+change and its workload-specific benchmark are described in the
+[1.2.48 release notes](release-notes/1.2.48.en.md).
 
 This page is updated when a delivered capability or its evidence changes. It
 does not turn a specification or roadmap entry into an implementation claim.
