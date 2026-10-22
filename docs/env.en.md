@@ -342,11 +342,12 @@ requests. A project `zelyra.theme.css` remains separate and is included after
 the selected stylesheet. Custom CSS can make external requests with `@import`
 or `url(...)`; review those references yourself.
 
-Reserved asset routes are `/__zelyra/ui/1.0.6/zelyra-ui.css`,
-`/__zelyra/ui/1.0.6/zelyra-ui.js`, and `/__zelyra/ui/project.css`. Built-in,
-versioned assets are embedded in the Zelyra binary, work offline, and receive
-long-lived caching. Selected project CSS is served with `no-cache`. Zelyra
-includes UI assets only on pages with Zelyra UI markup.
+Versioned asset routes are `/__zelyra/ui/<zelyra-version>/zelyra-ui.css` and
+`/__zelyra/ui/<zelyra-version>/zelyra-ui.js`; the project theme is served from
+`/__zelyra/ui/project.css`. The CSS bundle keeps the stable
+`zelyra-ui.v1.css` interface. Built-in assets are embedded in the Zelyra binary,
+work offline, and receive long-lived caching. Selected project CSS is served
+with `no-cache`. Zelyra includes UI assets only on pages with Zelyra UI markup.
 
 ## Project-local theme
 

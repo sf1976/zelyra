@@ -224,6 +224,11 @@ CSS uses Cascade Layers `reset`, `base`, `layout`, `components`, `utilities`,
 `theme`, and `overrides`. Public classes start with `z-`, design variables with
 `--z-`, and the rules are scoped under `html[data-z-ui]`. System font stacks
 are used. The framework makes no external font or runtime-library request.
+The distributed bundle keeps the stable `zelyra-ui.v1.css` interface; generated
+asset URLs include the Zelyra release version so browser and local caches can
+separate releases. The theme tokens are the supported customization surface;
+the modular source files are maintained with the compiler and are not copied
+into new projects.
 
 Light and dark themes, system preference, a persisted user choice,
 comfortable/compact density, `prefers-reduced-motion`, and print styles are
@@ -252,9 +257,13 @@ Project themes should change related color tokens together, for example
 `--z-color-success`/`--z-color-on-success`/`--z-color-success-soft`,
 `--z-color-warning`/`--z-color-on-warning`/`--z-color-warning-soft`, and
 `--z-color-danger`/`--z-color-on-danger`/`--z-color-danger-soft` together.
-Other variables control canvas/surface/text/border/focus/link, system fonts,
-font size, spacing, radii, shadows, control height, content width, overlay
-layers, and motion. See the [theme template](../examples/invoice_tutorial.theme.css).
+Other variables control canvas/surface/text/border/focus/link, sidebar colors,
+system fonts, font size, spacing, radii, shadows, control height, content width,
+overlay layers, and motion. A complete starting point for palette, sidebar,
+page width, radii, shadows, and CRUD cards is in the
+[customization example](../examples/theme_customization/zelyra.theme.css).
+See the [invoice theme](../examples/invoice_tutorial.theme.css) for a smaller
+project-specific example.
 Existing components can be adjusted under `:where(html[data-z-ui])`, for
 example with `.z-card` or `.z-button`. Custom classes remain available in page
 HTML. Change only the tokens you need and keep foreground/background pairs

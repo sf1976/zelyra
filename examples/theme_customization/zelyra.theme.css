@@ -1,19 +1,34 @@
 /*
-Project-local theme customization example.
+Project-local Zelyra theme example.
 This file is public browser content; never put secrets here.
+Change tokens here instead of copying the framework stylesheet.
 */
-:root {
-    --zelyra-color-accent: #087f8c;
-    --zelyra-color-accent-strong: #066b76;
-    --zelyra-color-canvas: #f4faf9;
-    --zelyra-color-surface: #ffffff;
-    --zelyra-color-ink: #153238;
-    --zelyra-color-muted: #5f777b;
-    --zelyra-color-border: #cfe3e1;
-    --zelyra-radius-card: 22px;
+:where(html[data-z-ui]) {
+  /* Brand palette: keep foreground and soft colors paired. */
+  --z-color-primary: #087f8c;
+  --z-color-on-primary: #ffffff;
+  --z-color-primary-hover: #066b76;
+  --z-color-primary-soft: #e6f5f4;
+  --z-color-link: #066b76;
+
+  /* Page and navigation surfaces. */
+  --z-color-canvas: #f2f8f7;
+  --z-color-surface: #ffffff;
+  --z-color-surface-raised: #f8fcfb;
+  --z-color-sidebar: #12343a;
+  --z-color-sidebar-text: #f4fbfa;
+  --z-color-sidebar-muted: #b3cece;
+  --z-color-sidebar-border: #2a5054;
+  --z-color-sidebar-active: #245158;
+
+  /* Shape, spacing, and readable content width. */
+  --z-content-width: 78rem;
+  --z-radius-sm: .5rem;
+  --z-radius-md: .8rem;
+  --z-radius-lg: 1.2rem;
+  --z-shadow-md: 0 16px 40px rgb(18 52 58 / 10%), 0 3px 10px rgb(18 52 58 / 4%);
 }
 
-body {
-    font-family: Inter, ui-sans-serif, system-ui, sans-serif;
-    letter-spacing: 0.01em;
+:where(html[data-z-ui]) .zelyra-crud-card {
+  border-radius: var(--z-radius-lg);
 }

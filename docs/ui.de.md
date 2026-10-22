@@ -234,6 +234,11 @@ Das CSS ist in Cascade Layers `reset`, `base`, `layout`, `components`,
 mit `z-`, Designvariablen mit `--z-`; die Regeln gelten nur unter
 `html[data-z-ui]`. Schriftarten stammen aus der Systemschriftliste. Das
 Framework benötigt keine externe Schrift oder Laufzeitbibliothek.
+Das ausgelieferte Bundle behält die stabile Schnittstelle
+`zelyra-ui.v1.css`; generierte Asset-URLs enthalten die Zelyra-Releaseversion,
+damit Browser- und lokale Caches Releases unterscheiden können. Die Theme-
+Tokens sind die unterstützte Anpassungsschnittstelle. Die modularen Quelldateien
+werden gemeinsam mit dem Compiler gepflegt und nicht in neue Projekte kopiert.
 
 Helles und dunkles Theme, Systempräferenz, gespeicherte manuelle Auswahl,
 komfortable/kompakte Dichte, `prefers-reduced-motion` und Druckregeln sind
@@ -261,9 +266,14 @@ Ein Projekt-Theme verändert verwandte Farben gemeinsam, etwa
 `--z-color-success`/`--z-color-on-success`/`--z-color-success-soft`,
 `--z-color-warning`/`--z-color-on-warning`/`--z-color-warning-soft` und
 `--z-color-danger`/`--z-color-on-danger`/`--z-color-danger-soft` zusammen.
-Weitere Variablen steuern canvas/surface/text/border/focus/link, Systemschrift,
-Schriftgröße, Abstände, Rundungen, Schatten, Kontrollhöhe, Inhaltsbreite,
-Überlagerungsebenen und Bewegung. Siehe die [Theme-Vorlage](../examples/invoice_tutorial.theme.css).
+Weitere Variablen steuern canvas/surface/text/border/focus/link,
+Navigationsfarben, Systemschrift, Schriftgröße, Abstände, Rundungen, Schatten,
+Kontrollhöhe, Inhaltsbreite, Überlagerungsebenen und Bewegung. Einen
+vollständigen Einstieg für Palette, Navigation, Seitenbreite, Rundungen,
+Schatten und CRUD-Karten bietet das
+[Anpassungsbeispiel](../examples/theme_customization/zelyra.theme.css).
+Das [Rechnungstheme](../examples/invoice_tutorial.theme.css) zeigt eine kleinere
+projektspezifische Anpassung.
 Vorhandene Komponenten lassen sich gezielt unter `:where(html[data-z-ui])`
 anpassen, zum Beispiel mit `.z-card` oder `.z-button`. Eigene Klassen können
 weiterhin im Seiten-HTML verwendet werden. Ändere möglichst nur benötigte

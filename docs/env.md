@@ -367,12 +367,13 @@ Anfragen werden dabei nicht geladen. Bei einem eigenen Stylesheet bleibt
 Eigenes CSS kann durch `@import` oder `url(...)` externe Anfragen auslösen;
 prüfe solche Referenzen selbst.
 
-Die reservierten Asset-Routen lauten `/__zelyra/ui/1.0.6/zelyra-ui.css`,
-`/__zelyra/ui/1.0.6/zelyra-ui.js` und `/__zelyra/ui/project.css`. Die eingebauten,
-versionierten Assets kommen aus dem Zelyra-Binary, funktionieren offline und
-werden langfristig zwischengespeichert. Ausgewählte Projekt-CSS-Dateien werden
-mit `no-cache` ausgeliefert. Zelyra bindet die UI-Assets nur in Seiten mit
-Zelyra-UI-Markup ein.
+Die versionierten Asset-Routen lauten `/__zelyra/ui/<zelyra-version>/zelyra-ui.css`
+und `/__zelyra/ui/<zelyra-version>/zelyra-ui.js`; das Projekt-Theme liegt unter
+`/__zelyra/ui/project.css`. Das CSS-Bundle behält die stabile
+`zelyra-ui.v1.css`-Schnittstelle. Die eingebauten Assets kommen aus dem
+Zelyra-Binary, funktionieren offline und werden langfristig zwischengespeichert.
+Ausgewählte Projekt-CSS-Dateien werden mit `no-cache` ausgeliefert. Zelyra
+bindet die UI-Assets nur in Seiten mit Zelyra-UI-Markup ein.
 
 ## Projektlokales Theme
 

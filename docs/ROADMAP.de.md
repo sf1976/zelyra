@@ -1076,6 +1076,9 @@ werden. Details stehen im [Projektlayout-Arbeitsplan](release-plans/1.3.0-projec
 - [x] **1.2.53 — Zelyra-spezifisches Editorverhalten:** Klammern und Anführungszeichen automatisch paaren, Zelyra-Blöcke mit vier Leerzeichen einrücken und Tab/Umschalt+Tab zum Ein- und Ausrücken unterstützen. Die Einrückung folgt der Blockstruktur und ignoriert Klammern in Kommentaren und Zeichenketten. Vollständige PR-CI und Linux-/Windows-Tag-Workflows bestanden, einschließlich reproduzierbarer Builds, Prüfsummen, SPDX-SBOMs und Release-Attestierungen. Der veröffentlichte Linux-Installations- und Update-Smoke-Test bestand. Siehe [GitHub Releases](https://github.com/sf1976/zelyra/releases/tag/v1.2.53). Zelyra 1.3.0 wird weiterentwickelt.
 - [x] **1.2.54 — Importhilfe im Studio (veröffentlicht):** Beim Schreiben eines Imports lokale `.zyl`-Module vorschlagen, aktive/duplizierte/Nicht-Quelldatei-/Kommentar-Kandidaten auslassen und nach dem Alias mit der Vervollständigung öffentlicher Modulmitglieder fortfahren. PR #217 bestand die vollständige CI; Release-PR #218 und der Tag-Workflow für v1.2.54 bestanden Releaseprüfung, reproduzierbare Linux-/Windows-Builds, Archivprüfungen, Prüfsummen, SPDX-SBOMs und Artefaktattestierungen. Der Smoke-Test für Installation, erneute Installation, Update und Rollback bestand. Siehe [GitHub Releases](https://github.com/sf1976/zelyra/releases/tag/v1.2.54) und den [Releaseprüfbericht](release-readiness/1.2.54-release-verification.de.md). Zelyra 1.3.0 wird weiterentwickelt.
 
+- [~] **CSS 1.1.0 — professionelles Zelyra-Designsystem:** Ein hochwertiges, responsives Standarddesign für generierte CRUD-Seiten und den Anwendungsrahmen schaffen. Dazu gehören Listen, Filter, Formulare, Detailansichten, Tabellen, Statusmeldungen und Navigation. Das Design bleibt über dokumentierte projektlokale Tokens anpassbar; die stabile Schnittstelle `zelyra-ui.v1.css` bleibt erhalten und das Stylesheet wird mit jeder Zelyra-Version ausgeliefert. Helles/dunkles Theme, Tastaturfokus, reduzierte Bewegung, Druckansicht und schmale Bildschirme prüfen; deutsche und englische Anpassungsanleitungen synchron halten. Ein visueller Theme-Editor und eine breitere Vorlagenabdeckung bleiben getrennte Folgearbeiten.
+- [ ] **Produktvideo als Folgepunkt:** Nach Abschluss des Designsystems die Starterprojekt-Demonstration neu erstellen: deutsche Moderation, englische Untertitel, ein kurzes generiertes Zelyra-Intro und das neue professionelle Template als Abschluss. Das bestehende Video auf der Startseite bleibt veröffentlicht, bis die Ersatzfassung bereit ist.
+
 - [ ] **1.2.0 — Compose-Prüfung im Installer:** Die Installer
   erkennen Docker Compose v2 oder neuer und unterscheiden es von der veralteten
   Python-Version v1. Docker bleibt für die Kerninstallation optional. Fehlt
@@ -1303,8 +1306,9 @@ werden. Details stehen im [Projektlayout-Arbeitsplan](release-plans/1.3.0-projec
   Überschreibungen und ressourcenspezifische Inhalte für benannte CRUD-Layout-
   Slots sind verfügbar. Statische Slot-Markups dürfen geprüfte Komponenten
   verwenden; datensatzgebundene Slot-Inhalte bleiben offen. Projektlokale
-  CSS-Token-Overrides sind implementiert; vollständige Theme-Erstellung und
-  -Auswahl bleiben offen.
+  Projektlokale CSS-Tokens, ein gemeinsames responsives Standardtheme und ein
+  Anpassungsbeispiel werden gemeinsam gepflegt. Ein visueller Theme-Editor und
+  eine breitere Vorlagenabdeckung bleiben offen.
 - [~] Eingebaute deutsche/englische UI-Kataloge werden über
   `ZELYRA_LANGUAGE` gewählt; `ZELYRA_LEVEL=learn|work` steuert die
   kontextbezogene Lernhilfe. Die minimalen und
@@ -1320,7 +1324,7 @@ werden. Details stehen im [Projektlayout-Arbeitsplan](release-plans/1.3.0-projec
   Beschriftungen und generierte Feldnamen werden unterstützt; HTML-Escaping
   und englischer Fallback bleiben aktiv. Fachdatensätze und unmarkierte eigene
   Texte werden nicht übersetzt. Umfassendere Vorlagenabdeckung und ein
-  vollständiger Theme-Editor bleiben offen.
+  visueller Theme-Editor bleiben offen.
 - [x] Authentifizierung, persistente Sessions, Argon2-Passwörter, direkte und
   rollenbasierte Berechtigungen, Browserverwaltung und MariaDB-Audit.
   Schreibende Browseranfragen benötigen zusätzlich gleichursprüngliche

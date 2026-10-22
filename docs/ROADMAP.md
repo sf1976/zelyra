@@ -1046,6 +1046,9 @@ compatibility behavior before changing syntax. See the detailed
 - [x] **1.2.53 — Zelyra-aware editor behavior:** Pair brackets and quotes, indent Zelyra blocks with four spaces, and support Tab/Shift+Tab. Indentation follows block structure and ignores braces in comments and strings. Full PR CI and the Linux/Windows tag workflows passed, including reproducible builds, checksums, SPDX SBOMs, and release attestations. The published Linux install and update smoke test passed. See [GitHub Releases](https://github.com/sf1976/zelyra/releases/tag/v1.2.53). Zelyra 1.3.0 remains in progress.
 - [x] **1.2.54 — Studio import guidance (released):** Suggest local `.zyl` modules while writing an import, filter self/duplicate/non-source/comment candidates, and continue with public-module completion after the alias. PR #217 passed full CI; release PR #218 and the v1.2.54 tag workflow passed release validation, reproducible Linux/Windows builds, archive checks, checksums, SPDX SBOMs, and artifact attestations. The published install, repeated install, update, and rollback smoke test passed. See [GitHub Releases](https://github.com/sf1976/zelyra/releases/tag/v1.2.54) and the [release verification record](release-readiness/1.2.54-release-verification.en.md). Zelyra 1.3.0 remains in progress.
 
+- [~] **CSS 1.1.0 — professional Zelyra design system:** Establish a polished, responsive default for generated CRUD pages and the application shell, including useful list, filter, form, detail, table, status, and navigation styles. Keep the design adaptable through documented project-local tokens and preserve the stable `zelyra-ui.v1.css` interface; ship the stylesheet with each Zelyra version. Check light/dark themes, keyboard focus, reduced motion, print, and narrow screens, and keep the German and English customization guides aligned. A visual theme editor and broader template coverage remain separate follow-up work.
+- [ ] **Follow-up product video:** After the design-system milestone is complete, recreate the starter-project demonstration with German narration, English subtitles, a short generated Zelyra intro, and the new professional template as the final reveal. The existing homepage video remains a separate published version until the replacement is ready.
+
 - [ ] **1.2.0 — Compose check in the installer:** Installers detect
   Docker Compose v2 or newer and distinguish it from obsolete Python Compose
   v1. Docker remains optional for the core installation. When Compose v2 is
@@ -1241,8 +1244,9 @@ compatibility behavior before changing syntax. See the detailed
   Named slots with fallback content, CRUD view overrides, and per-resource
   content for named CRUD-layout slots are available. Static slot markup may
   use checked components; record-bound custom slot content remains open.
-  Project-local CSS token overrides are implemented, while full theme
-  authoring and selection remain open.
+  Project-local CSS tokens, a shared responsive default theme, and a starter
+  customization example are maintained together. A visual theme editor and
+  broader template coverage remain open.
 - [~] Built-in German/English UI catalogs are selected by `ZELYRA_LANGUAGE`,
   and `ZELYRA_LEVEL=learn|work` controls the contextual learning guide. The
   minimal and machine-management MariaDB starters and generated CRUD, form,
@@ -1255,8 +1259,9 @@ compatibility behavior before changing syntax. See the detailed
   Parameterized labels and generated field identifiers are supported; resolved
   values are escaped and German falls back through the project English catalog
   to built-in translations. Business records and unmarked user-authored content
-  are not translated. Broader template coverage and a full theme editor remain
-  open. Project-local CSS overrides for documented visual tokens are available.
+  are not translated. Broader template coverage and a visual theme editor
+  remain open. Project-local CSS overrides for documented visual tokens are
+  available.
 - [x] Authentication, persistent sessions, Argon2 passwords, direct and
   role-based permissions, browser administration, and MariaDB audit logging.
   Browser writes also require same-origin evidence; the 0.2.0 release adds a
