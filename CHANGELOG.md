@@ -1,5 +1,18 @@
 ## Unreleased
 
+## 1.2.47 — 2026-10-22
+
+- Validate host-provided arguments against resolved function parameter and
+  generic types at the AST execution boundary. AST, MIR, and Bytecode share the
+  same mismatch diagnostic and parameter source span. Align generated table
+  validation bridges with stored relation-key and `Id` values. This improves a
+  specific runtime boundary and does not claim general backend parity. /
+  Hostseitige Argumente an der AST-Ausführungsgrenze anhand aufgelöster
+  Parameter- und Generiktypen prüfen. AST, MIR und Bytecode verwenden dieselbe
+  Typfehlerdiagnose und Parameter-Quellposition. Generierte Tabellenvalidatoren
+  an gespeicherte Relationsschlüssel und `Id`-Werte angleichen. Dies verbessert
+  eine konkrete Laufzeitgrenze und behauptet keine allgemeine Backend-Parität.
+
 ## 1.2.46 — 2026-10-22
 
 - Align AST, MIR, and verified Bytecode array and tuple index diagnostics,
