@@ -651,7 +651,11 @@ Archiv ist Referenzmaterial und keine akzeptierte Implementierung. Neu
 entwickelt werden quellbelegte, idiomatische und wiederverwendbare
 Zelyra-Module; nicht migrierte Anwendungsbereiche müssen ausdrücklich sichtbar
 bleiben. Laravel oder eine allgemeine PHP-Übersetzung werden nicht
-nachgebaut. Der begrenzte Plan steht im verlinkten 1.2.27-Arbeitsplan.
+nachgebaut. Wiederverwendbare Module bündeln regelmäßig benötigte
+Geschäftsfunktionen mit klaren Typen, Effekten, Voraussetzungen und Tests. Ein
+einmaliger Sonderfall bleibt ausdrücklich Anwendungscode und wird nicht als
+allgemeines Paket oder versteckte Importer-Ausnahme verpackt. Der begrenzte
+Plan steht im verlinkten 1.2.27-Arbeitsplan.
 
 ### 1.2.34 — geordnete, vollständig geschützte Migrations-Callbacks
 
