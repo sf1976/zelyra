@@ -25,7 +25,7 @@ telemetry, explicit effects, portable data, resource discipline, and honest
 proof claims guide every phase. The [manifesto](MANIFESTO.md) states the
 principles; the roadmap below tracks what is actually implemented.
 
-The current stable release is [1.2.39](https://github.com/sf1976/zelyra/releases/tag/v1.2.39). **Current milestones** is the source of
+The current stable release is [1.2.41](https://github.com/sf1976/zelyra/releases/tag/v1.2.41). **Current milestones** is the source of
 near-term commitments. Older numbered release sections below are retained as
 historical planning and evidence; they do not by themselves define current
 release targets. Longer-term ideas remain in the post-1.0 evolution section.
@@ -662,11 +662,11 @@ CSRF, idempotency, and second-tenant isolation checks. Generated success
 components carry explicit module dependencies. PR #176 was merged as
 `6fc61c31`; its GitHub CI passed. The v1.2.40 release tag points to merge
 `4d5a58ab`; the published release now includes Linux and Windows archives,
-checksums, and SPDX SBOMs. The latest published stable release is v1.2.40.
+checksums, and SPDX SBOMs. The latest published stable release is v1.2.41.
 This imports one specifically recognized workflow, not the Laravel website or
 all 2,274 findings.
 
-### 🧪 [~] 1.2.41 — literal Laravel public-file routes
+### ✅ [x] 1.2.41 — literal Laravel public-file routes (released)
 
 The importer recognizes a deliberately narrow route shape: an ungrouped,
 middleware-free `GET` closure whose only statement returns
@@ -679,10 +679,12 @@ check verifies `/favicon.ico` was copied byte-for-byte and the generated
 scaffold passes `zelyra check`. This does not translate dynamic responses,
 middleware, route groups, PHP logic, or arbitrary controller routes. It is a
 small route-import slice, not Laravel compatibility.
-On PR head `88fe1d00`, the full GitHub CI passed, including workspace and
-end-to-end tests, database compatibility, fuzzing, and Linux/Windows release
-archive and SBOM verification. The release workflow skipped publication
-because no release tag was requested; no release has been published.
+PR #177 passed full GitHub CI; PR #179 passed full release CI and PR #180
+fixed the release workflow's 21,000-character input limit, then passed CI and
+reproducible Linux/Windows artifact builds. Release v1.2.41 was published
+with checksum sidecars, SPDX SBOMs, and attestations. Downloaded Linux and
+Windows archives and binaries passed SHA-256 verification. Tag-triggered workspace CI passed on run #39693042950. This remains a narrow static file-route
+import, not general Laravel compatibility.
 
 ### 🧪 [~] 1.2.42 — source-resolved Laravel view dependencies
 
@@ -997,7 +999,8 @@ compatibility behavior before changing syntax. See the detailed
   portable Bytecode, not native machine-code generation. See the detailed
   1.3.0 section above.
 - [~] **Laravel website import — active through 1.3.0:** Replace the removed framework-oriented migrator with a source-evidenced website importer that emits compiler-checked reusable Zelyra modules. Analyze first, require explicit selections, preserve unsupported behavior as findings, and keep the Laravel source read-only. Use `/opt/siedelmann-laravel/app` as the first integration fixture. It must compose with the 1.1.5 package/module system and 1.2.0 operations foundation rather than introducing a parallel plugin/runtime model. Release 1.2.34 preserves Laravel `mediumText`/`longText` capacity as `String text_storage medium|long` for MariaDB, rejects unsupported MariaDB indexing of those columns, and reports backend-specific PostgreSQL/SQLite limits. Release 1.2.35 also preserves supported unsigned integer widths. This does not make the site importer complete; route behavior and workflow migration remain open.
-- [~] **1.2.40 importer vertical slice:** The real project's public unsubscribe route is generated only through the checked tenant-scoped `public_token` form primitive. Its real-project scaffold and disposable MariaDB/HTTP E2E pass; all other importer findings remain open. The tagged release is pending.
+- [~] **1.2.40 importer vertical slice:** The real project's public unsubscribe route is generated only through the checked tenant-scoped `public_token` form primitive. Its real-project scaffold and disposable MariaDB/HTTP E2E pass; all other importer findings remain open. Release v1.2.40 is published.
+- [~] **1.2.41 — literal Laravel public-file routes (released):** The importer recognizes one narrow route shape: an ungrouped, middleware-free `GET` closure whose only statement returns `response()->file(public_path('<literal path>'))`, with an exact route/file path match. Bounded, symlink-safe copying feeds the existing static-file server and records `STATIC_ASSET_ROUTES.json`. The real-project check verifies byte-identical `/favicon.ico` output and `zelyra check` on the generated scaffold. It does not translate dynamic responses, middleware, route groups, PHP logic, or arbitrary controllers. Release v1.2.41 is published with verified Linux/Windows archives, checksums, SBOMs, and attestations; see the [release page](https://github.com/sf1976/zelyra/releases/tag/v1.2.41). Full tag-triggered workspace CI passed on run #39693042950.
 
 - [ ] **1.2.0 — Compose check in the installer:** Installers detect
   Docker Compose v2 or newer and distinguish it from obsolete Python Compose
