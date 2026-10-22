@@ -214,6 +214,11 @@
     :where(html[data-z-ui]) .zelyra-crud-detail-card dl { grid-template-columns: minmax(0, 1fr); }
     :where(html[data-z-ui]) .zelyra-crud-form-card form > .z-button { grid-column: 1; }
   }
+  @media (prefers-reduced-motion: reduce) {
+    :where(html[data-z-ui]) .zelyra-crud-card,
+    :where(html[data-z-ui]) .zelyra-crud-card:hover { transform: none; transition: none; }
+    :where(html[data-z-ui] .zelyra-sidebar .z-app-shell__navigation a) { transition: none; }
+  }
   @media print {
     :where(html[data-z-ui]) { --z-color-canvas: #fff; --z-color-surface: #fff; --z-color-text: #000; --z-color-border: #999; color-scheme: light; background: #fff; }
     :where(html[data-z-ui] body) { background: #fff; color: #000; font-size: 10pt; }
