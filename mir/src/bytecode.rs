@@ -1259,6 +1259,14 @@ pub fn verify_bytecode(program: &BytecodeProgram) -> Result<(), Vec<MirError>> {
                     instruction.span,
                 )]);
             }
+            if matches!(instruction.operation, BytecodeOp::ArrayIndexAddInt { .. })
+                && instruction.source_step_span.is_none()
+            {
+                return Err(vec![bytecode_error(
+                    "bytecode literal array increment is missing its source-step span",
+                    instruction.span,
+                )]);
+            }
             match &instruction.operation {
                 BytecodeOp::Call {
                     function: target,

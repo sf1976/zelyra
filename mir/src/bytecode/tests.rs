@@ -6324,6 +6324,22 @@ fn bytecode_verifier_rejects_array_index_check_on_an_immutable_local() {
             .message
             .contains("array index check requires a mutable local")));
     }
+
+    let (_mir, mut bytecode) = compile_source(
+        "fn main() { mutable values: Int[] = [1] values[0] += 1 }",
+        "main",
+    );
+    let instruction = bytecode.functions[bytecode.entry]
+        .code
+        .iter_mut()
+        .find(|instruction| matches!(instruction.operation, BytecodeOp::ArrayIndexAddInt { .. }))
+        .expect("literal increment emits the fused instruction");
+    instruction.source_step_span = None;
+    let errors = verify_bytecode(&bytecode)
+        .expect_err("a fused increment without its RHS budget step must be rejected");
+    assert!(errors.iter().any(|error| error
+        .message
+        .contains("literal array increment is missing its source-step span")));
 }
 
 #[test]
