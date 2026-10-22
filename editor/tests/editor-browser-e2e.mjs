@@ -147,12 +147,16 @@ try {
   await page.locator("#terminal-panel").waitFor({ state: "visible" });
   await page.locator("#terminal-start").click();
   await page.locator("#terminal-input").waitFor({ state: "visible" });
-  await page.locator("#terminal-input").fill("1 + 1");
-  await page.locator("#terminal-input").press("Enter");
-  await page.waitForFunction(() => document.querySelector("#terminal-output")?.textContent.includes("=> 2"));
-  await page.locator("#terminal-input").fill(":quit");
-  await page.locator("#terminal-input").press("Enter");
-  await page.waitForFunction(() => document.querySelector("#terminal-stop")?.disabled === true);
+  if (process.env.ZELYRA_STUDIO_E2E_BACKEND === "postgres") {
+    await page.waitForFunction(() => document.querySelector("#terminal-output")?.textContent.includes("sandbox transactions currently require MariaDB/MySQL"));
+  } else {
+    await page.locator("#terminal-input").fill("1 + 1");
+    await page.locator("#terminal-input").press("Enter");
+    await page.waitForFunction(() => document.querySelector("#terminal-output")?.textContent.includes("=> 2"));
+    await page.locator("#terminal-input").fill(":quit");
+    await page.locator("#terminal-input").press("Enter");
+    await page.waitForFunction(() => document.querySelector("#terminal-stop")?.disabled === true);
+  }
   await page.locator("#terminal-close").click();
   await page.locator("#welcome-open-file").click();
   await page.locator(".cm-content[contenteditable=true]").waitFor({ timeout: 10_000 });

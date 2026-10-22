@@ -37,6 +37,8 @@ folder. Enter Zelyra expressions interactively, follow their output, and stop
 the session when finished. This terminal does not run operating-system shell
 commands; use Zelyra tools and Studio actions to manage files and processes.
 Output is bounded and known local credentials are redacted.
+For PostgreSQL projects, the console reports the current Zelyra REPL limit:
+sandbox transactions are currently available only with MariaDB/MySQL.
 
 ## Choose an appearance
 

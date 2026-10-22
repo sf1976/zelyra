@@ -2066,6 +2066,10 @@ function renderDatabaseRecords(result) {
       cell.textContent = String(name);
       heading.append(cell);
     }
+    const actionsHeading = document.createElement("th");
+    actionsHeading.scope = "col";
+    actionsHeading.textContent = language === "de" ? "Aktionen" : "Actions";
+    heading.append(actionsHeading);
     const body = table.createTBody();
     for (const values of rows) {
       const row = body.insertRow();
@@ -2074,6 +2078,21 @@ function renderDatabaseRecords(result) {
         cell.textContent = String(values[index] ?? "");
         cell.title = cell.textContent;
       }
+      const actions = row.insertCell();
+      const primary = (selectedDatabaseTable.live_columns || []).filter((column) => column.primary_key);
+      const key = Object.fromEntries(primary.map((column) => [column.name, values[columns.indexOf(column.name)]]));
+      const edit = document.createElement("button");
+      edit.type = "button";
+      edit.textContent = language === "de" ? "Bearbeiten" : "Edit";
+      edit.addEventListener("click", () => openDatabaseRecordForm("update", columns, values, key));
+      const remove = document.createElement("button");
+      remove.type = "button";
+      remove.textContent = language === "de" ? "Löschen" : "Delete";
+      remove.addEventListener("click", () => {
+        const prompt = language === "de" ? "Diesen Datensatz dauerhaft löschen?" : "Permanently delete this record?";
+        if (window.confirm(prompt)) void mutateDatabaseRecord("delete", {}, key);
+      });
+      actions.append(edit, remove);
     }
     wrap.append(table);
     wrap.hidden = false;
@@ -2575,6 +2594,68 @@ async function loadDatabaseRecords(offset = 0) {
       $("database-record-load").disabled = false;
       $("database-record-previous").disabled = databaseRecordOffsets.length <= 1;
     }
+  }
+}
+
+function openDatabaseRecordForm(action, columns, values = [], key = {}) {
+  if (!selectedDatabaseTable) return;
+  const dialog = $("database-record-dialog");
+  const fields = $("database-record-fields");
+  fields.replaceChildren();
+  const liveColumns = (selectedDatabaseTable.live_columns || []).filter((column) =>
+    !column.auto_increment && (selectedDatabaseTable.declared_columns || []).some((declared) => declared.name === column.name)
+      && (action === "create" || !column.primary_key));
+  $("database-record-dialog-title").textContent = action === "create"
+    ? (language === "de" ? "Datensatz anlegen" : "Create record")
+    : (language === "de" ? "Datensatz bearbeiten" : "Edit record");
+  for (const column of liveColumns) {
+    const label = document.createElement("label");
+    label.className = "database-record-field";
+    const caption = document.createElement("span");
+    caption.textContent = column.name;
+    const input = document.createElement("input");
+    input.dataset.column = column.name;
+    input.autocomplete = "off";
+    input.value = action === "update" ? String(values[columns.indexOf(column.name)] ?? "") : "";
+    const sqlType = String(column.sql_type || column.type || "");
+    if (/^DATE\b/i.test(sqlType)) input.type = "date";
+    else if (/^(?:TINYINT|SMALLINT|MEDIUMINT|INT|INTEGER|BIGINT|DECIMAL|NUMERIC|FLOAT|DOUBLE|REAL)\b/i.test(sqlType)) {
+      input.type = "number";
+      input.step = "any";
+    }
+    input.required = action === "create" && !column.nullable && !column.default;
+    label.append(caption, input);
+    if (column.nullable) {
+      const nullLabel = document.createElement("span");
+      nullLabel.className = "database-record-null";
+      const nullInput = document.createElement("input");
+      nullInput.type = "checkbox";
+      nullInput.dataset.nullFor = column.name;
+      nullLabel.append(nullInput, document.createTextNode(" NULL"));
+      label.append(nullLabel);
+    }
+    fields.append(label);
+  }
+  $("database-record-form").dataset.action = action;
+  $("database-record-form").dataset.key = JSON.stringify(key);
+  dialog.showModal();
+}
+
+async function mutateDatabaseRecord(action, values, key = {}) {
+  if (!selectedDatabaseTable) return;
+  try {
+    const result = await api("database-record-mutate", {
+      method: "POST",
+      body: JSON.stringify({ action, table: selectedDatabaseTable.name, values, key, confirm: true }),
+    });
+    $("database-record-dialog").close();
+    await loadDatabaseRecords(databaseRecordOffset);
+    announce(result.message || (language === "de" ? "Datensatz gespeichert." : "Record saved."), "success");
+  } catch (error) {
+    $("database-record-dialog-status").textContent = error.message;
+    $("database-record-dialog-status").dataset.kind = "error";
+    $("database-record-status").textContent = error.message;
+    $("database-record-status").dataset.kind = "error";
   }
 }
 
@@ -4147,6 +4228,26 @@ for (const id of ["schema-column-name", "schema-column-type", "schema-column-req
 }
 $("crud-preview-button").addEventListener("click", previewCrud);
 $("crud-apply-button").addEventListener("click", applyCrud);
+$("database-record-create").addEventListener("click", () => openDatabaseRecordForm("create", []));
+$("database-record-cancel").addEventListener("click", () => $("database-record-dialog").close());
+$("database-record-dialog").addEventListener("close", () => $("database-record-form").reset());
+$("database-record-form").addEventListener("submit", (event) => {
+  event.preventDefault();
+  const form = event.currentTarget;
+  const action = form.dataset.action;
+  const values = {};
+  for (const input of $("database-record-fields").querySelectorAll("input[data-column]")) {
+    const name = input.dataset.column;
+    const nullInput = $("database-record-fields").querySelector(`[data-null-for="${CSS.escape(name)}"]`);
+    if (nullInput?.checked) values[name] = null;
+    else if (!(action === "create" && input.value === "" && !input.required)) values[name] = input.value;
+  }
+  const key = JSON.parse(form.dataset.key || "{}");
+  const prompt = action === "create"
+    ? (language === "de" ? "Datensatz in der ausgewählten Projektdatenbank anlegen?" : "Create a record in the selected project database?")
+    : (language === "de" ? "Änderungen an diesem Datensatz speichern?" : "Save changes to this record?");
+  if (window.confirm(prompt)) void mutateDatabaseRecord(action, values, key);
+});
 $("new-file-button").addEventListener("click", createFile);
 $("refresh-button").addEventListener("click", refreshTree);
 $("tree-filter").addEventListener("input", (event) => { activeFilter = event.target.value; renderTree(); });
@@ -4156,6 +4257,118 @@ $("theme-button").addEventListener("click", () => {
   updateThemeControl();
   if (editor) editor.dispatch({ effects: editorTheme.reconfigure(createZelyraTheme()) });
 });
+
+const terminalPanel = $("terminal-panel");
+const terminalOutput = $("terminal-output");
+const terminalInput = $("terminal-input");
+const terminalInputForm = $("terminal-input-form");
+const terminalState = $("terminal-state");
+let terminalPoll = null;
+let terminalRefreshing = false;
+async function refreshTerminal() {
+  if (terminalRefreshing) return;
+  terminalRefreshing = true;
+  try {
+    const state = await api("terminal-state");
+    const nearEnd = terminalOutput.scrollHeight - terminalOutput.scrollTop - terminalOutput.clientHeight < 48;
+    terminalOutput.textContent = state.output || "";
+    if (nearEnd) terminalOutput.scrollTop = terminalOutput.scrollHeight;
+    $("terminal-start").disabled = state.active;
+    $("terminal-stop").disabled = !state.active;
+    terminalInput.disabled = !state.active;
+    terminalInputForm.querySelector("button").disabled = !state.active;
+    terminalState.textContent = state.active
+      ? (language === "de" ? "Verbunden · Zelyra-Konsole" : "Connected · Zelyra console")
+      : (language === "de" ? "Nicht gestartet" : "Not started");
+    terminalState.dataset.kind = state.active ? "success" : "";
+    if (state.active && !terminalPoll) terminalPoll = setInterval(() => void refreshTerminal(), 500);
+    if (!state.active && terminalPoll) { clearInterval(terminalPoll); terminalPoll = null; }
+  } catch (error) {
+    terminalState.textContent = error.message;
+    terminalState.dataset.kind = "error";
+  } finally { terminalRefreshing = false; }
+}
+$("terminal-toggle-button").addEventListener("click", async () => {
+  terminalPanel.hidden = !terminalPanel.hidden;
+  if (!terminalPanel.hidden) { await refreshTerminal(); if (!terminalInput.disabled) terminalInput.focus(); }
+});
+$("terminal-close").addEventListener("click", () => { terminalPanel.hidden = true; });
+$("terminal-start").addEventListener("click", async () => {
+  try { await api("terminal-start", { method: "POST", body: "{}" }); await refreshTerminal(); terminalInput.focus(); }
+  catch (error) { terminalState.textContent = error.message; terminalState.dataset.kind = "error"; }
+});
+$("terminal-stop").addEventListener("click", async () => {
+  try { await api("terminal-stop", { method: "POST", body: "{}" }); await refreshTerminal(); }
+  catch (error) { terminalState.textContent = error.message; terminalState.dataset.kind = "error"; }
+});
+terminalInputForm.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const line = terminalInput.value;
+  if (!line) return;
+  try { await api("terminal-input", { method: "POST", body: JSON.stringify({ line }) }); terminalInput.value = ""; terminalInput.focus(); await refreshTerminal(); }
+  catch (error) { terminalState.textContent = error.message; terminalState.dataset.kind = "error"; }
+});
+document.addEventListener("keydown", (event) => {
+  if ((event.ctrlKey || event.metaKey) && event.key === "`") {
+    event.preventDefault();
+    terminalPanel.hidden = !terminalPanel.hidden;
+    if (!terminalPanel.hidden) { void refreshTerminal(); if (!terminalInput.disabled) terminalInput.focus(); }
+  }
+});
+
+const closeStudioMenus = () => {
+  for (const item of document.querySelectorAll(".studio-menu")) {
+    const trigger = item.querySelector("[data-studio-menu]");
+    const panel = item.querySelector(".studio-menu-popover");
+    trigger?.setAttribute("aria-expanded", "false");
+    if (panel) panel.hidden = true;
+  }
+};
+for (const item of document.querySelectorAll(".studio-menu")) {
+  const trigger = item.querySelector("[data-studio-menu]");
+  const panel = item.querySelector(".studio-menu-popover");
+  trigger.addEventListener("click", () => {
+    const open = trigger.getAttribute("aria-expanded") === "true";
+    closeStudioMenus();
+    if (!open) { trigger.setAttribute("aria-expanded", "true"); panel.hidden = false; panel.querySelector("[role=menuitem]")?.focus(); }
+  });
+  item.addEventListener("click", (event) => {
+    const target = event.target.closest("[data-menu-target]");
+    if (!target) return;
+    event.preventDefault();
+    const action = document.getElementById(target.dataset.menuTarget);
+    if (action && !action.disabled) action.click();
+    closeStudioMenus();
+    trigger.focus();
+  });
+  trigger.addEventListener("keydown", (event) => {
+    if (event.key === "ArrowDown") { event.preventDefault(); trigger.click(); }
+  });
+}
+document.querySelector(".menubar-quick-actions")?.addEventListener("click", (event) => {
+  const target = event.target.closest("[data-menu-target]");
+  if (target) document.getElementById(target.dataset.menuTarget)?.click();
+});
+document.addEventListener("click", (event) => { if (!event.target.closest(".studio-menubar")) closeStudioMenus(); });
+document.addEventListener("keydown", (event) => {
+  if (event.key === "Escape") closeStudioMenus();
+  for (const key of ["ArrowDown", "ArrowUp"]) {
+    if (event.key !== key || !event.target.matches(".studio-menu-popover [role=menuitem]")) continue;
+    event.preventDefault();
+    const items = [...event.target.closest("[role=menu]").querySelectorAll("[role=menuitem]:not(:disabled)")];
+    const index = items.indexOf(event.target);
+    items[(index + (key === "ArrowDown" ? 1 : -1) + items.length) % items.length]?.focus();
+  }
+});
+
+$("welcome-open-file").addEventListener("click", () => {
+  const path = treeFiles.includes("main.zyl") ? "main.zyl" : treeFiles.find((file) => file.endsWith(".zyl"));
+  if (path) void openFile(path);
+  else announce(language === "de" ? "Noch keine Zelyra-Datei im Projekt" : "No Zelyra file in this project yet", "error");
+});
+$("welcome-check").addEventListener("click", () => $("check-button").click());
+$("welcome-terminal").addEventListener("click", () => $("terminal-toggle-button").click());
+$("welcome-database").addEventListener("click", () => $("database-button").click());
 $("language-button").addEventListener("click", () => setLanguage(language === "de" ? "en" : "de"));
 $("font-size-button").addEventListener("click", cycleFontSize);
 $("sidebar-toggle").addEventListener("click", (event) => {
@@ -4214,7 +4427,6 @@ setLanguage(language);
 $("project-name").textContent = document.body.dataset.project || "Zelyra-Projekt";
 $("project-name-side").textContent = (document.body.dataset.project || "ZELYRA-PROJEKT").toLocaleUpperCase();
 refreshTree().then(() => {
-  const first = treeFiles.includes("main.zyl") ? "main.zyl" : treeFiles.find((file) => file.endsWith(".zyl"));
-  if (first) void openFile(first);
+  $("empty-state").hidden = false;
 });
 void connectStudioEvents();

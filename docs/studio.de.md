@@ -39,6 +39,8 @@ verfolgen und die Sitzung beenden. Das Terminal führt keine Betriebssystem-
 Shellbefehle aus; Dateien und Prozesse werden über die Zelyra-Werkzeuge und
 Studio-Aktionen verwaltet. Die Ausgabe ist begrenzt und bekannte lokale
 Zugangsdaten werden ausgeblendet.
+Bei PostgreSQL-Projekten meldet die Konsole die bestehende Zelyra-REPL-Grenze:
+Sandbox-Transaktionen sind derzeit nur mit MariaDB/MySQL verfügbar.
 
 ## Darstellung wechseln
 

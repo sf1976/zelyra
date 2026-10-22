@@ -1,5 +1,17 @@
 ## Unreleased
 
+## 1.2.50 — Studio-Buildabgleich
+
+- Synchronize the Studio source modules with the shipped terminal, welcome
+  screen, menus, and database record actions. Keep the generated browser assets
+  reproducible from `editor/src`. Document that Zelyra's current PostgreSQL
+  REPL does not support sandbox transactions; Studio reports that console
+  limitation instead of treating it as a general Studio startup failure. /
+  Studio-Quellmodule mit Terminal, Startansicht, Menüs und Datenbankaktionen
+  abgleichen und die Browser-Assets reproduzierbar aus `editor/src` erzeugen.
+  Dokumentieren, dass die aktuelle Zelyra-REPL unter PostgreSQL keine Sandbox-
+  Transaktionen unterstützt; Studio weist auf diese Konsolenbegrenzung hin.
+
 ## 1.2.49 — Studio IDE für Zelyra
 
 - Add a focused Studio menu and an optional integrated Zelyra console. The
