@@ -1,5 +1,56 @@
 import "pkg:storage" as storage
 
+/// Rounded amounts for one invoice line. Scale and rounding are explicit so
+/// the caller, rather than the module, selects the applicable money policy.
+pub struct InvoiceAmounts {
+    net: Decimal
+    tax: Decimal
+    gross: Decimal
+}
+
+/// Calculate a line's net, tax, and gross amounts. `tax_rate` is a fraction
+/// (for example, 0.19 for 19%). The caller supplies the currency scale and
+/// one of decimal_quantize_result's supported rounding modes.
+pub fn calculate_line_amounts(
+    quantity: Decimal,
+    unit_price: Decimal,
+    tax_rate: Decimal,
+    scale: Int,
+    rounding_mode: String
+) -> Result<InvoiceAmounts, String> {
+    raw_net = quantity * unit_price
+    return match decimal_quantize_result(raw_net, scale, rounding_mode) {
+        Err(message) => Err(message)
+        Ok(net) => calculate_tax_amounts(net, tax_rate, scale, rounding_mode)
+    }
+}
+
+fn calculate_tax_amounts(
+    net: Decimal,
+    tax_rate: Decimal,
+    scale: Int,
+    rounding_mode: String
+) -> Result<InvoiceAmounts, String> {
+    raw_tax = net * tax_rate
+    return match decimal_quantize_result(raw_tax, scale, rounding_mode) {
+        Err(message) => Err(message)
+        Ok(tax) => calculate_gross_amount(net, tax, scale, rounding_mode)
+    }
+}
+
+fn calculate_gross_amount(
+    net: Decimal,
+    tax: Decimal,
+    scale: Int,
+    rounding_mode: String
+) -> Result<InvoiceAmounts, String> {
+    raw_gross = net + tax
+    return match decimal_quantize_result(raw_gross, scale, rounding_mode) {
+        Err(message) => Err(message)
+        Ok(gross) => Ok(InvoiceAmounts { net: net, tax: tax, gross: gross })
+    }
+}
+
 pub fn invoice_count() -> Int uses Database(read) {
     return storage::invoice_count()
 }
