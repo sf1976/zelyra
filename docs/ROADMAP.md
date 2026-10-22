@@ -686,7 +686,7 @@ with checksum sidecars, SPDX SBOMs, and attestations. Downloaded Linux and
 Windows archives and binaries passed SHA-256 verification. Tag-triggered workspace CI passed on run #39693042950. This remains a narrow static file-route
 import, not general Laravel compatibility.
 
-### 🧪 [~] 1.2.42 — source-resolved Laravel view dependencies
+### ✅ [x] 1.2.42 — source-resolved Laravel view dependencies
 
 `VIEW_LINKS.json` now resolves literal Blade `@extends`, `@include`,
 `@includeIf`, `@includeWhen`, `@each`, and local anonymous `@component`
@@ -699,9 +699,10 @@ unresolved references, and cycles in a reviewable report. The acceptance-project
 shared `app.layouts.app` edge and currently sees 231 dependencies, no
 unresolved references, and no cycles across the scanned views. This is an
 analysis graph only: it does not translate Blade layout or fragment behavior,
-wire page routes, or claim the site has been imported. Focused Rust tests and
-the source-only check against `/opt/siedelmann-laravel/app` passed. Full release
-gates have not run.
+wire page routes, or claim the site has been imported. Focused Rust tests, the
+source-only check against `/opt/siedelmann-laravel/app`, and full GitHub PR CI
+passed. Linux and Windows release archives and SBOMs were built and verified
+in the PR release workflow. Versioned tag publication is tracked separately.
 
 ## Active architecture milestones (1.1.5 through 1.3.0)
 
