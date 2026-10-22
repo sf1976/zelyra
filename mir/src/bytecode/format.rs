@@ -648,6 +648,10 @@ impl Writer {
                     zelyra_ast::ArrayIndexAssignOp::Add => 1,
                 })
             }
+            BytecodeOp::ArrayIndexCheck { local } => {
+                self.u8(51)?;
+                self.usize(local.0)
+            }
             BytecodeOp::ArrayAppend {
                 local,
                 element_type,
@@ -1198,6 +1202,9 @@ impl<'a> Reader<'a> {
                     1 => zelyra_ast::ArrayIndexAssignOp::Add,
                     _ => return Err(error("unknown bytecode array update operation")),
                 },
+            },
+            51 => BytecodeOp::ArrayIndexCheck {
+                local: LocalId(self.usize()?),
             },
             26 => BytecodeOp::TupleBind {
                 locals: {

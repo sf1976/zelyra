@@ -295,7 +295,7 @@ fn compile_source(source: &str, entry: &str) -> (MirProgram, BytecodeProgram) {
 }
 
 #[test]
-fn bytecode_v28_roundtrips_typed_view_properties() {
+fn bytecode_roundtrips_typed_view_properties() {
     let source = r#"
         view InvoiceShell {
             props {
@@ -310,7 +310,7 @@ fn bytecode_v28_roundtrips_typed_view_properties() {
         fn main() {}
     "#;
     let (_, bytecode) = compile_source(source, "main");
-    assert_eq!(bytecode.version, 28);
+    assert_eq!(bytecode.version, BYTECODE_VERSION);
     assert_eq!(bytecode.views.len(), 1);
     let original_view = bytecode.views[0].clone();
     assert_eq!(original_view.props.len(), 2);
@@ -1761,6 +1761,68 @@ fn mutable_array_index_errors_match_ast_mir_and_decoded_bytecode() {
         assert_eq!(ast_error.span, mir_error.span);
         assert_eq!(ast_error.span, bytecode_error.span);
     }
+}
+
+#[test]
+fn mutable_array_compound_assignment_rhs_order_matches_all_backends() {
+    let source = r#"
+fn rhs() -> Int { print("rhs ran"); return 5 }
+fn main() { mutable values: Int[] = [1] values[2] += rhs() }
+"#;
+    let ast = parse(&lex(source).expect("source lexes")).expect("source parses");
+    let mir = crate::lower(&ast).expect("source type-checks and lowers");
+    let bytecode = compile(&mir, "main").expect("main function compiles");
+    let bytecode = decode(&encode(&bytecode).expect("bytecode encodes"))
+        .expect("bytecode verifies after decoding");
+
+    let ast_result = zelyra_runtime::execute_function_captured_with_capabilities_and_policies(
+        &ast,
+        "main",
+        Vec::new(),
+        None,
+        None,
+        None,
+    );
+    let mir_result = execution::execute_function_captured_with_host_services_and_policy(
+        &mir,
+        "main",
+        Vec::new(),
+        ExecutionLimits::default(),
+        None,
+        None,
+        Arc::new(SystemHostServices),
+    );
+    let bytecode_result = execute_with_host_services_and_policy_captured(
+        &bytecode,
+        Vec::new(),
+        ExecutionLimits::default(),
+        None,
+        None,
+        Arc::new(SystemHostServices),
+    );
+
+    assert_eq!(ast_result.output, mir_result.output);
+    assert_eq!(ast_result.output, bytecode_result.output);
+    assert!(
+        ast_result.output.is_empty(),
+        "invalid LHS must fail before RHS effects"
+    );
+    assert_eq!(
+        ast_result.error.as_ref().map(|error| &error.message),
+        mir_result.error.as_ref().map(|error| &error.message)
+    );
+    assert_eq!(
+        ast_result.error.as_ref().map(|error| &error.message),
+        bytecode_result.error.as_ref().map(|error| &error.message)
+    );
+    assert_eq!(
+        ast_result.error.as_ref().map(|error| error.span),
+        mir_result.error.as_ref().map(|error| error.span)
+    );
+    assert_eq!(
+        ast_result.error.as_ref().map(|error| error.span),
+        bytecode_result.error.as_ref().map(|error| error.span)
+    );
 }
 
 #[test]
