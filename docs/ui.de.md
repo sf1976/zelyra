@@ -239,6 +239,12 @@ Das ausgelieferte Bundle behält die stabile Schnittstelle
 damit Browser- und lokale Caches Releases unterscheiden können. Die Theme-
 Tokens sind die unterstützte Anpassungsschnittstelle. Die modularen Quelldateien
 werden gemeinsam mit dem Compiler gepflegt und nicht in neue Projekte kopiert.
+Der generierte Bundle-Header führt zusätzlich eine unabhängige
+Designsystemversion. Patch-Releases verbessern das Aussehen oder korrigieren
+Stile ohne Änderung am Token-/Klassenvertrag; Minor-Releases dürfen kompatible
+Tokens oder Komponenten ergänzen. Eine inkompatible Änderung an öffentlichen
+Tokens oder Klassen erfordert eine neue Major-Version. Das aktuelle CSS-Bundle
+hat Version 1.0.7.
 
 Helles und dunkles Theme, Systempräferenz, gespeicherte manuelle Auswahl,
 komfortable/kompakte Dichte, `prefers-reduced-motion` und Druckregeln sind
