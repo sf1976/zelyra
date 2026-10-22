@@ -36,7 +36,10 @@ einem Arbeitsablauf:
 
 - statisch geprüfte Geschäftslogik und schemaabhängiges SQL;
 - MariaDB als primäre Laufzeit sowie geprüfte MySQL- und PostgreSQL-Abläufe;
-- generierte Formulare, Tabellenansichten, CRUD, Beziehungen und APIs;
+- generierte CRUD-Ressourcen mit Liste, Detail, Create-/Edit-Formularen und
+  CSRF-geschütztem Löschdialog; `permits delete` schützt Endpunkt und Anzeige,
+  optionales Soft Delete ermöglicht Archivierung und Wiederherstellung;
+- Beziehungen, typisierte APIs und schemaabhängige Formulare;
 - die erweiterte Standardbibliothek für Mathematik, Text, Arrays,
   Sets, Maps, Datumsrechnung, Parsing, Encodings und Pfade sowie `|>`-Pipelines
   und flache `else if`-Kaskaden;

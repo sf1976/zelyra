@@ -34,7 +34,10 @@ in one workflow:
 
 - statically checked business logic and schema-aware SQL;
 - MariaDB as the primary runtime, plus verified MySQL and PostgreSQL workflows;
-- generated forms, table views, CRUD, relationships, and APIs;
+- generated CRUD resources with list, detail, create/edit forms, and a
+  CSRF-protected delete confirmation; `permits delete` protects the endpoint
+  and its UI, while optional soft delete supports archive and restore;
+- relationships, typed APIs, and schema-aware forms;
 - the expanded standard library for math, text, arrays, sets, maps, date
   arithmetic, parsing, encodings, and paths, plus `|>` pipelines and flat
   `else if` chains;
