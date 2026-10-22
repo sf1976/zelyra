@@ -15,6 +15,178 @@ pub(super) struct GeneratedWorkflow {
     pub(super) report: Value,
 }
 
+/// Generate a native Zelyra page only for a complete, ungrouped GET closure
+/// that returns one view already accepted by the bounded static-view
+/// translator. This connects source-evidenced routing to an existing
+/// translated presentation without copying or interpreting Laravel code.
+pub(super) fn static_translated_view_routes(
+    root: &Path,
+    graph: &Value,
+    view_translations: &Value,
+    occupied_paths: &[String],
+) -> Vec<Value> {
+    let route_prefix = compiled_regex(
+        r#"(?is)^\s*Route::get\s*\(\s*(?:'([^']+)'|\"([^\"]+)\")\s*,\s*function\s*\(\s*\)\s*\{"#,
+        "literal Laravel static-view route regex",
+    );
+    let return_view = compiled_regex(
+        r#"(?is)^\s*return\s+view\s*\(\s*(?:'([^']+)'|\"([^\"]+)\")\s*\)\s*;\s*$"#,
+        "literal Laravel view response regex",
+    );
+    let mut source_cache = std::collections::BTreeMap::<String, String>::new();
+    let mut routes = Vec::new();
+    for route in graph["nodes"].as_array().into_iter().flatten() {
+        if route["kind"] != "route" {
+            continue;
+        }
+        let (Some(file), Some(route_name), Some(start)) = (
+            route["file"].as_str(),
+            route["name"].as_str(),
+            route["source_span"]["start"]["byte_offset"].as_u64(),
+        ) else {
+            continue;
+        };
+        let Some((method, declared_path)) = route_name.split_once(' ') else {
+            continue;
+        };
+        if !method.eq_ignore_ascii_case("get")
+            || route["route_context"]["effective_path"].as_str() != Some(declared_path)
+            || !safe_static_route_path(declared_path)
+            || occupied_paths.iter().any(|path| path == declared_path)
+            || route["route_context"]["middleware_complete"] != true
+            || route["route_context"]["groups"]
+                .as_array()
+                .is_none_or(|items| !items.is_empty())
+            || route["route_context"]["inherited_middleware"]
+                .as_array()
+                .is_none_or(|items| !items.is_empty())
+            || route["route_context"]["route_middleware"]
+                .as_array()
+                .is_none_or(|items| !items.is_empty())
+        {
+            continue;
+        }
+        let source = source_cache.entry(file.to_owned()).or_insert_with(|| {
+            safe_source_path(root, file)
+                .and_then(|path| fs::read_to_string(path).ok())
+                .unwrap_or_default()
+        });
+        let start = start as usize;
+        if start >= source.len() || !source.is_char_boundary(start) {
+            continue;
+        }
+        let source_map = PhpSourceMap::new(source);
+        if !source_map.is_code(start) {
+            continue;
+        }
+        let Some(prefix) = route_prefix.captures(&source[start..]) else {
+            continue;
+        };
+        let literal_path = prefix
+            .get(1)
+            .or_else(|| prefix.get(2))
+            .map(|capture| capture.as_str());
+        if literal_path != Some(declared_path) {
+            continue;
+        }
+        let open = start + prefix.get(0).expect("matched route prefix").end() - 1;
+        let Some(close) = super::graph::matching_brace(source.as_bytes(), &source_map, open) else {
+            continue;
+        };
+        let body = source_map.without_comments(&source[open + 1..close]);
+        let Some(view_match) = return_view.captures(&body) else {
+            continue;
+        };
+        let Some(view_name) = view_match
+            .get(1)
+            .or_else(|| view_match.get(2))
+            .map(|capture| capture.as_str())
+        else {
+            continue;
+        };
+        let suffix = source[close + 1..].trim_start();
+        if !suffix.starts_with(");") {
+            continue;
+        }
+        let view_file = format!("resources/views/{}.blade.php", view_name.replace('.', "/"));
+        let Some(translation) = view_translations["translations"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .find(|item| {
+                item["source_file"].as_str() == Some(view_file.as_str())
+                    && item["status"] == "translated_static_presentation_component"
+            })
+        else {
+            continue;
+        };
+        let Some(component) = translation["component"].as_str() else {
+            continue;
+        };
+        let Some(title) = translation["document_title"].as_str() else {
+            continue;
+        };
+        routes.push(json!({
+            "route": declared_path,
+            "method": "GET",
+            "source_file": file,
+            "source_span": route["source_span"],
+            "source_view": view_file,
+            "component": component,
+            "document_title": title,
+            "status": "generated_static_translated_view_route",
+            "mapping": "literal_get_closure_to_translated_component",
+            "php_executed": false
+        }));
+    }
+    let mut route_counts = std::collections::BTreeMap::<String, usize>::new();
+    for route in &routes {
+        if let Some(path) = route["route"].as_str() {
+            *route_counts.entry(path.to_owned()).or_default() += 1;
+        }
+    }
+    routes.retain(|route| {
+        route["route"]
+            .as_str()
+            .is_some_and(|path| route_counts.get(path) == Some(&1))
+    });
+    routes.sort_by(|left, right| left["route"].as_str().cmp(&right["route"].as_str()));
+    routes
+}
+
+pub(super) fn render_static_translated_view_pages(
+    routes: &[Value],
+    has_shared_layout: bool,
+) -> String {
+    let mut source = String::new();
+    let (view_import, header_title_slot) = if has_shared_layout {
+        (
+            "    view: ImportedAppShell\n",
+            "        <slot name=\"header_title\">{title}</slot>\n",
+        )
+    } else {
+        ("    view: ImportedPublicShell\n", "")
+    };
+    for route in routes {
+        let (Some(path), Some(title), Some(component)) = (
+            route["route"].as_str(),
+            route["document_title"].as_str(),
+            route["component"].as_str(),
+        ) else {
+            continue;
+        };
+        use std::fmt::Write as _;
+        let _ = writeln!(
+            source,
+            "\npage {:?} {{\n{view_import}    html {{\n        <slot name=\"title\">{title}</slot>\n{header_title_slot}        <{component} />\n    }}\n}}",
+            path,
+            title = super::view_links::escape_static_html_text(title),
+            component = component,
+        );
+    }
+    source
+}
+
 /// Find Laravel GET routes whose complete closure returns one literal file
 /// beneath `public/`. The importer copies the asset into Zelyra's `public/`
 /// tree; the static asset server then serves it at the same origin-relative
@@ -388,6 +560,7 @@ pub(super) fn generate(
                 "source_controller": controller_file,
                 "source_table": table,
                 "source_route": path,
+                "success_path": success_path,
                 "route_parameter": token_name,
                 "verification": if tenant_scoped {
                     "sha256-token-hash-resolves-globally-unique-row-and-tenant"
@@ -636,6 +809,74 @@ class PublicUnsubscribeController {
             },
             "source_span": {"start": {"byte_offset": start}}
         }]})
+    }
+
+    #[test]
+    fn wires_only_unambiguous_static_gets_to_translated_components() {
+        let root = std::env::temp_dir().join(format!(
+            "zelyra-static-view-route-{}-{}",
+            std::process::id(),
+            std::thread::current().name().unwrap_or("test")
+        ));
+        let _ = fs::remove_dir_all(&root);
+        fs::create_dir_all(root.join("routes")).unwrap();
+        let source =
+            "<?php\nRoute::get('/notice', function () { return view('public.notice'); });\n";
+        fs::write(root.join("routes/web.php"), source).unwrap();
+        let graph = asset_route_graph(source, "/notice", json!([]));
+        let translations = json!({"translations": [{
+            "source_file": "resources/views/public/notice.blade.php",
+            "status": "translated_static_presentation_component",
+            "component": "PublicNotice",
+            "document_title": "Notice"
+        }]});
+        let routes = static_translated_view_routes(&root, &graph, &translations, &[]);
+        assert_eq!(routes.len(), 1);
+        assert_eq!(routes[0]["route"], "/notice");
+        assert_eq!(routes[0]["component"], "PublicNotice");
+        assert_eq!(routes[0]["php_executed"], false);
+        let page = render_static_translated_view_pages(&routes, true);
+        assert!(page.contains("page \"/notice\""));
+        assert!(page.contains("view: ImportedAppShell"));
+        assert!(page.contains("<PublicNotice />"));
+
+        let occupied =
+            static_translated_view_routes(&root, &graph, &translations, &["/notice".into()]);
+        assert!(occupied.is_empty());
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn refuses_dynamic_or_middleware_protected_static_view_routes() {
+        let root = std::env::temp_dir().join(format!(
+            "zelyra-static-view-route-reject-{}-{}",
+            std::process::id(),
+            std::thread::current().name().unwrap_or("test")
+        ));
+        let _ = fs::remove_dir_all(&root);
+        fs::create_dir_all(root.join("routes")).unwrap();
+        let translations = json!({"translations": [{
+            "source_file": "resources/views/public/notice.blade.php",
+            "status": "translated_static_presentation_component",
+            "component": "PublicNotice",
+            "document_title": "Notice"
+        }]});
+        let cases = [
+            ("<?php\nRoute::get('/notice', function () { return view($name); });\n", "/notice", json!([])),
+            ("<?php\nRoute::get('/notice', function () { return view('public.notice'); })->middleware('auth');\n", "/notice", json!([])),
+            ("<?php\nRoute::get('/notice', function () { return view('public.notice'); });\n", "/notice", json!(["auth"])),
+        ];
+        for (source, path, groups) in cases {
+            fs::write(root.join("routes/web.php"), source).unwrap();
+            let routes = static_translated_view_routes(
+                &root,
+                &asset_route_graph(source, path, groups),
+                &translations,
+                &[],
+            );
+            assert!(routes.is_empty());
+        }
+        fs::remove_dir_all(root).unwrap();
     }
 
     #[test]
