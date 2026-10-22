@@ -4642,10 +4642,7 @@ fn make_frame(
         if !runtime_type_matches(expected, &value.ty()) {
             return Err(runtime_error(
                 *span,
-                format!(
-                    "bytecode parameter expected `{expected}` but received `{}`",
-                    value.ty()
-                ),
+                zelyra_runtime::function_parameter_type_error(expected, &value.ty()),
             ));
         }
         locals.insert(*local, value);

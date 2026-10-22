@@ -879,17 +879,24 @@ fn computed_decimal_crud_post_persists_the_server_recalculated_value() {
 #[test]
 fn table_validation_converts_relation_fields_to_database_identity_values() {
     let source = r#"
+        type TenantId = Id
         table departments { id: Int primary auto name: String required }
         table machines {
             department: Department required
+            optional_department: Department?
+            tenant_id: TenantId required
             validate { department == department: "A department is required." }
+            validate { optional_department == None || optional_department == optional_department: "Optional relation must be valid." }
         }
         fn main() {}
     "#;
     let program = zelyra_parser::parse(&zelyra_lexer::lex(source).unwrap()).unwrap();
     zelyra_runtime::check(&program).expect("relation field and validation are well typed");
     let (lowered, mappings) = zelyra_ast::lower_table_validation_functions(&program);
-    let values = HashMap::from([("department".to_owned(), "1".to_owned())]);
+    let values = HashMap::from([
+        ("department".to_owned(), "1".to_owned()),
+        ("tenant_id".to_owned(), "101".to_owned()),
+    ]);
 
     assert!(
         evaluate_table_validations(&lowered, &mappings, "machines", &values)

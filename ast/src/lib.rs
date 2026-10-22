@@ -439,7 +439,7 @@ pub fn build_table_validation_functions(
                     .filter(|column| !column.auto)
                     .map(|column| Param {
                         name: column.name.clone(),
-                        ty: column.ty.clone(),
+                        ty: table_validation_storage_type(program, &column.ty),
                         span: column.span,
                     })
                     .collect(),
@@ -464,6 +464,66 @@ pub fn build_table_validation_functions(
         }
     }
     (functions, mappings)
+}
+
+/// Generated validation functions receive database storage values from the
+/// web layer. Relation fields and `Id` aliases are stored as integer keys;
+/// retain their source-level type checking on the original validation while
+/// giving the private runtime bridge the matching storage type.
+fn table_validation_storage_type(program: &Program, ty: &Type) -> Type {
+    match ty {
+        Type::Named(name) if table_identity_type(program, name) => Type::Int,
+        Type::Option(inner) => {
+            Type::Option(Box::new(table_validation_storage_type(program, inner)))
+        }
+        Type::Array(inner) => Type::Array(Box::new(table_validation_storage_type(program, inner))),
+        other => other.clone(),
+    }
+}
+
+fn table_identity_type(program: &Program, name: &str) -> bool {
+    table_identity_type_inner(program, name, &mut std::collections::HashSet::new())
+}
+
+fn table_identity_type_inner(
+    program: &Program,
+    name: &str,
+    visited: &mut std::collections::HashSet<String>,
+) -> bool {
+    let name = name.rsplit("::").next().unwrap_or(name);
+    if name == "Id" {
+        return true;
+    }
+    if !visited.insert(name.to_owned()) {
+        return false;
+    }
+    if let Some(alias) = program.types.iter().find(|alias| alias.name == name) {
+        return table_identity_type_for_type(program, &alias.target, visited);
+    }
+    let snake = name.to_ascii_lowercase();
+    if program.tables.iter().any(|table| table.name == snake) {
+        return true;
+    }
+    let plural = if snake.ends_with('y') {
+        format!("{}ies", &snake[..snake.len() - 1])
+    } else {
+        format!("{snake}s")
+    };
+    program.tables.iter().any(|table| table.name == plural)
+}
+
+fn table_identity_type_for_type(
+    program: &Program,
+    ty: &Type,
+    visited: &mut std::collections::HashSet<String>,
+) -> bool {
+    match ty {
+        Type::Named(name) => table_identity_type_inner(program, name, visited),
+        Type::Option(inner) | Type::Array(inner) => {
+            table_identity_type_for_type(program, inner, visited)
+        }
+        _ => false,
+    }
 }
 
 /// A named process entry that can be inspected and invoked by the Zelyra CLI.
