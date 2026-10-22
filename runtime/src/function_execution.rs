@@ -91,6 +91,21 @@ impl<'program, 'services> Interpreter<'program, 'services> {
             }
             substitutions
         };
+        if self.call_depth == 0 {
+            for (parameter, value) in function.params.iter().zip(&args) {
+                let expected = self.runtime_alias_type(
+                    &substitute_generic_type(&parameter.ty, &substitutions),
+                    parameter.span,
+                )?;
+                let actual = self.runtime_alias_type(&value.ty(), parameter.span)?;
+                if !crate::type_checker::compatible(&expected, &actual) {
+                    return Err(self.runtime_error(
+                        parameter.span,
+                        crate::function_parameter_type_error(&expected, &actual),
+                    ));
+                }
+            }
+        }
         let expected_return = function
             .return_type
             .as_ref()

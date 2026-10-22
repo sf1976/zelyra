@@ -788,10 +788,7 @@ impl Machine<'_> {
         for ((local, _, expected, span), value) in function.parameters.iter().zip(arguments) {
             if !runtime_type_matches(expected, &value.ty()) {
                 return Err(RuntimeError {
-                    message: format!(
-                        "MIR parameter expects `{expected}` but received `{}`",
-                        value.ty()
-                    ),
+                    message: zelyra_runtime::function_parameter_type_error(expected, &value.ty()),
                     span: *span,
                 });
             }

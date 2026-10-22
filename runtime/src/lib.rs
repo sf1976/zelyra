@@ -388,6 +388,12 @@ pub struct RuntimeError {
     pub span: Span,
 }
 
+/// Shared runtime diagnostic for a host-provided function argument with the
+/// wrong type. Used by the AST, MIR, and bytecode execution backends.
+pub fn function_parameter_type_error(expected: &Type, actual: &Type) -> String {
+    format!("function parameter expects `{expected}` but received `{actual}`")
+}
+
 /// Inspect a literal path with the exact canonicalization and root rules used
 /// by file-system builtins. Dynamic paths cannot be certified by this helper.
 pub fn inspect_filesystem_path(

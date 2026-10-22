@@ -5547,6 +5547,41 @@ fn main() {}
 }
 
 #[test]
+fn host_function_argument_type_checks_match_ast_mir_and_bytecode() {
+    let source = r#"
+struct Customer { name: String }
+fn customer_name(customer: Customer) -> String { return customer.name }
+fn main() {}
+"#;
+    let ast = parse(&lex(source).expect("source lexes")).expect("source parses");
+    let mir = crate::lower(&ast).expect("source type-checks and lowers");
+    let bytecode = compile(&mir, "customer_name").expect("source compiles to bytecode");
+    let arguments = vec![Value::Int(7)];
+
+    let ast_error =
+        zelyra_runtime::execute_function(&ast, "customer_name", arguments.clone(), None)
+            .expect_err("AST rejects a host-provided argument with the wrong type");
+    let mir_error = execution::execute_function(
+        &mir,
+        "customer_name",
+        arguments.clone(),
+        ExecutionLimits::default(),
+    )
+    .expect_err("MIR rejects a host-provided argument with the wrong type");
+    let bytecode_error = execute(&bytecode, arguments, ExecutionLimits::default())
+        .expect_err("bytecode rejects a host-provided argument with the wrong type");
+
+    assert_eq!(ast_error.message, mir_error.message);
+    assert_eq!(ast_error.message, bytecode_error.message);
+    assert_eq!(ast_error.span, mir_error.span);
+    assert_eq!(ast_error.span, bytecode_error.span);
+    assert_eq!(
+        ast_error.message,
+        "function parameter expects `Customer` but received `Int`"
+    );
+}
+
+#[test]
 fn bytecode_lowers_record_copy_updates_with_ast_and_mir_parity() {
     let source = r#"
 struct Customer { name: String age: Int active: Bool }
