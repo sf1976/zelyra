@@ -1,5 +1,19 @@
 ## Unreleased
 
+## 1.2.44 — 2026-10-22
+
+- Compare generated Laravel schema candidates with explicitly requested,
+  read-only live database metadata. Classify only evidenced differences,
+  retain raw mismatches and review guidance, and never apply migrations or
+  read application rows. Reusable Zelyra packages remain focused on recurring
+  business capabilities; one-off cases stay in application code. / Erzeugte
+  Laravel-Schemakandidaten mit ausdrücklich angeforderten, schreibgeschützt
+  gelesenen Live-Datenbankmetadaten vergleichen. Nur belegte Abweichungen
+  einstufen, Rohbefunde und Prüfschritte beibehalten und niemals Migrationen
+  anwenden oder Anwendungsdatensätze lesen. Wiederverwendbare Zelyra-Pakete
+  bleiben auf wiederkehrende Geschäftsfunktionen begrenzt; Einzelfälle gehören
+  in den Anwendungscode.
+
 ## 1.2.43 — 2026-10-22
 
 - Wire narrowly recognized translated static Blade views to generated Zelyra
