@@ -11,13 +11,16 @@ for database-backed business and web applications. It brings schema-aware SQL,
 forms, CRUD, views, and application logic together while keeping ordinary code
 and native SQL available.
 
-> **Release 1.2.48 · language compatibility line: 0.1** · [GitHub release](https://github.com/sf1976/zelyra/releases/tag/v1.2.48)
+> **Release 1.2.49 · language compatibility line: 0.1** · [GitHub release](https://github.com/sf1976/zelyra/releases/tag/v1.2.49)
 >
 > Compiler checks and the verifier cover defined scopes. They do not prove arbitrary applications correct. Review the documented support and limits for each workflow before deployment.
 
-Zelyra 1.2.48 advances the experimental Bytecode backend to v30, fusing
-verified literal-increment array updates into a single operation. Earlier
-1.2.x releases added typed CRUD domain actions, compiler-checked file uploads,
+Zelyra 1.2.49 gives the language its own dedicated Studio IDE: a project-aware
+welcome screen, compiler-guided next-step completion, SQL suggestions based on
+declared tables, an integrated Zelyra console, and confirmed record management
+for declared database tables. Zelyra 1.2.48 advanced the experimental Bytecode
+backend to v30, fusing verified literal-increment array updates into a single
+operation. Earlier 1.2.x releases added typed CRUD domain actions, compiler-checked file uploads,
 computed table fields, business number series, a Laravel website importer,
 `zelyra db console` and `zelyra db query`, reusable billing packages, and
 typed CSV conversion. See the [1.2.48 release notes](docs/release-notes/1.2.48.en.md)
@@ -41,10 +44,12 @@ in one workflow:
 - the expanded standard library for math, text, arrays, sets, maps, date
   arithmetic, parsing, encodings, and paths, plus `|>` pipelines and flat
   `else if` chains;
-- offline Studio with CodeMirror 6, compiler diagnostics and language services,
-  semantic navigation/refactoring, verifier status, a project data map,
-  typed-hole assistance, isolated UI/theme preview, capability review,
-  runtime budgets, PDF preview, and MariaDB outbox inspection/requeue;
+- offline Studio built specifically for Zelyra, with a guided welcome screen,
+  CodeMirror 6, compiler diagnostics and language services, import-aware
+  next-step completion, SQL suggestions from declared tables, semantic
+  navigation/refactoring, an integrated Zelyra console, a project data map,
+  typed-hole assistance, isolated UI/theme preview, capability review, runtime
+  budgets, PDF preview, and MariaDB outbox inspection/requeue;
 - standalone `zelyra lsp` using the same project overlays and semantic service;
 - Studio-accessible, redacted local JSONL run and preview logs, plus
   `zelyra uninstall` for the active user-owned installation;

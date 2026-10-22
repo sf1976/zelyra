@@ -18,10 +18,14 @@ mod editor_capabilities;
 #[path = "editor_module_settings.rs"]
 mod editor_module_settings;
 pub(crate) use editor_module_settings::ProjectModuleSettingsStore;
+#[path = "editor_database_records.rs"]
+mod editor_database_records;
 #[path = "editor_outbox.rs"]
 mod editor_outbox;
 #[path = "editor_pdf.rs"]
 mod editor_pdf;
+#[path = "editor_terminal.rs"]
+mod editor_terminal;
 #[path = "editor_transactions.rs"]
 mod editor_transactions;
 #[path = "editor_watcher.rs"]
@@ -83,6 +87,7 @@ struct EditorState {
     run_cancel: Arc<AtomicBool>,
     run_stdin: Arc<std::sync::Mutex<Option<std::process::ChildStdin>>>,
     run_output: Arc<std::sync::Mutex<EditorRunOutput>>,
+    terminal: Arc<std::sync::Mutex<editor_terminal::Session>>,
     module_settings_write_lock: Arc<std::sync::Mutex<()>>,
 }
 
@@ -113,6 +118,7 @@ impl Drop for EditorState {
         if Arc::strong_count(&self.web_process) != 1 {
             return;
         }
+        editor_terminal::shutdown(&self.terminal);
         if let Ok(mut process) = self.web_process.lock() {
             if let Some(mut child) = process.take() {
                 let _ = child.kill();
@@ -206,6 +212,7 @@ pub(super) fn command(mut arguments: impl Iterator<Item = String>) -> ExitCode {
         run_cancel: Arc::new(AtomicBool::new(false)),
         run_stdin: Arc::new(std::sync::Mutex::new(None)),
         run_output: Arc::new(std::sync::Mutex::new(EditorRunOutput::default())),
+        terminal: Arc::new(std::sync::Mutex::new(editor_terminal::Session::default())),
         module_settings_write_lock: Arc::new(std::sync::Mutex::new(())),
     });
     let active = Arc::new(AtomicUsize::new(0));
@@ -541,9 +548,18 @@ fn editor_response(
         ("POST", "canvas-render") => editor_canvas::render(state, &parse_json_body(&request.body)?),
         ("GET", "logs") => editor_logs_response(state),
         ("GET", "run-progress") => editor_run_progress(state),
+        ("GET", "terminal-state") => editor_terminal::state(state),
+        ("POST", "terminal-start") => editor_terminal::start(state),
+        ("POST", "terminal-input") => {
+            editor_terminal::input(state, &parse_json_body(&request.body)?)
+        }
+        ("POST", "terminal-stop") => editor_terminal::stop(state),
         ("GET", "database-schema") => database_schema_response(state),
         ("GET", "database-target") => database_target_response(state),
         ("GET", "database-rows") => database_rows_response(state, request),
+        ("POST", "database-record-mutate") => {
+            editor_database_records::mutate(state, &parse_json_body(&request.body)?)
+        }
         ("POST", "database-chart-preview") => {
             database_chart_preview(state, parse_json_body(&request.body)?)
         }
@@ -5457,6 +5473,7 @@ fn main() {}
             run_cancel: Arc::new(AtomicBool::new(false)),
             run_stdin: Arc::new(std::sync::Mutex::new(None)),
             run_output: Arc::new(std::sync::Mutex::new(EditorRunOutput::default())),
+            terminal: Arc::new(std::sync::Mutex::new(editor_terminal::Session::default())),
             module_settings_write_lock: Arc::new(std::sync::Mutex::new(())),
         }
     }

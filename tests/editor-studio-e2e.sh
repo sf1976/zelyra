@@ -244,6 +244,34 @@ assert "description" in declared and "description" not in live
 assert "legacy_code" in live and "legacy_code" not in declared
 assert any(key["references_table"] == "departments" for key in customers["foreign_keys"])
 assert any(key["references_table"] == "departments" for key in customers["live_foreign_keys"])
+request("database-record-mutate", "POST", {"action": "create", "table": "customers", "values": {"name": "must not write", "amount": 1}}, expect=400)
+request("database-record-mutate", "POST", {"action": "delete", "table": "unlisted", "key": {"id": 1}, "confirm": True}, expect=403)
+foreign_key_column = next(
+    name for name in declared & live if name not in {"id", "name", "amount"}
+)
+mutation = request("database-record-mutate", "POST", {
+    "action": "create", "table": "customers", "confirm": True,
+    "values": {foreign_key_column: 1, "name": "Studio CRUD candidate", "amount": 19.95},
+})
+assert mutation["success"] is True and mutation["action"] == "create", mutation
+rows = request("database-rows?table=customers&limit=25&offset=0")
+name_index = rows["columns"].index("name")
+id_index = rows["columns"].index("id")
+created_row = next(row for row in rows["rows"] if row[name_index] == "Studio CRUD candidate")
+record_key = {"id": int(created_row[id_index])}
+updated = request("database-record-mutate", "POST", {
+    "action": "update", "table": "customers", "confirm": True,
+    "key": record_key, "values": {"name": "Studio CRUD updated"},
+})
+assert updated["success"] is True and updated["action"] == "update", updated
+rows = request("database-rows?table=customers&limit=25&offset=0")
+assert any(row[name_index] == "Studio CRUD updated" for row in rows["rows"]), rows
+removed = request("database-record-mutate", "POST", {
+    "action": "delete", "table": "customers", "confirm": True, "key": record_key,
+})
+assert removed["success"] is True and removed["action"] == "delete", removed
+rows = request("database-rows?table=customers&limit=25&offset=0")
+assert not any(row[name_index] == "Studio CRUD updated" for row in rows["rows"]), rows
 
 project_map = request("project-map")
 assert project_map == request("project-map"), "project map output must be deterministic"

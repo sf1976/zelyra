@@ -1,5 +1,20 @@
 ## Unreleased
 
+## 1.2.49 — Studio IDE für Zelyra
+
+- Add a focused Studio menu and an optional integrated Zelyra console. The
+  console runs `zelyra console` in the project directory, with bounded output,
+  local secret redaction, and no operating-system shell. Add compiler-aware
+  import and SQL completion with selectable next-step templates. Add confirmed
+  create, update, and delete operations to the declared-table record browser,
+  using bound parameters and primary-key checks. / Ein fokussiertes Studio-Menü
+  und eine optionale integrierte Zelyra-Konsole ergänzen. Sie startet
+  `zelyra console` im Projektordner, begrenzt die Ausgabe, blendet lokale
+  Zugangsdaten aus und stellt keine Betriebssystem-Shell bereit. Import- und
+  SQL-Vervollständigung nutzt Compilerwissen und bietet auswählbare nächste
+  Bausteine. Der Datenbrowser erhält bestätigte Create-, Update- und Delete-
+  Vorgänge für deklarierte Tabellen mit Parameterbindung und Primärschlüsselprüfung.
+
 ## 1.2.48 — 2026-10-22
 
 - Specialize mutable array `Int` index updates with integer-literal increments

@@ -13,6 +13,7 @@ try {
   const databaseRowRequests = [];
   const chartRequests = [];
   let databaseCreateRequest = null;
+  const recordMutationRequests = [];
   let schemaApplyRequest = null;
   let schemaSourceHash = "";
   let schemaCandidateContent = "";
@@ -72,6 +73,17 @@ try {
       }),
     });
   });
+  await page.route("**/__zelyra/editor/api/database-record-mutate", async (route) => {
+    const request = route.request();
+    assert.equal(request.headers()["x-zelyra-editor-token"], token, "record writes must use the local editor session token");
+    const payload = request.postDataJSON();
+    recordMutationRequests.push(payload);
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ success: true, action: payload.action, message: `${payload.action} complete` }),
+    });
+  });
   await page.route("**/__zelyra/editor/api/database-chart-preview", async (route) => {
     const request = route.request();
     assert.equal(request.headers()["x-zelyra-editor-token"], token, "chart queries must use the local editor session token");
@@ -127,9 +139,23 @@ try {
   const startupSplash = page.locator("#studio-splash");
   await startupSplash.waitFor({ state: "visible" });
   assert.equal(await startupSplash.getAttribute("aria-label"), "Zelyra Studio wird gestartet");
-  await page.locator(".cm-content[contenteditable=true]").waitFor({ timeout: 10_000 });
+  await page.locator("#empty-state").waitFor({ state: "visible" });
+  await page.locator("#empty-state h1", { hasText: "Zelyra verstehen" }).waitFor();
   await page.locator('.tree-item.file[title="main.zyl"]').waitFor();
   await startupSplash.waitFor({ state: "detached", timeout: 5_000 });
+  await page.locator("#welcome-terminal").click();
+  await page.locator("#terminal-panel").waitFor({ state: "visible" });
+  await page.locator("#terminal-start").click();
+  await page.locator("#terminal-input").waitFor({ state: "visible" });
+  await page.locator("#terminal-input").fill("1 + 1");
+  await page.locator("#terminal-input").press("Enter");
+  await page.waitForFunction(() => document.querySelector("#terminal-output")?.textContent.includes("=> 2"));
+  await page.locator("#terminal-input").fill(":quit");
+  await page.locator("#terminal-input").press("Enter");
+  await page.waitForFunction(() => document.querySelector("#terminal-stop")?.disabled === true);
+  await page.locator("#terminal-close").click();
+  await page.locator("#welcome-open-file").click();
+  await page.locator(".cm-content[contenteditable=true]").waitFor({ timeout: 10_000 });
   const themeButton = page.locator("#theme-button");
   await themeButton.click();
   assert.equal(await page.locator("html").getAttribute("data-theme"), "light");
@@ -156,6 +182,8 @@ try {
   });
   assert.ok(Object.values(lightThemeContrast).flatMap(Object.values).every((ratio) => ratio >= 4.5), `light-theme text contrast must be at least 4.5:1: ${JSON.stringify(lightThemeContrast)}`);
   await page.reload();
+  await page.locator("#empty-state").waitFor({ state: "visible" });
+  await page.locator("#welcome-open-file").click();
   await page.locator(".cm-content[contenteditable=true]").waitFor({ timeout: 10_000 });
   assert.equal(await page.locator("html").getAttribute("data-theme"), "light", "the selected appearance must survive reload");
   assert.equal(await page.locator(".cm-editor").evaluate((element) => getComputedStyle(element).backgroundColor), "rgb(255, 255, 255)", "CodeMirror must use the selected light appearance");
@@ -174,19 +202,23 @@ try {
   assert.equal(await page.locator("html").getAttribute("data-theme"), "light", "keyboard users must be able to switch the Studio appearance");
 
   const fontSizeButton = page.locator("#font-size-button");
+  const changeFontSize = async () => {
+    await page.locator('[data-studio-menu="view"]').click();
+    await page.locator('[data-menu-target="font-size-button"]').click();
+  };
   assert.equal(await fontSizeButton.textContent(), "aA");
   assert.equal(await page.locator("html").getAttribute("data-font-size"), null);
-  await fontSizeButton.click();
+  await changeFontSize();
   assert.equal(await page.locator("html").getAttribute("data-font-size"), "medium");
   assert.equal(await fontSizeButton.textContent(), "aA⁺");
   assert.equal(await page.locator(".cm-editor").evaluate((element) => getComputedStyle(element).fontSize), "16px");
 
-  await fontSizeButton.click();
+  await changeFontSize();
   assert.equal(await page.locator("html").getAttribute("data-font-size"), "large");
   assert.equal(await fontSizeButton.textContent(), "aA⁺⁺");
   assert.equal(await page.locator(".cm-editor").evaluate((element) => getComputedStyle(element).fontSize), "18px");
 
-  await fontSizeButton.click();
+  await changeFontSize();
   assert.equal(await page.locator("html").getAttribute("data-font-size"), null);
   assert.equal(await fontSizeButton.textContent(), "aA");
   assert.equal(await page.locator(".cm-editor").evaluate((element) => getComputedStyle(element).fontSize), "14px");
@@ -197,6 +229,8 @@ try {
   assert.equal(await page.locator("html").getAttribute("data-font-size"), "large");
 
   await page.reload();
+  await page.locator("#empty-state").waitFor({ state: "visible" });
+  await page.locator("#welcome-open-file").click();
   await page.locator(".cm-content[contenteditable=true]").waitFor({ timeout: 10_000 });
   assert.equal(await page.locator("html").getAttribute("data-font-size"), "large", "the selected font size must survive reload");
   assert.equal(await page.locator(".cm-editor").evaluate((element) => getComputedStyle(element).fontSize), "18px");
@@ -207,7 +241,11 @@ try {
   assert.equal(await page.locator("html").getAttribute("data-font-size"), null);
   assert.equal(await page.locator(".cm-editor").evaluate((element) => getComputedStyle(element).fontSize), "14px");
 
-  await page.locator("#task-finder-button").click();
+  const openTaskFinder = async () => {
+    await page.locator('[data-studio-menu="help"]').click();
+    await page.locator('[data-menu-target="task-finder-button"]').click();
+  };
+  await openTaskFinder();
   assert.equal(await page.locator("#task-finder").evaluate((element) => getComputedStyle(element).backgroundColor), "rgb(255, 255, 255)");
   await page.locator("#task-finder-input").fill("no such studio action");
   await page.locator("#task-finder-empty").waitFor();
@@ -217,12 +255,12 @@ try {
   assert.ok(await page.locator(".task-finder-item").allTextContents().then((items) => items.some((item) => /format/i.test(item))));
   await page.keyboard.press("Escape");
   await page.locator("#task-finder").waitFor({ state: "hidden" });
-  await page.locator("#task-finder-button").click();
+  await openTaskFinder();
   await page.locator("#task-finder-input").fill("properties");
   await page.locator(".task-finder-item", { hasText: /Dateieigenschaften öffnen/ }).click();
   await page.locator("#assistant-properties-tab").waitFor({ state: "visible" });
   assert.equal(await page.locator("#studio-assistant").evaluate((element) => getComputedStyle(element).backgroundColor), "rgb(255, 255, 255)");
-  await page.locator("#task-finder-button").click();
+  await openTaskFinder();
   await page.locator("#task-finder-input").fill("properties");
   await page.locator(".task-finder-item", { hasText: /Dateieigenschaften öffnen/ }).click();
   await page.locator("#assistant-properties-tab").waitFor({ state: "hidden" });
@@ -245,7 +283,8 @@ try {
   assert.equal(await sidebarToggle.getAttribute("aria-expanded"), "true");
 
   await editor.focus();
-  await page.locator("#complete-button").click();
+  await page.locator('[data-studio-menu="edit"]').click();
+  await page.locator('[data-menu-target="complete-button"]').click();
   await page.locator(".cm-tooltip-autocomplete").waitFor();
   const mainCompletions = page.locator(".cm-tooltip-autocomplete .cm-completionLabel", { hasText: /^main$/ });
   await mainCompletions.first().waitFor();
@@ -304,6 +343,30 @@ try {
   ]);
   await page.locator("#database-record-previous").click();
   await page.getByRole("cell", { name: "1", exact: true }).waitFor();
+  await page.locator("#database-record-create").click();
+  await page.locator("#database-record-dialog").waitFor({ state: "visible" });
+  await page.locator('#database-record-fields [data-column="name"]').fill("New customer");
+  await page.locator('#database-record-fields [data-column="amount"]').fill("19.95");
+  page.once("dialog", async (dialog) => { assert.match(dialog.message(), /Datensatz.*anlegen/); await dialog.accept(); });
+  const createMutation = page.waitForRequest((request) => request.url().includes("/api/database-record-mutate") && request.postDataJSON().action === "create");
+  await page.locator("#database-record-save").click();
+  await createMutation;
+  await page.locator("#database-record-dialog").waitFor({ state: "hidden" });
+  const editButtons = page.locator("#database-record-table-wrap button", { hasText: "Bearbeiten" });
+  await editButtons.first().click();
+  await page.locator('#database-record-fields [data-column="name"]').fill("Edited customer");
+  page.once("dialog", async (dialog) => { assert.match(dialog.message(), /Änderungen.*speichern/); await dialog.accept(); });
+  const updateMutation = page.waitForRequest((request) => request.url().includes("/api/database-record-mutate") && request.postDataJSON().action === "update");
+  await page.locator("#database-record-save").click();
+  await updateMutation;
+  await page.locator("#database-record-dialog").waitFor({ state: "hidden" });
+  page.once("dialog", async (dialog) => { assert.match(dialog.message(), /dauerhaft löschen/); await dialog.accept(); });
+  const deleteMutation = page.waitForRequest((request) => request.url().includes("/api/database-record-mutate") && request.postDataJSON().action === "delete");
+  await page.locator("#database-record-table-wrap button", { hasText: "Löschen" }).first().click();
+  await deleteMutation;
+  assert.deepEqual(recordMutationRequests.map(({ action, confirm }) => [action, confirm]), [
+    ["create", true], ["update", true], ["delete", true],
+  ]);
   await page.locator("#schema-column-operation").selectOption("edit");
 
   await page.locator("#chart-name").fill("Umsatz nach Kunde");
@@ -498,6 +561,8 @@ try {
   });
   await page.reload({ waitUntil: "domcontentloaded" });
   assert.equal(unloadPromptSeen, true, "reload must warn before discarding unsaved edits");
+  await page.locator("#empty-state").waitFor({ state: "visible" });
+  await page.locator("#welcome-open-file").click();
   await page.locator(".cm-content[contenteditable=true]").waitFor();
 
   const current = page.locator(".cm-content[contenteditable=true]");
@@ -526,6 +591,8 @@ try {
   assert.ok(problemCount > 0, "malformed source must produce visible compiler diagnostics");
 
   await page.reload({ waitUntil: "domcontentloaded" });
+  await page.locator("#empty-state").waitFor({ state: "visible" });
+  await page.locator("#welcome-open-file").click();
   await page.locator(".cm-content[contenteditable=true]").waitFor();
   assert.equal(
     await page.locator(".cm-content[contenteditable=true]").textContent(),
@@ -541,7 +608,7 @@ try {
   }, { base, token });
   assert.equal(response.content, "fn main( {\n", "the browser keyboard save must reach the project file");
   assert.deepEqual(browserErrors, [], "Studio must not raise browser runtime errors");
-  console.log("Studio database preview, browser editing, unsaved-change warning, keyboard save, diagnostics, and restart passed");
+  console.log("Studio welcome, Zelyra terminal, database CRUD, browser editing, unsaved-change warning, keyboard save, diagnostics, and restart passed");
 } finally {
   await browser.close();
 }

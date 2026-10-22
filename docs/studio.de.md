@@ -21,6 +21,25 @@ Der Editor ist nur unter `127.0.0.1` erreichbar. Die Startadresse enthält ein
 zufälliges Sitzungstoken. Schreibende Anfragen benötigen dieses Token und
 müssen vom selben Browser-Origin kommen.
 
+Beim Öffnen zeigt Studio zunächst einen projektbezogenen Einstiegsbildschirm.
+Von dort kannst du eine Zelyra-Datei öffnen, das Projekt prüfen, die Konsole
+starten oder das Datenbank-Studio aufrufen. So bleiben Compiler, SQL und
+Anwendungsvorschau als zusammenhängender Zelyra-Arbeitsfluss sichtbar.
+
+Die Menüleiste ordnet die häufigen Wege nach **Datei**, **Bearbeiten**,
+**Ansicht**, **Ausführen**, **Datenbank** und **Hilfe**. Die Schnellaktionen
+Starten und Prüfen bleiben sichtbar; Spezialwerkzeuge erreichst du aus dem
+passenden Menü oder über **Strg+Umschalt+P**. **F5** startet das Projekt,
+**F8** prüft es. Menüs lassen sich mit Tastatur und Maus bedienen.
+
+Über **Ansicht → Integriertes Zelyra-Terminal** oder **Strg+`** öffnest du das
+optionale Terminal. **Konsole starten** startet `zelyra console` im geöffneten
+Projektordner. Du kannst Zelyra-Ausdrücke interaktiv eingeben, die Ausgabe
+verfolgen und die Sitzung beenden. Das Terminal führt keine Betriebssystem-
+Shellbefehle aus; Dateien und Prozesse werden über die Zelyra-Werkzeuge und
+Studio-Aktionen verwaltet. Die Ausgabe ist begrenzt und bekannte lokale
+Zugangsdaten werden ausgeblendet.
+
 ## Darstellung wechseln
 
 Über das Farbsymbol oben rechts kannst du zwischen dunkler und heller
@@ -58,6 +77,16 @@ Feldlabels in auflösbaren Record-Mustern werden getrennt von lokalen Aliasen
 umbenannt. Für Empfänger ohne statisch ableitbaren Typ wird kein Rename
 angeboten. Die freie projektweite
 Textsuche bleibt ein getrenntes Werkzeug.
+
+Vervollständigungen beziehen auflösbare Deklarationen aus dem aktiven Modul und
+seinen Imports ein. Nach `import "src/customer.zyl" as customer` zeigt
+**Strg+Leertaste** die exportierten Namen als `customer::Name` an. Während du
+einen Importpfad schreibst, schlägt Studio passende `.zyl`-Dateien aus dem
+Projekt vor. In SQL-Blöcken erscheinen SQL-Schlüsselwörter und deklarierte
+Tabellen. An einer leeren Datei oder nach einem Datenbank-, Tabellen- oder
+Funktionskopf bietet Studio passende Startbausteine an. Nach dem Bestätigen
+eines Imports öffnet Studio die Vorschläge im nächsten Editorabschnitt. Nichts
+wird ohne Auswahl eingefügt; **Rückgängig** bleibt verfügbar.
 
 Mit **F2** lassen sich aufgelöste Funktionen, Record-Typen und indexierte
 Record-Felder umbenennen. Studio zeigt vorab alle betroffenen Dateien und prüft die Änderung
@@ -283,11 +312,17 @@ automatische IDs, Eindeutigkeit und Fremdschlüssel mit der Live-Datenbank. Fehl
 der Datenbank vorhandene Tabellen und Spalten werden markiert. Die Zuordnung
 zum Quellmodul ist eine Orientierung und setzt keine Zugriffsrechte durch.
 
-Der **Datenbrowser** zeigt Datensätze nur auf ausdrücklichen Klick und in
-Seiten mit höchstens 25 Zeilen. Er ist schreibgeschützt; Tabellen- und
-Spaltennamen stammen aus der geladenen Schemaansicht, die SQL-Bezeichner werden
-backendgerecht maskiert, und Werte werden als Text dargestellt. Studio lädt
-keine Datensätze automatisch beim Öffnen der Werkbank.
+Der **Datenbrowser** lädt Datensätze erst auf ausdrücklichen Klick und zeigt
+höchstens 25 Zeilen pro Seite. Für deklarierte Tabellen mit passendem
+Live-Schema kannst du Datensätze anlegen, bearbeiten und löschen. Eintrag und
+Änderung benötigen eine Bestätigung; Löschen wird als dauerhaft und nicht
+rückgängig zu machend angekündigt. Änderungen verwenden ausschließlich
+Schemafelder und gebundene Parameter. Bearbeiten und Löschen verlangen einen
+Primärschlüssel; unbekannte Tabellen, nicht deklarierte Felder und Tabellen
+ohne Live-Verbindung werden abgewiesen. Zugangsdaten bleiben auf dem lokalen
+Studio-Server, und Werte werden als Text dargestellt. Studio lädt keine
+Datensätze automatisch beim Öffnen der Werkbank. Freie SQL-Eingaben und
+tabellenübergreifende Schreibvorgänge sind nicht Teil des Datenbrowsers.
 
 Der **Diagramm-Assistent** erstellt aus einer deklarierten Live-Tabelle ein
 gruppiertes Balken- oder Liniendiagramm. Gruppierung und Kennzahl wählst du

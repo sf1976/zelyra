@@ -20,6 +20,24 @@ The editor listens only on `127.0.0.1`. Its startup address contains a random
 session token. Mutating requests require that token and the same browser
 origin.
 
+Studio opens with a project-aware welcome screen. From there, open a Zelyra
+source file, check the project, start the console, or open Database Studio.
+The page presents compiler, SQL, and application preview as one Zelyra
+workflow.
+
+The application menu groups common actions under **File**, **Edit**, **View**,
+**Run**, **Database**, and **Help**. Start and Check remain available as quick
+actions; specialist tools live in their matching menus or the command palette
+(**Ctrl+Shift+P**). **F5** starts the project and **F8** checks it. Menus work
+with the keyboard and mouse.
+
+Open the optional terminal with **View → Integrated Zelyra Terminal** or
+**Ctrl+`**. **Start Console** launches `zelyra console` in the current project
+folder. Enter Zelyra expressions interactively, follow their output, and stop
+the session when finished. This terminal does not run operating-system shell
+commands; use Zelyra tools and Studio actions to manage files and processes.
+Output is bounded and known local credentials are redacted.
+
 ## Choose an appearance
 
 Use the color control in the upper-right corner to switch between light and
@@ -53,6 +71,15 @@ resolved function. Field labels in resolvable record patterns are renamed
 separately from local aliases. No rename is offered for a receiver without a
 statically resolvable type.
 Project-wide free-text search remains a separate tool.
+
+Completion uses declarations resolved from the active module and its imports.
+After `import "src/customer.zyl" as customer`, **Ctrl+Space** offers exported
+names as `customer::Name`. While entering an import path, Studio suggests
+matching `.zyl` files from the project. SQL blocks offer SQL keywords and
+declared tables. An empty file or a database, table, or function declaration
+can offer a matching starter block. After confirming a completed import,
+Studio opens suggestions in the next editor section. Nothing is inserted
+without a selection, and Undo remains available.
 
 Press **F2** on a resolved function, record type, or indexed record field to rename it. Studio
 previews every affected file and checks the candidate with the compiler. If an
@@ -255,9 +282,14 @@ live-only tables and columns, are marked. Source-module mapping is guidance;
 it does not enforce access rights.
 
 The **record browser** loads rows only after an explicit click and pages at no
-more than 25 rows. It is read-only; table and column names come from the loaded
-schema, SQL identifiers are quoted for the selected backend, and values are
-rendered as text. Opening the workbench does not fetch records automatically.
+more than 25 rows. You can create, edit, and delete records in declared tables
+that match the live schema. Create and update require confirmation; delete is
+identified as permanent and cannot be undone. Changes use only schema fields
+and bound parameters. Edit and delete require a primary key. Unknown tables,
+undeclared fields, and tables without a live connection are rejected.
+Credentials stay on the local Studio server, and values are rendered as text.
+Opening the workbench does not fetch records automatically. The browser does
+not accept arbitrary SQL or cross-table writes.
 
 The **chart assistant** creates a grouped bar or line chart from a declared
 live table. Choose the grouping and measure from fields. Available operations

@@ -11,13 +11,16 @@ Business-, Datenbank- und Webanwendungen. Schemaabhängiges SQL, Formulare,
 CRUD, Views und Geschäftslogik greifen ineinander; gewöhnlicher Programmcode
 und natives SQL bleiben jederzeit möglich.
 
-> **Release 1.2.48 · Sprachkompatibilitätslinie: 0.1** · [GitHub-Release](https://github.com/sf1976/zelyra/releases/tag/v1.2.48)
+> **Release 1.2.49 · Sprachkompatibilitätslinie: 0.1** · [GitHub-Release](https://github.com/sf1976/zelyra/releases/tag/v1.2.49)
 >
 > Die Compilerprüfung und der Verifier decken klar abgegrenzte Bereiche ab. Sie beweisen nicht die Korrektheit beliebiger Anwendungen. Prüfe vor dem Einsatz die unterstützten Abläufe und Grenzen in der jeweiligen Dokumentation.
 
-Zelyra 1.2.48 hebt das experimentelle Bytecode-Backend auf v30 und fasst
-verifizierte Literal-Inkrement-Arrayupdates in eine einzelne Instruktion
-zusammen. Frühere 1.2.x-Releases ergänzten typisierte CRUD-Domänenaktionen,
+Zelyra 1.2.49 gibt der Sprache eine eigene Studio-IDE: mit projektbezogenem
+Einstiegsbildschirm, compilergeführten nächsten Codevorschlägen, SQL-Vorschlägen
+aus deklarierten Tabellen, integrierter Zelyra-Konsole und bestätigter
+Datensatzverwaltung. Zelyra 1.2.48 hob das experimentelle Bytecode-Backend auf
+v30 und fasste verifizierte Literal-Inkrement-Arrayupdates in eine einzelne
+Instruktion zusammen. Frühere 1.2.x-Releases ergänzten typisierte CRUD-Domänenaktionen,
 compilergeprüfte Datei-Uploads, berechnete Tabellenfelder,
 Geschäftsnummernkreise, einen Laravel-Website-Importer,
 `zelyra db console` und `zelyra db query`, wiederverwendbare
@@ -43,8 +46,10 @@ einem Arbeitsablauf:
 - die erweiterte Standardbibliothek für Mathematik, Text, Arrays,
   Sets, Maps, Datumsrechnung, Parsing, Encodings und Pfade sowie `|>`-Pipelines
   und flache `else if`-Kaskaden;
-- offlinefähiges Studio mit CodeMirror 6, Compilerdiagnostik und Sprachdiensten,
-  semantischer Navigation/Umbenennung, Verifier-Status, Projekt-Datenkarte,
+- offlinefähiges Studio speziell für Zelyra mit geführtem Einstiegsbildschirm,
+  CodeMirror 6, Compilerdiagnostik und Sprachdiensten, importbewussten nächsten
+  Codevorschlägen, SQL-Vorschlägen aus deklarierten Tabellen, semantischer
+  Navigation/Umbenennung, integrierter Zelyra-Konsole, Projekt-Datenkarte,
   Typed-Hole-Hilfe, isolierter UI-/Theme-Vorschau, Capability-Prüfung,
   Laufzeitbudgets, PDF-Vorschau und MariaDB-Outbox-Anzeige mit erneutem Einreihen;
 - eigenständiges `zelyra lsp` mit denselben Projekt-Overlays und Sprachdiensten;
