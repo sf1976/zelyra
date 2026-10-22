@@ -84,11 +84,7 @@ impl Environment {
         Err("missing")
     }
 
-    pub(crate) fn mutable_array_element(
-        &self,
-        name: &str,
-        index: usize,
-    ) -> Result<Value, &'static str> {
+    pub(crate) fn mutable_array_element(&self, name: &str, index: usize) -> Result<Value, String> {
         let variable = self
             .scopes
             .iter()
@@ -96,15 +92,15 @@ impl Environment {
             .find_map(|scope| scope.get(name))
             .ok_or("unknown array binding")?;
         if !variable.mutable {
-            return Err("cannot update an immutable array binding");
+            return Err("cannot update an immutable array binding".into());
         }
         let Value::Array(values) = &variable.value else {
-            return Err("indexed update target is not an array");
+            return Err("indexed update target is not an array".into());
         };
         values
             .get(index)
             .cloned()
-            .ok_or("mutable array index is out of bounds")
+            .ok_or_else(|| format!("array index {index} is out of bounds"))
     }
 
     pub(crate) fn assign_mutable_array_element(
@@ -112,7 +108,7 @@ impl Environment {
         name: &str,
         index: usize,
         value: Value,
-    ) -> Result<(), &'static str> {
+    ) -> Result<(), String> {
         let variable = self
             .scopes
             .iter_mut()
@@ -120,14 +116,14 @@ impl Environment {
             .find_map(|scope| scope.get_mut(name))
             .ok_or("unknown array binding")?;
         if !variable.mutable {
-            return Err("cannot update an immutable array binding");
+            return Err("cannot update an immutable array binding".into());
         }
         let Value::Array(values) = &mut variable.value else {
-            return Err("indexed update target is not an array");
+            return Err("indexed update target is not an array".into());
         };
         let element = values
             .get_mut(index)
-            .ok_or("mutable array index is out of bounds")?;
+            .ok_or_else(|| format!("array index {index} is out of bounds"))?;
         *element = value;
         Ok(())
     }

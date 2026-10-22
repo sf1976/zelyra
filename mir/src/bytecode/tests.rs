@@ -1736,6 +1736,34 @@ fn array_index_errors_match_ast_mir_and_decoded_bytecode() {
 }
 
 #[test]
+fn mutable_array_index_errors_match_ast_mir_and_decoded_bytecode() {
+    for source in [
+        "fn main() { mutable values: Int[] = [1] values[2] = 3 }",
+        "fn main() { mutable values: Int[] = [1] values[2] += 3 }",
+    ] {
+        let ast = parse(&lex(source).expect("source lexes")).expect("source parses");
+        let mir = crate::lower(&ast).expect("source type-checks and lowers");
+        let bytecode = compile(&mir, "main").expect("main function compiles");
+        let bytecode = decode(&encode(&bytecode).expect("bytecode encodes"))
+            .expect("bytecode verifies after decoding");
+
+        let ast_error = zelyra_runtime::execute_function(&ast, "main", Vec::new(), None)
+            .expect_err("AST rejects an out-of-range mutable index");
+        let mir_error =
+            execution::execute_function(&mir, "main", Vec::new(), ExecutionLimits::default())
+                .expect_err("MIR rejects an out-of-range mutable index");
+        let bytecode_error = execute(&bytecode, Vec::new(), ExecutionLimits::default())
+            .expect_err("Bytecode rejects an out-of-range mutable index");
+
+        assert_eq!(ast_error.message, "array index 2 is out of bounds");
+        assert_eq!(ast_error.message, mir_error.message);
+        assert_eq!(ast_error.message, bytecode_error.message);
+        assert_eq!(ast_error.span, mir_error.span);
+        assert_eq!(ast_error.span, bytecode_error.span);
+    }
+}
+
+#[test]
 fn source_step_budget_boundaries_match_across_ast_mir_and_bytecode() {
     let source = r#"
 fn run() -> Int {
