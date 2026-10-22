@@ -652,6 +652,11 @@ impl Writer {
                 self.u8(51)?;
                 self.usize(local.0)
             }
+            BytecodeOp::ArrayIndexAddInt { local, value } => {
+                self.u8(52)?;
+                self.usize(local.0)?;
+                self.u64(*value as u64)
+            }
             BytecodeOp::ArrayAppend {
                 local,
                 element_type,
@@ -1205,6 +1210,10 @@ impl<'a> Reader<'a> {
             },
             51 => BytecodeOp::ArrayIndexCheck {
                 local: LocalId(self.usize()?),
+            },
+            52 => BytecodeOp::ArrayIndexAddInt {
+                local: LocalId(self.usize()?),
+                value: self.u64()? as i64,
             },
             26 => BytecodeOp::TupleBind {
                 locals: {

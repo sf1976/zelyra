@@ -1554,17 +1554,36 @@ impl FunctionCompiler<'_> {
                 ..
             } => {
                 self.expression(*index, &mut HashSet::new())?;
-                if *operation == zelyra_ast::ArrayIndexAssignOp::Add {
-                    self.emit(BytecodeOp::ArrayIndexCheck { local: *local }, *span);
+                let literal_add = (*operation == zelyra_ast::ArrayIndexAssignOp::Add)
+                    .then(|| self.program.expressions.get(value.0))
+                    .flatten()
+                    .and_then(|expression| match expression.kind {
+                        MirExpressionKind::Int(value) => Some(value),
+                        _ => None,
+                    });
+                if let Some(literal_value) = literal_add {
+                    let value_span = self.program.expressions[value.0].span;
+                    self.emit(BytecodeOp::Step, value_span);
+                    self.emit(
+                        BytecodeOp::ArrayIndexAddInt {
+                            local: *local,
+                            value: literal_value,
+                        },
+                        *span,
+                    );
+                } else {
+                    if *operation == zelyra_ast::ArrayIndexAssignOp::Add {
+                        self.emit(BytecodeOp::ArrayIndexCheck { local: *local }, *span);
+                    }
+                    self.expression(*value, &mut HashSet::new())?;
+                    self.emit(
+                        BytecodeOp::ArrayIndexAssign {
+                            local: *local,
+                            operation: *operation,
+                        },
+                        *span,
+                    );
                 }
-                self.expression(*value, &mut HashSet::new())?;
-                self.emit(
-                    BytecodeOp::ArrayIndexAssign {
-                        local: *local,
-                        operation: *operation,
-                    },
-                    *span,
-                );
             }
             MirInstruction::TupleBind {
                 bindings,
