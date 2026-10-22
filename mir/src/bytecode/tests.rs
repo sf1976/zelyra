@@ -295,7 +295,7 @@ fn compile_source(source: &str, entry: &str) -> (MirProgram, BytecodeProgram) {
 }
 
 #[test]
-fn bytecode_v28_roundtrips_typed_view_properties() {
+fn bytecode_roundtrips_typed_view_properties() {
     let source = r#"
         view InvoiceShell {
             props {
@@ -310,7 +310,7 @@ fn bytecode_v28_roundtrips_typed_view_properties() {
         fn main() {}
     "#;
     let (_, bytecode) = compile_source(source, "main");
-    assert_eq!(bytecode.version, 28);
+    assert_eq!(bytecode.version, BYTECODE_VERSION);
     assert_eq!(bytecode.views.len(), 1);
     let original_view = bytecode.views[0].clone();
     assert_eq!(original_view.props.len(), 2);
@@ -1698,6 +1698,131 @@ fn zero_step_budget_failure_keeps_source_location_across_backends() {
     assert!(bytecode_error.message.contains("step budget exceeded"));
     assert_eq!(mir_error.span, ast_error.span);
     assert_eq!(bytecode_error.span, ast_error.span);
+}
+
+#[test]
+fn array_index_errors_match_ast_mir_and_decoded_bytecode() {
+    for (source, arguments, expected_message) in [
+        (
+            "fn run() -> Int { values = [4] return values[2] } fn main() {}",
+            Vec::new(),
+            "array index 2 is out of bounds",
+        ),
+        (
+            "fn run() -> Int { values = [4] return values[-1] } fn main() {}",
+            Vec::new(),
+            "array index must not be negative",
+        ),
+    ] {
+        let ast = parse(&lex(source).expect("source lexes")).expect("source parses");
+        let mir = crate::lower(&ast).expect("source type-checks and lowers");
+        let bytecode = compile(&mir, "run").expect("run function compiles");
+        let bytecode = decode(&encode(&bytecode).expect("bytecode encodes"))
+            .expect("bytecode verifies after decoding");
+
+        let ast_error = zelyra_runtime::execute_function(&ast, "run", arguments.clone(), None)
+            .expect_err("AST rejects an out-of-range collection index");
+        let mir_error =
+            execution::execute_function(&mir, "run", arguments.clone(), ExecutionLimits::default())
+                .expect_err("MIR rejects an invalid collection index");
+        let bytecode_error = execute(&bytecode, arguments, ExecutionLimits::default())
+            .expect_err("Bytecode rejects an out-of-range collection index");
+
+        for error in [&ast_error, &mir_error, &bytecode_error] {
+            assert_eq!(error.message, expected_message);
+            assert_eq!(error.span, ast_error.span);
+        }
+    }
+}
+
+#[test]
+fn mutable_array_index_errors_match_ast_mir_and_decoded_bytecode() {
+    for source in [
+        "fn main() { mutable values: Int[] = [1] values[2] = 3 }",
+        "fn main() { mutable values: Int[] = [1] values[2] += 3 }",
+    ] {
+        let ast = parse(&lex(source).expect("source lexes")).expect("source parses");
+        let mir = crate::lower(&ast).expect("source type-checks and lowers");
+        let bytecode = compile(&mir, "main").expect("main function compiles");
+        let bytecode = decode(&encode(&bytecode).expect("bytecode encodes"))
+            .expect("bytecode verifies after decoding");
+
+        let ast_error = zelyra_runtime::execute_function(&ast, "main", Vec::new(), None)
+            .expect_err("AST rejects an out-of-range mutable index");
+        let mir_error =
+            execution::execute_function(&mir, "main", Vec::new(), ExecutionLimits::default())
+                .expect_err("MIR rejects an out-of-range mutable index");
+        let bytecode_error = execute(&bytecode, Vec::new(), ExecutionLimits::default())
+            .expect_err("Bytecode rejects an out-of-range mutable index");
+
+        assert_eq!(ast_error.message, "array index 2 is out of bounds");
+        assert_eq!(ast_error.message, mir_error.message);
+        assert_eq!(ast_error.message, bytecode_error.message);
+        assert_eq!(ast_error.span, mir_error.span);
+        assert_eq!(ast_error.span, bytecode_error.span);
+    }
+}
+
+#[test]
+fn mutable_array_compound_assignment_rhs_order_matches_all_backends() {
+    let source = r#"
+fn rhs() -> Int { print("rhs ran"); return 5 }
+fn main() { mutable values: Int[] = [1] values[2] += rhs() }
+"#;
+    let ast = parse(&lex(source).expect("source lexes")).expect("source parses");
+    let mir = crate::lower(&ast).expect("source type-checks and lowers");
+    let bytecode = compile(&mir, "main").expect("main function compiles");
+    let bytecode = decode(&encode(&bytecode).expect("bytecode encodes"))
+        .expect("bytecode verifies after decoding");
+
+    let ast_result = zelyra_runtime::execute_function_captured_with_capabilities_and_policies(
+        &ast,
+        "main",
+        Vec::new(),
+        None,
+        None,
+        None,
+    );
+    let mir_result = execution::execute_function_captured_with_host_services_and_policy(
+        &mir,
+        "main",
+        Vec::new(),
+        ExecutionLimits::default(),
+        None,
+        None,
+        Arc::new(SystemHostServices),
+    );
+    let bytecode_result = execute_with_host_services_and_policy_captured(
+        &bytecode,
+        Vec::new(),
+        ExecutionLimits::default(),
+        None,
+        None,
+        Arc::new(SystemHostServices),
+    );
+
+    assert_eq!(ast_result.output, mir_result.output);
+    assert_eq!(ast_result.output, bytecode_result.output);
+    assert!(
+        ast_result.output.is_empty(),
+        "invalid LHS must fail before RHS effects"
+    );
+    assert_eq!(
+        ast_result.error.as_ref().map(|error| &error.message),
+        mir_result.error.as_ref().map(|error| &error.message)
+    );
+    assert_eq!(
+        ast_result.error.as_ref().map(|error| &error.message),
+        bytecode_result.error.as_ref().map(|error| &error.message)
+    );
+    assert_eq!(
+        ast_result.error.as_ref().map(|error| error.span),
+        mir_result.error.as_ref().map(|error| error.span)
+    );
+    assert_eq!(
+        ast_result.error.as_ref().map(|error| error.span),
+        bytecode_result.error.as_ref().map(|error| error.span)
+    );
 }
 
 #[test]
@@ -6013,6 +6138,33 @@ fn bytecode_verifier_rejects_pop_mut_on_an_immutable_local() {
     assert!(errors
         .iter()
         .any(|error| error.message.contains("mutate immutable local")));
+}
+
+#[test]
+fn bytecode_verifier_rejects_array_index_check_on_an_immutable_local() {
+    let source = "fn main() { mutable values: Int[] = [1] values[0] += 1 }";
+    let (_mir, mut bytecode) = compile_source(source, "main");
+    let function = &mut bytecode.functions[bytecode.entry];
+    let target = function
+        .code
+        .iter()
+        .find_map(|instruction| match &instruction.operation {
+            BytecodeOp::ArrayIndexCheck { local } => Some(*local),
+            _ => None,
+        })
+        .expect("compound indexed assignment emits a checked target");
+    let target_mutability = function
+        .local_mutability
+        .iter_mut()
+        .find(|(local, _)| *local == target)
+        .expect("array target has local mutability metadata");
+    target_mutability.1 = false;
+
+    let errors = verify_bytecode(&bytecode)
+        .expect_err("a mutated artifact cannot prepare an immutable array target");
+    assert!(errors.iter().any(|error| error
+        .message
+        .contains("array index check requires a mutable local")));
 }
 
 #[test]

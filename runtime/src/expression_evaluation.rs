@@ -133,34 +133,7 @@ impl<'program, 'services> Interpreter<'program, 'services> {
             ExprKind::Index { target, index } => {
                 let target = self.eval(target, env)?;
                 let index = self.eval(index, env)?;
-                let index = match index {
-                    Value::Int(value) if value >= 0 => value as usize,
-                    Value::UInt(value) => value as usize,
-                    value => {
-                        return Err(self.runtime_error(
-                            expr.span,
-                            format!("array index must be Int or UInt, found {}", value.ty()),
-                        ));
-                    }
-                };
-                match target {
-                    Value::Array(values) => values.get(index).cloned().ok_or_else(|| {
-                        self.runtime_error(
-                            expr.span,
-                            format!("array index {index} is out of bounds"),
-                        )
-                    }),
-                    Value::Tuple(values) => values.get(index).cloned().ok_or_else(|| {
-                        self.runtime_error(
-                            expr.span,
-                            format!("tuple index {index} is out of bounds"),
-                        )
-                    }),
-                    value => Err(self.runtime_error(
-                        expr.span,
-                        format!("indexing requires an array or Tuple, found {}", value.ty()),
-                    )),
-                }
+                index_collection_value(target, index, expr.span)
             }
             ExprKind::Field { target, field } => {
                 let value = self.eval(target, env)?;

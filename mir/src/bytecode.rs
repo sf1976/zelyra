@@ -39,7 +39,7 @@ pub use format::{decode, decode_with_limits, encode, encode_with_limits, Bytecod
 mod compiler;
 pub use compiler::compile;
 
-pub const BYTECODE_VERSION: u16 = 28;
+pub const BYTECODE_VERSION: u16 = 29;
 const MAX_BYTECODE_OPERATIONS_PER_EXECUTION: usize = 10_000_000;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -150,6 +150,11 @@ pub enum BytecodeOp {
     ArrayIndexAssign {
         local: LocalId,
         operation: ArrayIndexAssignOp,
+    },
+    /// Validates an indexed compound-assignment target before evaluating its RHS.
+    /// Leaves the index on the stack for the following `ArrayIndexAssign`.
+    ArrayIndexCheck {
+        local: LocalId,
     },
     /// Append one checked element to a compiler-generated collection result.
     ArrayAppend {
@@ -510,6 +515,14 @@ pub fn verify_bytecode(program: &BytecodeProgram) -> Result<(), Vec<MirError>> {
             .map(|(local, _, _)| *local)
             .collect::<HashSet<_>>();
         for (instruction_index, instruction) in function.code.iter().enumerate() {
+            if let BytecodeOp::ArrayIndexCheck { local } = &instruction.operation {
+                if local_mutability.get(local) != Some(&true) {
+                    return Err(vec![bytecode_error(
+                        "bytecode array index check requires a mutable local",
+                        instruction.span,
+                    )]);
+                }
+            }
             if let Some(local) = bytecode_captured_write(&instruction.operation, &captured_locals) {
                 return Err(vec![bytecode_error(
                     format!(
@@ -1602,6 +1615,10 @@ fn verify_function(function: &BytecodeFunction, span: Span) -> Result<usize, Vec
             BytecodeOp::ArrayIndexAssign { .. } => {
                 require_stack(height, 2, instruction.span)?;
                 next_height -= 2;
+                vec![pc + 1]
+            }
+            BytecodeOp::ArrayIndexCheck { .. } => {
+                require_stack(height, 1, instruction.span)?;
                 vec![pc + 1]
             }
             BytecodeOp::ArrayAppend { .. } => {
@@ -2777,6 +2794,27 @@ fn execute_bytecode_entry(
                         ));
                     };
                     *element = value;
+                }
+                BytecodeOp::ArrayIndexCheck { local } => {
+                    let index = stack.last().cloned().ok_or_else(|| {
+                        runtime_error(instruction.span, "bytecode array index stack underflow")
+                    })?;
+                    let values_len = match frame.locals.get(&local) {
+                        Some(Value::Array(values)) => values.len(),
+                        Some(other) => {
+                            return Err(runtime_error(
+                                instruction.span,
+                                format!("indexed assignment requires Array, got `{}`", other.ty()),
+                            ));
+                        }
+                        None => {
+                            return Err(runtime_error(
+                                instruction.span,
+                                "bytecode indexed assignment targets an uninitialized local",
+                            ));
+                        }
+                    };
+                    array_assignment_index(index, values_len, instruction.span)?;
                 }
                 BytecodeOp::ArrayAppend {
                     local,

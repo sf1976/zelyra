@@ -1554,6 +1554,9 @@ impl FunctionCompiler<'_> {
                 ..
             } => {
                 self.expression(*index, &mut HashSet::new())?;
+                if *operation == zelyra_ast::ArrayIndexAssignOp::Add {
+                    self.emit(BytecodeOp::ArrayIndexCheck { local: *local }, *span);
+                }
                 self.expression(*value, &mut HashSet::new())?;
                 self.emit(
                     BytecodeOp::ArrayIndexAssign {
