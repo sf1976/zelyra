@@ -380,7 +380,7 @@ fn reusable_billing_package_calculates_line_amounts_on_all_backends() {
         String::from_utf8_lossy(&checked.stderr)
     );
 
-    let expected = b"net=0.15 tax=0.03 gross=0.18\nrounding mode must be toward_zero, floor, ceiling, half_up, or half_even\n";
+    let expected = b"net=0.15 tax=0.03 gross=0.18\nquote=net:50.00 tax:10.00 gross:60.00\nrounding mode must be toward_zero, floor, ceiling, half_up, or half_even\n";
     for backend in ["ast", "mir", "bytecode"] {
         let output = run(&[
             "run",

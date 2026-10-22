@@ -207,6 +207,25 @@ fn billing_calculation_demo() {
         Err(message) => { print(message) }
     }
 
+    // The same package API also prices a quote line; the package does not
+    // distinguish document types or choose the caller's tax policy.
+    quote_line = billing::calculate_line_amounts(
+        decimal("4"),
+        decimal("12.50"),
+        decimal("0.20"),
+        2,
+        "half_even"
+    )
+    match quote_line {
+        Ok(value) => {
+            assert(value.net == decimal("50.00"), "quote net is calculated by the shared line API")
+            assert(value.tax == decimal("10.00"), "quote tax uses the caller's fraction")
+            assert(value.gross == decimal("60.00"), "quote gross uses the same shared calculation")
+            print("quote=net:50.00 tax:10.00 gross:60.00")
+        }
+        Err(message) => { print(message) }
+    }
+
     invalid_mode = billing::calculate_line_amounts(
         decimal("1"),
         decimal("1.005"),

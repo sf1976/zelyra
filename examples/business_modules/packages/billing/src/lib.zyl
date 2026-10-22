@@ -1,8 +1,9 @@
 import "pkg:storage" as storage
 
-/// Rounded amounts for one invoice line. Scale and rounding are explicit so
-/// the caller, rather than the module, selects the applicable money policy.
-pub struct InvoiceAmounts {
+/// Rounded amounts for one priced business line. The caller selects scale,
+/// tax fraction, and rounding so this value can be used for quotes, orders, or
+/// invoices without embedding a document-specific policy in the package.
+pub struct LineAmounts {
     net: Decimal
     tax: Decimal
     gross: Decimal
@@ -17,7 +18,7 @@ pub fn calculate_line_amounts(
     tax_rate: Decimal,
     scale: Int,
     rounding_mode: String
-) -> Result<InvoiceAmounts, String> {
+) -> Result<LineAmounts, String> {
     raw_net = quantity * unit_price
     return match decimal_quantize_result(raw_net, scale, rounding_mode) {
         Err(message) => Err(message)
@@ -30,7 +31,7 @@ fn calculate_tax_amounts(
     tax_rate: Decimal,
     scale: Int,
     rounding_mode: String
-) -> Result<InvoiceAmounts, String> {
+) -> Result<LineAmounts, String> {
     raw_tax = net * tax_rate
     return match decimal_quantize_result(raw_tax, scale, rounding_mode) {
         Err(message) => Err(message)
@@ -43,11 +44,11 @@ fn calculate_gross_amount(
     tax: Decimal,
     scale: Int,
     rounding_mode: String
-) -> Result<InvoiceAmounts, String> {
+) -> Result<LineAmounts, String> {
     raw_gross = net + tax
     return match decimal_quantize_result(raw_gross, scale, rounding_mode) {
         Err(message) => Err(message)
-        Ok(gross) => Ok(InvoiceAmounts { net: net, tax: tax, gross: gross })
+        Ok(gross) => Ok(LineAmounts { net: net, tax: tax, gross: gross })
     }
 }
 

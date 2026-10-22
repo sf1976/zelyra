@@ -30,8 +30,10 @@ isolated MariaDB 11.4 instance with default AST, `--backend mir`, and
 remain partial; this verifies this module path, not complete language or
 effect parity.
 
-The billing package also exposes `calculate_line_amounts`. It returns typed
-net, tax, and gross Decimal amounts for one line. Callers pass a fractional tax
+The billing package also exposes `calculate_line_amounts`, returning a
+`LineAmounts` record with typed net, tax, and gross Decimal amounts for one
+priced business line. The same API works for quote, order, and invoice lines.
+Callers pass a fractional tax
 rate, currency scale, and explicit rounding mode; the package does not assume a
 country's tax rules, currency, invoice numbering, or posting workflow. It
 quantizes net first, then tax on the rounded net, then gross as rounded net
@@ -39,9 +41,10 @@ plus rounded tax. Decimal arithmetic currently has at most nine fractional
 digits before quantization, so applications that require different precision
 or line-versus-document rounding rules must choose and test those rules
 explicitly. `billing_calculation_demo` checks a 3 × 0.05 line at 19% using
-`half_even`, and confirms an invalid rounding mode returns an error on AST,
-MIR, and Bytecode. This is a reusable calculation primitive, not a complete
-invoicing or accounting system.
+`half_even`, then checks both an invoice-line and a quote-line call against the
+same package API. It also confirms an invalid rounding mode returns an error
+on AST, MIR, and Bytecode. This is a reusable calculation primitive, not a
+complete invoicing or accounting system.
 
 The `csv_export` package is a reusable, local package in this example. Its
 `encode(rows)` function returns UTF-8 CSV text with quoted delimiters and
