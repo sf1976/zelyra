@@ -9,6 +9,48 @@ fn operator_error(span: Span, message: impl Into<String>) -> RuntimeError {
     }
 }
 
+/// Index a Zelyra array or tuple with the same checked semantics in all
+/// execution backends. String, map, and JSON indexing have backend-specific
+/// representations and are intentionally handled by their respective paths.
+pub fn index_collection_value(
+    target: Value,
+    index: Value,
+    span: Span,
+) -> Result<Value, RuntimeError> {
+    let (kind, values) = match target {
+        Value::Array(values) => ("array", values),
+        Value::Tuple(values) => ("tuple", values),
+        other => {
+            return Err(operator_error(
+                span,
+                format!("indexing requires an array or Tuple, found {}", other.ty()),
+            ));
+        }
+    };
+    let index = match index {
+        Value::Int(index) if index >= 0 => usize::try_from(index)
+            .map_err(|_| operator_error(span, format!("{kind} index is too large")))?,
+        Value::Int(_) => {
+            return Err(operator_error(
+                span,
+                format!("{kind} index must not be negative"),
+            ));
+        }
+        Value::UInt(index) => usize::try_from(index)
+            .map_err(|_| operator_error(span, format!("{kind} index is too large")))?,
+        other => {
+            return Err(operator_error(
+                span,
+                format!("{kind} index must be Int or UInt, found {}", other.ty()),
+            ));
+        }
+    };
+    values
+        .get(index)
+        .cloned()
+        .ok_or_else(|| operator_error(span, format!("{kind} index {index} is out of bounds")))
+}
+
 /// Apply one already-evaluated binary operation using Zelyra value semantics.
 /// Short-circuit evaluation remains the responsibility of each interpreter.
 pub fn evaluate_binary_value(

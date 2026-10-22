@@ -3443,19 +3443,8 @@ pub(crate) fn array_assignment_index(
 
 pub(crate) fn index_value(target: Value, index: Value, span: Span) -> Result<Value, RuntimeError> {
     match (target, index) {
-        (Value::Array(items), Value::Int(index)) | (Value::Tuple(items), Value::Int(index)) => {
-            let index = usize::try_from(index)
-                .map_err(|_| runtime_error(span, "collection index must not be negative"))?;
-            items.get(index).cloned().ok_or_else(|| {
-                runtime_error(span, format!("collection index {index} is out of bounds"))
-            })
-        }
-        (Value::Array(items), Value::UInt(index)) | (Value::Tuple(items), Value::UInt(index)) => {
-            let index = usize::try_from(index)
-                .map_err(|_| runtime_error(span, "collection index is too large"))?;
-            items.get(index).cloned().ok_or_else(|| {
-                runtime_error(span, format!("collection index {index} is out of bounds"))
-            })
+        (target @ (Value::Array(_) | Value::Tuple(_)), index) => {
+            zelyra_runtime::index_collection_value(target, index, span)
         }
         (Value::String(value), Value::Int(index)) => {
             let index = usize::try_from(index)

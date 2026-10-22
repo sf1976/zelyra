@@ -1701,6 +1701,41 @@ fn zero_step_budget_failure_keeps_source_location_across_backends() {
 }
 
 #[test]
+fn array_index_errors_match_ast_mir_and_decoded_bytecode() {
+    for (source, arguments, expected_message) in [
+        (
+            "fn run() -> Int { values = [4] return values[2] } fn main() {}",
+            Vec::new(),
+            "array index 2 is out of bounds",
+        ),
+        (
+            "fn run() -> Int { values = [4] return values[-1] } fn main() {}",
+            Vec::new(),
+            "array index must not be negative",
+        ),
+    ] {
+        let ast = parse(&lex(source).expect("source lexes")).expect("source parses");
+        let mir = crate::lower(&ast).expect("source type-checks and lowers");
+        let bytecode = compile(&mir, "run").expect("run function compiles");
+        let bytecode = decode(&encode(&bytecode).expect("bytecode encodes"))
+            .expect("bytecode verifies after decoding");
+
+        let ast_error = zelyra_runtime::execute_function(&ast, "run", arguments.clone(), None)
+            .expect_err("AST rejects an out-of-range collection index");
+        let mir_error =
+            execution::execute_function(&mir, "run", arguments.clone(), ExecutionLimits::default())
+                .expect_err("MIR rejects an invalid collection index");
+        let bytecode_error = execute(&bytecode, arguments, ExecutionLimits::default())
+            .expect_err("Bytecode rejects an out-of-range collection index");
+
+        for error in [&ast_error, &mir_error, &bytecode_error] {
+            assert_eq!(error.message, expected_message);
+            assert_eq!(error.span, ast_error.span);
+        }
+    }
+}
+
+#[test]
 fn source_step_budget_boundaries_match_across_ast_mir_and_bytecode() {
     let source = r#"
 fn run() -> Int {
