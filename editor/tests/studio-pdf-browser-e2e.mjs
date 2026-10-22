@@ -58,7 +58,8 @@ fn main() {}
   await page.locator('.tree-item.file[title="main.zyl"]').click();
   await page.locator(".cm-content[contenteditable=true]").waitFor();
 
-  await page.locator("#pdf-preview-button").click();
+  await page.locator('[data-studio-menu="run"]').click();
+  await page.locator('[data-menu-target="pdf-preview-button"]').click();
   await page.waitForFunction(() => [...document.querySelector("#pdf-preview-view")?.options || []]
     .some((option) => option.value === "InvoicePreview"));
   await page.locator("#pdf-preview-data").fill("{invalid json");

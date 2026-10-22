@@ -63,7 +63,8 @@ try {
   await page.waitForFunction(() => document.querySelector("#pipeline-breadcrumbs")?.textContent?.includes("sql:"),
     undefined, { timeout: 10_000 });
   assert.match(await page.locator("#pipeline-breadcrumbs").textContent(), /table:/);
-  await page.locator("#project-map-button").click();
+  await page.locator('[data-studio-menu="view"]').click();
+  await page.locator('[data-menu-target="project-map-button"]').click();
   await page.locator(".project-map-node.kind-sql").first().waitFor();
   await page.locator(".project-map-node.kind-struct").first().waitFor();
   await page.locator("#project-map-close").click();
@@ -74,7 +75,8 @@ try {
     undefined, { timeout: 10_000 });
   await page.waitForFunction(() => document.querySelector("#problems-list")?.textContent?.includes("E-SQL-004"),
     undefined, { timeout: 10_000 });
-  await page.locator("#project-map-button").click();
+  await page.locator('[data-studio-menu="view"]').click();
+  await page.locator('[data-menu-target="project-map-button"]').click();
   await page.locator("#project-map-nullability:not([hidden])").waitFor({ timeout: 10_000 });
   assert.match(await page.locator("#project-map-nullability-list").textContent(), /E-SQL-004/);
   assert.equal(await readFile(join(project, "main.zyl"), "utf8"), source,

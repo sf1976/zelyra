@@ -129,7 +129,8 @@ fn main() {}
   assert.deepEqual(await appPage.locator("#canvas-status").count(), 0, "the live app opens outside the static Canvas iframe");
   await appPage.close();
   await page.locator("#run-output-close").click();
-  await page.locator("#logs-button").click();
+  await page.locator('[data-studio-menu="view"]').click();
+  await page.locator('[data-menu-target="logs-button"]').click();
   await page.waitForFunction(() => /[1-9]\d*/.test(document.querySelector("#logs-status")?.textContent || ""));
   await page.waitForFunction(() => document.querySelector("#logs-content")?.textContent.includes("Zelyra server listening"));
   assert.match(await page.locator("#logs-content").innerText(), /INFO\s+preview\.stdout\nZelyra server listening on http:\/\/127\.0\.0\.1:/);
@@ -148,7 +149,8 @@ fn main() {}
   }, { sessionToken });
   assert.equal(stopStatus, 200, "the test must stop the spawned preview");
 
-  await page.locator("#outbox-button").click();
+  await page.locator('[data-studio-menu="database"]').click();
+  await page.locator('[data-menu-target="outbox-button"]').click();
   await page.waitForFunction(() => document.querySelector("#outbox-status")?.textContent.includes("Outbox-Tabelle fehlt"));
   assert.match(await page.locator("#outbox-status").innerText(), /zelyra outbox setup main\.zyl.*Ohne Outbox-Nutzung/);
   await page.locator("#outbox-close").click();

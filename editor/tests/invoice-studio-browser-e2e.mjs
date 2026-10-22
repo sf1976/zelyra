@@ -31,7 +31,8 @@ try {
   const appUrl = await page.locator("#run-output-web-url").getAttribute("href");
   assert.match(appUrl, /^http:\/\/127\.0\.0\.1:\d+$/);
   await page.locator("#run-output-close").click();
-  await page.locator("#logs-button").click();
+  await page.locator('[data-studio-menu="view"]').click();
+  await page.locator('[data-menu-target="logs-button"]').click();
   await page.locator("#logs-content").waitFor();
   await page.waitForFunction(() => /[1-9]\d*/.test(document.querySelector("#logs-status")?.textContent || ""));
   assert.match(await page.locator("#logs-content").innerText(), /studio\.run.*starting web preview/s);

@@ -91,7 +91,8 @@ try {
   await page.goto(url, { waitUntil: "domcontentloaded" });
   await page.locator('.tree-item.file[title="main.zyl"]').click();
   await page.locator(".cm-content[contenteditable=true]").waitFor();
-  await page.locator("#outbox-button").click();
+  await page.locator('[data-studio-menu="database"]').click();
+  await page.locator('[data-menu-target="outbox-button"]').click();
   const row = page.locator("#outbox-rows tr").filter({ hasText: eventId });
   await row.waitFor();
   assert.match(await row.textContent(), /outbox-recipient@example\.test/);
