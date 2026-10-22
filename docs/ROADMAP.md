@@ -25,7 +25,7 @@ telemetry, explicit effects, portable data, resource discipline, and honest
 proof claims guide every phase. The [manifesto](MANIFESTO.md) states the
 principles; the roadmap below tracks what is actually implemented.
 
-The current stable release is [1.2.42](https://github.com/sf1976/zelyra/releases/tag/v1.2.42). **Current milestones** is the source of
+The current stable release is [1.2.43](https://github.com/sf1976/zelyra/releases/tag/v1.2.43). **Current milestones** is the source of
 near-term commitments. Older numbered release sections below are retained as
 historical planning and evidence; they do not by themselves define current
 release targets. Longer-term ideas remain in the post-1.0 evolution section.
@@ -662,7 +662,7 @@ CSRF, idempotency, and second-tenant isolation checks. Generated success
 components carry explicit module dependencies. PR #176 was merged as
 `6fc61c31`; its GitHub CI passed. The v1.2.40 release tag points to merge
 `4d5a58ab`; the published release now includes Linux and Windows archives,
-checksums, and SPDX SBOMs. The latest published stable release is [v1.2.42](https://github.com/sf1976/zelyra/releases/tag/v1.2.42).
+checksums, and SPDX SBOMs. The latest published stable release is [v1.2.43](https://github.com/sf1976/zelyra/releases/tag/v1.2.43).
 This imports one specifically recognized workflow, not the Laravel website or
 all 2,274 findings.
 
@@ -706,7 +706,7 @@ in the PR release workflow. Release v1.2.42 is published with verified Linux
 and Windows archives, SHA-256 sidecars, SPDX SBOMs, and attestations.
 Tag-triggered GitHub CI run #39705431062 passed.
 
-### 🧪 [~] 1.2.43 — route wiring for translated static Blade views
+### ✅ [x] 1.2.43 — route wiring for translated static Blade views (released)
 
 The importer emits a native Zelyra `page` for a translated static view only
 when the source has one ungrouped, middleware-free literal `GET` closure whose
@@ -718,7 +718,11 @@ ambiguous duplicate paths, and records route-to-view wiring in
 The real `/opt/siedelmann-laravel/app` inventory and generated scaffold pass,
 but no page in that project currently matches this narrow shape. Dynamic
 layouts, Blade expressions, controllers, and protected routes remain manual;
-this is not a general Blade importer.
+this is not a general Blade importer. Synthetic route tests, the real-project
+check, release metadata/readiness checks, and full GitHub CI on the merge commit
+passed. Release v1.2.43 published verified Linux and Windows artifacts,
+SHA-256 sidecars, SPDX SBOMs, and attestations; the downloaded Linux archive
+checksum and contents were verified.
 
 ## Active architecture milestones (1.1.5 through 1.3.0)
 
@@ -1018,7 +1022,7 @@ compatibility behavior before changing syntax. See the detailed
 - [~] **Laravel website import — active through 1.3.0:** Replace the removed framework-oriented migrator with a source-evidenced website importer that emits compiler-checked reusable Zelyra modules. Analyze first, require explicit selections, preserve unsupported behavior as findings, and keep the Laravel source read-only. Use `/opt/siedelmann-laravel/app` as the first integration fixture. It must compose with the 1.1.5 package/module system and 1.2.0 operations foundation rather than introducing a parallel plugin/runtime model. Release 1.2.34 preserves Laravel `mediumText`/`longText` capacity as `String text_storage medium|long` for MariaDB, rejects unsupported MariaDB indexing of those columns, and reports backend-specific PostgreSQL/SQLite limits. Release 1.2.35 also preserves supported unsigned integer widths. This does not make the site importer complete; route behavior and workflow migration remain open.
 - [~] **1.2.40 importer vertical slice:** The real project's public unsubscribe route is generated only through the checked tenant-scoped `public_token` form primitive. Its real-project scaffold and disposable MariaDB/HTTP E2E pass; all other importer findings remain open. Release v1.2.40 is published.
 - [~] **1.2.41 — literal Laravel public-file routes (released):** The importer recognizes one narrow route shape: an ungrouped, middleware-free `GET` closure whose only statement returns `response()->file(public_path('<literal path>'))`, with an exact route/file path match. Bounded, symlink-safe copying feeds the existing static-file server and records `STATIC_ASSET_ROUTES.json`. The real-project check verifies byte-identical `/favicon.ico` output and `zelyra check` on the generated scaffold. It does not translate dynamic responses, middleware, route groups, PHP logic, or arbitrary controllers. Release v1.2.41 is published with verified Linux/Windows archives, checksums, SBOMs, and attestations; see the [release page](https://github.com/sf1976/zelyra/releases/tag/v1.2.41). Full tag-triggered workspace CI passed on run #39693042950.
-- [~] **1.2.43 — translated static Blade page routes:** The importer wires an already translated standalone view to a generated Zelyra page only for an ungrouped, middleware-free literal GET closure whose sole statement returns that exact view. It rejects duplicate and occupied route paths and reports the generated page. A synthetic scaffold passes compiler validation; the real integration project passes importer checks but currently has no page matching this strict shape. Dynamic Blade layouts and application routes remain manual.
+- [x] **1.2.43 — translated static Blade page routes (released):** The importer wires an already translated standalone view to a generated Zelyra page only for an ungrouped, middleware-free literal GET closure whose sole statement returns that exact view. It rejects duplicate and occupied route paths and reports the generated page. A synthetic scaffold passes compiler validation; the real integration project passes importer checks but currently has no page matching this strict shape. Dynamic Blade layouts and application routes remain manual. See [v1.2.43](https://github.com/sf1976/zelyra/releases/tag/v1.2.43).
 
 - [ ] **1.2.0 — Compose check in the installer:** Installers detect
   Docker Compose v2 or newer and distinguish it from obsolete Python Compose

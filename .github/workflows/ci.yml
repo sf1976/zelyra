@@ -24,8 +24,8 @@ jobs:
           cache-dependency-path: editor/package-lock.json
       - name: Install locked editor dependencies
         run: npm ci --prefix editor
-      - name: Audit editor dependencies
-        run: npm audit --prefix editor --audit-level=high
+      - name: Audit editor dependencies with the bulk advisory endpoint
+        run: npx --yes npm@11.6.2 audit --prefix editor --audit-level=high
       - name: Rebuild self-hosted editor assets
         run: npm run build --prefix editor
       - name: Check committed browser bundles
