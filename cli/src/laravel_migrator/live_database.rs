@@ -454,7 +454,8 @@ pub(super) fn compare_candidates(live: &Value, generation: &Value) -> Value {
                     "expected_column": relation_column,
                     "expected_columns": expected_source_columns.clone(),
                     "expected_referenced_columns": expected_target_columns.clone(),
-                    "expected_on_delete": delete_action
+                    "expected_on_delete": delete_action,
+                    "observed_foreign_keys": actual_foreign_keys
                 }));
             }
         }
@@ -518,11 +519,16 @@ fn assess_schema_difference(mut difference: Value) -> Value {
                     "Check existing values before applying a schema migration.",
                 )
             }
-            (Some("TIMESTAMP"), Some(expected)) if expected.starts_with("DATETIME") => (
-                "utc_datetime_storage_normalization",
-                "Zelyra stores Timestamp values as UTC-normalized DATETIME; MariaDB TIMESTAMP applies server/session time-zone conversion. Existing values need an explicit conversion decision.",
-                "Review UTC interpretation and data conversion before migration.",
-            ),
+            (Some(actual), Some(expected))
+                if timestamp_precision(actual).is_some()
+                    && datetime_precision(expected).is_some() =>
+            {
+                (
+                    "utc_datetime_storage_normalization",
+                    "Zelyra stores Timestamp values as UTC-normalized DATETIME; MariaDB TIMESTAMP applies server/session time-zone conversion. Existing values need an explicit conversion decision.",
+                    "Review UTC interpretation and data conversion before migration.",
+                )
+            }
             (Some(actual), Some(expected))
                 if datetime_precision(actual).zip(datetime_precision(expected)).is_some_and(
                     |(actual, expected)| expected >= actual,
@@ -543,7 +549,8 @@ fn assess_schema_difference(mut difference: Value) -> Value {
                 .is_some_and(|columns| columns.iter().any(|column| column == "tenant_id"))
                 && difference["expected_referenced_columns"]
                     .as_array()
-                    .is_some_and(|columns| columns.iter().any(|column| column == "tenant_id")) =>
+                    .is_some_and(|columns| columns.iter().any(|column| column == "tenant_id"))
+                && has_matching_single_column_foreign_key(&difference) =>
         {
             (
                 "tenant_isolation_hardening",
@@ -581,6 +588,37 @@ fn assess_schema_difference(mut difference: Value) -> Value {
     difference
 }
 
+fn has_matching_single_column_foreign_key(difference: &Value) -> bool {
+    let Some(expected_columns) = difference["expected_columns"].as_array() else {
+        return false;
+    };
+    let Some(expected_referenced_columns) = difference["expected_referenced_columns"].as_array()
+    else {
+        return false;
+    };
+    let (Some(expected_column), Some(expected_referenced_column)) =
+        (expected_columns.last(), expected_referenced_columns.last())
+    else {
+        return false;
+    };
+    let (Some(expected_column), Some(expected_referenced_column)) = (
+        expected_column.as_str(),
+        expected_referenced_column.as_str(),
+    ) else {
+        return false;
+    };
+    difference["observed_foreign_keys"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .any(|actual| {
+            actual_foreign_key_columns(actual, "columns", "column") == [expected_column]
+                && actual_foreign_key_columns(actual, "referenced_columns", "referenced_column")
+                    == [expected_referenced_column]
+                && actual["referenced_table"] == difference["expected_table"]
+        })
+}
+
 fn integer_storage(value: &str) -> Option<(u8, bool)> {
     let normalized = normalize_schema_type(value);
     let unsigned = normalized.ends_with("UNSIGNED");
@@ -597,12 +635,20 @@ fn integer_storage(value: &str) -> Option<(u8, bool)> {
 }
 
 fn datetime_precision(value: &str) -> Option<u8> {
+    temporal_precision(value, "DATETIME")
+}
+
+fn timestamp_precision(value: &str) -> Option<u8> {
+    temporal_precision(value, "TIMESTAMP")
+}
+
+fn temporal_precision(value: &str, expected_base: &str) -> Option<u8> {
     let normalized = normalize_schema_type(value);
-    if normalized == "DATETIME" {
+    if normalized == expected_base {
         return Some(0);
     }
     let (base, suffix) = normalized.split_once('(')?;
-    if base != "DATETIME" {
+    if base != expected_base {
         return None;
     }
     suffix
@@ -1554,15 +1600,53 @@ mod tests {
             "utc_datetime_storage_normalization"
         );
 
+        let fractional_timestamp = assess_schema_difference(json!({
+            "kind":"sql_type_mismatch", "actual_type":"TIMESTAMP(3)", "expected_type":"DATETIME(3)"
+        }));
+        assert_eq!(
+            fractional_timestamp["assessment"]["classification"],
+            "utc_datetime_storage_normalization"
+        );
+
         let tenant_foreign_key = assess_schema_difference(json!({
             "kind":"missing_or_different_live_foreign_key",
             "expected_columns":["tenant_id", "customer_id"],
-            "expected_referenced_columns":["tenant_id", "id"]
+            "expected_referenced_columns":["tenant_id", "id"],
+            "expected_table":"customers",
+            "observed_foreign_keys":[{
+                "column":"customer_id", "referenced_table":"customers",
+                "referenced_column":"id", "on_delete":"RESTRICT"
+            }]
         }));
         assert_eq!(
             tenant_foreign_key["assessment"]["classification"],
             "tenant_isolation_hardening"
         );
+
+        for observed_foreign_keys in [
+            json!([]),
+            json!([{
+                "column":"customer_id", "referenced_table":"other_customers",
+                "referenced_column":"id", "on_delete":"RESTRICT"
+            }]),
+            json!([{
+                "columns":["tenant_id", "customer_id"],
+                "referenced_table":"customers", "referenced_columns":["tenant_id", "id"],
+                "on_delete":"RESTRICT"
+            }]),
+        ] {
+            let unproven_narrower_key = assess_schema_difference(json!({
+                "kind":"missing_or_different_live_foreign_key",
+                "expected_table":"customers",
+                "expected_columns":["tenant_id", "customer_id"],
+                "expected_referenced_columns":["tenant_id", "id"],
+                "observed_foreign_keys": observed_foreign_keys
+            }));
+            assert_eq!(
+                unproven_narrower_key["assessment"]["classification"],
+                "relation_constraint_review"
+            );
+        }
 
         let decimal = assess_schema_difference(json!({
             "kind":"sql_type_mismatch", "actual_type":"DECIMAL(12,4)", "expected_type":"DECIMAL(12,2)"
