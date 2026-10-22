@@ -41,7 +41,7 @@ url = urlsplit(sys.argv[1])
 if url.scheme not in ("mariadb", "mysql") or url.hostname not in ("127.0.0.1", "localhost"):
     raise SystemExit("error: the rollback E2E only accepts a local MariaDB/MySQL server")
 database = url.path.lstrip("/")
-if "test" not in database.lower() or not database.replace("_", "").isalnum():
+if ("test" not in database.lower() and database.lower() != "zelyra_ci") or not database.replace("_", "").isalnum():
     raise SystemExit("error: refusing a database not explicitly named as a test database")
 print(url.hostname, url.port or 3306, unquote(url.username or ""), unquote(url.password or ""), database, sep="\n")
 PY
