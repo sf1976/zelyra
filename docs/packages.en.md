@@ -27,6 +27,28 @@ available when the project defines an auth admin permission. Reusable
 business and integration modules (including auth, ODBC, CSV, PDF, and Excel)
 are roadmap goals; the package format alone does not provide those features.
 
+## What belongs in a reusable package
+
+A package should provide a recurring business capability through a clear,
+typed contract. It should not attempt to anticipate every exception from one
+customer or project. A good candidate uses the same core business concepts in
+multiple applications and can be adapted through explicit parameters and
+settings.
+
+Examples include a clear invoice-line calculation or an explicitly mapped CSV
+import format. A workflow step used by only one project, a special form label,
+or a customer-specific exception belongs in application code. Tax law,
+numbering schemes, and posting workflows must not be silently imposed as
+universal package defaults. If the same business requirement recurs in other
+projects, it can later become a configurable package feature.
+
+Reviewing existing Laravel projects helps identify recurring workflows and
+gaps in the Zelyra language. The importer should analyze those workflows and
+suggest suitable Zelyra models or packages; it should not copy Laravel code and
+one-off behavior into packages or automatically turn every discovered class
+into one. Package code remains ordinary checked Zelyra code and follows the
+same type, effect, capability, and runtime rules as the application.
+
 ## Module inventory
 
 ```sh
