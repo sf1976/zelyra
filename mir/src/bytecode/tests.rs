@@ -6141,6 +6141,33 @@ fn bytecode_verifier_rejects_pop_mut_on_an_immutable_local() {
 }
 
 #[test]
+fn bytecode_verifier_rejects_array_index_check_on_an_immutable_local() {
+    let source = "fn main() { mutable values: Int[] = [1] values[0] += 1 }";
+    let (_mir, mut bytecode) = compile_source(source, "main");
+    let function = &mut bytecode.functions[bytecode.entry];
+    let target = function
+        .code
+        .iter()
+        .find_map(|instruction| match &instruction.operation {
+            BytecodeOp::ArrayIndexCheck { local } => Some(*local),
+            _ => None,
+        })
+        .expect("compound indexed assignment emits a checked target");
+    let target_mutability = function
+        .local_mutability
+        .iter_mut()
+        .find(|(local, _)| *local == target)
+        .expect("array target has local mutability metadata");
+    target_mutability.1 = false;
+
+    let errors = verify_bytecode(&bytecode)
+        .expect_err("a mutated artifact cannot prepare an immutable array target");
+    assert!(errors.iter().any(|error| error
+        .message
+        .contains("array index check requires a mutable local")));
+}
+
+#[test]
 fn bytecode_supports_new_and_existing_tuple_bindings_with_ast_parity() {
     let source = r#"
 fn pair() -> Tuple<Int, Int> { return (20, 22) }
