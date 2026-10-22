@@ -244,7 +244,7 @@ Designsystemversion. Patch-Releases verbessern das Aussehen oder korrigieren
 Stile ohne Änderung am Token-/Klassenvertrag; Minor-Releases dürfen kompatible
 Tokens oder Komponenten ergänzen. Eine inkompatible Änderung an öffentlichen
 Tokens oder Klassen erfordert eine neue Major-Version. Das aktuelle CSS-Bundle
-hat Version 1.0.7.
+hat Version 1.1.0.
 
 Helles und dunkles Theme, Systempräferenz, gespeicherte manuelle Auswahl,
 komfortable/kompakte Dichte, `prefers-reduced-motion` und Druckregeln sind

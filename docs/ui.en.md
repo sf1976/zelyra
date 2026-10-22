@@ -232,7 +232,7 @@ into new projects. The generated bundle header also tracks an independent
 design-system version. Patch releases refine visuals or fix styles without
 changing the token/class contract; minor releases may add compatible tokens or
 components; a breaking token or public-class change requires a major version.
-The current CSS bundle is v1.0.7.
+The current CSS bundle is v1.1.0.
 
 Light and dark themes, system preference, a persisted user choice,
 comfortable/compact density, `prefers-reduced-motion`, and print styles are
