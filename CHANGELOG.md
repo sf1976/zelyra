@@ -1,5 +1,12 @@
 ## Unreleased
 
+## 1.2.46 — 2026-10-22
+
+- Align AST, MIR, and verified Bytecode array and tuple index diagnostics,
+  including mutable indexed updates and right-hand-side evaluation order.
+  Advance the versioned Bytecode artifact format to v29 for the verifier-checked
+  pre-update bounds check. Bytecode remains experimental and is not the default.
+
 ## 1.2.45 — 2026-10-22
 
 - Add a reusable billing package primitive for line net/tax/gross calculations
