@@ -32,3 +32,48 @@ Change tokens here instead of copying the framework stylesheet.
 :where(html[data-z-ui]) .zelyra-crud-card {
   border-radius: var(--z-radius-lg);
 }
+
+/* Keep the brand colors readable when a user selects the dark theme. */
+:where(html[data-z-ui][data-z-theme="dark"]) {
+  --z-color-primary: #70c9c5;
+  --z-color-on-primary: #102f32;
+  --z-color-primary-hover: #8bdad5;
+  --z-color-primary-soft: #203b3d;
+  --z-color-link: #8bdad5;
+  --z-color-canvas: #11191b;
+  --z-color-surface: #192326;
+  --z-color-surface-raised: #202d30;
+  --z-color-text: #eff8f6;
+  --z-color-text-muted: #b1c4c2;
+  --z-color-border: #35484a;
+  --z-color-focus: #70c9c5;
+  --z-color-sidebar: #0c1719;
+  --z-color-sidebar-text: #f4fbfa;
+  --z-color-sidebar-muted: #aec5c3;
+  --z-color-sidebar-border: #263b3e;
+  --z-color-sidebar-active: #1d3538;
+  --z-shadow-md: 0 16px 40px rgb(0 0 0 / 32%), 0 3px 10px rgb(0 0 0 / 18%);
+}
+
+@media (prefers-color-scheme: dark) {
+  :where(html[data-z-ui][data-z-theme="system"], html[data-z-ui]:not([data-z-theme])) {
+    --z-color-primary: #70c9c5;
+    --z-color-on-primary: #102f32;
+    --z-color-primary-hover: #8bdad5;
+    --z-color-primary-soft: #203b3d;
+    --z-color-link: #8bdad5;
+    --z-color-canvas: #11191b;
+    --z-color-surface: #192326;
+    --z-color-surface-raised: #202d30;
+    --z-color-text: #eff8f6;
+    --z-color-text-muted: #b1c4c2;
+    --z-color-border: #35484a;
+    --z-color-focus: #70c9c5;
+    --z-color-sidebar: #0c1719;
+    --z-color-sidebar-text: #f4fbfa;
+    --z-color-sidebar-muted: #aec5c3;
+    --z-color-sidebar-border: #263b3e;
+    --z-color-sidebar-active: #1d3538;
+    --z-shadow-md: 0 16px 40px rgb(0 0 0 / 32%), 0 3px 10px rgb(0 0 0 / 18%);
+  }
+}

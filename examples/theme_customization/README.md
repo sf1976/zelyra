@@ -5,7 +5,7 @@ Use `zelyra.theme.css` to adapt the design through documented `--z-` tokens;
 the shared framework CSS stays managed by Zelyra:
 
 - `zelyra.theme.css` changes brand colors, navigation surfaces, page width,
-  radii, shadows, and CRUD card styling;
+  radii, shadows, CRUD card styling, and matching dark-theme colors;
 - `Customer` uses a project-local layout and named slots;
 - `Ticket` intentionally keeps the standard generated application shell;
 - both resources retain compiler-checked fields, SQL, validation, CSRF, and
@@ -16,7 +16,7 @@ Dieses Beispiel zeigt das unterstützte projektlokale Anpassungsmodell. Mit
 das gemeinsame Framework-CSS bleibt von Zelyra verwaltet:
 
 - `zelyra.theme.css` ändert Markenfarben, Navigation, Seitenbreite, Rundungen,
-  Schatten und CRUD-Karten;
+  Schatten, CRUD-Karten und passende Farben für das dunkle Theme;
 - `Customer` verwendet ein projektlokales Layout und benannte Slots;
 - `Ticket` behält absichtlich den Standardrahmen der generierten Anwendung;
 - beide Ressourcen behalten compilergeprüfte Felder, SQL, Validierung, CSRF und
