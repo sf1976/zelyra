@@ -658,6 +658,11 @@ Geschäftsfunktionen mit klaren Typen, Effekten, Voraussetzungen und Tests. Ein
 einmaliger Sonderfall bleibt ausdrücklich Anwendungscode und wird nicht als
 allgemeines Paket oder versteckte Importer-Ausnahme verpackt. Der begrenzte
 Plan steht im verlinkten 1.2.27-Arbeitsplan.
+Die schreibgeschützte Live-Schema-Prüfung vom 21.10.2026 fand 89 Tabellen;
+neun davon liegen außerhalb der 80 migrationsbasierten Kandidaten. Ihre
+Zugehörigkeit ist nicht belegt. Zusätzlich meldete der Abgleich 473
+Katalogabweichungen. Die Projektion ist kein sicherer Ersatz des aktuellen
+Datenbankschemas; Einzelheiten stehen im Importer-Fortschrittsprotokoll.
 
 ### 1.2.34 — geordnete, vollständig geschützte Migrations-Callbacks
 
