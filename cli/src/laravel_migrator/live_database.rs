@@ -454,7 +454,8 @@ pub(super) fn compare_candidates(live: &Value, generation: &Value) -> Value {
                     "expected_column": relation_column,
                     "expected_columns": expected_source_columns.clone(),
                     "expected_referenced_columns": expected_target_columns.clone(),
-                    "expected_on_delete": delete_action
+                    "expected_on_delete": delete_action,
+                    "observed_foreign_keys": actual_foreign_keys
                 }));
             }
         }
@@ -465,6 +466,10 @@ pub(super) fn compare_candidates(live: &Value, generation: &Value) -> Value {
         .keys()
         .filter(|name| !candidate_names.contains(*name))
         .cloned()
+        .collect::<Vec<_>>();
+    let differences = differences
+        .into_iter()
+        .map(assess_schema_difference)
         .collect::<Vec<_>>();
     let compared_count = compared_tables
         .iter()
@@ -489,6 +494,167 @@ pub(super) fn compare_candidates(live: &Value, generation: &Value) -> Value {
         "differences": differences,
         "unmodeled_live_tables": unmodeled_live_tables
     })
+}
+
+/// Give a live-schema difference a conservative, review-oriented assessment.
+/// The comparison is a migration aid, not a claim that Laravel's storage
+/// representation must be copied literally into a Zelyra application.
+fn assess_schema_difference(mut difference: Value) -> Value {
+    let kind = difference["kind"].as_str().unwrap_or_default();
+    let (classification, rationale, next_step) = match kind {
+        "sql_type_mismatch" => match (
+            difference["actual_type"].as_str(),
+            difference["expected_type"].as_str(),
+        ) {
+            (Some(actual), Some(expected))
+                if integer_storage(actual)
+                    .zip(integer_storage(expected))
+                    .is_some_and(|((actual_rank, actual_unsigned), (expected_rank, expected_unsigned))| {
+                        actual_unsigned == expected_unsigned && expected_rank > actual_rank
+                    }) =>
+            {
+                (
+                    "candidate_widens_integer_storage",
+                    "The generated Zelyra column uses a wider integer storage type than the live column with the same signedness. This is a storage change, not evidence of a lost integer range.",
+                    "Check existing values before applying a schema migration.",
+                )
+            }
+            (Some(actual), Some(expected))
+                if timestamp_precision(actual).is_some()
+                    && datetime_precision(expected).is_some() =>
+            {
+                (
+                    "utc_datetime_storage_normalization",
+                    "Zelyra stores Timestamp values as UTC-normalized DATETIME; MariaDB TIMESTAMP applies server/session time-zone conversion. Existing values need an explicit conversion decision.",
+                    "Review UTC interpretation and data conversion before migration.",
+                )
+            }
+            (Some(actual), Some(expected))
+                if datetime_precision(actual).zip(datetime_precision(expected)).is_some_and(
+                    |(actual, expected)| expected >= actual,
+                ) => (
+                    "candidate_extends_datetime_precision",
+                    "The generated Zelyra column preserves the live fractional-second precision and may store additional fractional digits.",
+                    "Confirm that callers accept the target precision.",
+                ),
+            _ => (
+                "requires_storage_semantics_review",
+                "The live and generated SQL types differ; this comparison cannot establish value-preserving conversion.",
+                "Review range, precision, collation, and conversion behavior before migration.",
+            ),
+        },
+        "missing_or_different_live_foreign_key"
+            if difference["expected_columns"]
+                .as_array()
+                .is_some_and(|columns| columns.iter().any(|column| column == "tenant_id"))
+                && difference["expected_referenced_columns"]
+                    .as_array()
+                    .is_some_and(|columns| columns.iter().any(|column| column == "tenant_id"))
+                && has_matching_single_column_foreign_key(&difference) =>
+        {
+            (
+                "tenant_isolation_hardening",
+                "The generated Zelyra relation includes the tenant key on both sides; this is stricter than a single-column live foreign key and prevents cross-tenant references.",
+                "Check existing references for tenant consistency before applying the stricter constraint.",
+            )
+        }
+        "default_value_mismatch" => (
+            "default_value_review",
+            "The live and generated defaults differ. Literal values are deliberately omitted from this report.",
+            "Review the source default and choose the intended Zelyra default.",
+        ),
+        "missing_live_foreign_key" | "missing_or_different_live_foreign_key" => (
+            "relation_constraint_review",
+            "The generated relation does not match the live foreign-key definition.",
+            "Review delete behavior and existing data before adding or changing the constraint.",
+        ),
+        _ => (
+            "schema_difference_review",
+            "The schemas differ; the report does not infer that either definition is correct.",
+            "Review this difference against application behavior and existing data.",
+        ),
+    };
+    if let Some(object) = difference.as_object_mut() {
+        object.insert(
+            "assessment".into(),
+            json!({
+                "classification": classification,
+                "rationale": rationale,
+                "next_step": next_step,
+                "automatic_migration": false
+            }),
+        );
+    }
+    difference
+}
+
+fn has_matching_single_column_foreign_key(difference: &Value) -> bool {
+    let Some(expected_columns) = difference["expected_columns"].as_array() else {
+        return false;
+    };
+    let Some(expected_referenced_columns) = difference["expected_referenced_columns"].as_array()
+    else {
+        return false;
+    };
+    let (Some(expected_column), Some(expected_referenced_column)) =
+        (expected_columns.last(), expected_referenced_columns.last())
+    else {
+        return false;
+    };
+    let (Some(expected_column), Some(expected_referenced_column)) = (
+        expected_column.as_str(),
+        expected_referenced_column.as_str(),
+    ) else {
+        return false;
+    };
+    difference["observed_foreign_keys"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .any(|actual| {
+            actual_foreign_key_columns(actual, "columns", "column") == [expected_column]
+                && actual_foreign_key_columns(actual, "referenced_columns", "referenced_column")
+                    == [expected_referenced_column]
+                && actual["referenced_table"] == difference["expected_table"]
+        })
+}
+
+fn integer_storage(value: &str) -> Option<(u8, bool)> {
+    let normalized = normalize_schema_type(value);
+    let unsigned = normalized.ends_with("UNSIGNED");
+    let base = normalized.split_whitespace().next().unwrap_or_default();
+    let rank = match base {
+        "TINYINT" => 1,
+        "SMALLINT" => 2,
+        "MEDIUMINT" => 3,
+        "INT" => 4,
+        "BIGINT" => 5,
+        _ => return None,
+    };
+    Some((rank, unsigned))
+}
+
+fn datetime_precision(value: &str) -> Option<u8> {
+    temporal_precision(value, "DATETIME")
+}
+
+fn timestamp_precision(value: &str) -> Option<u8> {
+    temporal_precision(value, "TIMESTAMP")
+}
+
+fn temporal_precision(value: &str, expected_base: &str) -> Option<u8> {
+    let normalized = normalize_schema_type(value);
+    if normalized == expected_base {
+        return Some(0);
+    }
+    let (base, suffix) = normalized.split_once('(')?;
+    if base != expected_base {
+        return None;
+    }
+    suffix
+        .strip_suffix(')')
+        .and_then(|precision| precision.parse::<u8>().ok())
+        .filter(|precision| *precision <= 6)
 }
 
 fn expected_foreign_key_columns(
@@ -1405,6 +1571,94 @@ mod tests {
                     && difference["expected_type"] == "DECIMAL(12,2)"
                     && difference["actual_type"] == "DECIMAL(12,4)"
             }));
+    }
+
+    #[test]
+    fn classifies_schema_differences_without_calling_every_difference_an_error() {
+        let integer = assess_schema_difference(json!({
+            "kind":"sql_type_mismatch", "actual_type":"INT", "expected_type":"BIGINT"
+        }));
+        assert_eq!(
+            integer["assessment"]["classification"],
+            "candidate_widens_integer_storage"
+        );
+        assert_eq!(integer["assessment"]["automatic_migration"], false);
+
+        let precision = assess_schema_difference(json!({
+            "kind":"sql_type_mismatch", "actual_type":"DATETIME", "expected_type":"DATETIME(3)"
+        }));
+        assert_eq!(
+            precision["assessment"]["classification"],
+            "candidate_extends_datetime_precision"
+        );
+
+        let timestamp = assess_schema_difference(json!({
+            "kind":"sql_type_mismatch", "actual_type":"TIMESTAMP", "expected_type":"DATETIME(3)"
+        }));
+        assert_eq!(
+            timestamp["assessment"]["classification"],
+            "utc_datetime_storage_normalization"
+        );
+
+        let fractional_timestamp = assess_schema_difference(json!({
+            "kind":"sql_type_mismatch", "actual_type":"TIMESTAMP(3)", "expected_type":"DATETIME(3)"
+        }));
+        assert_eq!(
+            fractional_timestamp["assessment"]["classification"],
+            "utc_datetime_storage_normalization"
+        );
+
+        let tenant_foreign_key = assess_schema_difference(json!({
+            "kind":"missing_or_different_live_foreign_key",
+            "expected_columns":["tenant_id", "customer_id"],
+            "expected_referenced_columns":["tenant_id", "id"],
+            "expected_table":"customers",
+            "observed_foreign_keys":[{
+                "column":"customer_id", "referenced_table":"customers",
+                "referenced_column":"id", "on_delete":"RESTRICT"
+            }]
+        }));
+        assert_eq!(
+            tenant_foreign_key["assessment"]["classification"],
+            "tenant_isolation_hardening"
+        );
+
+        for observed_foreign_keys in [
+            json!([]),
+            json!([{
+                "column":"customer_id", "referenced_table":"other_customers",
+                "referenced_column":"id", "on_delete":"RESTRICT"
+            }]),
+            json!([{
+                "columns":["tenant_id", "customer_id"],
+                "referenced_table":"customers", "referenced_columns":["tenant_id", "id"],
+                "on_delete":"RESTRICT"
+            }]),
+        ] {
+            let unproven_narrower_key = assess_schema_difference(json!({
+                "kind":"missing_or_different_live_foreign_key",
+                "expected_table":"customers",
+                "expected_columns":["tenant_id", "customer_id"],
+                "expected_referenced_columns":["tenant_id", "id"],
+                "observed_foreign_keys": observed_foreign_keys
+            }));
+            assert_eq!(
+                unproven_narrower_key["assessment"]["classification"],
+                "relation_constraint_review"
+            );
+        }
+
+        let decimal = assess_schema_difference(json!({
+            "kind":"sql_type_mismatch", "actual_type":"DECIMAL(12,4)", "expected_type":"DECIMAL(12,2)"
+        }));
+        assert_eq!(
+            decimal["assessment"]["classification"],
+            "requires_storage_semantics_review"
+        );
+        assert!(decimal["assessment"]["rationale"]
+            .as_str()
+            .unwrap()
+            .contains("cannot establish value-preserving conversion"));
     }
 
     #[test]
