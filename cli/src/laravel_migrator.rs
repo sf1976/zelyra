@@ -387,6 +387,7 @@ fn import_coverage_report(
             "standalone_validation_candidates": generated_validation_candidates,
             "pure_service_helpers": generated_service_helpers,
             "static_view_components": generated_view_components,
+            "static_view_routes": generation_selection["static_translated_view_routes_generated_count"],
             "layout_starters": generated_layouts,
             "native_route_workflows": generated_route_workflows,
             "reusable_auth_packages": generated_auth_packages,
@@ -768,7 +769,7 @@ fn generate_scaffold(
         } else {
             0
         };
-        let (generated_static_view_source, mut view_translation_report) = if table_scoped {
+        let (mut generated_static_view_source, mut view_translation_report) = if table_scoped {
             (
                 None,
                 json!({
@@ -955,6 +956,90 @@ fn generate_scaffold(
         } else {
             (None, None)
         };
+        let mut occupied_page_paths = static_asset_routes
+            .iter()
+            .filter(|route| route["status"] == "generated_static_public_asset_route")
+            .filter_map(|route| route["route"].as_str().map(str::to_owned))
+            .collect::<Vec<_>>();
+        if native_auth.is_some() {
+            occupied_page_paths.extend(["/login".to_owned(), "/logout".to_owned()]);
+        }
+        if let Some(workflow) = &generated_route_workflow {
+            for key in ["source_route", "success_path"] {
+                if let Some(path) = workflow.report[key].as_str() {
+                    occupied_page_paths.push(path.to_owned());
+                }
+            }
+        }
+        let translated_view_routes = if table_scoped {
+            Vec::new()
+        } else {
+            route_workflows::static_translated_view_routes(
+                &root,
+                &report_json["graph"],
+                &view_translation_report,
+                &occupied_page_paths,
+            )
+        };
+        if !translated_view_routes.is_empty() {
+            let pages = route_workflows::render_static_translated_view_pages(
+                &translated_view_routes,
+                generated_layout_count > 0,
+            );
+            if let Some(source) = generated_static_view_source.as_mut() {
+                source.push_str(&pages);
+            }
+            if let Some(translations) = view_translation_report["translations"].as_array_mut() {
+                for translation in translations {
+                    let source_view = translation["source_file"].as_str();
+                    let wired_routes = translated_view_routes
+                        .iter()
+                        .filter(|route| route["source_view"].as_str() == source_view)
+                        .collect::<Vec<_>>();
+                    if !wired_routes.is_empty() {
+                        translation["route_wiring"] = json!("generated_static_view_page");
+                        translation["wired_routes"] = json!(wired_routes
+                            .iter()
+                            .filter_map(|route| route["route"].as_str())
+                            .collect::<Vec<_>>());
+                    }
+                }
+            }
+            if let Some(files) = source_file_plan.as_array_mut() {
+                for source_file in files {
+                    let file = source_file["file"].as_str();
+                    let wired_routes = translated_view_routes
+                        .iter()
+                        .filter(|route| route["source_file"].as_str() == file)
+                        .collect::<Vec<_>>();
+                    if !wired_routes.is_empty() {
+                        source_file["translation_status"] =
+                            json!("translated_static_presentation_and_route_wired");
+                        let mut outputs = source_file["translated_outputs"]
+                            .as_array()
+                            .cloned()
+                            .unwrap_or_default();
+                        outputs.extend(wired_routes.iter().map(|route| {
+                            json!({
+                                "kind": "static_presentation_page",
+                                "route": route["route"],
+                                "component": route["component"],
+                                "target_module": "src/imported_views.zyl",
+                                "route_wired": true
+                            })
+                        }));
+                        source_file["translated_outputs"] = json!(outputs);
+                    }
+                }
+            }
+        }
+        view_translation_report["route_wiring_generated"] = json!(
+            !translated_view_routes.is_empty()
+                || generated_route_workflow.as_ref().is_some_and(|workflow| {
+                    workflow.report["success_view_component"].is_string()
+                })
+        );
+        view_translation_report["generated_routes"] = json!(translated_view_routes);
         let mut generated_schema_source = included_tables
             .iter()
             .filter(|candidate| {
@@ -1123,6 +1208,8 @@ fn generate_scaffold(
                 .as_ref()
                 .map(|workflow| workflow.report.clone())
                 .unwrap_or_else(|| json!({"status": "no_complete_supported_workflow_found"})),
+            "static_translated_view_routes": translated_view_routes.clone(),
+            "static_translated_view_routes_generated_count": translated_view_routes.len(),
             "generated_runtime_capabilities": if native_auth.is_some()
                 || generated_route_workflow.is_some()
             {
@@ -1168,9 +1255,10 @@ fn generate_scaffold(
             "layout_slot_bindings_wired_to_views": false,
             "view_translations": view_translation_report,
             "view_translation_module": if generated_view_component_count > 0 { Some("src/imported_views.zyl") } else { None::<&str> },
-            "view_components_wired_to_routes": generated_route_workflow
-                .as_ref()
-                .is_some_and(|workflow| workflow.report["success_view_component"].is_string()),
+            "view_components_wired_to_routes": !translated_view_routes.is_empty()
+                || generated_route_workflow
+                    .as_ref()
+                    .is_some_and(|workflow| workflow.report["success_view_component"].is_string()),
             "asset_copy": asset_copy_report.clone(),
             "authentication": authentication_selection,
             "validation_forms_wired_to_routes": false,
@@ -1393,7 +1481,7 @@ fn generate_scaffold(
         write_new_file(
             &staging.join("README.md"),
             &format!(
-                "# Zelyra migration scaffold\n\nThis is a separate, compiler-checkable starting point. It contains no copied Laravel PHP, configuration, secrets, personal records, or production data. It includes {generated_table_count} schema declaration candidate(s) from a restricted static migration subset; these declarations do not apply database changes and must be reviewed. It also contains {generated_business_count} pure model projection helper(s) translated from a narrow static PHP subset in `src/imported_business.zyl`, imported from `main.zyl` through Zelyra's normal module system. These helpers do not include model casts, call sites, authorization, or surrounding workflows; review their assumptions and wire them explicitly. It contains {generated_service_count} narrow pure service helper(s) in `src/imported_services.zyl`, imported through the normal module system. Their statically resolved callers are listed, but their controller/service workflows are not automatically rewired. It contains {generated_enum_adapter_count} typed adapters for literal Laravel enum values in `src/imported_enums.zyl`. They map stored strings to Zelyra enum variants and back, but do not add database constraints or wire application call sites; parse every value read from storage and validate writes explicitly. It contains {generated_validation_form_count} standalone form declaration candidate(s) from a strict subset of literal Laravel validation rules in `src/imported_forms.zyl`. This file is deliberately not imported by `main.zyl`, so the suggestions do not create endpoints until explicitly included and reviewed. They are not connected to Laravel routes or handlers and do not perform Laravel validation or persistence; omitted rules and fields are recorded in `GENERATION_SELECTION.json`. Laravel command and scheduler metadata is listed in `MIGRATION_TASKS.md`; PHP handlers are not imported. Every statically inventoried PHP source file and its proposed migration disposition is listed in `MIGRATION_FILES.md` and `SOURCE_FILE_PLAN.json`; entries are not claims that behavior was translated. `ROUTE_CANDIDATES.json` separates statically resolved routes from conventionally named resource controllers and routes that merely consume the selected model; neither means a route was generated. `STATIC_ASSET_ROUTES.json` lists exact, middleware-free GET routes that return a literal file from `public/` and whose byte-for-byte copy into Zelyra's `public/` passed the bounded asset checks. Zelyra's static server serves those files at the same origin-relative route path; no Laravel or PHP handler is copied. Blade URL, asset, and shared-layout references are recorded in `VIEW_LINKS.json`; `VIEW_LAYOUTS.md` maps each `@extends` consumer and its `@section` values to the layout's `@yield` slots. Zelyra already provides reusable named `view` layouts. When a shared Blade layout is found, the scaffold emits the Zelyra starter `view ImportedAppShell` in `src/imported_layouts.zyl` and imports that module; each translated page can bind it with `view: ImportedAppShell`. The shared frame is therefore reusable immediately, while original navigation/auth behavior and Blade page bodies still require review and translation. Two strict standalone notice shapes may also be emitted as presentation components in `src/imported_views.zyl`: a static confirmation and a module notice with one escaped `String` property. Inspect `VIEW_TRANSLATIONS.md` and `VIEW_TRANSLATIONS.json`. Components alone do not create routes; the narrowly verified public unsubscribe workflow can reuse its translated success component, and the reports mark that exact wiring when generated. No general Laravel route or dynamic-view translation is implied. Referenced public assets are copied into the generated `public/` tree when they are regular files within the configured size limits; `ASSET_COPY.md` and `ASSET_COPY.json` list copied and skipped assets. URLs remain origin-relative, and host filesystem paths are never emitted as application URLs. The complete schema selection and added relation dependencies are listed in `GENERATION_SELECTION.json`; the migration report remains the full-project analysis.\n\nStart with `zelyra check main.zyl`, then review `MIGRATION_REPORT.md`, `MIGRATION_TODO.md`, `MIGRATION_TASKS.md`, `MIGRATION_FILES.md`, `STATIC_ASSET_ROUTES.json`, `VIEW_LINKS.json`, `VIEW_LAYOUTS.md`, `VIEW_TRANSLATIONS.md`, `VIEW_TRANSLATIONS.json`, `ASSET_COPY.md`, `ASSET_COPY.json`, `SOURCE_FILE_PLAN.json`, `ROUTE_CANDIDATES.json`, and `GENERATION_SELECTION.json` before connecting or changing a database.\n",
+                "# Zelyra migration scaffold\n\nThis is a separate, compiler-checkable starting point. It contains no copied Laravel PHP, configuration, secrets, personal records, or production data. It includes {generated_table_count} schema declaration candidate(s) from a restricted static migration subset; these declarations do not apply database changes and must be reviewed. It also contains {generated_business_count} pure model projection helper(s) translated from a narrow static PHP subset in `src/imported_business.zyl`, imported from `main.zyl` through Zelyra's normal module system. These helpers do not include model casts, call sites, authorization, or surrounding workflows; review their assumptions and wire them explicitly. It contains {generated_service_count} narrow pure service helper(s) in `src/imported_services.zyl`, imported through the normal module system. Their statically resolved callers are listed, but their controller/service workflows are not automatically rewired. It contains {generated_enum_adapter_count} typed adapters for literal Laravel enum values in `src/imported_enums.zyl`. They map stored strings to Zelyra enum variants and back, but do not add database constraints or wire application call sites; parse every value read from storage and validate writes explicitly. It contains {generated_validation_form_count} standalone form declaration candidate(s) from a strict subset of literal Laravel validation rules in `src/imported_forms.zyl`. This file is deliberately not imported by `main.zyl`, so the suggestions do not create endpoints until explicitly included and reviewed. They are not connected to Laravel routes or handlers and do not perform Laravel validation or persistence; omitted rules and fields are recorded in `GENERATION_SELECTION.json`. Laravel command and scheduler metadata is listed in `MIGRATION_TASKS.md`; PHP handlers are not imported. Every statically inventoried PHP source file and its proposed migration disposition is listed in `MIGRATION_FILES.md` and `SOURCE_FILE_PLAN.json`; entries are not claims that behavior was translated. `ROUTE_CANDIDATES.json` separates statically resolved routes from conventionally named resource controllers and routes that merely consume the selected model; neither means a route was generated. `STATIC_ASSET_ROUTES.json` lists exact, middleware-free GET routes that return a literal file from `public/` and whose byte-for-byte copy into Zelyra's `public/` passed the bounded asset checks. Zelyra's static server serves those files at the same origin-relative route path; no Laravel or PHP handler is copied. Blade URL, asset, and shared-layout references are recorded in `VIEW_LINKS.json`; `VIEW_LAYOUTS.md` maps each `@extends` consumer and its `@section` values to the layout's `@yield` slots. Zelyra already provides reusable named `view` layouts. When a shared Blade layout is found, the scaffold emits the Zelyra starter `view ImportedAppShell` in `src/imported_layouts.zyl` and imports that module; each translated page can bind it with `view: ImportedAppShell`. The shared frame is therefore reusable immediately, while original navigation/auth behavior and Blade page bodies still require review and translation. Two strict standalone notice shapes may also be emitted as presentation components in `src/imported_views.zyl`: a static confirmation and a module notice with one escaped `String` property. Inspect `VIEW_TRANSLATIONS.md` and `VIEW_TRANSLATIONS.json`. A translated static component is wired as a page only when its Laravel route is an ungrouped, middleware-free GET closure whose sole statement returns that exact literal view; the report records each generated route. Other components do not create routes. The narrowly verified public unsubscribe workflow can also reuse its translated success component. No general Laravel route or dynamic-view translation is implied. Referenced public assets are copied into the generated `public/` tree when they are regular files within the configured size limits; `ASSET_COPY.md` and `ASSET_COPY.json` list copied and skipped assets. URLs remain origin-relative, and host filesystem paths are never emitted as application URLs. The complete schema selection and added relation dependencies are listed in `GENERATION_SELECTION.json`; the migration report remains the full-project analysis.\n\nStart with `zelyra check main.zyl`, then review `MIGRATION_REPORT.md`, `MIGRATION_TODO.md`, `MIGRATION_TASKS.md`, `MIGRATION_FILES.md`, `STATIC_ASSET_ROUTES.json`, `VIEW_LINKS.json`, `VIEW_LAYOUTS.md`, `VIEW_TRANSLATIONS.md`, `VIEW_TRANSLATIONS.json`, `ASSET_COPY.md`, `ASSET_COPY.json`, `SOURCE_FILE_PLAN.json`, `ROUTE_CANDIDATES.json`, and `GENERATION_SELECTION.json` before connecting or changing a database.\n",
                 generated_validation_form_count = generated_validation_form_count
             ),
         )?;
@@ -4179,5 +4267,48 @@ Schema::table($runtimeTable, function ($table) { $table->boolean('dynamic'); });
         assert_eq!(analysis.counts.total, 1);
         let _ = fs::remove_dir_all(root);
         let _ = fs::remove_file(analysis.report_path);
+    }
+
+    #[test]
+    fn generated_static_notice_route_is_compiler_checked_and_reported_as_wired() {
+        let root = env::temp_dir().join(format!(
+            "zelyra-laravel-static-page-{}-{}",
+            std::process::id(),
+            rand_core::OsRng.next_u64()
+        ));
+        let source = root.join("source");
+        fs::create_dir_all(source.join("routes")).unwrap();
+        fs::create_dir_all(source.join("resources/views/public")).unwrap();
+        fs::write(
+            source.join("routes/web.php"),
+            "<?php\nRoute::get('/notice', function () { return view('public.notice'); });\n",
+        )
+        .unwrap();
+        fs::write(
+            source.join("resources/views/public/notice.blade.php"),
+            r#"<!doctype html><html lang="de"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Notice</title><script src="https://cdn.tailwindcss.com"></script></head><body class="min-h-screen bg-slate-50 flex items-center justify-center p-6"><main class="max-w-lg rounded-2xl bg-white p-8 shadow"><h1 class="text-2xl font-bold text-slate-900">Notice</h1><p class="mt-3 text-slate-600">This is a reviewed static page.</p></main></body></html>"#,
+        )
+        .unwrap();
+        let output = root.join("scaffold");
+        generate_scaffold(&source, None, &output, "json", &[], None).unwrap();
+        let generated_views = fs::read_to_string(output.join("src/imported_views.zyl")).unwrap();
+        assert!(generated_views.contains("page \"/notice\""));
+        assert!(generated_views.contains("view: ImportedPublicShell"));
+        assert!(generated_views.contains("<PublicNotice />"));
+        let selection: Value =
+            serde_json::from_slice(&fs::read(output.join("GENERATION_SELECTION.json")).unwrap())
+                .unwrap();
+        assert_eq!(
+            selection["static_translated_view_routes_generated_count"],
+            1
+        );
+        assert_eq!(
+            selection["view_translation_module"],
+            "src/imported_views.zyl"
+        );
+        assert!(fs::read_to_string(output.join("IMPORT_COVERAGE.json"))
+            .unwrap()
+            .contains("\"static_view_routes\": 1"));
+        fs::remove_dir_all(root).unwrap();
     }
 }

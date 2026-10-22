@@ -2461,14 +2461,14 @@ dependencies = [
 
 [[package]]
 name = "zelyra-ast"
-version = "1.2.42"
+version = "1.2.43"
 dependencies = [
  "serde_json",
 ]
 
 [[package]]
 name = "zelyra-cli"
-version = "1.2.42"
+version = "1.2.43"
 dependencies = [
  "chrono",
  "chrono-tz",
@@ -2506,7 +2506,7 @@ dependencies = [
 
 [[package]]
 name = "zelyra-database"
-version = "1.2.42"
+version = "1.2.43"
 dependencies = [
  "bytes",
  "mysql",
@@ -2527,7 +2527,7 @@ dependencies = [
 
 [[package]]
 name = "zelyra-forms"
-version = "1.2.42"
+version = "1.2.43"
 dependencies = [
  "zelyra-ast",
  "zelyra-database",
@@ -2537,7 +2537,7 @@ dependencies = [
 
 [[package]]
 name = "zelyra-hir"
-version = "1.2.42"
+version = "1.2.43"
 dependencies = [
  "zelyra-ast",
  "zelyra-database",
@@ -2547,21 +2547,21 @@ dependencies = [
 
 [[package]]
 name = "zelyra-lexer"
-version = "1.2.42"
+version = "1.2.43"
 dependencies = [
  "zelyra-ast",
 ]
 
 [[package]]
 name = "zelyra-mail"
-version = "1.2.42"
+version = "1.2.43"
 dependencies = [
  "lettre",
 ]
 
 [[package]]
 name = "zelyra-mir"
-version = "1.2.42"
+version = "1.2.43"
 dependencies = [
  "zelyra-ast",
  "zelyra-database",
@@ -2573,7 +2573,7 @@ dependencies = [
 
 [[package]]
 name = "zelyra-parser"
-version = "1.2.42"
+version = "1.2.43"
 dependencies = [
  "zelyra-ast",
  "zelyra-lexer",
@@ -2581,7 +2581,7 @@ dependencies = [
 
 [[package]]
 name = "zelyra-runtime"
-version = "1.2.42"
+version = "1.2.43"
 dependencies = [
  "mime",
  "num-bigint",
@@ -2601,7 +2601,7 @@ dependencies = [
 
 [[package]]
 name = "zelyra-web"
-version = "1.2.42"
+version = "1.2.43"
 dependencies = [
  "argon2",
  "blake2",

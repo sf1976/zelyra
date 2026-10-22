@@ -1,5 +1,19 @@
 ## Unreleased
 
+## 1.2.43 — 2026-10-22
+
+- Wire narrowly recognized translated static Blade views to generated Zelyra
+  page routes. Accept only ungrouped, middleware-free literal GET closures
+  whose sole statement returns the exact translated view; reject occupied or
+  duplicate route paths and record route provenance. Other Blade templates,
+  dynamic views, protected routes, controllers, and workflow behavior remain
+  manual. / Übersetzte statische Blade-Views mit eng begrenzten Prüfungen an
+  erzeugte Zelyra-Seitenrouten binden. Nur nicht gruppierte, middlewarefreie
+  GET-Closures mit literaler Route und genau einer Rückgabe der exakt
+  übersetzten View akzeptieren; belegte und doppelte Routenpfade abweisen und
+  die Herkunft dokumentieren. Andere Blade-Templates, dynamische Views,
+  geschützte Routen, Controller und Ablaufverhalten bleiben manuell.
+
 ## 1.2.42 — 2026-10-22
 
 - Resolve literal Blade layout, include, and local anonymous-component
