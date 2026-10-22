@@ -120,8 +120,8 @@ impl HostServices for OutboxHost {
         Ok(None)
     }
     fn fill_random(&self, output: &mut [u8]) -> Result<(), String> {
-        self.random_calls.fetch_add(1, Ordering::SeqCst);
-        output.fill(0xab);
+        let call = self.random_calls.fetch_add(1, Ordering::SeqCst);
+        output.fill(0xab_u8.wrapping_add(call as u8));
         Ok(())
     }
     fn validate_database_storage(
@@ -893,6 +893,7 @@ fn bytecode_pdf_attachment_survives_encoding_and_uses_the_shared_renderer() {
                 transaction {
                     sql { INSERT INTO invoice_audits (invoice_number) VALUES (:invoice_number) }
                     mail_queue("customer@example.test", "Invoice", "Attached", "invoice.pdf", render_pdf("InvoicePrint", invoice))
+                    mail_queue("archive@example.test", "Invoice copy", "Archive copy", "invoice-copy.pdf", render_pdf("InvoicePrint", invoice))
                 }
             }
             fn main() uses Email, Database(write) {
@@ -929,7 +930,7 @@ fn bytecode_pdf_attachment_survives_encoding_and_uses_the_shared_renderer() {
     assert_eq!(outcome.error, None);
     let (queries, transactional) = host.batch.lock().unwrap().clone().expect("outbox batch");
     assert!(transactional);
-    assert_eq!(queries.len(), 2);
+    assert_eq!(queries.len(), 3);
     assert!(queries[0].sql.contains("INSERT INTO invoice_audits"));
     assert_eq!(queries[0].params.len(), 1);
     assert!(matches!(
@@ -937,6 +938,15 @@ fn bytecode_pdf_attachment_survives_encoding_and_uses_the_shared_renderer() {
         zelyra_database::QueryValue::String(number) if number == "INV-1"
     ));
     assert!(queries[1].sql.contains("INSERT INTO `_zelyra_outbox`"));
+    assert!(queries[2].sql.contains("INSERT INTO `_zelyra_outbox`"));
+    assert!(matches!(
+        &queries[1].params[0].1,
+        zelyra_database::QueryValue::String(id) if id == &"ab".repeat(16)
+    ));
+    assert!(matches!(
+        &queries[2].params[0].1,
+        zelyra_database::QueryValue::String(id) if id == &"ac".repeat(16)
+    ));
     let payload = match &queries[1].params[2].1 {
         zelyra_database::QueryValue::String(payload) => payload,
         other => panic!("expected JSON outbox payload, got {other:?}"),
@@ -947,6 +957,13 @@ fn bytecode_pdf_attachment_survives_encoding_and_uses_the_shared_renderer() {
         payload.contains("JVBER"),
         "the attachment contains encoded PDF bytes"
     );
+    let second_payload = match &queries[2].params[2].1 {
+        zelyra_database::QueryValue::String(payload) => payload,
+        other => panic!("expected JSON outbox payload, got {other:?}"),
+    };
+    assert!(second_payload.contains("archive@example.test"));
+    assert!(second_payload.contains("invoice-copy.pdf"));
+    assert!(second_payload.contains("application/pdf"));
 
     // Compare the actual SQL-plus-outbox transaction across all three
     // backends. Independent PDF-header checks would not establish parity for
@@ -1046,6 +1063,7 @@ fn pdf_outbox_transaction_host_failure_is_differential_and_atomic() {
                 transaction {
                     sql { INSERT INTO invoice_audits (invoice_number) VALUES (:invoice_number) }
                     mail_queue("customer@example.test", "Invoice", "Attached", "invoice.pdf", render_pdf("InvoicePrint", invoice))
+                    mail_queue("archive@example.test", "Invoice copy", "Archive copy", "invoice-copy.pdf", render_pdf("InvoicePrint", invoice))
                 }
             }
             fn main() uses Email, Database(write) {
@@ -1123,10 +1141,11 @@ fn pdf_outbox_transaction_host_failure_is_differential_and_atomic() {
             transactional,
             "SQL and outbox writes must share a transaction"
         );
-        assert_eq!(queries.len(), 2);
+        assert_eq!(queries.len(), 3);
         assert_eq!(host.calls.load(Ordering::SeqCst), 1);
         assert!(queries[0].sql.contains("INSERT INTO invoice_audits"));
         assert!(queries[1].sql.contains("INSERT INTO `_zelyra_outbox`"));
+        assert!(queries[2].sql.contains("INSERT INTO `_zelyra_outbox`"));
         if let Some(expected_queries) = &reference_queries {
             for (actual, expected) in queries.iter().zip(expected_queries) {
                 assert_eq!(actual.sql, expected.sql);
