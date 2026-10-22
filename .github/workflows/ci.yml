@@ -351,6 +351,11 @@ jobs:
           DATABASE_URL: mariadb://root:root@127.0.0.1:3306/zelyra_ci
           ZELYRA_BIN: target/debug/zelyra
         run: bash ./tests/mail-outbox-e2e.sh
+      - name: Verify multi-message outbox rollback across execution backends
+        env:
+          DATABASE_URL: mariadb://root:root@127.0.0.1:3306/zelyra_ci
+          ZELYRA_BIN: target/debug/zelyra
+        run: bash ./tests/mariadb-outbox-multi-rollback-e2e.sh
       - name: Run generated machine authorization end-to-end test
         env:
           ZELYRA_MACHINE_AUTH_GENERATED_ROOT_PASSWORD: root
