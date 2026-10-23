@@ -142,10 +142,7 @@ fn call_contexts(source: &str, cursor_byte: usize) -> Vec<CallContext> {
         }
         match &token.kind {
             TokenKind::LParen => {
-                let is_call = index
-                    .checked_sub(1)
-                    .and_then(|previous| tokens.get(previous))
-                    .is_some_and(|previous| matches!(&previous.kind, TokenKind::Ident(_)));
+                let is_call = function_name_index_before_open(&tokens, index).is_some();
                 delimiters.push(if is_call {
                     Delimiter::Call {
                         open_index: index,
@@ -197,25 +194,7 @@ fn call_context_for_open(
     open_index: usize,
     commas: usize,
 ) -> Option<CallContext> {
-    let mut name_index = open_index.checked_sub(1)?;
-    if matches!(tokens.get(name_index)?.kind, TokenKind::Greater) {
-        let mut depth = 1usize;
-        name_index = name_index.checked_sub(1)?;
-        while depth > 0 {
-            match tokens.get(name_index)?.kind {
-                TokenKind::Greater => depth += 1,
-                TokenKind::Less => depth -= 1,
-                _ => {}
-            }
-            if depth > 0 {
-                name_index = name_index.checked_sub(1)?;
-            }
-        }
-        name_index = name_index.checked_sub(1)?;
-    }
-    if !matches!(tokens.get(name_index)?.kind, TokenKind::Ident(_)) {
-        return None;
-    }
+    let name_index = function_name_index_before_open(tokens, open_index)?;
     let mut callee_start_index = name_index;
     while callee_start_index >= 2
         && tokens[callee_start_index - 1].kind == TokenKind::DoubleColon
@@ -230,6 +209,26 @@ fn call_context_for_open(
         callee_start: tokens.get(name_index)?.span.start,
         active_parameter: commas,
     })
+}
+
+fn function_name_index_before_open(tokens: &[Token], open_index: usize) -> Option<usize> {
+    let mut name_index = open_index.checked_sub(1)?;
+    if matches!(&tokens.get(name_index)?.kind, TokenKind::Greater) {
+        let mut depth = 1usize;
+        name_index = name_index.checked_sub(1)?;
+        while depth > 0 {
+            match &tokens.get(name_index)?.kind {
+                TokenKind::Greater => depth += 1,
+                TokenKind::Less => depth -= 1,
+                _ => {}
+            }
+            if depth > 0 {
+                name_index = name_index.checked_sub(1)?;
+            }
+        }
+        name_index = name_index.checked_sub(1)?;
+    }
+    matches!(&tokens.get(name_index)?.kind, TokenKind::Ident(_)).then_some(name_index)
 }
 
 #[cfg(test)]
@@ -254,5 +253,14 @@ mod tests {
         let source = "fn main() { print(\"value with (not a call\") }";
         let cursor = source.find("not a call").unwrap() + 4;
         assert!(call_contexts(source, cursor).is_empty());
+    }
+
+    #[test]
+    fn call_context_recognizes_explicit_nested_generic_arguments() {
+        let source = "fn main() { find<Map<String, Int>>(1, ) }";
+        let cursor = source.find(", )").unwrap() + 2;
+        let contexts = call_contexts(source, cursor);
+        assert_eq!(contexts.len(), 1);
+        assert_eq!(contexts[0].active_parameter, 1);
     }
 }
