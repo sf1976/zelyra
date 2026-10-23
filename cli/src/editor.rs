@@ -30,6 +30,8 @@ mod editor_database_records;
 mod editor_outbox;
 #[path = "editor_pdf.rs"]
 mod editor_pdf;
+#[path = "editor_sql.rs"]
+mod editor_sql;
 #[path = "editor_terminal.rs"]
 mod editor_terminal;
 #[path = "editor_transactions.rs"]
@@ -567,6 +569,7 @@ fn editor_response(
         ("GET", "database-schema") => database_schema_response(state),
         ("GET", "database-target") => database_target_response(state),
         ("GET", "database-rows") => database_rows_response(state, request),
+        ("POST", "database-query") => editor_sql::query(state, &parse_json_body(&request.body)?),
         ("POST", "database-record-mutate") => {
             editor_database_records::mutate(state, &parse_json_body(&request.body)?)
         }
@@ -1905,9 +1908,14 @@ fn database_target_response(
                     .and_then(|url| url.path_segments()?.next_back().map(str::to_owned))
             })
         });
+    let project_scope = format!(
+        "{:x}",
+        Sha256::digest(state.root.to_string_lossy().as_bytes())
+    );
     let response = json!({
         "engine": engine,
         "database": target_database,
+        "projectScope": &project_scope[..16],
         "configured": configured,
         "creationSupported": (engine.eq_ignore_ascii_case("mariadb") || engine.eq_ignore_ascii_case("mysql")) && configured,
     });
@@ -6423,9 +6431,26 @@ fn main() {}
         assert_eq!(status, 200);
         assert_eq!(value["engine"], "mariadb");
         assert_eq!(value["database"], "studio_db");
+        let project_scope = value["projectScope"].as_str().unwrap().to_owned();
+        assert_eq!(project_scope.len(), 16);
         assert_eq!(value["configured"], true);
         assert_eq!(value["creationSupported"], true);
         assert!(!body.contains("studio_secret"));
+        let other_state = project();
+        fs::write(
+            other_state.root.join("main.zyl"),
+            "database main {\n    engine: mariadb\n}\nfn main() {}\n",
+        )
+        .expect("write second MariaDB project source");
+        fs::write(
+            other_state.root.join(".env"),
+            "DATABASE_URL=mysql://studio_user:studio_secret@127.0.0.1:3306/studio_db\n",
+        )
+        .expect("write second local connection configuration");
+        let (_, _, other_body) = database_target_response(&other_state)
+            .expect("inspect second project's target metadata");
+        let other_value: Value = serde_json::from_str(&other_body).unwrap();
+        assert_ne!(other_value["projectScope"].as_str().unwrap(), project_scope);
         fs::write(
             state.root.join("main.zyl"),
             "database main {\n    engine: mysql\n}\nfn main() {}\n",
@@ -6437,6 +6462,7 @@ fn main() {}
         assert_eq!(value["creationSupported"], true);
         assert!(!body.contains("studio_secret"));
         let _ = fs::remove_dir_all(state.root.clone());
+        let _ = fs::remove_dir_all(other_state.root.clone());
     }
 
     #[test]

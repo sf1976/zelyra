@@ -12,11 +12,13 @@ try {
   const browserErrors = [];
   const databaseRowRequests = [];
   const chartRequests = [];
+  const sqlQueryRequests = [];
   let databaseCreateRequest = null;
   const recordMutationRequests = [];
   let schemaApplyRequest = null;
   let schemaSourceHash = "";
   let schemaCandidateContent = "";
+  let schemaBackend = "mariadb";
   const base = `http://127.0.0.1:${port}/__zelyra/editor`;
   const url = `${base}/#${token}`;
   page.on("pageerror", (error) => browserErrors.push(error.message));
@@ -24,7 +26,7 @@ try {
     status: 200,
     contentType: "application/json",
     body: JSON.stringify({
-      backend: "mariadb",
+      backend: schemaBackend,
       modules: [{ source_module: "main.zyl", tables: [{
         name: "customers", status: "matched", declared_columns: [
           { name: "id", type: "BIGINT", nullable: false, primary_key: true, auto_increment: true, unique: false },
@@ -53,7 +55,7 @@ try {
   await page.route("**/__zelyra/editor/api/database-target", (route) => route.fulfill({
     status: 200,
     contentType: "application/json",
-    body: JSON.stringify({ engine: "mariadb", database: "studio_db", configured: true, creationSupported: true }),
+    body: JSON.stringify({ projectScope: "0123456789abcdef", engine: "mariadb", database: "studio_db", configured: true, creationSupported: true }),
   }));
   await page.route("**/__zelyra/editor/api/database-create", async (route) => {
     databaseCreateRequest = route.request().postDataJSON();
@@ -103,6 +105,60 @@ try {
       status: 200,
       contentType: "application/json",
       body: JSON.stringify({ readOnly: true, table: spec.table, groupBy: spec.groupBy, aggregation: spec.aggregation, measure: spec.measure, columns: [spec.groupBy, "value"], rows: [["Anna <script>", "12.5"], ["Bert & Co", "7"]], limit: 20, truncated: false }),
+    });
+  });
+  await page.route("**/__zelyra/editor/api/database-query", async (route) => {
+    const request = route.request();
+    assert.equal(request.headers()["x-zelyra-editor-token"], token, "SQL queries must use the local editor session token");
+    const query = request.postDataJSON();
+    sqlQueryRequests.push(query);
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify(query.sql.includes("columns_truncated")
+        ? {
+            readOnly: true,
+            columns: Array.from({ length: 50 }, (_, index) => `column_${index + 1}`),
+            rows: [Array.from({ length: 50 }, (_, index) => `value_${index + 1}`)],
+            nulls: [Array(50).fill(false)],
+            rowCount: 1,
+            limit: 200,
+            columnLimit: 50,
+            truncated: true,
+            rowsTruncated: false,
+            columnsTruncated: true,
+            elapsedMs: 4,
+          }
+        : query.sql.includes("cells_truncated")
+          ? {
+              readOnly: true,
+              columns: ["long_value"],
+              rows: [[`${"x".repeat(512)}…`]],
+              nulls: [[false]],
+              rowCount: 1,
+              limit: 200,
+              columnLimit: 50,
+              cellLimit: 512,
+              truncated: true,
+              rowsTruncated: false,
+              columnsTruncated: false,
+              cellsTruncated: true,
+              elapsedMs: 4,
+            }
+          : {
+            readOnly: true,
+            columns: ["name", "email"],
+            rows: [["<script>alert(1)</script>Anna", "\\N"]],
+            nulls: [[false, true]],
+            rowCount: 1,
+            limit: 200,
+            columnLimit: 50,
+            truncated: false,
+            rowsTruncated: false,
+            columnsTruncated: false,
+            cellsTruncated: false,
+            elapsedMs: 4,
+          }),
     });
   });
   await page.route("**/__zelyra/editor/api/schema-column-preview", async (route) => {
@@ -220,12 +276,12 @@ try {
   }
   await page.locator("#terminal-close").click();
   await page.locator("#welcome-open-file").click();
-  await page.locator(".cm-content[contenteditable=true]").waitFor({ timeout: 10_000 });
+  await page.locator("#editor-stage .cm-content[contenteditable=true]").waitFor({ timeout: 10_000 });
   const themeButton = page.locator("#theme-button");
   await themeButton.click();
   assert.equal(await page.locator("html").getAttribute("data-theme"), "light");
   assert.equal(await themeButton.getAttribute("aria-label"), "Dunkles Farbschema aktivieren");
-  assert.equal(await page.locator(".cm-editor").evaluate((element) => getComputedStyle(element).backgroundColor), "rgb(255, 255, 255)");
+  assert.equal(await page.locator("#editor-stage .cm-editor").evaluate((element) => getComputedStyle(element).backgroundColor), "rgb(255, 255, 255)");
   assert.equal(await page.locator(".topbar").evaluate((element) => getComputedStyle(element).backgroundColor), "rgb(255, 255, 255)");
   assert.equal(await page.locator(".explorer").evaluate((element) => getComputedStyle(element).backgroundColor), "rgb(248, 249, 252)");
   assert.equal(await page.locator("#project-map-dialog").evaluate((element) => getComputedStyle(element).backgroundColor), "rgb(255, 255, 255)");
@@ -249,14 +305,14 @@ try {
   await page.reload();
   await page.locator("#empty-state").waitFor({ state: "visible" });
   await page.locator("#welcome-open-file").click();
-  await page.locator(".cm-content[contenteditable=true]").waitFor({ timeout: 10_000 });
+  await page.locator("#editor-stage .cm-content[contenteditable=true]").waitFor({ timeout: 10_000 });
   assert.equal(await page.locator("html").getAttribute("data-theme"), "light", "the selected appearance must survive reload");
-  assert.equal(await page.locator(".cm-editor").evaluate((element) => getComputedStyle(element).backgroundColor), "rgb(255, 255, 255)", "CodeMirror must use the selected light appearance");
+  assert.equal(await page.locator("#editor-stage .cm-editor").evaluate((element) => getComputedStyle(element).backgroundColor), "rgb(255, 255, 255)", "CodeMirror must use the selected light appearance");
   await themeButton.focus();
   await page.keyboard.press("Space");
   assert.equal(await page.locator("html").getAttribute("data-theme"), "dark");
   assert.equal(await themeButton.getAttribute("aria-label"), "Helles Farbschema aktivieren");
-  await page.locator(".cm-content[contenteditable=true]").focus();
+  await page.locator("#editor-stage .cm-content[contenteditable=true]").focus();
   await page.keyboard.press("F1");
   await page.locator("#assistant-help-view").waitFor({ state: "visible" });
   assert.equal(await page.locator("#studio-assistant").evaluate((element) => getComputedStyle(element).backgroundColor), "rgb(17, 24, 42)");
@@ -276,17 +332,17 @@ try {
   await changeFontSize();
   assert.equal(await page.locator("html").getAttribute("data-font-size"), "medium");
   assert.equal(await fontSizeButton.textContent(), "aA⁺");
-  assert.equal(await page.locator(".cm-editor").evaluate((element) => getComputedStyle(element).fontSize), "16px");
+  assert.equal(await page.locator("#editor-stage .cm-editor").evaluate((element) => getComputedStyle(element).fontSize), "16px");
 
   await changeFontSize();
   assert.equal(await page.locator("html").getAttribute("data-font-size"), "large");
   assert.equal(await fontSizeButton.textContent(), "aA⁺⁺");
-  assert.equal(await page.locator(".cm-editor").evaluate((element) => getComputedStyle(element).fontSize), "18px");
+  assert.equal(await page.locator("#editor-stage .cm-editor").evaluate((element) => getComputedStyle(element).fontSize), "18px");
 
   await changeFontSize();
   assert.equal(await page.locator("html").getAttribute("data-font-size"), null);
   assert.equal(await fontSizeButton.textContent(), "aA");
-  assert.equal(await page.locator(".cm-editor").evaluate((element) => getComputedStyle(element).fontSize), "14px");
+  assert.equal(await page.locator("#editor-stage .cm-editor").evaluate((element) => getComputedStyle(element).fontSize), "14px");
 
   await page.keyboard.press("Control+=");
   assert.equal(await page.locator("html").getAttribute("data-font-size"), "medium");
@@ -296,15 +352,15 @@ try {
   await page.reload();
   await page.locator("#empty-state").waitFor({ state: "visible" });
   await page.locator("#welcome-open-file").click();
-  await page.locator(".cm-content[contenteditable=true]").waitFor({ timeout: 10_000 });
+  await page.locator("#editor-stage .cm-content[contenteditable=true]").waitFor({ timeout: 10_000 });
   assert.equal(await page.locator("html").getAttribute("data-font-size"), "large", "the selected font size must survive reload");
-  assert.equal(await page.locator(".cm-editor").evaluate((element) => getComputedStyle(element).fontSize), "18px");
+  assert.equal(await page.locator("#editor-stage .cm-editor").evaluate((element) => getComputedStyle(element).fontSize), "18px");
 
   await page.keyboard.press("Control+-");
   assert.equal(await page.locator("html").getAttribute("data-font-size"), "medium");
   await page.keyboard.press("Control+0");
   assert.equal(await page.locator("html").getAttribute("data-font-size"), null);
-  assert.equal(await page.locator(".cm-editor").evaluate((element) => getComputedStyle(element).fontSize), "14px");
+  assert.equal(await page.locator("#editor-stage .cm-editor").evaluate((element) => getComputedStyle(element).fontSize), "14px");
 
   const openTaskFinder = async () => {
     await page.locator('[data-studio-menu="help"]').click();
@@ -330,13 +386,13 @@ try {
   await page.locator(".task-finder-item", { hasText: /Dateieigenschaften öffnen/ }).click();
   await page.locator("#assistant-properties-tab").waitFor({ state: "hidden" });
 
-  const editor = page.locator(".cm-content[contenteditable=true]");
+  const editor = page.locator("#editor-stage .cm-content[contenteditable=true]");
   const initialEditorWidth = await editor.evaluate((element) => element.getBoundingClientRect().width);
   const sidebarToggle = page.locator("#sidebar-toggle");
   await sidebarToggle.click();
   assert.equal(await sidebarToggle.getAttribute("aria-expanded"), "false");
   await page.waitForFunction((width) =>
-    document.querySelector(".cm-content")?.getBoundingClientRect().width > width,
+    document.querySelector("#editor-stage .cm-content")?.getBoundingClientRect().width > width,
   initialEditorWidth);
   for (const width of [360, 768, 1280, 1920]) {
     await page.setViewportSize({ width, height: 900 });
@@ -359,9 +415,9 @@ try {
   await page.locator('.tree-item.file[title="main.zyl"]').click();
   await page.waitForFunction(() =>
     document.querySelector("#active-file")?.textContent === "main.zyl" &&
-    document.querySelector(".cm-content")?.textContent.includes("import"),
+    document.querySelector("#editor-stage .cm-content")?.textContent.includes("import"),
   );
-  await page.locator(".cm-scroller").evaluate((element) => { element.scrollTop = element.scrollHeight; });
+  await page.locator("#editor-stage .cm-scroller").evaluate((element) => { element.scrollTop = element.scrollHeight; });
   const callSite = page.locator(".cm-line", { hasText: "math::sum" });
   await callSite.waitFor();
   await callSite.click();
@@ -383,6 +439,48 @@ try {
   await page.waitForFunction(() => document.querySelector("#active-file")?.textContent === "main.zyl");
 
   await page.locator("#database-button").click();
+  await page.locator("#database-query-workbench").waitFor({ state: "visible" });
+  const sqlEditor = page.locator("#database-query-editor .cm-content[contenteditable=true]");
+  await sqlEditor.fill("SELECT name FROM customers WHERE ");
+  await page.keyboard.press("Control+Space");
+  await page.locator(".cm-tooltip-autocomplete").waitFor();
+  const suggestions = await page.locator(".cm-tooltip-autocomplete li").allTextContents();
+  assert.ok(suggestions.some((suggestion) => suggestion.includes("amount")), "SQL workbench completion uses live schema columns");
+  await page.keyboard.press("Escape");
+  await sqlEditor.fill("SELECT name FROM customers;");
+  await page.locator("#database-query-run").click();
+  await page.getByRole("columnheader", { name: "name" }).waitFor();
+  await page.getByRole("cell", { name: "<script>alert(1)</script>Anna" }).waitFor();
+  await page.getByRole("cell", { name: "NULL" }).waitFor();
+  assert.equal(await page.locator("#database-query-results script").count(), 0, "SQL results must be rendered as text, never markup");
+  assert.deepEqual(sqlQueryRequests[0], { sql: "SELECT name FROM customers;", limit: 200 });
+  assert.ok(await page.evaluate(() => localStorage.getItem("zelyra-studio-sql:0123456789abcdef:mariadb:studio_db") !== null), "SQL drafts are scoped to the project and database");
+  assert.match(await page.locator("#database-query-status").textContent(), /1 Zeile · 4 ms/);
+  await page.locator("#database-query-history").selectOption("0");
+  assert.match(await page.locator("#database-query-editor .cm-content").textContent(), /SELECT name FROM customers/);
+  await page.locator("#database-query-clear").click();
+  assert.equal(await page.locator("#database-query-editor .cm-content").textContent(), "");
+  await sqlEditor.fill("SELECT columns_truncated FROM customers;");
+  await page.locator("#database-query-run").click();
+  await page.getByRole("columnheader", { name: "column_1", exact: true }).waitFor();
+  const truncatedStatus = await page.locator("#database-query-status").textContent();
+  assert.match(truncatedStatus, /Spalten/);
+  assert.doesNotMatch(truncatedStatus, /Zeilen vorhanden/);
+  await sqlEditor.fill("SELECT cells_truncated FROM customers;");
+  await page.locator("#database-query-run").click();
+  await page.waitForFunction(() => {
+    const status = document.querySelector("#database-query-status");
+    return status && status.dataset.kind !== "pending";
+  });
+  const cellTruncatedStatus = await page.locator("#database-query-status").textContent();
+  assert.match(cellTruncatedStatus, /Zellenwerte wurden nach 512 Zeichen gekürzt/);
+  await page.locator("#database-query-clear").click();
+  schemaBackend = "sqlite";
+  await page.locator("#database-refresh").click();
+  await page.waitForFunction(() => document.querySelector("#database-query-workbench")?.hidden === true);
+  schemaBackend = "mariadb";
+  await page.locator("#database-refresh").click();
+  await page.waitForFunction(() => document.querySelector("#database-query-workbench")?.hidden === false);
   await page.locator("#database-create").waitFor({ state: "visible" });
   assert.equal(await page.locator(".database-header").evaluate((element) => getComputedStyle(element).backgroundColor), "rgb(255, 255, 255)");
   page.once("dialog", async (dialog) => {
@@ -571,7 +669,7 @@ try {
   await page.locator('.tree-item.file[title="main.zyl"]').click();
   await page.waitForFunction(() => document.querySelector("#active-file")?.textContent === "main.zyl");
 
-  await page.locator(".cm-scroller").evaluate((element) => { element.scrollTop = element.scrollHeight; });
+  await page.locator("#editor-stage .cm-scroller").evaluate((element) => { element.scrollTop = element.scrollHeight; });
   const functionDeclaration = page.locator(".cm-line", { hasText: "fn main" });
   await functionDeclaration.waitFor();
   await functionDeclaration.click();
@@ -583,7 +681,7 @@ try {
   await page.locator("#assistant-properties-tab").click();
   await page.getByRole("heading", { name: "main.zyl" }).waitFor();
   await page.locator("#assistant-help-tab").click();
-  const codeEditor = page.locator(".cm-content[contenteditable=true]");
+  const codeEditor = page.locator("#editor-stage .cm-content[contenteditable=true]");
   await codeEditor.fill('import "zelyra/ui" as ui\npage "/" {\n    html {\n        <Button label="Continue" />\n    }\n}\n');
   const componentLine = page.locator(".cm-line", { hasText: "<Button label" });
   await componentLine.waitFor();
@@ -595,7 +693,7 @@ try {
   await page.getByRole("heading", { name: "<Button>" }).waitFor();
   await page.locator("#assistant-ui-appearance").selectOption("danger");
   await page.locator("#assistant-ui-appearance-apply").click();
-  await page.waitForFunction(() => document.querySelector(".cm-content")?.textContent.includes('appearance="danger"'));
+  await page.waitForFunction(() => document.querySelector("#editor-stage .cm-content")?.textContent.includes('appearance="danger"'));
   await page.getByText(/ohne href|without href/i).waitFor();
   await page.route("**/__zelyra/editor/api/run", (route) => route.fulfill({
     status: 200,
@@ -610,7 +708,7 @@ try {
   }
   assert.equal(await page.locator("#run-output-state").evaluate((element) => getComputedStyle(element).fontSize), "12px");
   assert.equal(await page.locator("#run-output-content").evaluate((element) => getComputedStyle(element).fontSize), "13px", "program output text should be comfortably readable without changing editor source text");
-  assert.equal(await page.locator(".cm-editor").evaluate((element) => getComputedStyle(element).fontSize), "14px", "program output sizing must not alter the code editor font");
+  assert.equal(await page.locator("#editor-stage .cm-editor").evaluate((element) => getComputedStyle(element).fontSize), "14px", "program output sizing must not alter the code editor font");
   const consoleOutput = await page.locator("#run-output-content").textContent();
   assert.match(consoleOutput, /3/, "Studio Run must display console output");
   assert.equal(await page.locator("#run-console-form").isVisible(), false, "completed runs must hide interactive input controls");
@@ -652,9 +750,9 @@ try {
   assert.equal(unloadPromptSeen, true, "reload must warn before discarding unsaved edits");
   await page.locator("#empty-state").waitFor({ state: "visible" });
   await page.locator("#welcome-open-file").click();
-  await page.locator(".cm-content[contenteditable=true]").waitFor();
+  await page.locator("#editor-stage .cm-content[contenteditable=true]").waitFor();
 
-  const current = page.locator(".cm-content[contenteditable=true]");
+  const current = page.locator("#editor-stage .cm-content[contenteditable=true]");
   await current.focus();
   await page.keyboard.press("Control+A");
   const invalidCompilerResponse = page.waitForResponse(async (response) => {
@@ -682,9 +780,9 @@ try {
   await page.reload({ waitUntil: "domcontentloaded" });
   await page.locator("#empty-state").waitFor({ state: "visible" });
   await page.locator("#welcome-open-file").click();
-  await page.locator(".cm-content[contenteditable=true]").waitFor();
+  await page.locator("#editor-stage .cm-content[contenteditable=true]").waitFor();
   assert.equal(
-    await page.locator(".cm-content[contenteditable=true]").textContent(),
+    await page.locator("#editor-stage .cm-content[contenteditable=true]").textContent(),
     "fn main( {    })",
     "saved content must be restored after a clean Studio restart",
   );

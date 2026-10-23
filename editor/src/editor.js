@@ -20,6 +20,7 @@ import {
 import { zelyraKeywords as keywords, zelyraLanguage } from "./zelyra-language.js";
 import { zelyraEditingExtensions, zelyraEditingKeymap } from "./zelyra-editing.js";
 import { sqlBodyPrefix, sqlCompletionOptions } from "./sql-completion.js";
+import { createSqlWorkbenchEditor } from "./sql-workbench.js";
 import { importPathCompletion, importSignature, importedModuleAlias, importedModuleAliasAtCursor, importedModuleCompletion } from "./module-completion.js";
 import { isTopLevelBlankPosition, nextCrudCompletions } from "./next-step-completion.js";
 import { databaseRecordEnumOptions, databaseRecordInputKind, databaseRecordInputValue, parseDatabaseRecordInput } from "./database-record-inputs.js";
@@ -216,6 +217,9 @@ let databaseRecordOffset = 0;
 let databaseRecordOffsets = [0];
 let databaseRecordRequest = 0;
 let databaseRecordBusy = false;
+let databaseQueryEditor = null;
+let databaseQueryTargetKey = "default";
+let databaseQueryBusy = false;
 let chartPreviewState = null;
 let presentationCharts = [];
 let schemaColumnPreview = null;
@@ -286,6 +290,7 @@ const messages = {
     databaseStudio: "DATENBANK STUDIO", databaseTitle: "Datenbank verstehen",
     databaseIntro: "Leseübersicht für DATABASE_URL mit compilergeprüfter CRUD-Vorschau.", databaseNotLoaded: "Noch nicht verbunden",
     refreshSchema: "Schema laden", backToCode: "Zurück zum Code", filterTables: "Tabellen filtern",
+    sqlWorkbenchEyebrow: "SQL-ARBEITSPLATZ", sqlWorkbenchTitle: "Abfragen direkt ausführen", sqlWorkbenchHint: "Schemaabhängige Vorschläge · Nur-Lese-Transaktion · höchstens 200 Ergebniszeilen", sqlWorkbenchReadonly: "NUR LESEN", sqlWorkbenchHistory: "Letzte Abfragen", sqlWorkbenchHistoryEmpty: "Keine gespeicherten Abfragen", sqlWorkbenchClear: "Leeren", sqlWorkbenchRun: "Abfrage ausführen", sqlWorkbenchShortcut: "⌘/Ctrl + Enter", sqlWorkbenchResults: "Ergebnis", sqlWorkbenchIdle: "Eine SELECT- oder WITH-Abfrage schreiben und ausführen.", sqlWorkbenchRunning: "Abfrage läuft …", sqlWorkbenchSuccessOne: "{0} Zeile · {1} ms", sqlWorkbenchSuccess: "{0} Zeilen · {1} ms", sqlWorkbenchRowsTruncated: "Mehr Zeilen vorhanden; Anzeige auf {0} Zeilen begrenzt.", sqlWorkbenchColumnsTruncated: "Weitere Spalten ausgelassen; angezeigt werden höchstens {0}.", sqlWorkbenchCellsTruncated: "Lange Zellenwerte wurden nach {0} Zeichen gekürzt.", sqlWorkbenchFailed: "Abfrage fehlgeschlagen", sqlWorkbenchNoRows: "Keine Zeilen zurückgegeben", sqlWorkbenchNull: "NULL",
     databaseChooseTable: "Wähle links eine Tabelle", databaseChooseHint: "Studio zeigt Spalten, Schlüssel, Beziehungen und Quellcode-Abweichungen.",
     loadSchema: "Datenbankschema laden", columnsAndRelations: "Spalten und Beziehungen",
     schemaCompareHint: "Deklarierte und live vorhandene Merkmale im Vergleich.", schemaLegend: "Quelle · Datenbank",
@@ -398,6 +403,7 @@ const messages = {
     databaseStudio: "DATABASE STUDIO", databaseTitle: "Understand your data",
     databaseIntro: "Read-only DATABASE_URL schema overview with a compiler-checked CRUD preview.", databaseNotLoaded: "Not connected",
     refreshSchema: "Load schema", backToCode: "Back to code", filterTables: "Filter tables",
+    sqlWorkbenchEyebrow: "SQL WORKBENCH", sqlWorkbenchTitle: "Run SQL queries directly", sqlWorkbenchHint: "Schema-aware suggestions · read-only transaction · up to 200 result rows", sqlWorkbenchReadonly: "READ ONLY", sqlWorkbenchHistory: "Recent queries", sqlWorkbenchHistoryEmpty: "No saved queries", sqlWorkbenchClear: "Clear", sqlWorkbenchRun: "Run query", sqlWorkbenchShortcut: "⌘/Ctrl + Enter", sqlWorkbenchResults: "Result", sqlWorkbenchIdle: "Write and run a SELECT or WITH query.", sqlWorkbenchRunning: "Running query …", sqlWorkbenchSuccessOne: "{0} row · {1} ms", sqlWorkbenchSuccess: "{0} rows · {1} ms", sqlWorkbenchRowsTruncated: "More rows are available; display is limited to {0} rows.", sqlWorkbenchColumnsTruncated: "Additional columns were omitted; at most {0} are shown.", sqlWorkbenchCellsTruncated: "Long cell values were shortened after {0} characters.", sqlWorkbenchFailed: "Query failed", sqlWorkbenchNoRows: "No rows returned", sqlWorkbenchNull: "NULL",
     databaseChooseTable: "Choose a table on the left", databaseChooseHint: "Studio shows columns, keys, relations, and source drift.",
     loadSchema: "Load database schema", columnsAndRelations: "Columns and relations",
     schemaCompareHint: "Compare declared fields with the live database.", schemaLegend: "Source · database",
@@ -2029,7 +2035,12 @@ async function loadDatabaseSchema() {
   try {
     databaseMap = await api("database-schema");
     databaseTables = flattenDatabaseMap(databaseMap);
-    state.textContent = databaseMap.live_connected === false
+    const databaseBackend = String(databaseMap.backend || "").toLowerCase();
+    const supportsSqlWorkbench = ["mariadb", "mysql", "postgres"].includes(databaseBackend);
+    const sqlWorkbenchAvailable = databaseMap.live_connected !== false && supportsSqlWorkbench;
+    $("database-query-workbench").hidden = !sqlWorkbenchAvailable;
+    if (sqlWorkbenchAvailable) ensureDatabaseQueryEditor();
+    state.textContent = !sqlWorkbenchAvailable
       ? `${t("schemaLoaded")} (deklariert) · ${databaseMap.backend || ""}`
       : `${t("schemaLoaded")} · ${databaseMap.backend || ""}`;
     state.dataset.kind = "success";
@@ -2041,6 +2052,7 @@ async function loadDatabaseSchema() {
   } catch (error) {
     databaseMap = null;
     databaseTables = [];
+    $("database-query-workbench").hidden = true;
     state.textContent = t("schemaLoadFailed");
     state.dataset.kind = "error";
     renderDatabaseGraph();
@@ -2057,6 +2069,13 @@ async function loadDatabaseTarget() {
   button.hidden = true;
   try {
     const target = await api("database-target");
+    const nextTargetKey = `zelyra-studio-sql:${target.projectScope || "project"}:${target.engine || "database"}:${target.database || "default"}`;
+    if (nextTargetKey !== databaseQueryTargetKey) {
+      databaseQueryTargetKey = nextTargetKey;
+      const savedDraft = localStorage.getItem(databaseQueryTargetKey);
+      if (databaseQueryEditor) databaseQueryEditor.setValue(savedDraft ?? "SELECT 1;");
+      populateDatabaseQueryHistory();
+    }
     if (target.creationSupported) {
       status.textContent = t("databaseTargetReady", target.database || "main");
       button.hidden = false;
@@ -2066,6 +2085,143 @@ async function loadDatabaseTarget() {
   } catch (error) {
     status.textContent = error.message;
   }
+}
+
+function ensureDatabaseQueryEditor() {
+  if (databaseQueryEditor) return databaseQueryEditor;
+  const storageKey = databaseQueryTargetKey;
+  const initial = localStorage.getItem(storageKey) ?? "SELECT 1;";
+  databaseQueryEditor = createSqlWorkbenchEditor($("database-query-editor"), {
+    initial,
+    getTables: () => databaseTables,
+    run: () => { void runDatabaseQuery(); },
+    onChange: (value) => localStorage.setItem(databaseQueryTargetKey, value),
+  });
+  populateDatabaseQueryHistory();
+  $("database-query-status").textContent = t("sqlWorkbenchIdle");
+  return databaseQueryEditor;
+}
+
+function databaseQueryHistory() {
+  try {
+    const queries = JSON.parse(localStorage.getItem(`${databaseQueryTargetKey}:history`) || "[]");
+    return Array.isArray(queries) ? queries.filter((query) => typeof query === "string").slice(0, 12) : [];
+  } catch { return []; }
+}
+
+function populateDatabaseQueryHistory() {
+  const select = $("database-query-history");
+  if (!select) return;
+  const queries = databaseQueryHistory();
+  select.replaceChildren();
+  const empty = document.createElement("option");
+  empty.value = "";
+  empty.textContent = queries.length ? t("sqlWorkbenchHistory") : t("sqlWorkbenchHistoryEmpty");
+  select.append(empty);
+  queries.forEach((query, index) => {
+    const option = document.createElement("option");
+    option.value = String(index);
+    option.textContent = query.replace(/\s+/g, " ").slice(0, 100);
+    select.append(option);
+  });
+}
+
+function rememberDatabaseQuery(sql) {
+  const history = databaseQueryHistory().filter((query) => query !== sql);
+  history.unshift(sql);
+  localStorage.setItem(`${databaseQueryTargetKey}:history`, JSON.stringify(history.slice(0, 12)));
+  populateDatabaseQueryHistory();
+}
+
+function renderDatabaseQueryResult(result) {
+  const container = $("database-query-results");
+  container.replaceChildren();
+  container.hidden = false;
+  if (!result.columns.length) {
+    const message = document.createElement("p");
+    message.className = "database-query-empty";
+    message.textContent = t("sqlWorkbenchNoRows");
+    container.append(message);
+    return;
+  }
+  const table = document.createElement("table");
+  table.className = "database-query-table";
+  const head = document.createElement("thead");
+  const headerRow = document.createElement("tr");
+  result.columns.forEach((column) => {
+    const cell = document.createElement("th");
+    cell.scope = "col";
+    cell.textContent = column;
+    headerRow.append(cell);
+  });
+  head.append(headerRow);
+  table.append(head);
+  const body = document.createElement("tbody");
+  result.rows.forEach((row, rowIndex) => {
+    const tr = document.createElement("tr");
+    row.forEach((value, columnIndex) => {
+      const td = document.createElement("td");
+      const isNull = result.nulls?.[rowIndex]?.[columnIndex] === true;
+      if (isNull) {
+        td.className = "database-query-null";
+        td.textContent = t("sqlWorkbenchNull");
+      } else {
+        td.textContent = value;
+      }
+      tr.append(td);
+    });
+    body.append(tr);
+  });
+  table.append(body);
+  container.append(table);
+}
+
+async function runDatabaseQuery() {
+  if (databaseQueryBusy) return;
+  const queryEditor = ensureDatabaseQueryEditor();
+  const sql = queryEditor.getValue().trim();
+  if (!sql) return;
+  databaseQueryBusy = true;
+  const button = $("database-query-run");
+  const status = $("database-query-status");
+  button.disabled = true;
+  status.dataset.kind = "pending";
+  status.textContent = t("sqlWorkbenchRunning");
+  try {
+    localStorage.setItem(databaseQueryTargetKey, sql);
+    const result = await api("database-query", { method: "POST", body: JSON.stringify({ sql, limit: 200 }) });
+    renderDatabaseQueryResult(result);
+    rememberDatabaseQuery(sql);
+    const rowsTruncated = result.rowsTruncated ?? result.truncated;
+    const columnsTruncated = result.columnsTruncated === true;
+    const cellsTruncated = result.cellsTruncated === true;
+    status.dataset.kind = rowsTruncated || columnsTruncated || cellsTruncated ? "warning" : "success";
+    const countMessage = t(result.rowCount === 1 ? "sqlWorkbenchSuccessOne" : "sqlWorkbenchSuccess", result.rowCount, result.elapsedMs);
+    const truncationMessages = [];
+    if (rowsTruncated) truncationMessages.push(t("sqlWorkbenchRowsTruncated", result.limit));
+    if (columnsTruncated) truncationMessages.push(t("sqlWorkbenchColumnsTruncated", result.columnLimit || 50));
+    if (cellsTruncated) truncationMessages.push(t("sqlWorkbenchCellsTruncated", result.cellLimit || 512));
+    status.textContent = [countMessage, ...truncationMessages].join(" · ");
+  } catch (error) {
+    $("database-query-results").replaceChildren();
+    $("database-query-results").hidden = true;
+    status.dataset.kind = "error";
+    status.textContent = `${t("sqlWorkbenchFailed")}: ${error.message}`;
+  } finally {
+    databaseQueryBusy = false;
+    button.disabled = false;
+  }
+}
+
+function clearDatabaseQuery() {
+  const queryEditor = ensureDatabaseQueryEditor();
+  queryEditor.setValue("");
+  queryEditor.focus();
+  localStorage.setItem(databaseQueryTargetKey, "");
+  $("database-query-results").replaceChildren();
+  $("database-query-results").hidden = true;
+  $("database-query-status").textContent = t("sqlWorkbenchIdle");
+  delete $("database-query-status").dataset.kind;
 }
 
 async function createDatabaseFromStudio() {
@@ -4610,6 +4766,16 @@ $("database-record-previous").addEventListener("click", () => {
 $("database-record-next").addEventListener("click", () => {
   if (databaseRecordBusy || $("database-record-next").disabled) return;
   void loadDatabaseRecords(databaseRecordOffset + 25);
+});
+$("database-query-run").addEventListener("click", () => { void runDatabaseQuery(); });
+$("database-query-clear").addEventListener("click", clearDatabaseQuery);
+$("database-query-history").addEventListener("change", (event) => {
+  if (!event.currentTarget.value) return;
+  const index = Number(event.currentTarget.value);
+  const query = databaseQueryHistory()[index];
+  if (query === undefined) return;
+  ensureDatabaseQueryEditor().setValue(query);
+  databaseQueryEditor.focus();
 });
 $("chart-preview-button").addEventListener("click", () => { void previewChart(); });
 $("chart-save-button").addEventListener("click", () => { void saveChart(); });

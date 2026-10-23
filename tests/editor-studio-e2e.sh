@@ -273,6 +273,37 @@ assert removed["success"] is True and removed["action"] == "delete", removed
 rows = request("database-rows?table=customers&limit=25&offset=0")
 assert not any(row[name_index] == "Studio CRUD updated" for row in rows["rows"]), rows
 
+sql_rows = request("database-query", "POST", {
+    "sql": "SELECT id, name, amount FROM customers ORDER BY id",
+    "limit": 25,
+})
+assert sql_rows["readOnly"] is True and sql_rows["rowCount"] == 2, sql_rows
+assert sql_rows["columns"] == ["id", "name", "amount"], sql_rows
+assert [row[1] for row in sql_rows["rows"]] == ["Alice", "Bert"], sql_rows
+assert all(value is False for row in sql_rows["nulls"] for value in row), sql_rows
+request("database-query", "POST", {"sql": "UPDATE customers SET name = 'must not write'"}, expect=403)
+request("database-query", "POST", {"sql": "SELECT 1; DELETE FROM customers"}, expect=400)
+request("database-query", "POST", {"sql": "SELECT SLEEP/* comment gap */(0)"}, expect=403)
+if os.environ["ZELYRA_STUDIO_E2E_BACKEND"] == "mariadb":
+    request("database-query", "POST", {"sql": "SELECT LOAD_FILE/**/('/etc/passwd')"}, expect=403)
+    request("database-query", "POST", {"sql": "SELECT /*!80000 SLEEP(0) */ 1"}, expect=403)
+request("database-query", "POST", {"sql": "SELECT pg_notify('channel', 'payload')"}, expect=403)
+request("database-query", "POST", {"sql": "SELECT \"pg_notify\"('channel', 'payload')"}, expect=403)
+if os.environ["ZELYRA_STUDIO_E2E_BACKEND"] == "mariadb":
+    request("database-query", "POST", {"sql": r"SELECT 'a\'b' AS x, SLEEP(0)"}, expect=403)
+    request("database-query", "POST", {"sql": "SELECT SLEEP# hidden\n(0)"}, expect=403)
+literal_sql_row = request("database-query", "POST", {"sql": "SELECT 'SLEEP(30)' AS harmless_text"})
+assert literal_sql_row["rows"] == [["SLEEP(30)"]], literal_sql_row
+long_cell = request("database-query", "POST", {"sql": "SELECT REPEAT('x', 1000000) AS long_value"})
+assert long_cell["cellsTruncated"] is True and long_cell["cellLimit"] == 512, long_cell
+assert len(long_cell["rows"][0][0]) == 513 and long_cell["rows"][0][0].endswith("…"), long_cell
+bounded_sql_rows = request("database-query", "POST", {
+    "sql": "WITH RECURSIVE numbers(n) AS (SELECT 1 UNION ALL SELECT n + 1 FROM numbers WHERE n < 250) SELECT n FROM numbers",
+    "limit": 9999,
+})
+assert bounded_sql_rows["readOnly"] is True and bounded_sql_rows["limit"] == 200, bounded_sql_rows
+assert bounded_sql_rows["rowCount"] == 200 and bounded_sql_rows["truncated"] is True, bounded_sql_rows
+
 project_map = request("project-map")
 assert project_map == request("project-map"), "project map output must be deterministic"
 math_function = next(

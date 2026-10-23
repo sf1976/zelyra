@@ -397,8 +397,22 @@ Anlegen lässt einen deklarierten Datenbankstandard bestehen. Bearbeiten und
 Löschen verlangen einen Primärschlüssel; unbekannte Tabellen, nicht deklarierte Felder und Tabellen
 ohne Live-Verbindung werden abgewiesen. Zugangsdaten bleiben auf dem lokalen
 Studio-Server, und Werte werden als Text dargestellt. Studio lädt keine
-Datensätze automatisch beim Öffnen der Werkbank. Freie SQL-Eingaben und
-tabellenübergreifende Schreibvorgänge sind nicht Teil des Datenbrowsers.
+Datensätze automatisch beim Öffnen der Werkbank. Tabellenübergreifende
+Schreibvorgänge sind nicht Teil des Datenbrowsers.
+
+Der **SQL-Arbeitsplatz** im Datenbank-Studio bietet einen separaten Editor für
+manuelle Abfragen. Er schlägt Tabellen und Spalten aus dem erkannten
+Datenbankschema vor und führt genau ein `SELECT`- oder `WITH`-Statement in
+einer Nur-Lese-Transaktion aus. Die Ergebnistabelle zeigt höchstens 200 Zeilen
+und 50 Spalten; einzelne Zellwerte werden nach 512 Zeichen gekürzt. Der Status
+nennt, ob Zeilen oder Spalten ausgelassen oder Zellwerte gekürzt wurden. Die
+Abfrage wird mit `⌘/Ctrl + Enter` oder über die Schaltfläche
+gestartet. Entwurf und die letzten zwölf Abfragen werden lokal im Browser je
+Studio-Projekt und Datenbankziel gespeichert. Schreibende SQL-
+Anweisungen, erkannte Funktionen mit Nebenwirkungen, mehrere Statements und
+Projekte ohne MariaDB- oder PostgreSQL-Verbindung werden abgewiesen. Nutze
+für Datensatzänderungen den bestätigungspflichtigen Datenbrowser und für
+Schemaänderungen den Spaltenassistenten und den Datenbank-Plan.
 
 Der **Diagramm-Assistent** erstellt aus einer deklarierten Live-Tabelle ein
 gruppiertes Balken- oder Liniendiagramm. Gruppierung und Kennzahl wählst du
