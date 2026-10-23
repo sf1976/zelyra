@@ -22,6 +22,7 @@ import { zelyraEditingExtensions, zelyraEditingKeymap } from "./zelyra-editing.j
 import { sqlBodyPrefix, sqlCompletionOptions } from "./sql-completion.js";
 import { importPathCompletion, importSignature, importedModuleAlias, importedModuleAliasAtCursor, importedModuleCompletion } from "./module-completion.js";
 import { isTopLevelBlankPosition, nextCrudCompletions } from "./next-step-completion.js";
+import { databaseRecordEnumOptions, databaseRecordInputKind, databaseRecordInputValue, parseDatabaseRecordInput } from "./database-record-inputs.js";
 import {
   crosshairCursor,
   drawSelection,
@@ -2909,17 +2910,54 @@ function openDatabaseRecordForm(action, columns, values = [], key = {}) {
     label.className = "database-record-field";
     const caption = document.createElement("span");
     caption.textContent = column.name;
-    const input = document.createElement("input");
+    const inputKind = databaseRecordInputKind(column.sql_type || column.type);
+    const input = inputKind === "json"
+      ? document.createElement("textarea")
+      : inputKind === "enum" || inputKind === "boolean"
+        ? document.createElement("select")
+        : document.createElement("input");
     input.dataset.column = column.name;
+    input.dataset.inputKind = inputKind;
     input.autocomplete = "off";
-    input.value = action === "update" ? String(values[columns.indexOf(column.name)] ?? "") : "";
     const sqlType = String(column.sql_type || column.type || "");
-    if (/^DATE\b/i.test(sqlType)) input.type = "date";
-    else if (/^(?:TINYINT|SMALLINT|MEDIUMINT|INT|INTEGER|BIGINT|DECIMAL|NUMERIC|FLOAT|DOUBLE|REAL)\b/i.test(sqlType)) {
+    const currentValue = action === "update" ? values[columns.indexOf(column.name)] : "";
+    if (inputKind === "boolean") {
+      const defaultOption = document.createElement("option");
+      defaultOption.value = "";
+      defaultOption.textContent = language === "de" ? "Datenbankstandard verwenden" : "Use database default";
+      input.append(defaultOption);
+      for (const [value, labelText] of [["true", language === "de" ? "Ja" : "Yes"], ["false", language === "de" ? "Nein" : "No"]]) {
+        const option = document.createElement("option");
+        option.value = value;
+        option.textContent = labelText;
+        input.append(option);
+      }
+      if (action === "update" && currentValue != null) {
+        input.value = databaseRecordInputValue(inputKind, currentValue) ? "true" : "false";
+      }
+    } else if (inputKind === "enum") {
+      const placeholder = document.createElement("option");
+      placeholder.value = "";
+      placeholder.textContent = language === "de" ? "Auswählen …" : "Choose …";
+      input.append(placeholder);
+      for (const value of databaseRecordEnumOptions(sqlType)) {
+        const option = document.createElement("option");
+        option.value = value;
+        option.textContent = value;
+        input.append(option);
+      }
+      input.value = databaseRecordInputValue(inputKind, currentValue);
+    } else {
+      input.value = databaseRecordInputValue(inputKind, currentValue);
+    }
+    if (inputKind === "date" || inputKind === "time") input.type = inputKind;
+    else if (inputKind === "number") {
       input.type = "number";
       input.step = "any";
     }
     input.required = action === "create" && !column.nullable && !column.default;
+    if (inputKind === "json") input.rows = 5;
+    if (inputKind === "enum" && input.required) input.required = true;
     label.append(caption, input);
     if (column.nullable) {
       const nullLabel = document.createElement("span");
@@ -2927,6 +2965,9 @@ function openDatabaseRecordForm(action, columns, values = [], key = {}) {
       const nullInput = document.createElement("input");
       nullInput.type = "checkbox";
       nullInput.dataset.nullFor = column.name;
+      nullInput.checked = action === "update" && currentValue == null;
+      input.disabled = nullInput.checked;
+      nullInput.addEventListener("change", () => { input.disabled = nullInput.checked; });
       nullLabel.append(nullInput, document.createTextNode(" NULL"));
       label.append(nullLabel);
     }
@@ -4548,11 +4589,29 @@ $("database-record-form").addEventListener("submit", (event) => {
   const form = event.currentTarget;
   const action = form.dataset.action;
   const values = {};
-  for (const input of $("database-record-fields").querySelectorAll("input[data-column]")) {
+  for (const input of $("database-record-fields").querySelectorAll("[data-column]")) {
     const name = input.dataset.column;
     const nullInput = $("database-record-fields").querySelector(`[data-null-for="${CSS.escape(name)}"]`);
-    if (nullInput?.checked) values[name] = null;
-    else if (!(action === "create" && input.value === "" && !input.required)) values[name] = input.value;
+    if (nullInput?.checked) {
+      values[name] = null;
+      continue;
+    }
+    if (input.dataset.inputKind === "json") {
+      if (action === "create" && input.value.trim() === "" && !input.required) continue;
+      try {
+        values[name] = parseDatabaseRecordInput("json", input.value);
+      } catch {
+        $("database-record-dialog-status").textContent = language === "de" ? `JSON in „${name}“ ist ungültig.` : `JSON in “${name}” is invalid.`;
+        $("database-record-dialog-status").dataset.kind = "error";
+        input.focus();
+        return;
+      }
+    } else if (input.dataset.inputKind === "boolean") {
+      if (action === "create" && input.value === "" && !input.required) continue;
+      values[name] = parseDatabaseRecordInput("boolean", input.value);
+    } else if (!(action === "create" && input.value === "" && !input.required)) {
+      values[name] = parseDatabaseRecordInput(input.dataset.inputKind, input.value);
+    }
   }
   const key = JSON.parse(form.dataset.key || "{}");
   const prompt = action === "create"

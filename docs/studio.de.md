@@ -382,8 +382,12 @@ höchstens 25 Zeilen pro Seite. Für deklarierte Tabellen mit passendem
 Live-Schema kannst du Datensätze anlegen, bearbeiten und löschen. Eintrag und
 Änderung benötigen eine Bestätigung; Löschen wird als dauerhaft und nicht
 rückgängig zu machend angekündigt. Änderungen verwenden ausschließlich
-Schemafelder und gebundene Parameter. Bearbeiten und Löschen verlangen einen
-Primärschlüssel; unbekannte Tabellen, nicht deklarierte Felder und Tabellen
+Schemafelder und gebundene Parameter. Boolean-Spalten erhalten eine eindeutige
+Ja/Nein-Auswahl, Enum-Spalten ihre deklarierten Optionen, JSON wird formatiert
+bearbeitet und vor dem Speichern geprüft; Datum und Uhrzeit erhalten passende
+Eingabefelder. NULL ist für optionale Werte markierbar; ein leeres Feld beim
+Anlegen lässt einen deklarierten Datenbankstandard bestehen. Bearbeiten und
+Löschen verlangen einen Primärschlüssel; unbekannte Tabellen, nicht deklarierte Felder und Tabellen
 ohne Live-Verbindung werden abgewiesen. Zugangsdaten bleiben auf dem lokalen
 Studio-Server, und Werte werden als Text dargestellt. Studio lädt keine
 Datensätze automatisch beim Öffnen der Werkbank. Freie SQL-Eingaben und
