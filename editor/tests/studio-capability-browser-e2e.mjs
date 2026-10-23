@@ -6,6 +6,7 @@ import { spawn } from "node:child_process";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { chromium, firefox, webkit } from "playwright";
+import { clickStudioMenuAction } from "./studio-menu-test-helpers.mjs";
 
 const project = await mkdtemp(join(tmpdir(), "zelyra-studio-capability-"));
 const defaultBinary = existsSync(resolve("../target/debug/zelyra"))
@@ -62,7 +63,7 @@ try {
   await page.goto(url, { waitUntil: "domcontentloaded" });
   await page.locator('.tree-item.file[title="main.zyl"]').click();
   await page.locator(".cm-content[contenteditable=true]").waitFor();
-  await page.locator("#capability-button").click();
+  await clickStudioMenuAction(page, "project", "capability-button");
   await page.waitForFunction(() => {
     const status = document.querySelector("#capability-status")?.textContent || "";
     return Boolean(document.querySelector("#capability-needed button")) || (status && !/wird geladen|loading/i.test(status));

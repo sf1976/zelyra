@@ -9,6 +9,7 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { chromium, firefox, webkit } from "playwright";
 import { PNG } from "pngjs";
+import { clickStudioMenuAction } from "./studio-menu-test-helpers.mjs";
 
 async function assertStudioScreenshot(page) {
   await page.evaluate(async () => {
@@ -131,7 +132,7 @@ try {
     return response.json();
   }, { token });
   assert.equal(saved.content, math, "semantic refactoring leaves disk unchanged until the user saves");
-  await page.locator("#save-all-button").click();
+  await clickStudioMenuAction(page, "file", "save-all-button");
   await page.waitForFunction(() => document.querySelector("#status-message")?.textContent?.includes("2 Dateien gemeinsam gespeichert"));
   const savedFiles = await page.evaluate(async ({ token }) => {
     const read = async (path) => (await fetch(`/__zelyra/editor/api/file?path=${encodeURIComponent(path)}`, {
@@ -169,7 +170,7 @@ try {
   assert.match(await page.locator(".cm-content").textContent(), /customer: math::Invoice = math::Invoice/);
   await page.locator('#tabs .tab').filter({ hasText: "math.zyl" }).click();
   assert.match(await page.locator(".cm-content").textContent(), /struct Invoice \{ value: Int \}/);
-  await page.locator("#save-all-button").click();
+  await clickStudioMenuAction(page, "file", "save-all-button");
   await page.waitForFunction(() => document.querySelector("#status-message")?.textContent?.includes("2 Dateien gemeinsam gespeichert"));
   await page.locator('#tabs .tab').filter({ hasText: "main.zyl" }).click();
   const fieldPoint = await page.evaluate(() => {
@@ -196,14 +197,14 @@ try {
   assert.match(await page.locator(".cm-content").textContent(), /customer: math::Invoice = math::Invoice \{ amount: 42 \} print\(customer.amount\)/);
   await page.locator('#tabs .tab').filter({ hasText: "math.zyl" }).click();
   assert.match(await page.locator(".cm-content").textContent(), /struct Invoice \{ amount: Int \}/);
-  await page.locator("#save-all-button").click();
+  await clickStudioMenuAction(page, "file", "save-all-button");
   await page.waitForFunction(() => document.querySelector("#status-message")?.textContent?.includes("2 Dateien gemeinsam gespeichert"));
   page.on("dialog", async (dialog) => {
     if (dialog.type() === "prompt") await dialog.accept("src/answers.zyl");
     else await dialog.accept();
   });
   await page.locator('#tabs .tab').filter({ hasText: "math.zyl" }).click();
-  await page.locator("#rename-file-button").click();
+  await clickStudioMenuAction(page, "file", "rename-file-button");
   await page.waitForFunction(() => document.querySelector("#status-message")?.textContent?.includes("Datei umbenannt") || document.querySelector("#status-message")?.dataset.kind === "error");
   assert.match(await page.locator("#status-message").textContent(), /Datei umbenannt/, `rename failed: ${await page.locator("#status-message").textContent()}, browser errors: ${errors.join(", ")}`);
   const afterRename = await page.evaluate(async ({ token }) => {
