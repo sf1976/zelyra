@@ -416,7 +416,10 @@ try {
   await updateMutation;
   await page.locator("#database-record-dialog").waitFor({ state: "hidden" });
   page.once("dialog", async (dialog) => { assert.match(dialog.message(), /dauerhaft löschen/); await dialog.accept(); });
-  const deleteMutation = page.waitForRequest((request) => request.url().includes("/api/database-record-mutate") && request.postDataJSON().action === "delete");
+  const deleteMutation = page.waitForResponse((response) => {
+    const request = response.request();
+    return request.url().includes("/api/database-record-mutate") && request.postDataJSON().action === "delete";
+  });
   await page.locator("#database-record-table-wrap button", { hasText: "Löschen" }).first().click();
   await deleteMutation;
   assert.deepEqual(recordMutationRequests.map(({ action, confirm }) => [action, confirm]), [
