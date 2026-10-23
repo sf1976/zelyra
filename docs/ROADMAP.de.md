@@ -708,6 +708,8 @@ Der erste dokumentierte Abgleich und seine Testbelege stehen im
 
 - [🧪] **1.3.0 — HTTP-unabhängige Domain-Module:** `strict_architecture` meldet direkte Importe von Modulen aus `routes/` in `domain/` mit `E-ARCH-004` an der Importstelle. Domain-Funktionen werden dadurch über ihre fachlichen Eingaben aufgerufen statt an die Route gekoppelt. Typen für eingehende Requests, Responses, Sessions oder Cookies existieren aktuell nicht als benutzbare Zelyra-API; eine weitergehende Typprüfung dieser Werte ist daher noch nicht möglich.
 
+- [🧪] **1.3.0 — Laravel-Anwendungsabgleich:** Ein read-only Lauf gegen `/opt/siedelmann-laravel/app` hat einen konkreten Generatorfehler offengelegt: ausgewählte Kunden-/Rechnungstabellen ließen skalare Fremdschlüsselziele wie `tenants` aus, wodurch das generierte Zelyra-Schema nicht kompilierte. Die Auswahl verfolgt jetzt sowohl typisierte Beziehungen als auch `references_table`-Fremdschlüssel. Der ausgewählte Ausschnitt für `customers`, `invoices` und `invoice_items` enthält nun `customer_groups`, `document_templates`, `suppliers`, `tenants` und `users` und besteht `zelyra check`. Geschäftsabläufe, Autorisierung und Mandantensicherheit sind damit nicht als portiert belegt.
+
 - [🗺️] **1.5.0 — Bytecode als mögliches Standard-Backend:** AST bleibt bis dahin
   Standard; MIR und Bytecode bleiben ausdrücklich auswählbar und experimentell.
   Ein Standardwechsel wird nur freigegeben, wenn unterstützte Sprach-, SQL-,

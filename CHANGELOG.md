@@ -27,6 +27,12 @@
 - Apply the route SQL boundary check to embedded form and CRUD actions as well
   as API handlers. / Die SQL-Grenzprüfung für Routen auch auf eingebettete
   Form- und CRUD-Aktionen anwenden.
+- Include scalar foreign-key targets when selecting Laravel schema
+  dependencies, so generated customer and invoice subsets compile with their
+  referenced tenant and user tables. / Bei der Auswahl von Laravel-Schema-
+  Abhängigkeiten auch skalare Fremdschlüsselziele aufnehmen, damit generierte
+  Kunden- und Rechnungsausschnitte samt Tenant- und Benutzertabellen
+  kompilieren.
 
 ## 1.2.56 — Zelyra Studio SQL workbench and editor usability
 

@@ -124,6 +124,67 @@ fn laravel_import_generates_and_compiler_checks_verified_unsubscribe_workflow() 
     assert!(!contains_php_file(&output));
 }
 
+#[test]
+fn selected_laravel_tables_include_scalar_foreign_key_dependencies_and_compile() {
+    let tree = TestTree::new();
+    let source = tree.0.join("laravel");
+    let output = tree.0.join("zelyra-import");
+    fs::create_dir(&source).expect("create Laravel source root");
+    tree.write(
+        "laravel/database/migrations/create_business_tables.php",
+        "<?php\nSchema::create('users', function (Blueprint $table) { $table->id(); $table->string('name'); });\nSchema::create('tenants', function (Blueprint $table) { $table->id(); $table->foreignId('user_id')->nullable(); $table->foreign('user_id')->references('id')->on('users')->nullOnDelete(); $table->string('name'); });\nSchema::create('customers', function (Blueprint $table) { $table->id(); $table->foreignId('tenant_id'); $table->foreign('tenant_id')->references('id')->on('tenants')->cascadeOnDelete(); $table->string('name'); });\n",
+    );
+
+    let generated = Command::new(env!("CARGO_BIN_EXE_zelyra"))
+        .args([
+            "import",
+            "laravel",
+            "generate",
+            source.to_str().expect("UTF-8 test path"),
+            "--output",
+            output.to_str().expect("UTF-8 test path"),
+            "--table",
+            "customers",
+        ])
+        .output()
+        .expect("run targeted Laravel importer");
+    assert_success(generated, "targeted Laravel scaffold generation");
+
+    let selection: serde_json::Value = serde_json::from_slice(
+        &fs::read(output.join("GENERATION_SELECTION.json")).expect("read selection report"),
+    )
+    .expect("decode selection report");
+    assert_eq!(selection["schema_version"], "2");
+    assert_eq!(
+        selection["mode"],
+        "requested_tables_with_dependency_closure"
+    );
+    assert_eq!(selection["requested_tables"][0], "customers");
+    assert_eq!(
+        selection["included_tables"],
+        serde_json::json!(["customers", "tenants", "users"])
+    );
+    assert!(
+        selection["relation_dependencies"]
+            .as_array()
+            .unwrap()
+            .contains(&serde_json::json!("tenants"))
+            || selection["foreign_key_dependencies"]
+                .as_array()
+                .unwrap()
+                .contains(&serde_json::json!("tenants"))
+    );
+
+    let checked = Command::new(env!("CARGO_BIN_EXE_zelyra"))
+        .args([
+            "check",
+            output.join("main.zyl").to_str().expect("UTF-8 test path"),
+        ])
+        .output()
+        .expect("compile generated dependency-complete scaffold");
+    assert_success(checked, "selected table scaffold compiler check");
+}
+
 fn contains_php_file(directory: &Path) -> bool {
     let Ok(entries) = fs::read_dir(directory) else {
         return false;

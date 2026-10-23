@@ -648,6 +648,8 @@ The initial documented comparison and its test evidence are in the
 
 - [🧪] **1.3.0 — HTTP-independent domain modules:** `strict_architecture` reports direct imports of modules from `routes/` inside `domain/` as `E-ARCH-004` at the import site. Domain functions are called with business inputs instead of depending on route modules. Types for incoming requests, responses, sessions, or cookies are not currently exposed as usable Zelyra APIs, so deeper type checks for these values are not yet possible.
 
+- [🧪] **1.3.0 — Laravel application acceptance check:** A read-only run against `/opt/siedelmann-laravel/app` exposed a generator defect: selected customer/invoice tables omitted scalar foreign-key targets such as `tenants`, leaving the generated Zelyra schema uncompilable. Selection now follows both typed relations and `references_table` foreign keys. The selected `customers`, `invoices`, and `invoice_items` slice now includes `customer_groups`, `document_templates`, `suppliers`, `tenants`, and `users` and passes `zelyra check`. This does not prove that workflows, authorization, or tenant security have been ported.
+
 - [🗺️] **1.5.0 — Bytecode as a candidate default backend:** Keep AST as the
   default through this milestone; MIR and Bytecode remain explicitly selectable
   and experimental. Promote Bytecode only after supported language, SQL,
