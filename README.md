@@ -11,11 +11,17 @@ for database-backed business and web applications. It brings schema-aware SQL,
 forms, CRUD, views, and application logic together while keeping ordinary code
 and native SQL available.
 
-> **Release 1.2.54 · language compatibility line: 0.1** · [GitHub release](https://github.com/sf1976/zelyra/releases/tag/v1.2.54)
+> **Release 1.2.55 · language compatibility line: 0.1** · [GitHub release](https://github.com/sf1976/zelyra/releases/tag/v1.2.55)
 >
 > Compiler checks and the verifier cover defined scopes. They do not prove arbitrary applications correct. Review the documented support and limits for each workflow before deployment.
 
-Zelyra 1.2.54 suggests matching project `.zyl` modules after `import "`,
+Zelyra 1.2.55 brings the professional CSS 1.1.0 design system to generated
+applications, with refined CRUD, forms, tables, responsive layouts, and
+light/dark theme tokens. Studio adds a dedicated Project menu and suggestions
+for public declarations after an imported module namespace. Runtime settings
+can select experimental MIR and Bytecode backends for console projects; AST
+remains the default, and web previews remain AST-only. Zelyra 1.2.54 suggests
+matching project `.zyl` modules after `import "`,
 excluding the active file, duplicate imports, other file types, and comments.
 Version 1.2.53 added paired brackets and quotation marks and Zelyra-aware
 indentation; 1.2.52 added compiler-resolved function signatures,
@@ -34,7 +40,8 @@ v30, fusing verified literal-increment array updates into one operation.
 Earlier 1.2.x releases added typed CRUD actions, compiler-checked uploads,
 computed table fields, business number series, a Laravel website importer,
 `zelyra db console` and `zelyra db query`, reusable billing packages, and typed
-CSV conversion. See the [1.2.54 release notes](docs/release-notes/1.2.54.en.md),
+CSV conversion. See the [1.2.55 release notes](docs/release-notes/1.2.55.en.md),
+[1.2.54 release notes](docs/release-notes/1.2.54.en.md),
 [1.2.53 release notes](docs/release-notes/1.2.53.en.md),
 [1.2.52 release notes](docs/release-notes/1.2.52.en.md),
 [1.2.51 release notes](docs/release-notes/1.2.51.en.md),
