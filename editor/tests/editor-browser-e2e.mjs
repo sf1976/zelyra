@@ -142,6 +142,28 @@ try {
   await page.locator("#empty-state").waitFor({ state: "visible" });
   await page.locator("#empty-state h1", { hasText: "Zelyra verstehen" }).waitFor();
   await page.locator('.tree-item.file[title="main.zyl"]').waitFor();
+  await page.waitForFunction(() => document.querySelector("#welcome-project-status")?.textContent.includes("vollständig analysiert"));
+  assert.equal(await page.locator("#welcome-project-modules").textContent(), "2", "the welcome view counts compiler-loaded project modules");
+  assert.equal(await page.locator("#welcome-project-data").textContent(), "3", "the welcome view counts declared tables and records");
+  assert.equal(await page.locator("#welcome-project-web").textContent(), "3", "the welcome view counts declared web surfaces and reusable views");
+  assert.equal(await page.locator("#welcome-project-sql").textContent(), "1", "the welcome view counts parsed SQL declarations");
+  assert.equal(await page.locator("#welcome-project-action").getAttribute("data-action"), "map", "the compiler model suggests the project map when web queries exist");
+  await page.locator("#welcome-project-action").click();
+  await page.locator("#project-map-dialog").waitFor({ state: "visible" });
+  await page.waitForFunction(() => document.querySelector("#project-map-status")?.textContent === "");
+  await page.locator("#project-map-close").click();
+  await page.route("**/__zelyra/editor/api/project-map", async (route) => {
+    const response = await route.fetch();
+    const model = await response.json();
+    model.incomplete = true;
+    await route.fulfill({ response, body: JSON.stringify(model) });
+  });
+  await page.reload({ waitUntil: "domcontentloaded" });
+  await page.waitForFunction(() => document.querySelector("#welcome-project-status")?.textContent.includes("Analyse unvollständig"));
+  assert.equal(await page.locator("#welcome-project-action").getAttribute("data-action"), "check", "incomplete compiler analysis recommends a project check");
+  assert.equal(await page.locator("#welcome-project-action").textContent(), "Projekt prüfen");
+  assert.match(await page.locator("#welcome-project-guidance").textContent(), /nicht vollständig auflösbar/);
+  await page.unroute("**/__zelyra/editor/api/project-map");
   await startupSplash.waitFor({ state: "detached", timeout: 5_000 });
   await page.locator("#welcome-terminal").click();
   await page.locator("#terminal-panel").waitFor({ state: "visible" });

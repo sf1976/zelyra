@@ -25,6 +25,12 @@ source file, check the project, start the console, or open Database Studio.
 The page presents compiler, SQL, and application preview as one Zelyra
 workflow.
 
+The welcome page also reads the local compiler project map and shows recognized
+modules, data models, web surfaces, and SQL queries. Its suggested next action
+leads to the project check, project map, Database Studio, or entry point. When
+analysis is incomplete, Studio says so and recommends the compiler check first.
+The overview does not edit source files and needs no AI or cloud service.
+
 The application menu groups common actions under **File**, **Edit**, **View**,
 **Run**, **Database**, and **Help**. Start and Check remain available as quick
 actions; specialist tools live in their matching menus or the command palette

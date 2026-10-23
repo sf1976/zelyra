@@ -117,6 +117,7 @@ function onStudioEvent(message) {
   if (message?.schema !== 1 || typeof message.kind !== "string") return;
   if (message.kind === "workspace.changed") {
     void refreshTree();
+    if (!activePath) void refreshWelcomeProject();
     const changedPath = message.document?.path || "";
     if (!changedPath || changedPath === activePath) setVerificationResults([]);
     pipelineMapCache = null;
@@ -195,6 +196,8 @@ const symbolCache = new Map();
 const symbolRequests = new Map();
 let treeFiles = [];
 let activeFilter = "";
+let welcomeProjectState = { kind: "loading" };
+let welcomeProjectSequence = 0;
 let projectSearchMode = "text";
 let semanticReferenceQuery = null;
 let databaseMap = null;
@@ -260,7 +263,7 @@ const messages = {
     fileRenamed: "Datei umbenannt: {0}", fileDeleted: "Datei gelöscht: {0}",
     switchLanguage: "Sprache wechseln", switchFontSize: "Schriftgröße anpassen", fontSizeDefaultAction: "Standard-Schriftgröße (100%)", fontSizeDefaultHelp: "Schriftgröße der Elemente und des Editors auf Standard zurücksetzen", fontSizeMediumAction: "Mittlere Schriftgröße (+15%)", fontSizeMediumHelp: "Schriftgröße um 15% vergrößern", fontSizeLargeAction: "Große Schriftgröße (+30%)", fontSizeLargeHelp: "Schriftgröße um 30% vergrößern", themeLightAction: "Helles Farbschema aktivieren", themeDarkAction: "Dunkles Farbschema aktivieren",
     format: "Formatieren", check: "Projekt prüfen", welcome: "Willkommen in Zelyra Studio",
-    welcomeHint: "Öffne links eine Datei und entwickle direkt in deinem Projekt.", problems: "Probleme",
+    welcomeHint: "Öffne links eine Datei und entwickle direkt in deinem Projekt.", welcomeProjectEyebrow: "ZELYRA-PROJEKTBILD", welcomeProjectTitle: "Vom Compiler gelesen", welcomeProjectMetrics: "Erkannte Zelyra-Projektbereiche", welcomeProjectLoading: "Compiler-Modell wird geladen …", welcomeProjectReady: "Projektmodell vollständig analysiert", welcomeProjectIncomplete: "Analyse unvollständig · angezeigte Werte sind erkannte Elemente", welcomeProjectEmpty: "Noch keine unterstützten Zelyra-Deklarationen erkannt", welcomeProjectFailed: "Compiler-Projektbild konnte nicht geladen werden", welcomeProjectModules: "Module", welcomeProjectData: "Datenmodelle", welcomeProjectWeb: "Webflächen", welcomeProjectSql: "SQL-Abfragen", welcomeProjectNext: "NÄCHSTER SINNVOLLER SCHRITT", welcomeProjectCheckHint: "Die Projektstruktur ist nicht vollständig auflösbar. Lass den Compiler die konkreten Diagnosen anzeigen.", welcomeProjectMapHint: "Deine Webflächen verwenden Datenabfragen. Verfolge ihre Verbindungen in der Zelyra-Projektkarte.", welcomeProjectDatabaseHint: "Zelyra-Datentabellen sind erkannt. Prüfe Schema, Beziehungen und CRUD im Datenbank-Studio.", welcomeProjectOpenHint: "Öffne den Einstiegspunkt und entwickle den nächsten Schritt direkt in Zelyra.", welcomeProjectOpenMap: "Projektkarte öffnen", welcomeProjectCheck: "Projekt prüfen", welcomeProjectDatabase: "Datenbank-Studio öffnen", welcomeProjectOpenFile: "Einstiegspunkt öffnen", problems: "Probleme",
     noProblems: "Keine Probleme gefunden. Dein Projekt ist bereit.", close: "Panel schließen", loadingFiles: "Dateien werden geladen",
     toggleExplorer: "Dateiübersicht umschalten", search: "Suchen", handbook: "Handbuch", projectFiles: "Projektdateien",
     openFile: "Datei öffnen", complete: "Vervollständigen", completeHelp: "Codevorschläge anzeigen (Strg+Leertaste)", ready: "Bereit", localMode: "Lokaler Modus",
@@ -371,7 +374,7 @@ const messages = {
     fileRenamed: "File renamed: {0}", fileDeleted: "File deleted: {0}",
     switchLanguage: "Switch language", switchFontSize: "Adjust font size", fontSizeDefaultAction: "Default font size (100%)", fontSizeDefaultHelp: "Reset font size of UI elements and editor to default", fontSizeMediumAction: "Medium font size (+15%)", fontSizeMediumHelp: "Increase font size by 15%", fontSizeLargeAction: "Large font size (+30%)", fontSizeLargeHelp: "Increase font size by 30%", themeLightAction: "Use light appearance", themeDarkAction: "Use dark appearance",
     format: "Format", check: "Check project", welcome: "Welcome to Zelyra Studio",
-    welcomeHint: "Open a file on the left and work directly in your project.", problems: "Problems",
+    welcomeHint: "Open a file on the left and work directly in your project.", welcomeProjectEyebrow: "ZELYRA PROJECT MODEL", welcomeProjectTitle: "Read by the compiler", welcomeProjectMetrics: "Recognized Zelyra project areas", welcomeProjectLoading: "Loading compiler model …", welcomeProjectReady: "Project model analyzed", welcomeProjectIncomplete: "Analysis incomplete · values show recognized elements", welcomeProjectEmpty: "No supported Zelyra declarations found yet", welcomeProjectFailed: "Could not load the compiler project model", welcomeProjectModules: "Modules", welcomeProjectData: "Data models", welcomeProjectWeb: "Web surfaces", welcomeProjectSql: "SQL queries", welcomeProjectNext: "A USEFUL NEXT STEP", welcomeProjectCheckHint: "The project structure could not be fully resolved. Ask the compiler to show its diagnostics.", welcomeProjectMapHint: "Your web surfaces use data queries. Follow their connections in the Zelyra project map.", welcomeProjectDatabaseHint: "Zelyra data tables are recognized. Review schema, relations, and CRUD in Database Studio.", welcomeProjectOpenHint: "Open the entry point and build the next step directly in Zelyra.", welcomeProjectOpenMap: "Open project map", welcomeProjectCheck: "Check project", welcomeProjectDatabase: "Open Database Studio", welcomeProjectOpenFile: "Open entry point", problems: "Problems",
     noProblems: "No problems found. Your project is ready.", close: "Close panel", loadingFiles: "Loading files",
     toggleExplorer: "Toggle file explorer", search: "Search", handbook: "Handbook", projectFiles: "Project files",
     openFile: "Open file", complete: "Complete", completeHelp: "Show code suggestions (Ctrl+Space)", ready: "Ready", localMode: "Local mode",
@@ -504,6 +507,7 @@ function setLanguage(next) {
     $("project-search-input").placeholder = t("referencesPlaceholder");
   }
   localStorage.setItem("zelyra-editor-language", language);
+  renderWelcomeProject();
   renderTree();
   if (databaseMap) {
     renderDatabaseTables();
@@ -658,6 +662,88 @@ function analysisRequest(path, source, version = liveCheckSequence) {
   }
   if (overlays.length >= 16 || bytes > 1_048_576) throw new Error(t("analysisOverlayLimit"));
   return { path, source, version, overlays };
+}
+
+function projectMapRequest(path = activePath, source = editor?.state.doc.toString(), version = liveCheckSequence) {
+  return path?.endsWith(".zyl") && typeof source === "string"
+    ? analysisRequest(path, source, version)
+    : { version, overlays: [] };
+}
+
+function welcomeProjectCounts(map) {
+  const nodes = Array.isArray(map?.nodes) ? map.nodes : [];
+  const count = (kinds) => nodes.filter((node) => kinds.includes(node.kind)).length;
+  return {
+    modules: count(["module"]),
+    data: count(["table", "struct", "class", "enum"]),
+    web: count(["page", "api", "form", "crud", "tableview", "view", "component"]),
+    sql: count(["sql"]),
+  };
+}
+
+function renderWelcomeProject() {
+  const state = welcomeProjectState;
+  const section = $("welcome-project");
+  if (!section) return;
+  const map = state.kind === "ready" ? state.map : null;
+  const counts = map ? welcomeProjectCounts(map) : null;
+  for (const [key, id] of Object.entries({ modules: "welcome-project-modules", data: "welcome-project-data", web: "welcome-project-web", sql: "welcome-project-sql" })) {
+    $(id).textContent = counts ? String(counts[key]) : "—";
+  }
+  section.setAttribute("aria-busy", String(state.kind === "loading"));
+  const status = $("welcome-project-status");
+  const guidance = $("welcome-project-guidance");
+  const action = $("welcome-project-action");
+  let statusKey = "welcomeProjectLoading";
+  let guidanceKey = "welcomeProjectLoading";
+  let actionKey = "welcomeProjectOpenMap";
+  let actionKind = "map";
+  if (state.kind === "ready") {
+    const noDeclarations = !counts.data && !counts.web && !counts.sql;
+    statusKey = state.map.incomplete ? "welcomeProjectIncomplete" : noDeclarations ? "welcomeProjectEmpty" : "welcomeProjectReady";
+    if (state.map.incomplete) {
+      guidanceKey = "welcomeProjectCheckHint";
+      actionKey = "welcomeProjectCheck";
+      actionKind = "check";
+    } else if (counts.web && counts.sql) {
+      guidanceKey = "welcomeProjectMapHint";
+      actionKey = "welcomeProjectOpenMap";
+      actionKind = "map";
+    } else if (counts.data) {
+      guidanceKey = "welcomeProjectDatabaseHint";
+      actionKey = "welcomeProjectDatabase";
+      actionKind = "database";
+    } else {
+      guidanceKey = "welcomeProjectOpenHint";
+      actionKey = "welcomeProjectOpenFile";
+      actionKind = "file";
+    }
+  } else if (state.kind === "failed") {
+    statusKey = "welcomeProjectFailed";
+    guidanceKey = "welcomeProjectCheckHint";
+    actionKey = "welcomeProjectCheck";
+    actionKind = "check";
+  }
+  status.textContent = t(statusKey);
+  guidance.textContent = t(guidanceKey);
+  action.textContent = t(actionKey);
+  action.dataset.action = actionKind;
+  action.disabled = state.kind === "loading";
+}
+
+async function refreshWelcomeProject() {
+  const sequence = ++welcomeProjectSequence;
+  welcomeProjectState = { kind: "loading" };
+  renderWelcomeProject();
+  try {
+    const map = await api("project-map", { method: "POST", body: JSON.stringify(projectMapRequest(null, null)) });
+    if (sequence !== welcomeProjectSequence) return;
+    welcomeProjectState = { kind: "ready", map };
+  } catch {
+    if (sequence !== welcomeProjectSequence) return;
+    welcomeProjectState = { kind: "failed" };
+  }
+  renderWelcomeProject();
 }
 
 function renderTabs() {
@@ -1512,7 +1598,7 @@ function closeTab(path) {
     renderPipelineBreadcrumbs();
     const next = tabs.keys().next().value;
     if (next) activate(next);
-    else { $("active-file").textContent = t("noDocument"); $("empty-state").hidden = false; }
+    else { $("active-file").textContent = t("noDocument"); $("empty-state").hidden = false; void refreshWelcomeProject(); }
   }
   renderTabs();
 }
@@ -3211,7 +3297,7 @@ async function openProjectMap() {
     const path = activePath?.endsWith(".zyl") ? activePath : null;
     const source = path && editor ? editor.state.doc.toString() : null;
     const version = liveCheckSequence;
-    const map = await api("project-map", { method: "POST", body: JSON.stringify(analysisRequest(path, source, version)) });
+    const map = await api("project-map", { method: "POST", body: JSON.stringify(projectMapRequest(path, source, version)) });
     if (!dialog.open || (source !== null && (path !== activePath || editor?.state.doc.toString() !== source))) return;
     renderProjectMap(map);
     const issueLabels = { ...messages[language].projectMapIssues, ...messages[language].projectMapIssuesExtra };
@@ -4369,6 +4455,13 @@ $("welcome-open-file").addEventListener("click", () => {
 $("welcome-check").addEventListener("click", () => $("check-button").click());
 $("welcome-terminal").addEventListener("click", () => $("terminal-toggle-button").click());
 $("welcome-database").addEventListener("click", () => $("database-button").click());
+$("welcome-project-action").addEventListener("click", (event) => {
+  const action = event.currentTarget.dataset.action;
+  if (action === "check") $("check-button").click();
+  else if (action === "database") $("database-button").click();
+  else if (action === "file") $("welcome-open-file").click();
+  else void openProjectMap();
+});
 $("language-button").addEventListener("click", () => setLanguage(language === "de" ? "en" : "de"));
 $("font-size-button").addEventListener("click", cycleFontSize);
 $("sidebar-toggle").addEventListener("click", (event) => {
@@ -4428,5 +4521,6 @@ $("project-name").textContent = document.body.dataset.project || "Zelyra-Projekt
 $("project-name-side").textContent = (document.body.dataset.project || "ZELYRA-PROJEKT").toLocaleUpperCase();
 refreshTree().then(() => {
   $("empty-state").hidden = false;
+  void refreshWelcomeProject();
 });
 void connectStudioEvents();
