@@ -55,5 +55,5 @@ fi
 curl --silent --show-error --fail "${base_url}/__zelyra/theme.css" \
     -o "${temp_dir}/theme.css"
 grep -Fq -- "The project theme changes the shared palette and typography." "${temp_dir}/workspace.html"
-grep -Fq -- "--zelyra-color-accent: #087f8c" "${temp_dir}/theme.css"
+grep -Fq -- "--z-color-primary: #087f8c" "${temp_dir}/theme.css"
 echo "Theme customization E2E passed"
