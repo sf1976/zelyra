@@ -26,7 +26,7 @@ proof claims guide every phase. The [manifesto](MANIFESTO.md) states the
 principles; the roadmap below tracks what is actually implemented.
 
 The current stable release is
-[1.2.53](https://github.com/sf1976/zelyra/releases/tag/v1.2.53).
+[1.2.54](https://github.com/sf1976/zelyra/releases/tag/v1.2.54).
 **Current milestones** is the source of near-term commitments. Older numbered release sections below are retained as
 historical planning and evidence; they do not by themselves define current
 release targets. Longer-term ideas remain in the post-1.0 evolution section.
@@ -1041,7 +1041,7 @@ compatibility behavior before changing syntax. See the detailed
 - [x] **1.2.51 — compiler-aware Studio and SQL completion:** Present the local compiler project map on the Studio welcome page with a context-dependent next action; complete SQL from declared tables and unambiguous columns, including table aliases. Suggestions require no live database. Published with Linux/Windows packages, checksums, SPDX SBOMs, and release attestations on [GitHub Releases](https://github.com/sf1976/zelyra/releases/tag/v1.2.51).
 - [x] **1.2.52 — contextual Zelyra Studio editing:** Resolve function signatures and active arguments, complete record fields from compiler-inferred types and public imports, and scope module completion to public declarations. Optional AI suggestions require explicit confirmation and never apply code automatically. Full PR CI and the Linux/Windows release workflow passed; packages, checksums, SPDX SBOMs, and release attestations are published on [GitHub Releases](https://github.com/sf1976/zelyra/releases/tag/v1.2.52). Zelyra 1.3.0 remains in progress.
 - [x] **1.2.53 — Zelyra-aware editor behavior:** Pair brackets and quotes, indent Zelyra blocks with four spaces, and support Tab/Shift+Tab. Indentation follows block structure and ignores braces in comments and strings. Full PR CI and the Linux/Windows tag workflows passed, including reproducible builds, checksums, SPDX SBOMs, and release attestations. The published Linux install and update smoke test passed. See [GitHub Releases](https://github.com/sf1976/zelyra/releases/tag/v1.2.53). Zelyra 1.3.0 remains in progress.
-- [~] **1.2.54 — Studio import guidance (release candidate):** Suggest local `.zyl` modules while writing an import, filter self/duplicate/non-source/comment candidates, and continue with public-module completion after the alias. PR #217 passed full CI, both Linux and Windows release candidate builds, and the published dependency audit after updating `ctutils` to 0.4.5. The v1.2.54 tag and publication are pending.
+- [x] **1.2.54 — Studio import guidance (released):** Suggest local `.zyl` modules while writing an import, filter self/duplicate/non-source/comment candidates, and continue with public-module completion after the alias. PR #217 passed full CI; release PR #218 and the v1.2.54 tag workflow passed release validation, reproducible Linux/Windows builds, archive checks, checksums, SPDX SBOMs, and artifact attestations. The published install, repeated install, update, and rollback smoke test passed. See [GitHub Releases](https://github.com/sf1976/zelyra/releases/tag/v1.2.54) and the [release verification record](release-readiness/1.2.54-release-verification.en.md). Zelyra 1.3.0 remains in progress.
 
 - [ ] **1.2.0 — Compose check in the installer:** Installers detect
   Docker Compose v2 or newer and distinguish it from obsolete Python Compose
