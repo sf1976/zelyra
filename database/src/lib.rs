@@ -3466,6 +3466,12 @@ pub struct BoundedQueryResult {
     pub cells_truncated: bool,
 }
 
+#[derive(Clone, Copy, Default)]
+struct QueryResultLimits {
+    max_rows: Option<usize>,
+    max_cell_characters: Option<usize>,
+}
+
 /// Credentials extracted from a supported database connection URL.
 /// The password is kept out of diagnostic formatting and command arguments.
 #[derive(Clone, PartialEq, Eq)]
@@ -3594,8 +3600,7 @@ pub fn execute_postgres_query(
         &[(sql, params)],
         false,
         false,
-        None,
-        None,
+        QueryResultLimits::default(),
     )
     .map(|mut results| results.pop().map(|(result, _)| result).unwrap_or_default())
 }
@@ -3623,8 +3628,7 @@ pub fn execute_postgres_queries(
         &prepared,
         transaction,
         false,
-        None,
-        None,
+        QueryResultLimits::default(),
     )
     .map(|results| results.into_iter().map(|(result, _)| result).collect())
 }
@@ -3650,8 +3654,7 @@ pub fn execute_read_only_query(
             &prepared,
             true,
             true,
-            None,
-            None,
+            QueryResultLimits::default(),
         )
         .map(|mut results| results.pop().map(|(result, _)| result).unwrap_or_default());
     }
@@ -3703,8 +3706,10 @@ pub fn execute_read_only_query_with_limits(
             &prepared,
             true,
             true,
-            max_rows,
-            Some(max_characters),
+            QueryResultLimits {
+                max_rows,
+                max_cell_characters: Some(max_characters),
+            },
         )
         .map(|mut results| {
             let (result, cells_truncated) = results.pop().unwrap_or_default();
@@ -3755,8 +3760,7 @@ pub fn execute_transactional_query(
             &prepared,
             true,
             false,
-            None,
-            None,
+            QueryResultLimits::default(),
         )
         .map(|mut results| results.pop().map(|(result, _)| result).unwrap_or_default());
     }
@@ -3779,8 +3783,7 @@ fn execute_postgres_batch(
     prepared: &[(String, Vec<Box<dyn PostgresToSql + Sync>>)],
     transaction: bool,
     read_only: bool,
-    max_rows: Option<usize>,
-    max_cell_characters: Option<usize>,
+    result_limits: QueryResultLimits,
 ) -> Result<Vec<(QueryResult, bool)>, DatabaseError> {
     let pool = postgres_pool(database_url, settings, tls)?;
     let pool_wait = postgres_pool_wait_timeout(settings)?;
@@ -3793,8 +3796,8 @@ fn execute_postgres_batch(
                 prepared,
                 transaction,
                 read_only,
-                max_rows,
-                max_cell_characters,
+                result_limits.max_rows,
+                result_limits.max_cell_characters,
             )
         }
         PostgresPool::Tls(pool) => {
@@ -3805,8 +3808,8 @@ fn execute_postgres_batch(
                 prepared,
                 transaction,
                 read_only,
-                max_rows,
-                max_cell_characters,
+                result_limits.max_rows,
+                result_limits.max_cell_characters,
             )
         }
     }
