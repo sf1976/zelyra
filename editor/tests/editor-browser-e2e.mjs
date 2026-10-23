@@ -31,11 +31,21 @@ try {
           { name: "name", type: "VARCHAR(100)", zelyra_type: "String(100)", zelyra_required: true, nullable: false, primary_key: false, auto_increment: false, unique: false },
           { name: "amount", type: "DECIMAL(10,2)", sql_type: "DECIMAL(10,2)", zelyra_type: "Decimal", zelyra_required: true, nullable: false, primary_key: false, auto_increment: false, unique: false },
           { name: "created_at", type: "DATE", sql_type: "DATE", zelyra_type: "Date?", nullable: true, primary_key: false, auto_increment: false, unique: false },
+          { name: "active", type: "BOOLEAN", sql_type: "BOOLEAN", zelyra_type: "Bool", zelyra_required: true, nullable: false, primary_key: false, auto_increment: false, unique: false },
+          { name: "marketing_opt_in", type: "BOOLEAN", sql_type: "BOOLEAN", zelyra_type: "Bool", nullable: false, default: "1", primary_key: false, auto_increment: false, unique: false },
+          { name: "status", type: "ENUM('active','paused')", sql_type: "ENUM('active','paused')", zelyra_type: "String", zelyra_required: true, nullable: false, primary_key: false, auto_increment: false, unique: false },
+          { name: "metadata", type: "JSON", sql_type: "JSON", zelyra_type: "String?", nullable: true, primary_key: false, auto_increment: false, unique: false },
+          { name: "starts_at", type: "TIME", sql_type: "TIME", zelyra_type: "String?", nullable: true, primary_key: false, auto_increment: false, unique: false },
         ], live_columns: [
           { name: "id", type: "BIGINT", nullable: false, primary_key: true, auto_increment: true, unique: false },
           { name: "name", type: "VARCHAR(100)", zelyra_type: "String(100)", zelyra_required: true, nullable: false, primary_key: false, auto_increment: false, unique: false },
           { name: "amount", type: "DECIMAL(10,2)", sql_type: "DECIMAL(10,2)", zelyra_type: "Decimal", zelyra_required: true, nullable: false, primary_key: false, auto_increment: false, unique: false },
           { name: "created_at", type: "DATE", sql_type: "DATE", zelyra_type: "Date?", nullable: true, primary_key: false, auto_increment: false, unique: false },
+          { name: "active", type: "BOOLEAN", sql_type: "BOOLEAN", zelyra_type: "Bool", zelyra_required: true, nullable: false, primary_key: false, auto_increment: false, unique: false },
+          { name: "marketing_opt_in", type: "BOOLEAN", sql_type: "BOOLEAN", zelyra_type: "Bool", nullable: false, default: "1", primary_key: false, auto_increment: false, unique: false },
+          { name: "status", type: "ENUM('active','paused')", sql_type: "ENUM('active','paused')", zelyra_type: "String", zelyra_required: true, nullable: false, primary_key: false, auto_increment: false, unique: false },
+          { name: "metadata", type: "JSON", sql_type: "JSON", zelyra_type: "String?", nullable: true, primary_key: false, auto_increment: false, unique: false },
+          { name: "starts_at", type: "TIME", sql_type: "TIME", zelyra_type: "String?", nullable: true, primary_key: false, auto_increment: false, unique: false },
         ], foreign_keys: [], live_foreign_keys: [],
       }] }], unmapped_live_tables: [], crud_resources: [{ table: "customers", name: "CustomerResource" }], crud_targets: ["main.zyl"],
     }),
@@ -64,8 +74,8 @@ try {
       contentType: "application/json",
       body: JSON.stringify({
         readOnly: true,
-        columns: ["id", "name"],
-        rows: [[url.searchParams.get("offset") === "25" ? "26" : "1", "<img src=x onerror=alert(1)> & Anna"]],
+        columns: ["id", "name", "amount", "created_at", "active", "status", "metadata", "starts_at"],
+        rows: [[url.searchParams.get("offset") === "25" ? "26" : "1", "<img src=x onerror=alert(1)> & Anna", "19.95", "2026-10-23", true, "active", "{\"tier\":\"old\"}", "12:30:00"]],
         limit: 25,
         offset: Number(url.searchParams.get("offset")),
         nextOffset: url.searchParams.get("offset") === "25" ? null : 25,
@@ -402,19 +412,40 @@ try {
   await page.locator("#database-record-dialog").waitFor({ state: "visible" });
   await page.locator('#database-record-fields [data-column="name"]').fill("New customer");
   await page.locator('#database-record-fields [data-column="amount"]').fill("19.95");
+  await page.locator('#database-record-fields [data-column="active"]').selectOption("true");
+  await page.locator('#database-record-fields [data-column="status"]').selectOption("paused");
+  await page.locator('#database-record-fields [data-column="metadata"]').fill("{");
+  await page.locator('#database-record-fields [data-column="created_at"]').fill("2026-10-23");
+  await page.locator('#database-record-fields [data-column="starts_at"]').fill("09:45");
+  await page.locator("#database-record-save").click();
+  await page.waitForFunction(() => {
+    const status = document.querySelector("#database-record-dialog-status")?.textContent || "";
+    return status.includes("ungültig") || status.includes("invalid");
+  });
+  assert.deepEqual(recordMutationRequests, [], "invalid JSON must stop before the confirmation and mutation request");
+  await page.locator('#database-record-fields [data-column="metadata"]').fill('{"tier":"new"}');
   page.once("dialog", async (dialog) => { assert.match(dialog.message(), /Datensatz.*anlegen/); await dialog.accept(); });
   const createMutation = page.waitForRequest((request) => request.url().includes("/api/database-record-mutate") && request.postDataJSON().action === "create");
   await page.locator("#database-record-save").click();
   await createMutation;
   await page.locator("#database-record-dialog").waitFor({ state: "hidden" });
+  assert.deepEqual(recordMutationRequests[0].values, {
+    name: "New customer", amount: "19.95", active: true, status: "paused",
+    metadata: { tier: "new" }, created_at: "2026-10-23", starts_at: "09:45",
+  });
+  assert.ok(!("marketing_opt_in" in recordMutationRequests[0].values), "an unselected Boolean with a database default must preserve that default");
   const editButtons = page.locator("#database-record-table-wrap button", { hasText: "Bearbeiten" });
   await editButtons.first().click();
   await page.locator('#database-record-fields [data-column="name"]').fill("Edited customer");
+  await page.locator('#database-record-fields [data-column="active"]').selectOption("false");
+  await page.locator('#database-record-fields [data-column="metadata"]').fill('{"tier":"edited"}');
   page.once("dialog", async (dialog) => { assert.match(dialog.message(), /Änderungen.*speichern/); await dialog.accept(); });
   const updateMutation = page.waitForRequest((request) => request.url().includes("/api/database-record-mutate") && request.postDataJSON().action === "update");
   await page.locator("#database-record-save").click();
   await updateMutation;
   await page.locator("#database-record-dialog").waitFor({ state: "hidden" });
+  assert.equal(recordMutationRequests[1].values.active, false, "boolean false must survive form submission");
+  assert.deepEqual(recordMutationRequests[1].values.metadata, { tier: "edited" }, "JSON must be sent as structured data");
   page.once("dialog", async (dialog) => { assert.match(dialog.message(), /dauerhaft löschen/); await dialog.accept(); });
   const deleteMutation = page.waitForResponse((response) => {
     const request = response.request();

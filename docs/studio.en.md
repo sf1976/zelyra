@@ -345,7 +345,11 @@ The **record browser** loads rows only after an explicit click and pages at no
 more than 25 rows. You can create, edit, and delete records in declared tables
 that match the live schema. Create and update require confirmation; delete is
 identified as permanent and cannot be undone. Changes use only schema fields
-and bound parameters. Edit and delete require a primary key. Unknown tables,
+and bound parameters. Boolean columns use an explicit true/false choice, enum
+columns use their declared options, JSON values are edited as formatted JSON and
+validated before submission, and date/time columns get matching controls.
+Nullable values can be marked NULL; a blank create field preserves a database
+default when one is declared. Edit and delete require a primary key. Unknown tables,
 undeclared fields, and tables without a live connection are rejected.
 Credentials stay on the local Studio server, and values are rendered as text.
 Opening the workbench does not fetch records automatically. The browser does

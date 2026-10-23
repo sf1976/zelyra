@@ -263,7 +263,8 @@ der [Setup-Anleitung](setup-web.de.md) und den
   Position auf oberster Ebene außerdem einen aus der Compiler-Projektkarte
   abgeleiteten CRUD-Block für eine eindeutige Tabelle ohne CRUD einfügen; bei
   unvollständiger/mehrdeutiger Analyse und innerhalb eines Codeblocks wird er
-  nicht angeboten. Einzelheiten: [Studio-Anleitung](studio.de.md).
+  nicht angeboten. Der Datenbrowser verwendet typisierte Boolean-/Enum-/Datum-
+  /Uhrzeitfelder und geprüfte JSON-Eingaben für passende Schemafelder. Einzelheiten: [Studio-Anleitung](studio.de.md).
 - ✅ `zelyra text edit <plan.zedit>` bietet vorschau-basierte Textänderungen aus
   TOML-Plänen mit linearen regulären Ausdrücken, erwarteter Trefferzahl,
   quellgebundener Plan-ID und ausdrücklichem Anwenden. Projektgrenzen und

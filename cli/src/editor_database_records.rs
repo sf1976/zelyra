@@ -178,11 +178,11 @@ fn input_query_value(value: &Value, column: &Column) -> Option<QueryValue> {
         return Some(QueryValue::Null);
     }
     let sql_type = column.sql_type.to_ascii_lowercase();
+    if sql_type.contains("json") {
+        return serde_json::to_string(value).ok().map(QueryValue::Json);
+    }
     if value.is_object() || value.is_array() {
-        return sql_type
-            .contains("json")
-            .then(|| serde_json::to_string(value).ok().map(QueryValue::Json))
-            .flatten();
+        return None;
     }
     if sql_type.contains("bool") {
         return match value {
@@ -297,7 +297,9 @@ fn validate_value_fields(
         if value.is_null() && !column.nullable {
             return Err((422, format!("field `{name}` does not allow NULL")));
         }
-        if value.is_object() || value.is_array() {
+        if (value.is_object() || value.is_array())
+            && !column.sql_type.to_ascii_lowercase().contains("json")
+        {
             return Err((
                 400,
                 format!("field `{name}` must be a scalar value or NULL"),
@@ -401,5 +403,33 @@ mod tests {
             append_key_predicates(&null_key, &primary, &|name| name.into(), &mut Vec::new())
                 .is_err()
         );
+    }
+
+    #[test]
+    fn json_columns_bind_structured_json_and_other_columns_reject_it() {
+        let json_column = Column {
+            name: "metadata".into(),
+            sql_type: "JSONB".into(),
+            nullable: true,
+            primary_key: false,
+            auto: false,
+            unique: false,
+            default: None,
+        };
+        let text_column = Column {
+            sql_type: "TEXT".into(),
+            ..json_column.clone()
+        };
+        let object = json!({"active": true, "count": 2});
+        let Some(QueryValue::Json(object_json)) = input_query_value(&object, &json_column) else {
+            panic!("structured JSON should bind as JSON");
+        };
+        assert_eq!(object_json, r#"{"active":true,"count":2}"#);
+        let Some(QueryValue::Json(string_json)) = input_query_value(&json!("label"), &json_column)
+        else {
+            panic!("JSON strings should retain JSON encoding");
+        };
+        assert_eq!(string_json, r#""label""#);
+        assert!(input_query_value(&object, &text_column).is_none());
     }
 }

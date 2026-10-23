@@ -13,6 +13,11 @@
   anbieten, nur an einer leeren Position auf oberster Ebene; Code wird erst
   durch Auswahl eingefügt, unvollständige und mehrdeutige Projektkarten werden
   ausgelassen.
+- Use SQL-type-aware Boolean/enum/date/time inputs and validated JSON values
+  in the Studio record editor; JSON remains a bound JSON parameter on the
+  server. / Im Studio-Datensatzeditor typgerechte Eingaben für Boolean/Enum/
+  Datum/Uhrzeit und geprüfte JSON-Werte verwenden; JSON bleibt serverseitig ein
+  gebundener JSON-Parameter.
 
 ## 1.2.55 — Zelyra Studio und professionelles UI-Designsystem
 
