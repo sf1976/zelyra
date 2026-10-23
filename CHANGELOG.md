@@ -1,5 +1,11 @@
 ## Unreleased
 
+- Scope Studio completion after an imported `alias::` to that module's public
+  declarations, using unsaved import changes from the active editor buffer.
+  / Die Studio-Vervollständigung nach einem importierten `alias::` auf die
+  öffentlichen Deklarationen dieses Moduls begrenzen und ungespeicherte
+  Importänderungen aus dem aktiven Editor berücksichtigen.
+
 ## 1.2.51 — Zelyra Studio compiler-aware workflow
 
 - Add schema-aware Zelyra SQL completion: suggest declared tables after

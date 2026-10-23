@@ -89,9 +89,13 @@ Textsuche bleibt ein getrenntes Werkzeug.
 
 Vervollständigungen beziehen auflösbare Deklarationen aus dem aktiven Modul und
 seinen Imports ein. Nach `import "src/customer.zyl" as customer` zeigt
-**Strg+Leertaste** die exportierten Namen als `customer::Name` an. Während du
-einen Importpfad schreibst, schlägt Studio passende `.zyl`-Dateien aus dem
-Projekt vor. In SQL-Blöcken erscheinen SQL-Schlüsselwörter und deklarierte
+**Strg+Leertaste** die exportierten Namen als `customer::Name` an; nach
+`customer::` zeigt Studio nur öffentliche Deklarationen aus diesem Modul an.
+Dabei gilt der aktuelle Editorinhalt, neue oder geänderte Imports müssen also
+nicht vorher gespeichert werden. Enum-Namespaces behalten ihre normale
+Vervollständigung. Während du einen Importpfad schreibst, schlägt Studio
+passende `.zyl`-Dateien aus dem Projekt vor. In SQL-Blöcken erscheinen
+SQL-Schlüsselwörter und deklarierte
 Tabellen. Innerhalb einer SQL-Abfrage schlägt die Vervollständigung außerdem
 deklarierte Spalten nach einem Tabellenbezug oder Alias sowie Tabellennamen
 nach `FROM` und `JOIN` vor. Die Angaben kommen aus der lokalen
