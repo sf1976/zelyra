@@ -54,6 +54,10 @@ The application menu groups common actions under **File**, **Edit**, **View**,
 actions; specialist tools live in their matching menus or the command palette
 (**Ctrl+Shift+P**). **F5** starts the project and **F8** checks it. Menus work
 with the keyboard and mouse.
+The **File** menu includes open, new, save, save all, close, rename, and delete.
+**Edit** includes undo, redo, cut, copy, paste, select all, and search.
+**Ctrl+F** searches the active document, **Ctrl+H** opens Find and Replace,
+and **Ctrl+Shift+F** searches the project.
 
 Open the optional terminal with **View → Integrated Zelyra Terminal** or
 **Ctrl+`**. **Start Console** launches `zelyra console` in the current project

@@ -57,6 +57,11 @@ Die Menüleiste ordnet die häufigen Wege nach **Datei**, **Bearbeiten**,
 Starten und Prüfen bleiben sichtbar; Spezialwerkzeuge erreichst du aus dem
 passenden Menü oder über **Strg+Umschalt+P**. **F5** startet das Projekt,
 **F8** prüft es. Menüs lassen sich mit Tastatur und Maus bedienen.
+Unter **Datei** findest du Öffnen, Neu, Speichern, Alle speichern und
+Schließen sowie Umbenennen und Löschen. **Bearbeiten** enthält Rückgängig,
+Wiederholen, Ausschneiden, Kopieren, Einfügen, Alles auswählen und die Suche.
+**Strg+F** sucht im aktiven Dokument; **Strg+H** öffnet Suchen und Ersetzen;
+**Strg+Umschalt+F** durchsucht das Projekt.
 
 Über **Ansicht → Integriertes Zelyra-Terminal** oder **Strg+`** öffnest du das
 optionale Terminal. **Konsole starten** startet `zelyra console` im geöffneten
