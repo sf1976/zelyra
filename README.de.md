@@ -21,7 +21,10 @@ sowie begrenzte Ergebnistabellen unterstützen Nur-Lese-`SELECT`- und `WITH`-
 Abfragen. Studio enthält außerdem das lokal ausgelieferte originale
 Zelyra-Logo, typgerechte Datenbank-Datensatzeditoren und compilergeführte
 Vorschläge für Imports, Record-Felder und CRUD-Blöcke. Vorschläge sind
-explizit und fügen erst nach Auswahl Code ein. Frühere Releases ergänzten das
+explizit und fügen erst nach Auswahl Code ein. Die Menüs Datei und Bearbeiten
+bieten gängige Aktionen einschließlich Suchen und Ersetzen im aktiven Dokument.
+Menüs, Werkzeugleisten und Dateileiste haben nun eine gut lesbare Standardschrift;
+mittlere und große Stufen bleiben verfügbar. Frühere Releases ergänzten das
 CSS-1.1.0-Designsystem, compilerbewusstes Editieren sowie die experimentellen
 MIR- und Bytecode-Backends. Siehe die
 [Release-Notizen 1.2.56](docs/release-notes/1.2.56.de.md),

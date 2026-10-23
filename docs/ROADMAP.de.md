@@ -48,7 +48,7 @@ abgeschlossen.
 
 | Version | Schwerpunkt | Abschlusskriterium |
 | --- | --- | --- |
-| 1.2.56 | Studio-Datei-/Bearbeiten-Menüs und SQL-Arbeitsplatz | Menüs sind auf `main`; die SQL-Werkbank und die Release-Artefakte bestehen die vollständige CI. |
+| 1.2.56 | Studio-Menüs Datei/Bearbeiten, lesbare UI und SQL-Arbeitsplatz | Release-Kandidat; vor dem stabilen Tag muss die vollständige CI bestehen. |
 | 1.3.0 | Compiler- und Studio-Grundlage | Kanonisches Projektlayout, Architekturprüfung/Migrationsvorschau und compilerbewusster Studio-Arbeitsfluss sind nachvollziehbar geprüft. AST bleibt Standard; MIR/Bytecode bleiben optional und nicht unterstützte Pfade scheitern sicher. |
 | 1.4.0 | Zelyra Visual Design Platform | Ein produktiver erster Schnitt mit gemeinsamem Komponentenregister und Vorschau, Zelyra-Quellcode als einziger maßgeblicher Beschreibung, Theme-/Style-Core, visueller Formularbearbeitung und sicherer Quellsynchronisierung. Phase 0 beginnt nach 1.3.0 mit Bestandsanalyse und Spezifikation. |
 | 1.5.0 | Bytecode-Reife und Standard-Gate | Bytecode wird nur bei belegter Parität, sicherem fail-closed Verhalten, geprüften Artefakt-Upgrades und messbarem Nutzen Standard. Andernfalls bleibt AST Standard und Bytecode optional. |
@@ -712,7 +712,7 @@ Der erste dokumentierte Abgleich und seine Testbelege stehen im
   Regression zeigen. AST bleibt Referenz und Differentialtest-Backend.
 
 - [x] **Zelyra-Studio-Projektmenü (veröffentlicht in 1.2.55):** Ein eigenes Menü „Projekt“ bietet die Prüfung von Capabilities/Pfadfreigaben und Paket-/Moduleinstellungen an. Ansicht, Ausführen, Datei und Datenbank führen ihre Aktionen ebenfalls über die sichtbare Menüleiste, wenn die alten Toolbar-Schaltflächen ausgeblendet sind. Browser-E2E-Tests benutzen diese sichtbaren Menüpfade; die Desktop-Screenshot-Baseline bildet das aktuelle Menülayout ab.
-- [🧪] **1.2.56 — Studio-Menüs und Lesbarkeit (in Arbeit):** Datei- und Bearbeiten-Menüs enthalten übliche Dateiaktionen sowie Rückgängig/Wiederholen, Ausschneiden/Kopieren/Einfügen, Alles auswählen und Dokument-Suche. Strg+H öffnet Suchen und Ersetzen im aktiven Dokument; Strg+Umschalt+F bleibt die Projektsuche. Menüleiste, Schnellaktionen und Dateileiste erhalten eine gut lesbare Standardschrift; optionale mittlere und große Schriftstufen bleiben verfügbar.
+- [🧪] **1.2.56 — Studio-Menüs und Lesbarkeit (Release-Kandidat):** Datei- und Bearbeiten-Menüs enthalten übliche Dateiaktionen sowie Rückgängig/Wiederholen, Ausschneiden/Kopieren/Einfügen, Alles auswählen und Dokument-Suche. Strg+H öffnet Suchen und Ersetzen im aktiven Dokument; Strg+Umschalt+F bleibt die Projektsuche. Menüleiste, Schnellaktionen und Dateileiste erhalten eine gut lesbare Standardschrift; optionale mittlere und große Schriftstufen bleiben verfügbar.
 
 **Nach 1.3.0 oder bei ausdrücklicher Neubewertung:** Ein natives AOT-Backend
 bleibt optional und hängt von Benchmarks ab. Kein offener Punkt entfällt stillschweigend: Arbeit, deren

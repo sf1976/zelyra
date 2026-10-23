@@ -21,7 +21,10 @@ bounded result tables support read-only `SELECT` and `WITH` queries. Studio
 also includes the original offline-served Zelyra logo, typed database-record
 editors, and compiler-guided suggestions for imports, record fields, and CRUD
 blocks. Suggestions are explicit and never insert code without selection.
-Earlier releases added the CSS 1.1.0 design system, compiler-aware editing,
+The File and Edit menus include common editing actions and document-level Find
+and Replace. Studio menus, toolbars, and the file sidebar now have more readable
+default text sizes, with medium and large settings still available. Earlier
+releases added the CSS 1.1.0 design system, compiler-aware editing,
 and the experimental MIR and Bytecode backends. See the
 [1.2.56 release notes](docs/release-notes/1.2.56.en.md),
 [1.2.55 release notes](docs/release-notes/1.2.55.en.md),
