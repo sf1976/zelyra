@@ -11,20 +11,23 @@ for database-backed business and web applications. It brings schema-aware SQL,
 forms, CRUD, views, and application logic together while keeping ordinary code
 and native SQL available.
 
-> **Release 1.2.50 · language compatibility line: 0.1** · [GitHub release](https://github.com/sf1976/zelyra/releases/tag/v1.2.50)
+> **Release 1.2.51 · language compatibility line: 0.1** · [GitHub release](https://github.com/sf1976/zelyra/releases/tag/v1.2.51)
 >
 > Compiler checks and the verifier cover defined scopes. They do not prove arbitrary applications correct. Review the documented support and limits for each workflow before deployment.
 
-Zelyra 1.2.50 aligns Studio's source modules with its generated browser assets
-for reproducible builds. Version 1.2.49 introduced the dedicated Zelyra Studio
-welcome screen, application menus, integrated Zelyra console, compiler-aware
-suggestions, and confirmed create, update, and delete operations for declared
-database tables. Version 1.2.48 advanced the experimental Bytecode backend to
+Zelyra 1.2.51 makes Studio's project awareness visible from its welcome page
+and adds SQL completion from declared Zelyra schemas. Version 1.2.50 aligned
+Studio source modules with generated browser assets for reproducible builds.
+Version 1.2.49 introduced the dedicated Zelyra Studio welcome screen,
+application menus, integrated Zelyra console, compiler-aware suggestions, and
+confirmed create, update, and delete operations for declared database tables.
+Version 1.2.48 advanced the experimental Bytecode backend to
 v30, fusing verified literal-increment array updates into one operation.
 Earlier 1.2.x releases added typed CRUD actions, compiler-checked uploads,
 computed table fields, business number series, a Laravel website importer,
 `zelyra db console` and `zelyra db query`, reusable billing packages, and typed
-CSV conversion. See the [1.2.50 release notes](docs/release-notes/1.2.50.en.md),
+CSV conversion. See the [1.2.51 release notes](docs/release-notes/1.2.51.en.md),
+[1.2.50 release notes](docs/release-notes/1.2.50.en.md),
 [1.2.49 release notes](docs/release-notes/1.2.49.en.md), and
 [changelog](CHANGELOG.md) for release history.
 The language compatibility line remains `0.1`; compiler releases do not change

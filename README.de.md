@@ -11,12 +11,14 @@ Business-, Datenbank- und Webanwendungen. Schemaabhängiges SQL, Formulare,
 CRUD, Views und Geschäftslogik greifen ineinander; gewöhnlicher Programmcode
 und natives SQL bleiben jederzeit möglich.
 
-> **Release 1.2.50 · Sprachkompatibilitätslinie: 0.1** · [GitHub-Release](https://github.com/sf1976/zelyra/releases/tag/v1.2.50)
+> **Release 1.2.51 · Sprachkompatibilitätslinie: 0.1** · [GitHub-Release](https://github.com/sf1976/zelyra/releases/tag/v1.2.51)
 >
 > Die Compilerprüfung und der Verifier decken klar abgegrenzte Bereiche ab. Sie beweisen nicht die Korrektheit beliebiger Anwendungen. Prüfe vor dem Einsatz die unterstützten Abläufe und Grenzen in der jeweiligen Dokumentation.
 
-Zelyra 1.2.50 gleicht die Studio-Quellmodule mit den generierten Browser-Assets
-ab und ermöglicht reproduzierbare Builds. Version 1.2.49 führte die dedizierte
+Zelyra 1.2.51 macht das Compiler-Projektverständnis auf der Studio-Startseite
+sichtbar und ergänzt SQL-Vervollständigung aus deklarierten Zelyra-Schemata.
+Version 1.2.50 glich Studio-Quellmodule mit den generierten Browser-Assets ab
+und ermöglicht reproduzierbare Builds. Version 1.2.49 führte die dedizierte
 Zelyra-Studio-Startansicht, Anwendungsmenüs, die integrierte Zelyra-Konsole,
 compilerbewusste Vorschläge und bestätigtes Anlegen, Bearbeiten und Löschen von
 Datensätzen deklarierter Tabellen ein. Version 1.2.48 hob das experimentelle
@@ -25,7 +27,8 @@ in einer Instruktion zusammen. Frühere 1.2.x-Releases ergänzten typisierte
 CRUD-Aktionen, compilergeprüfte Uploads, berechnete Tabellenfelder,
 Geschäftsnummernkreise, einen Laravel-Website-Importer, `zelyra db console` und
 `zelyra db query`, Abrechnungspakete sowie typisierte CSV-Konvertierung.
-Siehe die [Release-Notizen 1.2.50](docs/release-notes/1.2.50.de.md),
+Siehe die [Release-Notizen 1.2.51](docs/release-notes/1.2.51.de.md),
+[Release-Notizen 1.2.50](docs/release-notes/1.2.50.de.md),
 [Release-Notizen 1.2.49](docs/release-notes/1.2.49.de.md) und das
 [Changelog](CHANGELOG.md) für die Versionsgeschichte.
 Die Sprachkompatibilitätslinie bleibt `0.1`; Compiler-Releases ändern sie
