@@ -176,9 +176,9 @@ try {
   const sqlCompletions = page.locator(".cm-tooltip-autocomplete .cm-completionLabel");
   await sqlCompletions.first().waitFor();
   const sqlLabels = await sqlCompletions.allTextContents();
-  assert.ok(sqlLabels.includes("id"), "SQL completion offers declared table columns");
-  assert.ok(sqlLabels.includes("name"), "SQL completion includes all declared fields in the active table");
-  assert.ok(sqlLabels.includes("amount"), "SQL completion reads the Zelyra schema rather than a fixed SQL dictionary");
+  assert.ok(sqlLabels.includes("id"), `SQL completion offers declared table columns: ${JSON.stringify(sqlLabels)}`);
+  assert.ok(sqlLabels.includes("name"), `SQL completion includes all declared fields in the active table: ${JSON.stringify(sqlLabels)}`);
+  assert.ok(sqlLabels.includes("amount"), `SQL completion reads the Zelyra schema rather than a fixed SQL dictionary: ${JSON.stringify(sqlLabels)}`);
   await page.keyboard.press("Escape");
   await page.keyboard.press("Backspace");
   await page.route("**/__zelyra/editor/api/project-map", async (route) => {
@@ -416,7 +416,10 @@ try {
   await updateMutation;
   await page.locator("#database-record-dialog").waitFor({ state: "hidden" });
   page.once("dialog", async (dialog) => { assert.match(dialog.message(), /dauerhaft löschen/); await dialog.accept(); });
-  const deleteMutation = page.waitForRequest((request) => request.url().includes("/api/database-record-mutate") && request.postDataJSON().action === "delete");
+  const deleteMutation = page.waitForResponse((response) => {
+    const request = response.request();
+    return request.url().includes("/api/database-record-mutate") && request.postDataJSON().action === "delete";
+  });
   await page.locator("#database-record-table-wrap button", { hasText: "Löschen" }).first().click();
   await deleteMutation;
   assert.deepEqual(recordMutationRequests.map(({ action, confirm }) => [action, confirm]), [
@@ -651,7 +654,7 @@ try {
   await page.locator(".cm-content[contenteditable=true]").waitFor();
   assert.equal(
     await page.locator(".cm-content[contenteditable=true]").textContent(),
-    "fn main( {",
+    "fn main( {    })",
     "saved content must be restored after a clean Studio restart",
   );
 
@@ -661,7 +664,7 @@ try {
     });
     return result.json();
   }, { base, token });
-  assert.equal(response.content, "fn main( {\n", "the browser keyboard save must reach the project file");
+  assert.equal(response.content, "fn main( {\n    \n})", "the browser keyboard save must reach the project file with its generated bracket pairs");
   assert.deepEqual(browserErrors, [], "Studio must not raise browser runtime errors");
   console.log("Studio welcome, Zelyra terminal, database CRUD, browser editing, unsaved-change warning, keyboard save, diagnostics, and restart passed");
 } finally {

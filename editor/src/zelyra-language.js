@@ -15,7 +15,11 @@ export const zelyraKeywords = new Set((
 
 export const zelyraLanguage = StreamLanguage.define({
   startState: () => ({ inBlockComment: false }),
-  languageData: { commentTokens: { line: "#", block: { open: "##", close: "##" } } },
+  languageData: {
+    commentTokens: { line: "#", block: { open: "##", close: "##" } },
+    closeBrackets: { brackets: ["(", "[", "{", "'", '"'] },
+    indentOnInput: /^\s*[}\])\]]/,
+  },
   token(stream, state) {
     if (stream.string.trim() === "##") {
       stream.skipToEnd();

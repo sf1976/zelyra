@@ -81,6 +81,12 @@ Darstellungsschalter erreichbar, ohne dass Studio horizontal überläuft.
 
 ## IDE-Werkzeuge verwenden
 
+Der Zelyra-Editor setzt beim Tippen passende schließende Klammern und
+Anführungszeichen ein. Neue Blöcke werden mit vier Leerzeichen eingerückt;
+**Tab** rückt die aktuelle Zeile oder Auswahl ein, **Umschalt+Tab** rückt sie
+aus. Beim Einfügen eines Zeilenumbruchs innerhalb eines Blocks übernimmt Studio
+die Einrückung und richtet eine schließende Klammer wieder am Blockanfang aus.
+
 Mit **F1** oder über die Hilfeaktion öffnest du Beschreibung, Optionen und ein
 Beispiel zum unterstützten Sprachbegriff am Cursor. **Strg+Umschalt+P** öffnet
 den durchsuchbaren Aktionsfinder. **Strg+Leertaste** fordert

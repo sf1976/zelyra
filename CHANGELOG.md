@@ -1,5 +1,11 @@
 ## Unreleased
 
+- Add Zelyra-aware editor behavior: auto-paired brackets and quotes, four-space
+  block indentation, and Tab/Shift+Tab indentation. / Zelyra-spezifische
+  Editorhilfen ergänzen: automatische Klammer- und Anführungszeichenpaare,
+  vier Leerzeichen Blockeinrückung sowie Einrücken mit Tab und Ausrücken mit
+  Umschalt+Tab.
+
 ## 1.2.52 — Zelyra Studio contextual editing
 
 - Show compiler-resolved Zelyra function signatures and highlight the active
