@@ -105,10 +105,12 @@ fn format_postgres_timestamp(micros: i64, with_timezone: bool) -> Result<String,
         .ok_or_else(invalid)?;
     let formatted = format_timestamp_utc(millis);
     let without_zone = formatted.strip_suffix('Z').ok_or_else(invalid)?;
-    if without_zone.len() < 3 {
+    if without_zone.len() < 4 {
         return Err(invalid());
     }
-    let timestamp = &without_zone[..without_zone.len() - 3];
+    // `format_timestamp_utc` always emits milliseconds. Replace that fraction
+    // with the exact six-digit fraction from PostgreSQL's binary value.
+    let timestamp = &without_zone[..without_zone.len() - 4];
     let fraction = micros.rem_euclid(1_000_000);
     Ok(if with_timezone {
         format!("{timestamp}{fraction:06}Z")
