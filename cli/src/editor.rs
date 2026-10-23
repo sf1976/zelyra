@@ -1147,6 +1147,13 @@ fn editor_project_map(
                     &source.text,
                     table.span,
                 );
+                if let Some(node) = node_sink.nodes.get_mut(&id) {
+                    node["columns"] = json!(table
+                        .columns
+                        .iter()
+                        .map(|column| &column.name)
+                        .collect::<Vec<_>>());
+                }
                 tables_by_name
                     .entry(table.name.clone())
                     .or_default()
@@ -1216,7 +1223,7 @@ fn editor_project_map(
                 let sql_span = tokens
                     .iter()
                     .find(|token| {
-                        matches!(token.kind, TokenKind::Sql)
+                        matches!(token.kind, TokenKind::SqlBody(_))
                             && token.span.start >= tableview.span.start
                             && token.span.end <= tableview.span.end
                     })
@@ -5379,6 +5386,13 @@ fn main() {}
         .unwrap();
         let map: Value = serde_json::from_str(&body).unwrap();
         assert_eq!(map["version"], 9);
+        let table_node = map["nodes"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|node| node["kind"] == "table" && node["label"] == "items")
+            .expect("declared table node");
+        assert_eq!(table_node["columns"], json!(["id", "name"]));
         let edges = map["edges"].as_array().unwrap();
         assert!(
             edges

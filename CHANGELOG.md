@@ -1,5 +1,14 @@
 ## Unreleased
 
+- Add schema-aware Zelyra SQL completion: suggest declared tables after
+  `FROM`/`JOIN` and unambiguous declared columns after table names or aliases.
+  Suggestions come from the local compiler project map, including open source
+  overlays, and do not query the live database. / Zelyra-SQL-Vervollständigung
+  um deklarierte Tabellen nach `FROM`/`JOIN` und eindeutige deklarierte Spalten
+  nach Tabellenbezug oder Alias ergänzen. Die Vorschläge stammen aus der
+  lokalen Compiler-Projektkarte einschließlich offener Quelltext-Overlays und
+  fragen keine Live-Datenbank ab.
+
 ## 1.2.50 — Studio-Buildabgleich
 
 - Synchronize the Studio source modules with the shipped terminal, welcome

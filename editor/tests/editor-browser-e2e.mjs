@@ -166,6 +166,21 @@ try {
   await page.locator("#project-map-dialog").waitFor({ state: "visible" });
   await page.waitForFunction(() => document.querySelector("#project-map-status")?.textContent === "");
   await page.locator("#project-map-close").click();
+  await page.locator('.tree-item.file[title="main.zyl"]').click();
+  const sqlLine = page.locator(".cm-line", { hasText: "SELECT name FROM customers" });
+  await sqlLine.waitFor();
+  await sqlLine.click();
+  await page.keyboard.press("End");
+  await page.keyboard.press("Space");
+  await page.keyboard.press("Control+Space");
+  const sqlCompletions = page.locator(".cm-tooltip-autocomplete .cm-completionLabel");
+  await sqlCompletions.first().waitFor();
+  const sqlLabels = await sqlCompletions.allTextContents();
+  assert.ok(sqlLabels.includes("id"), "SQL completion offers declared table columns");
+  assert.ok(sqlLabels.includes("name"), "SQL completion includes all declared fields in the active table");
+  assert.ok(sqlLabels.includes("amount"), "SQL completion reads the Zelyra schema rather than a fixed SQL dictionary");
+  await page.keyboard.press("Escape");
+  await page.keyboard.press("Backspace");
   await page.route("**/__zelyra/editor/api/project-map", async (route) => {
     const response = await route.fetch();
     const model = await response.json();

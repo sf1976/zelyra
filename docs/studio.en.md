@@ -84,9 +84,13 @@ Completion uses declarations resolved from the active module and its imports.
 After `import "src/customer.zyl" as customer`, **Ctrl+Space** offers exported
 names as `customer::Name`. While entering an import path, Studio suggests
 matching `.zyl` files from the project. SQL blocks offer SQL keywords and
-declared tables. An empty file or a database, table, or function declaration
-can offer a matching starter block. After confirming a completed import,
-Studio opens suggestions in the next editor section. Nothing is inserted
+declared tables. Within a SQL body, completion also offers declared columns
+after a table reference or alias, and table names after `FROM` or `JOIN`. These
+suggestions come from the local compiler project map, including open source
+overlays; ambiguous table names are omitted and no live database is queried.
+An empty file or a database, table, or function declaration can offer a
+matching starter block. After confirming a completed import, Studio opens
+suggestions in the next editor section. Nothing is inserted
 without a selection, and Undo remains available.
 
 Press **F2** on a resolved function, record type, or indexed record field to rename it. Studio

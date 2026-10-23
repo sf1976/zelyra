@@ -19,6 +19,7 @@ import {
   zelyraUiDefaultAppearance,
 } from "./zelyra-ui-metadata.js";
 import { zelyraKeywords as keywords, zelyraLanguage } from "./zelyra-language.js";
+import { sqlBodyPrefix, sqlCompletionOptions } from "./sql-completion.js";
 import {
   crosshairCursor,
   drawSelection,
@@ -806,14 +807,16 @@ function completionSource(context) {
     }).catch(() => null);
   }
   const from = word ? word.from : context.pos;
-  const basicOptions = [
-    ...[...keywords].map((label) => ({ label, type: "keyword" })),
-    { label: "main", type: "function", detail: t("symbolEntrypoint") },
-  ];
+  const sqlQuery = activePath?.endsWith(".zyl") ? sqlBodyPrefix(source, context.pos) : null;
+  const sqlKeywords = ["SELECT", "FROM", "WHERE", "JOIN", "ON", "ORDER BY", "GROUP BY", "LIMIT", "INSERT INTO", "UPDATE", "SET", "VALUES", "DELETE FROM"];
+  const basicOptions = sqlQuery === null
+    ? [...[...keywords].map((label) => ({ label, type: "keyword" })), { label: "main", type: "function", detail: t("symbolEntrypoint") }]
+    : sqlKeywords.map((label) => ({ label, type: "keyword" }));
   const projectOptions = Promise.all([
-    loadProjectSymbols(activePath),
-    loadLocalSymbols(activePath, source, context.pos),
-  ]).then(([symbols, locals]) => {
+    sqlQuery === null ? loadProjectSymbols(activePath) : Promise.resolve([]),
+    sqlQuery === null ? loadLocalSymbols(activePath, source, context.pos) : Promise.resolve([]),
+    sqlQuery === null ? Promise.resolve(null) : sqlCompletionMap(activePath, source, context),
+  ]).then(([symbols, locals, sqlMap]) => {
     const localOptions = [...new Map(locals.map((item) => [item.label, item])).values()].map((item) => ({
       label: item.label,
       type: "variable",
@@ -825,10 +828,11 @@ function completionSource(context) {
       type: symbol.kind,
       detail: symbol.detail ? t(`symbol${symbol.detail[0].toUpperCase()}${symbol.detail.slice(1)}`) : t("symbolProject"),
     }));
+    const sqlOptions = sqlQuery === null ? [] : sqlCompletionOptions(sqlQuery, sqlMap, t("symbolTable"));
     if (!localNames.has("main") && !projectOptions.some((item) => item.label === "main")) {
       projectOptions.push({ label: "main", type: "function", detail: t("symbolEntrypoint") });
     }
-    return [...localOptions, ...projectOptions];
+    return [...localOptions, ...projectOptions, ...sqlOptions];
   });
   const fast = { from, options: basicOptions };
   const complete = projectOptions.then((options) => {
@@ -836,8 +840,22 @@ function completionSource(context) {
     for (const item of options) merged.set(item.label, item);
     return { from, options: [...merged.values()] };
   });
+  if (sqlQuery !== null) return complete;
   const fallback = new Promise((resolve) => setTimeout(() => resolve(fast), 300));
   return Promise.race([complete, fallback]);
+}
+
+function sqlCompletionMap(path, source, context) {
+  if (pipelineMapCache?.path === path && pipelineMapCache.source === source) return Promise.resolve(pipelineMapCache.map);
+  if (!context.explicit) return Promise.resolve(null);
+  return api("project-map", { method: "POST", body: JSON.stringify(projectMapRequest(path, source)) })
+    .then((map) => {
+      if (activePath === path && editor?.state.doc.toString() === source) {
+        pipelineMapCache = { path, source, map };
+      }
+      return map;
+    })
+    .catch(() => null);
 }
 
 function loadLocalSymbols(path, source, offset) {
@@ -3274,7 +3292,7 @@ async function refreshPipelineContext(path, source, version) {
   try {
     const map = await api("project-map", { method: "POST", body: JSON.stringify(analysisRequest(path, source, version)) });
     if (activePath !== path || editor?.state.doc.toString() !== source || liveCheckSequence !== version) return;
-    pipelineMapCache = { path, map };
+    pipelineMapCache = { path, source, map };
     renderPipelineBreadcrumbs();
   } catch {
     if (activePath === path && liveCheckSequence === version) {
