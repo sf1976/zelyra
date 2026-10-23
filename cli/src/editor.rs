@@ -41,6 +41,7 @@ const EDITOR_HTML: &str = include_str!("../assets/editor.html");
 const EDITOR_JS: &str = include_str!("../assets/editor.js");
 const EDITOR_CSS: &str = include_str!("../assets/editor.css");
 const EDITOR_THEME_JS: &str = include_str!("../assets/theme.js");
+const ZELYRA_LOGO_PNG: &[u8] = include_bytes!("../../assets/zelyra-logo.png");
 const EDITOR_PATH: &str = "/__zelyra/editor";
 const EDITOR_MAX_CONNECTIONS: usize = 16;
 const EDITOR_MAX_EVENT_STREAMS: usize = 4;
@@ -377,6 +378,9 @@ fn handle_editor_connection(
     if request.path == format!("{EDITOR_PATH}/api/events") {
         return editor_event_stream(stream, &request, state);
     }
+    if let Some((content_type, body)) = editor_image_asset(&request.path, &request.method) {
+        return write_editor_response_bytes(&mut stream, 200, content_type, body);
+    }
     let (status, content_type, body) = match editor_response(&request, state) {
         Ok(response) => response,
         Err((status, message)) => (
@@ -649,6 +653,11 @@ fn editor_response(
         }
         _ => Err((404, "not found".into())),
     }
+}
+
+fn editor_image_asset(path: &str, method: &str) -> Option<(&'static str, &'static [u8])> {
+    (method == "GET" && path == format!("{EDITOR_PATH}/assets/zelyra-logo.png"))
+        .then_some(("image/png", ZELYRA_LOGO_PNG))
 }
 
 fn editor_analysis_overlays(
@@ -5289,6 +5298,15 @@ fn write_editor_response(
     content_type: &str,
     body: &str,
 ) -> io::Result<()> {
+    write_editor_response_bytes(stream, status, content_type, body.as_bytes())
+}
+
+fn write_editor_response_bytes(
+    stream: &mut TcpStream,
+    status: u16,
+    content_type: &str,
+    body: &[u8],
+) -> io::Result<()> {
     let reason = match status {
         200 => "OK",
         400 => "Bad Request",
@@ -5305,7 +5323,7 @@ fn write_editor_response(
     };
     let csp = "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; connect-src 'self' blob:; img-src 'self' data:; font-src 'self'; frame-src blob:; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'none'";
     write!(stream, "HTTP/1.1 {status} {reason}\r\nContent-Type: {content_type}\r\nContent-Length: {}\r\nConnection: close\r\nCache-Control: no-store\r\nX-Content-Type-Options: nosniff\r\nReferrer-Policy: no-referrer\r\nCross-Origin-Resource-Policy: same-origin\r\nX-Frame-Options: DENY\r\nContent-Security-Policy: {csp}\r\n\r\n", body.len())?;
-    stream.write_all(body.as_bytes())?;
+    stream.write_all(body)?;
     stream.flush()
 }
 
@@ -6099,6 +6117,24 @@ fn main() {}
         )
         .expect("local Studio stylesheet should load");
         assert!(stylesheet.2.contains("prefers-reduced-motion:reduce"));
+        let _ = fs::remove_dir_all(state.root.clone());
+    }
+
+    #[test]
+    fn studio_branding_uses_the_original_logo_as_a_local_image_asset() {
+        let state = project();
+        let page = editor_response(&request("GET", EDITOR_PATH, &[]), &state)
+            .expect("Studio page should load");
+        assert!(page.2.contains("/__zelyra/editor/assets/zelyra-logo.png"));
+
+        let (content_type, image) =
+            editor_image_asset(&format!("{EDITOR_PATH}/assets/zelyra-logo.png"), "GET")
+                .expect("the original logo should be available to the local Studio");
+        assert_eq!(content_type, "image/png");
+        assert!(image.starts_with(b"\x89PNG\r\n\x1a\n"));
+        assert!(
+            editor_image_asset(&format!("{EDITOR_PATH}/assets/zelyra-logo.png"), "POST").is_none()
+        );
         let _ = fs::remove_dir_all(state.root.clone());
     }
 

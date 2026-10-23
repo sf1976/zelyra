@@ -1,5 +1,10 @@
 ## Unreleased
 
+- Show the original Zelyra logo on Studio's startup and welcome screens using a
+  locally served asset, so branding is present without an internet connection.
+  / Das originale Zelyra-Logo auf Start- und Begrüßungsbildschirm von Studio
+  zeigen und lokal ausliefern, damit das Branding keine Internetverbindung
+  benötigt.
 - Use compiler-inferred local initializer types and the compiler's known-type
   compatibility rule for expression-hole suggestions; never advertise values
   with unknown types. / Compilerinferenz für lokale Initialisierungen und die

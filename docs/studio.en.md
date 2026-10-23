@@ -24,6 +24,8 @@ Studio opens with a project-aware welcome screen. From there, open a Zelyra
 source file, check the project, start the console, or open Database Studio.
 The page presents compiler, SQL, and application preview as one Zelyra
 workflow.
+The original Zelyra logo appears during startup and is served as a local Studio
+asset.
 
 The welcome page also reads the local compiler project map and shows recognized
 modules, data models, web surfaces, and SQL queries. Its suggested next action
