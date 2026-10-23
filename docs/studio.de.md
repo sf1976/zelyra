@@ -104,6 +104,13 @@ umbenannt. Für Empfänger ohne statisch ableitbaren Typ wird kein Rename
 angeboten. Die freie projektweite
 Textsuche bleibt ein getrenntes Werkzeug.
 
+Steht der Cursor in einem aufgelösten Funktionsaufruf, zeigt Studio die
+Funktionssignatur und hebt den aktuellen Parameter hervor. Das funktioniert
+auch bei öffentlichen Funktionen aus importierten Modulen und ungespeicherten
+Aufrufen. Verschachtelte Klammern und Trennzeichen in Strings verändern die
+Parameterposition nicht. Für nicht aufgelöste Namen wird kein Signaturhinweis
+geraten.
+
 Vervollständigungen beziehen auflösbare Deklarationen aus dem aktiven Modul und
 seinen Imports ein. Nach `import "src/customer.zyl" as customer` zeigt
 **Strg+Leertaste** die exportierten Namen als `customer::Name` an; nach

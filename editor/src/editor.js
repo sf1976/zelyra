@@ -109,6 +109,9 @@ const verificationGutter = gutter({
 });
 let liveCheckTimer = null;
 let liveCheckSequence = 0;
+let signatureHelpTimer = null;
+let signatureHelpSequence = 0;
+let signatureHelpResult = null;
 let pipelineMapCache = null;
 const eventClientId = crypto.randomUUID();
 let eventController = null;
@@ -519,6 +522,7 @@ function setLanguage(next) {
     else renderDatabaseGraph();
   }
   if (editor && activePath) renderContextHelp(editor.state, activePath);
+  if (signatureHelpResult) renderSignatureHelp(signatureHelpResult);
   if (!$("studio-assistant").hidden) renderFileProperties(activePath);
 }
 
@@ -666,6 +670,69 @@ function analysisRequest(path, source, version = liveCheckSequence) {
   }
   if (overlays.length >= 16 || bytes > 1_048_576) throw new Error(t("analysisOverlayLimit"));
   return { path, source, version, overlays };
+}
+
+function hideSignatureHelp() {
+  const panel = $("signature-help");
+  signatureHelpResult = null;
+  if (panel) panel.hidden = true;
+}
+
+function renderSignatureHelp(result) {
+  const panel = $("signature-help");
+  signatureHelpResult = result;
+  panel.setAttribute("aria-label", language === "de" ? "Zelyra-Funktionssignatur" : "Zelyra function signature");
+  panel.replaceChildren();
+  panel.append(document.createTextNode("fn "));
+  const name = document.createElement("strong");
+  name.textContent = result.name;
+  panel.append(name);
+  if (result.typeParameters?.length) {
+    panel.append(document.createTextNode(`<${result.typeParameters.join(", ")}>`));
+  }
+  panel.append(document.createTextNode("("));
+  result.parameters.forEach((parameter, index) => {
+    if (index) panel.append(document.createTextNode(", "));
+    const item = document.createElement("span");
+    if (index === result.activeParameter) item.className = "signature-parameter-active";
+    item.textContent = `${parameter.name}: ${parameter.type}`;
+    panel.append(item);
+  });
+  panel.append(document.createTextNode(`) → ${result.returnType}`));
+  const position = document.createElement("span");
+  position.className = "signature-help-position";
+  position.textContent = language === "de"
+    ? `Parameter ${result.activeParameter + 1} von ${result.parameters.length}`
+    : `Parameter ${result.activeParameter + 1} of ${result.parameters.length}`;
+  panel.append(position);
+  panel.hidden = false;
+}
+
+function scheduleSignatureHelp(view, path) {
+  signatureHelpSequence += 1;
+  const sequence = signatureHelpSequence;
+  clearTimeout(signatureHelpTimer);
+  if (view !== editor || path !== activePath || !path?.endsWith(".zyl")
+    || !view.state.selection.main.empty) {
+    hideSignatureHelp();
+    return;
+  }
+  const source = view.state.doc.toString();
+  const offset = view.state.selection.main.head;
+  let request;
+  try { request = { ...analysisRequest(path, source), offset }; }
+  catch { hideSignatureHelp(); return; }
+  signatureHelpTimer = setTimeout(async () => {
+    try {
+      const result = await api("signature-help", { method: "POST", body: JSON.stringify(request) });
+      if (sequence !== signatureHelpSequence || view !== editor || path !== activePath
+        || view.state.doc.toString() !== source || view.state.selection.main.head !== offset) return;
+      if (result.found) renderSignatureHelp(result);
+      else hideSignatureHelp();
+    } catch {
+      if (sequence === signatureHelpSequence) hideSignatureHelp();
+    }
+  }, 220);
 }
 
 function projectMapRequest(path = activePath, source = editor?.state.doc.toString(), version = liveCheckSequence) {
@@ -1619,6 +1686,7 @@ function createView(path, state) {
       if (update.selectionSet || update.docChanged) {
         renderContextHelp(update.state, path);
         renderPipelineBreadcrumbs();
+        scheduleSignatureHelp(update.view, path);
       }
       if ((update.selectionSet || update.docChanged) && !$("assistant-properties-view").hidden) {
         renderUiPropertyInspector(update.state, path);
@@ -1709,6 +1777,7 @@ function activate(path) {
   $("empty-state").hidden = true;
   renderTabs();
   editor.focus();
+  scheduleSignatureHelp(editor, path);
   scheduleLiveCheck(path);
 }
 

@@ -96,6 +96,12 @@ separately from local aliases. No rename is offered for a receiver without a
 statically resolvable type.
 Project-wide free-text search remains a separate tool.
 
+When the cursor is inside a resolved function call, Studio shows the function
+signature and highlights the active parameter. This also works for public
+functions imported from another module and for unsaved calls. Nested brackets
+and separators inside strings do not change the parameter position. Unresolved
+names receive no guessed signature help.
+
 Completion uses declarations resolved from the active module and its imports.
 After `import "src/customer.zyl" as customer`, **Ctrl+Space** offers exported
 names as `customer::Name`; after `customer::`, suggestions are limited to
