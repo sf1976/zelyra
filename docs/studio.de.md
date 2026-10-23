@@ -402,10 +402,10 @@ einer Nur-Lese-Transaktion aus. Die Ergebnistabelle zeigt höchstens 200 Zeilen;
 größere Ergebnisse werden abgeschnitten. Die Abfrage wird mit `⌘/Ctrl + Enter`
 oder über die Schaltfläche gestartet. Entwurf und die letzten zwölf Abfragen
 werden lokal im Browser je Datenbankverbindung gespeichert. Schreibende SQL-
-Anweisungen, mehrere Statements und Projekte ohne MariaDB- oder
-PostgreSQL-Verbindung werden abgewiesen. Für Änderungen an Datensätzen nutze
-den bestätigungspflichtigen Datenbrowser; für Schemaänderungen den
-Spaltenassistenten und den Datenbank-Plan.
+Anweisungen, erkannte Funktionen mit Nebenwirkungen, mehrere Statements und
+Projekte ohne MariaDB- oder PostgreSQL-Verbindung werden abgewiesen. Nutze
+für Datensatzänderungen den bestätigungspflichtigen Datenbrowser und für
+Schemaänderungen den Spaltenassistenten und den Datenbank-Plan.
 
 Der **Diagramm-Assistent** erstellt aus einer deklarierten Live-Tabelle ein
 gruppiertes Balken- oder Liniendiagramm. Gruppierung und Kennzahl wählst du

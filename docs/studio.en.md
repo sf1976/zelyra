@@ -363,9 +363,10 @@ runs exactly one `SELECT` or `WITH` statement in a read-only transaction. The
 result grid displays at most 200 rows and truncates larger results. Run a query
 with `⌘/Ctrl + Enter` or the button. The draft and the last twelve queries are
 stored locally in the browser for each database connection. Writing SQL,
-multiple statements, and projects without a MariaDB or PostgreSQL connection
-are rejected. Use the confirmation-based record browser to change records,
-and the column editor and database plan to change the schema.
+recognized side-effecting functions, multiple statements, and projects without
+a MariaDB or PostgreSQL connection are rejected. Use the confirmation-based
+record browser to change records, and the column editor and database plan to
+change the schema.
 
 The **chart assistant** creates a grouped bar or line chart from a declared
 live table. Choose the grouping and measure from fields. Available operations
