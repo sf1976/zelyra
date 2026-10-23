@@ -212,6 +212,7 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .runtime-budget-content label { display: block; color: var(--ink); }
 .runtime-budget-content .runtime-budget-enable { display: flex; align-items: center; gap: 8px; margin-bottom: 7px; }
 .runtime-budget-content input[type="range"] { width: 100%; accent-color: var(--accent-strong); }
+.runtime-budget-content .runtime-backend-select { width: 100%; min-height: 34px; padding: 6px 9px; border: 1px solid var(--border); border-radius: 6px; color: var(--ink); background: var(--editor-bg); font: inherit; }
 .runtime-budget-content input[type="number"] { width: 100%; min-height: 34px; padding: 6px 9px; border: 1px solid var(--border); border-radius: 6px; background: var(--editor-bg); }
 .runtime-budget-content h3 { margin: 9px 0 0; color: var(--ink); font-size: 12px; }
 .runtime-budget-content p { margin: 3px 0; line-height: 1.5; }

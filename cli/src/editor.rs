@@ -4373,6 +4373,13 @@ fn run_editor_program(
     value: &Value,
 ) -> Result<(u16, &'static str, String), (u16, String)> {
     const MAX_STUDIO_STEPS: u64 = 100_000_000;
+    let backend = match value.get("backend") {
+        None | Some(Value::Null) => "ast",
+        Some(Value::String(backend)) if matches!(backend.as_str(), "ast" | "mir" | "bytecode") => {
+            backend.as_str()
+        }
+        _ => return Err((400, "backend must be one of: ast, mir, bytecode".into())),
+    };
     let max_steps = match value.get("maxSteps") {
         None | Some(Value::Null) => None,
         Some(raw) => Some(
@@ -4414,6 +4421,12 @@ fn run_editor_program(
             || !program.tableviews.is_empty()
             || !program.apis.is_empty()
         {
+            if backend != "ast" {
+                return Err((
+                    422,
+                    "Studio web previews currently use the AST backend; select AST to run this web application".into(),
+                ));
+            }
             append_editor_log(
                 state,
                 "info",
@@ -4437,6 +4450,9 @@ fn run_editor_program(
     let executable = zelyra_executable()?;
     let mut command = Command::new(executable);
     command.arg("run").arg(relative);
+    if backend != "ast" {
+        command.arg("--backend").arg(backend);
+    }
     if let Some(steps) = max_steps {
         command.arg("--max-steps").arg(steps.to_string());
     }
@@ -7212,6 +7228,50 @@ fn main() {}
                 .0,
             400
         );
+        fs::remove_dir_all(state.root.clone()).unwrap();
+    }
+
+    #[test]
+    fn studio_run_passes_experimental_backend_to_real_runtime() {
+        let state = project();
+        fs::write(
+            state.root.join("main.zyl"),
+            "fn main() { print(\"Studio backend\") }\n",
+        )
+        .expect("write backend fixture");
+        for backend in ["mir", "bytecode"] {
+            let result = run_editor_program(&state, &json!({"path":"main.zyl","backend":backend}))
+                .unwrap_or_else(|error| panic!("Studio could not run {backend}: {error:?}"));
+            let payload: Value = serde_json::from_str(&result.2).unwrap();
+            assert_eq!(payload["success"], true, "{backend}: {payload}");
+            assert!(payload["stdout"]
+                .as_str()
+                .unwrap()
+                .contains("Studio backend"));
+        }
+        assert_eq!(
+            run_editor_program(&state, &json!({"path":"main.zyl","backend":"rust"}))
+                .unwrap_err()
+                .0,
+            400
+        );
+        fs::remove_dir_all(state.root.clone()).unwrap();
+    }
+
+    #[test]
+    fn studio_run_keeps_web_preview_on_ast_backend() {
+        let state = project();
+        fs::write(
+            state.root.join("main.zyl"),
+            "database main { engine: mariadb }\ntable items { id: Id primary auto unit_price: Decimal required }\npage \"/\" { html { <h1>Test</h1> } }\n",
+        )
+        .expect("write web fixture");
+        let error =
+            run_editor_program(&state, &json!({"path":"main.zyl","backend":"mir"})).unwrap_err();
+        assert_eq!(error.0, 422);
+        assert!(error
+            .1
+            .contains("web previews currently use the AST backend"));
         fs::remove_dir_all(state.root.clone()).unwrap();
     }
 

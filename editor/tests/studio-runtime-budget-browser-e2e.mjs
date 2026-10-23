@@ -54,8 +54,13 @@ try {
   await page.goto(url, { waitUntil: "domcontentloaded" });
   await page.locator('.tree-item.file[title="main.zyl"]').click();
   await page.locator(".cm-content[contenteditable=true]").waitFor();
-  await page.locator("#runtime-budget-button").click();
+  await page.locator('[data-studio-menu="run"]').click();
+  await page.locator('.studio-menu-popover [data-menu-target="runtime-budget-button"]').click();
   await page.waitForFunction(() => Boolean(document.querySelector("#runtime-stack-depth")?.textContent));
+  const backend = page.locator("#run-backend");
+  assert.equal(await backend.inputValue(), "ast", "AST remains the default backend");
+  await backend.selectOption("mir");
+  assert.equal(await page.evaluate(() => localStorage.getItem("zelyra-studio-run-backend")), "mir");
   await page.locator("#runtime-budget-enabled").check();
   await page.locator("#runtime-budget-number").fill("1000");
   await page.locator("#runtime-budget-run").click();
