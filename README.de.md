@@ -11,11 +11,15 @@ Business-, Datenbank- und Webanwendungen. Schemaabhängiges SQL, Formulare,
 CRUD, Views und Geschäftslogik greifen ineinander; gewöhnlicher Programmcode
 und natives SQL bleiben jederzeit möglich.
 
-> **Release 1.2.52 · Sprachkompatibilitätslinie: 0.1** · [GitHub-Release](https://github.com/sf1976/zelyra/releases/tag/v1.2.52)
+> **Release 1.2.53 · Sprachkompatibilitätslinie: 0.1** · [GitHub-Release](https://github.com/sf1976/zelyra/releases/tag/v1.2.53)
 >
 > Die Compilerprüfung und der Verifier decken klar abgegrenzte Bereiche ab. Sie beweisen nicht die Korrektheit beliebiger Anwendungen. Prüfe vor dem Einsatz die unterstützten Abläufe und Grenzen in der jeweiligen Dokumentation.
 
-Zelyra 1.2.52 ergänzt compileraufgelöste Funktionssignaturen, Hinweise auf das
+Zelyra 1.2.53 verbessert das Schreiben im Studio mit automatischen
+Klammerpaaren und Anführungszeichen, vier Leerzeichen für Zelyra-Blöcke sowie
+Einrücken und Ausrücken mit Tab und Umschalt+Tab. Die Einrückung folgt der
+Blockstruktur und ignoriert Klammern in Zeichenketten und Kommentaren. Version
+1.2.52 ergänzte compileraufgelöste Funktionssignaturen, Hinweise auf das
 aktuelle Argument und Record-Feldvervollständigung im Studio. Vorschläge folgen
 Zelyras Typen und öffentlichen Modulgrenzen; bei nicht auflösbaren Record-Typen
 werden keine Felder geraten. Die optionale KI-Vorschlagsaktion erfordert eine
@@ -32,7 +36,8 @@ in einer Instruktion zusammen. Frühere 1.2.x-Releases ergänzten typisierte
 CRUD-Aktionen, compilergeprüfte Uploads, berechnete Tabellenfelder,
 Geschäftsnummernkreise, einen Laravel-Website-Importer, `zelyra db console` und
 `zelyra db query`, Abrechnungspakete sowie typisierte CSV-Konvertierung.
-Siehe die [Release-Notizen 1.2.52](docs/release-notes/1.2.52.de.md),
+Siehe die [Release-Notizen 1.2.53](docs/release-notes/1.2.53.de.md),
+[Release-Notizen 1.2.52](docs/release-notes/1.2.52.de.md),
 [Release-Notizen 1.2.51](docs/release-notes/1.2.51.de.md),
 [Release-Notizen 1.2.50](docs/release-notes/1.2.50.de.md),
 [Release-Notizen 1.2.49](docs/release-notes/1.2.49.de.md) und das
