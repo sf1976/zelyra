@@ -201,10 +201,10 @@ fn route_handler_sql_issues(
             let Some(function_source) = sources.get(function.span.source_id as usize) else {
                 continue;
             };
-            if !function_source
+            if function_source
                 .path
                 .replace('\\', "/")
-                .starts_with("routes/")
+                .starts_with("domain/")
             {
                 // Business writes in domain modules are the intended separation.
                 continue;
@@ -1033,6 +1033,28 @@ mod tests {
             SqlEffect::Unknown
         );
         assert_eq!(sql_effect("/* unterminated"), SqlEffect::Unknown);
+    }
+
+    #[test]
+    fn route_sql_analysis_continues_through_non_domain_modules() {
+        let source = "fn helper() -> Int { sql { INSERT INTO customers (name) VALUES ('Ada') } return 1 }\nfn serve_customer() -> Int { return helper() }\napi POST \"/customers\" { handler serve_customer output Int }\n";
+        let mut program = parse(&lex(source).unwrap()).unwrap();
+        program.functions[0].span = program.functions[0].span.with_source_id(1);
+        program.functions[1].span = program.functions[1].span.with_source_id(0);
+        let sources = vec![
+            crate::project::ProjectSource {
+                path: "routes/customers.zyl".into(),
+                text: source.into(),
+            },
+            crate::project::ProjectSource {
+                path: "main.zyl".into(),
+                text: source.into(),
+            },
+        ];
+        let issues = route_handler_sql_issues(&program, &sources);
+        assert_eq!(issues.len(), 1);
+        assert_eq!(issues[0].path, "main.zyl");
+        assert_eq!(issues[0].code, "E-ARCH-002");
     }
 
     #[cfg(unix)]

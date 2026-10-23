@@ -15,6 +15,11 @@
   diagnostics, instead of pointing every finding at line 1. / Bei Verstößen
   gegen die strenge Architektur die Quellposition der Deklaration melden,
   statt alle Befunde auf Zeile 1 zu verweisen.
+- Continue route SQL analysis through every statically reachable module until
+  the intentional `domain/` boundary, including project entrypoint and package
+  helpers. / Die SQL-Prüfung von Routen durch alle statisch erreichbaren
+  Module bis zur vorgesehenen `domain/`-Grenze fortsetzen, auch über Hilfen
+  im Projekteinstieg und in Paketen.
 
 ## 1.2.56 — Zelyra Studio SQL workbench and editor usability
 
