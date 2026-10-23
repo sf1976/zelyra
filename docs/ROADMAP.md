@@ -634,7 +634,7 @@ Laravel or view similarity.
   differential-test backend.
 
 - [x] **Zelyra Studio project menu (released in 1.2.55):** a dedicated Project menu exposes capability/path review and package/module settings, while View, Run, File, and Database keep their corresponding actions discoverable after the legacy toolbar buttons are hidden. Browser E2E tests follow these visible menu paths, and the screenshot baseline matches the current menu layout.
-- [🧪] **1.2.56 — File and Edit menus (in progress):** The Studio menus gain the expected file actions plus undo/redo, cut/copy/paste, select all, and document search. Ctrl+H opens Find and Replace in the active document; Ctrl+Shift+F remains project-wide search.
+- [🧪] **1.2.56 — Studio menus and readability (in progress):** File and Edit menus provide the expected file actions plus undo/redo, cut/copy/paste, select all, and document search. Ctrl+H opens Find and Replace in the active document; Ctrl+Shift+F remains project-wide search. The menu bar, quick actions, and file sidebar use a comfortable default font size while retaining the optional medium and large settings.
 
 **Post-1.3.0 or explicitly reprioritized:** a native AOT backend is optional
 and depends on benchmark evidence. No open task is silently dropped: work that cannot meet its release

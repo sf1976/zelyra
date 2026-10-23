@@ -553,6 +553,69 @@ kbd { padding: 3px 5px; border: 1px solid var(--border); border-radius: 4px; col
 .database-record-dialog footer p{flex:1 1 100%;margin:0;color:var(--danger);font-size:11px}
 @media(max-width:560px){.database-record-fields{grid-template-columns:minmax(0,1fr)}.database-record-dialog form{padding:14px}}
 
+/* Keep the Studio chrome readable at its normal setting. */
+:root:not([data-font-size]) .topbar{height:62px;flex-basis:62px}
+:root:not([data-font-size]) .brand-lockup strong{font-size:14px}
+:root:not([data-font-size]) .brand-lockup small{font-size:11px}
+:root:not([data-font-size]) .project-switcher{height:36px;font-size:14px}
+:root:not([data-font-size]) .toolbar-button{min-height:30px;font-size:13px}
+:root:not([data-font-size]) .panel-heading{font-size:11px}
+:root:not([data-font-size]) .tree-search input{font-size:13px}
+:root:not([data-font-size]) .project-root{font-size:12px}
+:root:not([data-font-size]) .project-root strong{font-size:12px}
+:root:not([data-font-size]) .tree-item{min-height:32px;font-size:13px}
+:root:not([data-font-size]) .explorer-footer{font-size:11px}
+:root:not([data-font-size]) .breadcrumbs{font-size:12px}
+:root:not([data-font-size]) .primary-button,:root:not([data-font-size]) .tab{font-size:12px}
+:root:not([data-font-size]) .studio-menubar{height:42px;min-height:42px}
+:root:not([data-font-size]) .studio-menu>button{min-height:34px;font-size:14px}
+:root:not([data-font-size]) .studio-menu-popover button,:root:not([data-font-size]) .studio-menu-popover a{min-height:36px;font-size:13px}
+:root:not([data-font-size]) .studio-menu-popover kbd{font-size:11px}
+:root:not([data-font-size]) .menubar-project-context{font-size:12px}
+:root:not([data-font-size]) .menubar-action{min-height:32px;font-size:12px}
+
+:root[data-font-size="medium"] .topbar{height:64px;flex-basis:64px}
+:root[data-font-size="medium"] .brand-lockup strong{font-size:15px}
+:root[data-font-size="medium"] .brand-lockup small{font-size:12px}
+:root[data-font-size="medium"] .project-switcher{height:38px;font-size:15px}
+:root[data-font-size="medium"] .toolbar-button{min-height:32px;font-size:14px}
+:root[data-font-size="medium"] .panel-heading{font-size:12px}
+:root[data-font-size="medium"] .tree-search input{font-size:14px}
+:root[data-font-size="medium"] .project-root,:root[data-font-size="medium"] .project-root strong{font-size:13px}
+:root[data-font-size="medium"] .tree-item{min-height:34px;font-size:14px}
+:root[data-font-size="medium"] .explorer-footer{font-size:12px}
+:root[data-font-size="medium"] .breadcrumbs,:root[data-font-size="medium"] .primary-button,:root[data-font-size="medium"] .tab{font-size:13px}
+:root[data-font-size="medium"] .studio-menubar{height:44px;min-height:44px}
+:root[data-font-size="medium"] .studio-menu>button{min-height:36px;font-size:15px}
+:root[data-font-size="medium"] .studio-menu-popover button,:root[data-font-size="medium"] .studio-menu-popover a{min-height:38px;font-size:14px}
+:root[data-font-size="medium"] .studio-menu-popover kbd{font-size:12px}
+:root[data-font-size="medium"] .menubar-project-context,:root[data-font-size="medium"] .menubar-action{font-size:13px}
+:root[data-font-size="medium"] .menubar-action{min-height:34px}
+
+:root[data-font-size="large"] .topbar{height:68px;flex-basis:68px}
+:root[data-font-size="large"] .brand-lockup strong{font-size:16px}
+:root[data-font-size="large"] .brand-lockup small{font-size:13px}
+:root[data-font-size="large"] .project-switcher{height:40px;font-size:16px}
+:root[data-font-size="large"] .toolbar-button{min-height:34px;font-size:15px}
+:root[data-font-size="large"] .panel-heading{font-size:13px}
+:root[data-font-size="large"] .tree-search input{font-size:15px}
+:root[data-font-size="large"] .project-root,:root[data-font-size="large"] .project-root strong{font-size:14px}
+:root[data-font-size="large"] .tree-item{min-height:36px;font-size:15px}
+:root[data-font-size="large"] .explorer-footer{font-size:13px}
+:root[data-font-size="large"] .breadcrumbs,:root[data-font-size="large"] .primary-button,:root[data-font-size="large"] .tab{font-size:14px}
+:root[data-font-size="large"] .studio-menubar{height:46px;min-height:46px}
+:root[data-font-size="large"] .studio-menu>button{min-height:38px;font-size:16px}
+:root[data-font-size="large"] .studio-menu-popover button,:root[data-font-size="large"] .studio-menu-popover a{min-height:40px;font-size:15px}
+:root[data-font-size="large"] .studio-menu-popover kbd{font-size:13px}
+:root[data-font-size="large"] .menubar-project-context,:root[data-font-size="large"] .menubar-action{font-size:14px}
+:root[data-font-size="large"] .menubar-action{min-height:36px}
+@media(max-width:760px){
+  :root:not([data-font-size]) .studio-menubar,:root[data-font-size="medium"] .studio-menubar,:root[data-font-size="large"] .studio-menubar{height:auto;flex-wrap:wrap}
+  :root:not([data-font-size]) .explorer{top:62px}
+  :root[data-font-size="medium"] .explorer{top:64px}
+  :root[data-font-size="large"] .explorer{top:68px}
+}
+
 .studio-splash-logo{display:grid;place-items:center;width:min(310px,82vw);min-height:118px;padding:12px 18px;border:1px solid #ffffffd9;border-radius:22px;background:linear-gradient(145deg,#fff,#f4f7ff);box-shadow:0 24px 70px #0002,0 0 65px color-mix(in srgb,var(--accent) 22%,transparent)}.studio-splash-logo img{display:block;width:100%;height:auto;max-height:96px;object-fit:contain}.studio-splash-card>strong{margin-top:-3px;font-size:11px;font-weight:750;letter-spacing:.3em;text-transform:uppercase}.welcome-logo{display:grid;place-items:center;flex:0 0 116px;width:116px;height:48px;padding:5px 8px;overflow:hidden;border:1px solid var(--border);border-radius:11px;background:linear-gradient(145deg,#fff,#f4f7ff);box-shadow:0 7px 20px color-mix(in srgb,#14213d 9%,transparent)}.welcome-logo img{display:block;width:100%;height:100%;object-fit:contain}
 .database-query-workbench { margin: 18px 0 24px; padding: 16px; border: 1px solid var(--border); border-radius: 11px; background: linear-gradient(150deg, color-mix(in srgb, var(--accent) 4%, var(--surface)), var(--surface)); box-shadow: 0 10px 28px color-mix(in srgb, #111827 5%, transparent); }
 .database-query-workbench[hidden] { display: none; }
