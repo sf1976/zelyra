@@ -1768,8 +1768,12 @@ fn compact_sql_for_safety(sql: &str) -> Option<String> {
                         index += 1;
                     }
                     let slash_count = index - slash_start;
-                    if characters.get(index) == Some(&quote) && slash_count % 2 == 1 {
-                        return None;
+                    if characters.get(index) == Some(&quote) {
+                        if slash_count % 2 == 1 {
+                            return None;
+                        }
+                        index += 1;
+                        break;
                     }
                 } else if characters[index] == quote {
                     if characters.get(index + 1) == Some(&quote) {
@@ -1789,15 +1793,18 @@ fn compact_sql_for_safety(sql: &str) -> Option<String> {
             let quote = character;
             index += 1;
             while index < characters.len() {
-                if characters[index] == '\\' {
+                if quote == '"' && characters[index] == '\\' {
                     let slash_start = index;
                     while characters.get(index) == Some(&'\\') {
                         index += 1;
                     }
                     let slash_count = index - slash_start;
-                    if quote == '"' && characters.get(index) == Some(&quote) && slash_count % 2 == 1
-                    {
-                        return None;
+                    if characters.get(index) == Some(&quote) {
+                        if slash_count % 2 == 1 {
+                            return None;
+                        }
+                        index += 1;
+                        break;
                     }
                     compact.push_str(&" ".repeat(slash_count));
                 } else if characters[index] == quote {
@@ -2287,6 +2294,8 @@ mod tests {
         assert!(!read_only_statement(r#"SELECT 'a\'b' AS x, SLEEP(30)"#));
         assert!(!read_only_statement(r#"SELECT "a\"b" AS x, SLEEP(30)"#));
         assert!(read_only_statement(r#"SELECT 'a\\' AS x"#));
+        assert!(!read_only_statement(r#"SELECT 'a\\' AS x, SLEEP(30)"#));
+        assert!(!read_only_statement(r#"SELECT "a\\" AS x, SLEEP(30)"#));
         assert!(!read_only_statement(
             "SELECT pg_notify('channel', 'payload')"
         ));
