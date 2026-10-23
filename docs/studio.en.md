@@ -79,6 +79,8 @@ and dialogs share the same theme tokens. The browser E2E check requires at
 least 4.5:1 contrast for light-theme text and syntax colors on the work
 surfaces. At the supported minimum width of 360 CSS pixels, the appearance
 control remains reachable without horizontal overflow.
+The menu bar, quick actions, and file sidebar use a larger, comfortable default
+font size. The optional medium and large font settings also adjust these areas.
 
 ## Use the IDE tools
 

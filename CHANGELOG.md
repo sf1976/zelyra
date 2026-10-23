@@ -30,6 +30,11 @@
   server. / Im Studio-Datensatzeditor typgerechte Eingaben für Boolean/Enum/
   Datum/Uhrzeit und geprüfte JSON-Werte verwenden; JSON bleibt serverseitig ein
   gebundener JSON-Parameter.
+- Raise the default font sizes of Studio menus, toolbars, and the file sidebar
+  to a comfortable standard reading size while preserving the optional medium
+  and large settings. / Die Standardschrift in Studio-Menüs, Werkzeugleisten
+  und Dateileiste auf eine gut lesbare Größe anheben; die optionalen mittleren
+  und großen Einstellungen bleiben erhalten.
 
 ## 1.2.55 — Zelyra Studio und professionelles UI-Designsystem
 

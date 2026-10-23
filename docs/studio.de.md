@@ -85,6 +85,9 @@ Dialoge verwenden dieselben Farbwerte. Für die hellen Text- und Syntaxfarben
 prüft der Browser-E2E-Test mindestens 4,5:1 Kontrast auf den Arbeitsflächen.
 Auch bei der unterstützten Mindestbreite von 360 CSS-Pixeln bleibt der
 Darstellungsschalter erreichbar, ohne dass Studio horizontal überläuft.
+Menüleiste, Schnellaktionen und Dateileiste verwenden standardmäßig eine
+größere, gut lesbare Schrift. Die optionalen mittleren und großen
+Schriftgrößenstufen passen diese Bereiche ebenfalls an.
 
 ## IDE-Werkzeuge verwenden
 
