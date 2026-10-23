@@ -2533,11 +2533,18 @@ fn strict_architecture_rejects_route_declarations_inside_domain_modules() {
     )
     .unwrap();
     let checked = Command::new(binary())
-        .args(["check", directory.join("main.zyl").to_str().unwrap()])
+        .args([
+            "check",
+            directory.join("main.zyl").to_str().unwrap(),
+            "--format=json",
+        ])
         .output()
         .unwrap();
     assert!(!checked.status.success());
-    assert!(String::from_utf8_lossy(&checked.stderr).contains("E-ARCH-001"));
+    let report: serde_json::Value = serde_json::from_slice(&checked.stdout).unwrap();
+    assert_eq!(report["diagnostics"][0]["code"], "E-ARCH-001");
+    assert_eq!(report["diagnostics"][0]["file"], "domain/bad.zyl");
+    assert_eq!(report["diagnostics"][0]["span"]["start"]["line"], 1);
     fs::remove_dir_all(directory).unwrap();
 }
 

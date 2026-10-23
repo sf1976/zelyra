@@ -83,6 +83,12 @@ pub(super) fn validate_project_modules(
             });
             continue;
         };
+        let declaration_spans = sources
+            .iter()
+            .find(|source| source.path.replace('\\', "/") == path)
+            .and_then(|source| {
+                declaration_spans(&source.text, source_id_for_path(sources, &path)?)
+            });
         for declaration in &module.declarations {
             let kind = declaration
                 .split_once(':')
@@ -94,7 +100,9 @@ pub(super) fn validate_project_modules(
                     message: format!(
                         "`{kind}` declarations are not allowed under `{directory}/`; move this declaration to its matching project area"
                     ),
-                    span: None,
+                    span: declaration_spans
+                        .as_ref()
+                        .and_then(|spans| spans.get(declaration).copied()),
                 });
             }
         }
@@ -105,6 +113,59 @@ pub(super) fn validate_project_modules(
     } else {
         Err(issues)
     }
+}
+
+fn source_id_for_path(sources: &[crate::project::ProjectSource], path: &str) -> Option<u32> {
+    sources
+        .iter()
+        .position(|source| source.path.replace('\\', "/") == path)
+        .and_then(|index| u32::try_from(index).ok())
+}
+
+fn declaration_spans(
+    source: &str,
+    source_id: u32,
+) -> Option<std::collections::HashMap<String, Span>> {
+    let tokens = lex(source).ok()?;
+    let program = parse(&tokens).ok()?;
+    let mut declarations = std::collections::HashMap::new();
+    macro_rules! add {
+        ($items:expr, $kind:literal) => {
+            for item in $items {
+                declarations.insert(
+                    format!("{}:{}", $kind, item.name),
+                    item.span.with_source_id(source_id),
+                );
+            }
+        };
+    }
+    add!(program.databases, "database");
+    add!(program.tables, "table");
+    add!(program.tableviews, "tableview");
+    add!(program.types, "type");
+    add!(program.enums, "enum");
+    add!(program.records, "record");
+    add!(program.views, "view");
+    add!(program.components, "component");
+    for page in program.pages {
+        declarations.insert(
+            format!("page:{}", page.path),
+            page.span.with_source_id(source_id),
+        );
+    }
+    add!(program.forms, "form");
+    add!(program.cruds, "crud");
+    add!(program.auth, "auth");
+    add!(program.commands, "command");
+    add!(program.schedules, "schedule");
+    add!(program.functions, "function");
+    for api in program.apis {
+        declarations.insert(
+            format!("api:{} {}", api.method, api.path),
+            api.span.with_source_id(source_id),
+        );
+    }
+    Some(declarations)
 }
 
 fn route_handler_sql_issues(

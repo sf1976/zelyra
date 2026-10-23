@@ -11,6 +11,10 @@
   layout migration preview, alongside its reason and candidate destination. /
   Die schreibgeschützte Projektlayout-Vorschau um Quellpositionen und stabile
   Regelkennungen ergänzen; Grund und Zielvorschlag bleiben ebenfalls sichtbar.
+- Attach declaration source spans to strict architecture placement
+  diagnostics, instead of pointing every finding at line 1. / Bei Verstößen
+  gegen die strenge Architektur die Quellposition der Deklaration melden,
+  statt alle Befunde auf Zeile 1 zu verweisen.
 
 ## 1.2.56 — Zelyra Studio SQL workbench and editor usability
 
