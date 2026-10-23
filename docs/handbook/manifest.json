@@ -1,0 +1,20 @@
+{
+  "schema_version": 1,
+  "description": "Canonical assembly order for the Zelyra handbooks. Edit the component files; website and downloads are generated from this manifest.",
+  "languages": {
+    "de": [
+      "docs/handbook/de/handbuch.md",
+      "docs/handbook/de/lehrbuch-grundlagen.md",
+      "docs/handbook/de/lehrbuch-anwendungen.md",
+      "docs/handbook/de/technisches-referenzhandbuch.md",
+      "docs/handbook/de/anhaenge.md"
+    ],
+    "en": [
+      "docs/handbook/en/handbook.md",
+      "docs/handbook/en/textbook-foundations.md",
+      "docs/handbook/en/textbook-applications.md",
+      "docs/handbook/en/technical-reference.md",
+      "docs/handbook/en/appendices.md"
+    ]
+  }
+}
