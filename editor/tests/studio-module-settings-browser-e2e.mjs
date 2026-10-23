@@ -5,6 +5,7 @@ import { spawn } from "node:child_process";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { chromium, firefox, webkit } from "playwright";
+import { clickStudioMenuAction } from "./studio-menu-test-helpers.mjs";
 
 const project = await mkdtemp(join(tmpdir(), "zelyra-studio-module-settings-"));
 const binary = resolve(process.env.ZELYRA_BIN || "../target/debug/zelyra");
@@ -35,7 +36,7 @@ try {
   const page = await browser.newPage();
   const errors = []; page.on("pageerror", (error) => errors.push(error.message));
   await page.goto(url, { waitUntil: "domcontentloaded" });
-  await page.locator("#module-settings-button").click();
+  await clickStudioMenuAction(page, "project", "module-settings-button");
   await page.locator("#module-settings-dialog[open]").waitFor();
   const timeout = page.locator('input[data-setting-name="timeout"]');
   await timeout.waitFor();

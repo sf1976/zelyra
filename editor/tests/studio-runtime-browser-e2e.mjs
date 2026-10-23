@@ -6,6 +6,7 @@ import { createServer } from "node:net";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { chromium, firefox, webkit } from "playwright";
+import { clickStudioMenuAction } from "./studio-menu-test-helpers.mjs";
 
 const engineName = process.env.ZELYRA_BROWSER_ENGINE || "chromium";
 const engine = { chromium, firefox, webkit }[engineName];
@@ -55,7 +56,7 @@ try {
   await page.goto(url, { waitUntil: "domcontentloaded" });
   await page.locator('.tree-item.file[title="main.zyl"]').click();
   await page.locator(".cm-content[contenteditable=true]").waitFor();
-  await page.locator("#runtime-budget-button").click();
+  await clickStudioMenuAction(page, "run", "runtime-budget-button");
   await page.locator("#runtime-budget-dialog[open]").waitFor();
   await page.waitForFunction(() => document.querySelector("#runtime-stack-depth")?.textContent?.includes("100"));
   await page.waitForFunction(() => document.querySelector("#runtime-step-budget")?.textContent?.includes("24000"));
@@ -99,7 +100,7 @@ try {
       }),
     });
   });
-  await page.locator("#runtime-budget-button").click();
+  await clickStudioMenuAction(page, "run", "runtime-budget-button");
   await page.locator("#runtime-budget-enabled").uncheck();
   const cancelledResponse = page.waitForResponse((reply) => reply.url().endsWith("/api/run"), { timeout: 15_000 });
   await page.locator("#runtime-budget-run").click();

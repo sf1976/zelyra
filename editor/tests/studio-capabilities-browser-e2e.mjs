@@ -6,6 +6,7 @@ import { createServer } from "node:net";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { chromium, firefox, webkit } from "playwright";
+import { clickStudioMenuAction } from "./studio-menu-test-helpers.mjs";
 
 const engineName = process.env.ZELYRA_BROWSER_ENGINE || "chromium";
 const engine = { chromium, firefox, webkit }[engineName];
@@ -55,7 +56,7 @@ try {
   page.on("pageerror", (error) => errors.push(error.message));
   await page.goto(url, { waitUntil: "domcontentloaded" });
   await page.locator('.tree-item.file[title="main.zyl"]').click();
-  await page.locator("#capability-button").click();
+  await clickStudioMenuAction(page, "project", "capability-button");
   await page.locator("#capability-dialog[open]").waitFor();
   await page.waitForFunction(() => document.querySelector("#capability-needed")?.textContent?.includes("FileSystem"));
   assert.match(await page.locator("#capability-paths").textContent(), /notes\/a\.txt.*allowed/);

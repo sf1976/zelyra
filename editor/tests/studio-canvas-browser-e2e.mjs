@@ -7,6 +7,7 @@ import { spawn } from "node:child_process";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { chromium, firefox, webkit } from "playwright";
+import { clickStudioMenuAction } from "./studio-menu-test-helpers.mjs";
 
 const project = await mkdtemp(join(tmpdir(), "zelyra-studio-canvas-"));
 const defaultBinary = existsSync(resolve("../target/debug/zelyra"))
@@ -83,7 +84,7 @@ fn main() {}
   await page.waitForFunction(() => document.querySelector("#save-button")?.disabled === true);
   await page.locator('.tree-item.file[title="main.zyl"]').click();
   await page.locator(".cm-content[contenteditable=true]").waitFor();
-  await page.locator("#canvas-button").click();
+  await clickStudioMenuAction(page, "view", "canvas-button");
   await page.waitForFunction(() => document.querySelector("#canvas-source")?.disabled === false);
   await page.locator("#canvas-target").selectOption({ label: "page · /reports/{id}" });
   await page.locator("#canvas-sample").fill('{"term":"<Acme & Co>"}');
