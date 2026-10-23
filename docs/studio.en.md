@@ -360,8 +360,9 @@ writes are not part of the record browser.
 The **SQL workbench** in Database Studio provides a separate editor for manual
 queries. It suggests tables and columns from the detected database schema and
 runs exactly one `SELECT` or `WITH` statement in a read-only transaction. The
-result grid displays at most 200 rows and 50 columns. Its status identifies
-whether rows, columns, or both were omitted. Run a query with `⌘/Ctrl + Enter`
+result grid displays at most 200 rows and 50 columns; individual cell values
+are shortened after 512 characters. Its status identifies omitted rows or
+columns and shortened cell values. Run a query with `⌘/Ctrl + Enter`
 or the button. The draft and the last twelve queries are stored locally in the
 browser for each Studio project and database target. Writing SQL,
 recognized side-effecting functions, multiple statements, and projects without

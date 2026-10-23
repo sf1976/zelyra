@@ -11,6 +11,7 @@ const MAX_CELL_CHARACTERS: usize = 512;
 fn prepare_read_only_query(
     sql: &str,
     requested_limit: Option<u64>,
+    postgres: bool,
 ) -> Result<(String, usize), (u16, String)> {
     let sql = sql.trim();
     if sql.is_empty() || sql.len() > MAX_QUERY_BYTES {
@@ -19,7 +20,7 @@ fn prepare_read_only_query(
     if !database_cli::single_sql_statement(sql) {
         return Err((400, "Studio accepts exactly one SQL statement".into()));
     }
-    if !database_cli::read_only_statement(sql)
+    if !database_cli::read_only_statement(sql, postgres)
         || !matches!(
             database_cli::first_sql_keyword(sql).as_str(),
             "SELECT" | "WITH"
@@ -54,9 +55,6 @@ pub(super) fn query(
         .get("sql")
         .and_then(Value::as_str)
         .ok_or((400, "sql is required".into()))?;
-    let (bounded_sql, limit) =
-        prepare_read_only_query(sql, request.get("limit").and_then(Value::as_u64))?;
-
     let entry = state.root.join("main.zyl");
     let declared = database_cli::load_schema(&entry.to_string_lossy()).map_err(|_| {
         (
@@ -77,6 +75,9 @@ pub(super) fn query(
     let database_url = database_url_for_project(&state.root, database_name)
         .map_err(|_| (422, "the project environment file could not be read".into()))?
         .ok_or((422, "database connection is not configured".into()))?;
+    let postgres = zelyra_database::is_postgres_url(&database_url);
+    let (bounded_sql, limit) =
+        prepare_read_only_query(sql, request.get("limit").and_then(Value::as_u64), postgres)?;
 
     let started = Instant::now();
     let result = zelyra_database::execute_read_only_query(&database_url, &bounded_sql, Vec::new())
@@ -89,7 +90,7 @@ pub(super) fn query(
     let elapsed_ms = started.elapsed().as_millis();
     let rows_truncated = result.rows.len() > limit;
     let columns_truncated = result.columns.len() > MAX_RESULT_COLUMNS;
-    let truncated = rows_truncated || columns_truncated;
+    let mut cells_truncated = false;
     let columns = result
         .columns
         .iter()
@@ -103,7 +104,11 @@ pub(super) fn query(
         .map(|row| {
             row.iter()
                 .take(MAX_RESULT_COLUMNS)
-                .map(|cell| truncate_cell(cell))
+                .map(|cell| {
+                    let (cell, was_truncated) = truncate_cell(cell);
+                    cells_truncated |= was_truncated;
+                    cell
+                })
                 .collect::<Vec<_>>()
         })
         .collect::<Vec<_>>();
@@ -127,24 +132,26 @@ pub(super) fn query(
         "rowCount": row_count,
         "limit": limit,
         "columnLimit": MAX_RESULT_COLUMNS,
-        "truncated": truncated,
+        "truncated": rows_truncated || columns_truncated || cells_truncated,
         "rowsTruncated": rows_truncated,
         "columnsTruncated": columns_truncated,
+        "cellsTruncated": cells_truncated,
+        "cellLimit": MAX_CELL_CHARACTERS,
         "elapsedMs": elapsed_ms,
     });
     Ok((200, "application/json; charset=utf-8", response.to_string()))
 }
 
-fn truncate_cell(value: &str) -> String {
+fn truncate_cell(value: &str) -> (String, bool) {
     let mut characters = value.chars();
     let text = characters
         .by_ref()
         .take(MAX_CELL_CHARACTERS)
         .collect::<String>();
     if characters.next().is_some() {
-        format!("{text}…")
+        (format!("{text}…"), true)
     } else {
-        text
+        (text, false)
     }
 }
 
@@ -155,16 +162,18 @@ mod tests {
     #[test]
     fn result_cells_are_bounded_without_splitting_unicode() {
         let cell = "ä".repeat(MAX_CELL_CHARACTERS + 4);
-        let bounded = truncate_cell(&cell);
+        let (bounded, truncated) = truncate_cell(&cell);
         assert_eq!(bounded.chars().count(), MAX_CELL_CHARACTERS + 1);
         assert!(bounded.ends_with('…'));
+        assert!(truncated);
+        assert_eq!(truncate_cell("short"), ("short".into(), false));
     }
 
     #[test]
     fn sql_workbench_accepts_only_one_read_only_select_family_statement() {
         for query in ["SELECT 1", "WITH item AS (SELECT 1) SELECT * FROM item"] {
             assert!(database_cli::single_sql_statement(query));
-            assert!(database_cli::read_only_statement(query));
+            assert!(database_cli::read_only_statement(query, false));
         }
         for query in [
             "DELETE FROM customers",
@@ -182,14 +191,15 @@ mod tests {
             "SELECT * FROM dblink('remote', 'DELETE FROM customers') AS result(id INT)",
             "SELECT LAST_INSERT_ID(123)",
         ] {
-            assert!(prepare_read_only_query(query, None).is_err());
+            assert!(prepare_read_only_query(query, None, false).is_err());
         }
+        assert!(prepare_read_only_query("SELECT pg_sleep--hidden\n(30)", None, true).is_err());
     }
 
     #[test]
     fn read_only_queries_are_wrapped_with_a_hard_result_limit() {
         let (bounded, limit) =
-            prepare_read_only_query("SELECT id FROM customers;", Some(9000)).unwrap();
+            prepare_read_only_query("SELECT id FROM customers;", Some(9000), false).unwrap();
         assert_eq!(limit, MAX_RESULT_ROWS);
         assert!(bounded.ends_with("LIMIT 201"));
         assert!(bounded.contains("SELECT id FROM customers"));

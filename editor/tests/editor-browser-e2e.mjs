@@ -128,7 +128,23 @@ try {
             columnsTruncated: true,
             elapsedMs: 4,
           }
-        : {
+        : query.sql.includes("cells_truncated")
+          ? {
+              readOnly: true,
+              columns: ["long_value"],
+              rows: [[`${"x".repeat(512)}…`]],
+              nulls: [[false]],
+              rowCount: 1,
+              limit: 200,
+              columnLimit: 50,
+              cellLimit: 512,
+              truncated: true,
+              rowsTruncated: false,
+              columnsTruncated: false,
+              cellsTruncated: true,
+              elapsedMs: 4,
+            }
+          : {
             readOnly: true,
             columns: ["name", "email"],
             rows: [["<script>alert(1)</script>Anna", "\\N"]],
@@ -139,6 +155,7 @@ try {
             truncated: false,
             rowsTruncated: false,
             columnsTruncated: false,
+            cellsTruncated: false,
             elapsedMs: 4,
           }),
     });
@@ -448,6 +465,14 @@ try {
   const truncatedStatus = await page.locator("#database-query-status").textContent();
   assert.match(truncatedStatus, /Spalten/);
   assert.doesNotMatch(truncatedStatus, /Zeilen vorhanden/);
+  await sqlEditor.fill("SELECT cells_truncated FROM customers;");
+  await page.locator("#database-query-run").click();
+  await page.waitForFunction(() => {
+    const status = document.querySelector("#database-query-status");
+    return status && status.dataset.kind !== "pending";
+  });
+  const cellTruncatedStatus = await page.locator("#database-query-status").textContent();
+  assert.match(cellTruncatedStatus, /Zellenwerte wurden nach 512 Zeichen gekürzt/);
   await page.locator("#database-query-clear").click();
   await page.locator("#database-create").waitFor({ state: "visible" });
   assert.equal(await page.locator(".database-header").evaluate((element) => getComputedStyle(element).backgroundColor), "rgb(255, 255, 255)");

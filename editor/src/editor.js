@@ -290,7 +290,7 @@ const messages = {
     databaseStudio: "DATENBANK STUDIO", databaseTitle: "Datenbank verstehen",
     databaseIntro: "Leseübersicht für DATABASE_URL mit compilergeprüfter CRUD-Vorschau.", databaseNotLoaded: "Noch nicht verbunden",
     refreshSchema: "Schema laden", backToCode: "Zurück zum Code", filterTables: "Tabellen filtern",
-    sqlWorkbenchEyebrow: "SQL-ARBEITSPLATZ", sqlWorkbenchTitle: "Abfragen direkt ausführen", sqlWorkbenchHint: "Schemaabhängige Vorschläge · Nur-Lese-Transaktion · höchstens 200 Ergebniszeilen", sqlWorkbenchReadonly: "NUR LESEN", sqlWorkbenchHistory: "Letzte Abfragen", sqlWorkbenchHistoryEmpty: "Keine gespeicherten Abfragen", sqlWorkbenchClear: "Leeren", sqlWorkbenchRun: "Abfrage ausführen", sqlWorkbenchShortcut: "⌘/Ctrl + Enter", sqlWorkbenchResults: "Ergebnis", sqlWorkbenchIdle: "Eine SELECT- oder WITH-Abfrage schreiben und ausführen.", sqlWorkbenchRunning: "Abfrage läuft …", sqlWorkbenchSuccessOne: "{0} Zeile · {1} ms", sqlWorkbenchSuccess: "{0} Zeilen · {1} ms", sqlWorkbenchRowsTruncated: "Mehr Zeilen vorhanden; Anzeige auf {0} Zeilen begrenzt.", sqlWorkbenchColumnsTruncated: "Weitere Spalten ausgelassen; angezeigt werden höchstens {0}.", sqlWorkbenchFailed: "Abfrage fehlgeschlagen", sqlWorkbenchNoRows: "Keine Zeilen zurückgegeben", sqlWorkbenchNull: "NULL",
+    sqlWorkbenchEyebrow: "SQL-ARBEITSPLATZ", sqlWorkbenchTitle: "Abfragen direkt ausführen", sqlWorkbenchHint: "Schemaabhängige Vorschläge · Nur-Lese-Transaktion · höchstens 200 Ergebniszeilen", sqlWorkbenchReadonly: "NUR LESEN", sqlWorkbenchHistory: "Letzte Abfragen", sqlWorkbenchHistoryEmpty: "Keine gespeicherten Abfragen", sqlWorkbenchClear: "Leeren", sqlWorkbenchRun: "Abfrage ausführen", sqlWorkbenchShortcut: "⌘/Ctrl + Enter", sqlWorkbenchResults: "Ergebnis", sqlWorkbenchIdle: "Eine SELECT- oder WITH-Abfrage schreiben und ausführen.", sqlWorkbenchRunning: "Abfrage läuft …", sqlWorkbenchSuccessOne: "{0} Zeile · {1} ms", sqlWorkbenchSuccess: "{0} Zeilen · {1} ms", sqlWorkbenchRowsTruncated: "Mehr Zeilen vorhanden; Anzeige auf {0} Zeilen begrenzt.", sqlWorkbenchColumnsTruncated: "Weitere Spalten ausgelassen; angezeigt werden höchstens {0}.", sqlWorkbenchCellsTruncated: "Lange Zellenwerte wurden nach {0} Zeichen gekürzt.", sqlWorkbenchFailed: "Abfrage fehlgeschlagen", sqlWorkbenchNoRows: "Keine Zeilen zurückgegeben", sqlWorkbenchNull: "NULL",
     databaseChooseTable: "Wähle links eine Tabelle", databaseChooseHint: "Studio zeigt Spalten, Schlüssel, Beziehungen und Quellcode-Abweichungen.",
     loadSchema: "Datenbankschema laden", columnsAndRelations: "Spalten und Beziehungen",
     schemaCompareHint: "Deklarierte und live vorhandene Merkmale im Vergleich.", schemaLegend: "Quelle · Datenbank",
@@ -403,7 +403,7 @@ const messages = {
     databaseStudio: "DATABASE STUDIO", databaseTitle: "Understand your data",
     databaseIntro: "Read-only DATABASE_URL schema overview with a compiler-checked CRUD preview.", databaseNotLoaded: "Not connected",
     refreshSchema: "Load schema", backToCode: "Back to code", filterTables: "Filter tables",
-    sqlWorkbenchEyebrow: "SQL WORKBENCH", sqlWorkbenchTitle: "Run SQL queries directly", sqlWorkbenchHint: "Schema-aware suggestions · read-only transaction · up to 200 result rows", sqlWorkbenchReadonly: "READ ONLY", sqlWorkbenchHistory: "Recent queries", sqlWorkbenchHistoryEmpty: "No saved queries", sqlWorkbenchClear: "Clear", sqlWorkbenchRun: "Run query", sqlWorkbenchShortcut: "⌘/Ctrl + Enter", sqlWorkbenchResults: "Result", sqlWorkbenchIdle: "Write and run a SELECT or WITH query.", sqlWorkbenchRunning: "Running query …", sqlWorkbenchSuccessOne: "{0} row · {1} ms", sqlWorkbenchSuccess: "{0} rows · {1} ms", sqlWorkbenchRowsTruncated: "More rows are available; display is limited to {0} rows.", sqlWorkbenchColumnsTruncated: "Additional columns were omitted; at most {0} are shown.", sqlWorkbenchFailed: "Query failed", sqlWorkbenchNoRows: "No rows returned", sqlWorkbenchNull: "NULL",
+    sqlWorkbenchEyebrow: "SQL WORKBENCH", sqlWorkbenchTitle: "Run SQL queries directly", sqlWorkbenchHint: "Schema-aware suggestions · read-only transaction · up to 200 result rows", sqlWorkbenchReadonly: "READ ONLY", sqlWorkbenchHistory: "Recent queries", sqlWorkbenchHistoryEmpty: "No saved queries", sqlWorkbenchClear: "Clear", sqlWorkbenchRun: "Run query", sqlWorkbenchShortcut: "⌘/Ctrl + Enter", sqlWorkbenchResults: "Result", sqlWorkbenchIdle: "Write and run a SELECT or WITH query.", sqlWorkbenchRunning: "Running query …", sqlWorkbenchSuccessOne: "{0} row · {1} ms", sqlWorkbenchSuccess: "{0} rows · {1} ms", sqlWorkbenchRowsTruncated: "More rows are available; display is limited to {0} rows.", sqlWorkbenchColumnsTruncated: "Additional columns were omitted; at most {0} are shown.", sqlWorkbenchCellsTruncated: "Long cell values were shortened after {0} characters.", sqlWorkbenchFailed: "Query failed", sqlWorkbenchNoRows: "No rows returned", sqlWorkbenchNull: "NULL",
     databaseChooseTable: "Choose a table on the left", databaseChooseHint: "Studio shows columns, keys, relations, and source drift.",
     loadSchema: "Load database schema", columnsAndRelations: "Columns and relations",
     schemaCompareHint: "Compare declared fields with the live database.", schemaLegend: "Source · database",
@@ -2135,11 +2135,13 @@ async function runDatabaseQuery() {
     rememberDatabaseQuery(sql);
     const rowsTruncated = result.rowsTruncated ?? result.truncated;
     const columnsTruncated = result.columnsTruncated === true;
-    status.dataset.kind = rowsTruncated || columnsTruncated ? "warning" : "success";
+    const cellsTruncated = result.cellsTruncated === true;
+    status.dataset.kind = rowsTruncated || columnsTruncated || cellsTruncated ? "warning" : "success";
     const countMessage = t(result.rowCount === 1 ? "sqlWorkbenchSuccessOne" : "sqlWorkbenchSuccess", result.rowCount, result.elapsedMs);
     const truncationMessages = [];
     if (rowsTruncated) truncationMessages.push(t("sqlWorkbenchRowsTruncated", result.limit));
     if (columnsTruncated) truncationMessages.push(t("sqlWorkbenchColumnsTruncated", result.columnLimit || 50));
+    if (cellsTruncated) truncationMessages.push(t("sqlWorkbenchCellsTruncated", result.cellLimit || 512));
     status.textContent = [countMessage, ...truncationMessages].join(" · ");
   } catch (error) {
     $("database-query-results").replaceChildren();

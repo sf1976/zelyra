@@ -1603,15 +1603,24 @@ fn database_query(path: &str, args: &[String]) -> ExitCode {
         database_usage();
         return ExitCode::from(2);
     };
+    let url = match project_database_url(path) {
+        Ok(url) => url,
+        Err(error) => {
+            eprintln!("error[E-CLI-DB-002]: {error}");
+            return ExitCode::from(1);
+        }
+    };
+    let postgres = zelyra_database::is_postgres_url(&url);
     if !single_sql_statement(&sql) {
         eprintln!("error[E-CLI-DB-004]: db query accepts exactly one SQL statement");
         return ExitCode::from(2);
     }
-    if !allow_mutation && !read_only_statement(&sql) {
+    if !allow_mutation && !read_only_statement(&sql, postgres) {
         eprintln!("error[E-CLI-DB-004]: only SELECT, WITH, SHOW, DESCRIBE, and EXPLAIN queries are allowed by default; pass --allow-mutation to opt in");
         return ExitCode::from(1);
     }
-    if allow_mutation && !read_only_statement(&sql) && !transactional_dml_statement(&sql) {
+    if allow_mutation && !read_only_statement(&sql, postgres) && !transactional_dml_statement(&sql)
+    {
         eprintln!("error[E-CLI-DB-004]: db query supports transactional INSERT, UPDATE, DELETE, and REPLACE mutations; use `db apply` or `db console` for DDL and other administrative statements");
         return ExitCode::from(1);
     }
@@ -1640,13 +1649,6 @@ fn database_query(path: &str, args: &[String]) -> ExitCode {
             vec![("tenant_id".to_owned(), parsed)]
         })
         .unwrap_or_default();
-    let url = match project_database_url(path) {
-        Ok(url) => url,
-        Err(error) => {
-            eprintln!("error[E-CLI-DB-002]: {error}");
-            return ExitCode::from(1);
-        }
-    };
     let result = if allow_mutation {
         zelyra_database::execute_transactional_query(&url, &sql, params)
     } else {
@@ -1664,9 +1666,9 @@ fn database_query(path: &str, args: &[String]) -> ExitCode {
     }
 }
 
-pub(super) fn read_only_statement(sql: &str) -> bool {
+pub(super) fn read_only_statement(sql: &str, postgres: bool) -> bool {
     let first = first_sql_keyword(sql);
-    let Some(compact) = compact_sql_for_safety(sql) else {
+    let Some(compact) = compact_sql_for_safety(sql, postgres) else {
         return false;
     };
     matches!(
@@ -1713,7 +1715,7 @@ pub(super) fn read_only_statement(sql: &str) -> bool {
     .any(|unsafe_clause| compact.contains(unsafe_clause))
 }
 
-fn compact_sql_for_safety(sql: &str) -> Option<String> {
+fn compact_sql_for_safety(sql: &str, postgres: bool) -> Option<String> {
     let characters = sql.chars().collect::<Vec<_>>();
     let mut compact = String::with_capacity(sql.len());
     let mut index = 0;
@@ -1749,9 +1751,10 @@ fn compact_sql_for_safety(sql: &str) -> Option<String> {
 
         if character == '-'
             && next == Some('-')
-            && characters
-                .get(index + 2)
-                .is_none_or(|next| next.is_whitespace() || next.is_control())
+            && (postgres
+                || characters
+                    .get(index + 2)
+                    .is_none_or(|next| next.is_whitespace() || next.is_control()))
         {
             while index < characters.len() && characters[index] != '\n' {
                 index += 1;
@@ -2280,39 +2283,75 @@ mod tests {
 
     #[test]
     fn default_query_allowlist_is_read_oriented() {
-        assert!(read_only_statement("SELECT 1"));
+        assert!(read_only_statement("SELECT 1", false));
         assert!(read_only_statement(
-            "WITH rows AS (SELECT 1) SELECT * FROM rows"
+            "WITH rows AS (SELECT 1) SELECT * FROM rows",
+            false
         ));
-        assert!(read_only_statement("SHOW TABLES"));
-        assert!(!read_only_statement("DELETE FROM users"));
-        assert!(!read_only_statement("UPDATE users SET active = false"));
-        assert!(!read_only_statement("SELECT id FROM users FOR UPDATE"));
-        assert!(!read_only_statement("SELECT GET_LOCK('name', 0)"));
-        assert!(!read_only_statement("SELECT @value := 1"));
-        assert!(!read_only_statement("SELECT SLEEP/* hidden gap */ (1)"));
-        assert!(!read_only_statement("SELECT LOAD_FILE/**/('/etc/passwd')"));
-        assert!(!read_only_statement("SELECT /*!80000 SLEEP(1) */ 1"));
-        assert!(!read_only_statement(r#"SELECT 'a\'b' AS x, SLEEP(30)"#));
-        assert!(!read_only_statement(r#"SELECT "a\"b" AS x, SLEEP(30)"#));
-        assert!(read_only_statement(r#"SELECT 'a\\' AS x"#));
-        assert!(!read_only_statement(r#"SELECT 'a\\' AS x, SLEEP(30)"#));
-        assert!(!read_only_statement(r#"SELECT "a\\" AS x, SLEEP(30)"#));
+        assert!(read_only_statement("SHOW TABLES", false));
+        assert!(!read_only_statement("DELETE FROM users", false));
         assert!(!read_only_statement(
-            "SELECT pg_notify('channel', 'payload')"
-        ));
-        assert!(!read_only_statement("SELECT pg_advisory_lock_shared(1)"));
-        assert!(!read_only_statement(
-            "SELECT * FROM dblink('remote', 'DELETE FROM customers') AS result(id INT)"
-        ));
-        assert!(!read_only_statement("SELECT LAST_INSERT_ID(123)"));
-        assert!(!read_only_statement(
-            "SELECT \"pg_notify\"('channel', 'payload')"
+            "UPDATE users SET active = false",
+            false
         ));
         assert!(!read_only_statement(
-            "SELECT document #>> '{}' FROM items WHERE pg_notify('channel', 'payload') IS NULL"
+            "SELECT id FROM users FOR UPDATE",
+            false
         ));
-        assert!(read_only_statement("SELECT 'SLEEP(1)' AS harmless_text"));
+        assert!(!read_only_statement("SELECT GET_LOCK('name', 0)", false));
+        assert!(!read_only_statement("SELECT @value := 1", false));
+        assert!(!read_only_statement(
+            "SELECT SLEEP/* hidden gap */ (1)",
+            false
+        ));
+        assert!(!read_only_statement(
+            "SELECT LOAD_FILE/**/('/etc/passwd')",
+            false
+        ));
+        assert!(!read_only_statement("SELECT /*!80000 SLEEP(1) */ 1", false));
+        let escaped = r#"SELECT 'a\'b' AS x, SLEEP(30)"#;
+        assert!(single_sql_statement(escaped));
+        assert!(!read_only_statement(escaped, false));
+        assert!(!read_only_statement(escaped, true));
+        assert!(!read_only_statement(
+            r#"SELECT "a\"b" AS x, SLEEP(30)"#,
+            false
+        ));
+        assert!(read_only_statement(r#"SELECT 'a\\' AS x"#, false));
+        assert!(!read_only_statement(
+            r#"SELECT 'a\\' AS x, SLEEP(30)"#,
+            false
+        ));
+        assert!(!read_only_statement(
+            r#"SELECT "a\\" AS x, SLEEP(30)"#,
+            false
+        ));
+        assert!(!read_only_statement(
+            "SELECT pg_notify('channel', 'payload')",
+            true
+        ));
+        assert!(!read_only_statement(
+            "SELECT pg_advisory_lock_shared(1)",
+            true
+        ));
+        assert!(!read_only_statement("SELECT pg_sleep--hidden\n(30)", true));
+        assert!(!read_only_statement(
+            "SELECT * FROM dblink('remote', 'DELETE FROM customers') AS result(id INT)",
+            true
+        ));
+        assert!(!read_only_statement("SELECT LAST_INSERT_ID(123)", false));
+        assert!(!read_only_statement(
+            "SELECT \"pg_notify\"('channel', 'payload')",
+            true
+        ));
+        assert!(!read_only_statement(
+            "SELECT document #>> '{}' FROM items WHERE pg_notify('channel', 'payload') IS NULL",
+            true
+        ));
+        assert!(read_only_statement(
+            "SELECT 'SLEEP(1)' AS harmless_text",
+            false
+        ));
         assert!(transactional_dml_statement("INSERT INTO users VALUES (1)"));
         assert!(!transactional_dml_statement("DROP TABLE users"));
     }
