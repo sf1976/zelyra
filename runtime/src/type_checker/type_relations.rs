@@ -207,7 +207,8 @@ pub(crate) fn expand_type_aliases(
     Err("cyclic or excessively deep type alias")
 }
 
-pub(crate) fn substitute_generic_type(ty: &Type, substitutions: &HashMap<String, Type>) -> Type {
+/// Applies concrete generic arguments to a type, recursively preserving its shape.
+pub fn substitute_generic_type(ty: &Type, substitutions: &HashMap<String, Type>) -> Type {
     match ty {
         Type::Named(name) => substitutions
             .get(name)

@@ -13,9 +13,10 @@ mod statements;
 mod type_relations;
 pub(crate) use enum_constructors::instantiated_enum_payload_types;
 use flow::{flow_outcomes, FLOW_FALLTHROUGH};
+pub use type_relations::substitute_generic_type;
 pub(super) use type_relations::{
     compatible, expand_type_aliases, infer_generic_types, is_map_key_type, is_numeric,
-    singular_table_type, substitute_generic_type, validate_type,
+    singular_table_type, validate_type,
 };
 
 #[derive(Clone)]
@@ -76,10 +77,31 @@ pub fn check_with_inferred_types(
     check_program(program, true)
 }
 
+/// Inspect source-mapped expression types even when the program contains
+/// type errors. This is intended for non-authoritative editor features such
+/// as completion; callers must still use `check` for acceptance decisions.
+pub fn inspect_expression_types(
+    program: &Program,
+) -> (Vec<InferredExpressionType>, Vec<TypeError>) {
+    inspect_program(program, true)
+}
+
 fn check_program(
     program: &Program,
     capture_inferred_expression_types: bool,
 ) -> Result<Vec<InferredExpressionType>, Vec<TypeError>> {
+    let (inferred_types, errors) = inspect_program(program, capture_inferred_expression_types);
+    if errors.is_empty() {
+        Ok(inferred_types)
+    } else {
+        Err(errors)
+    }
+}
+
+fn inspect_program(
+    program: &Program,
+    capture_inferred_expression_types: bool,
+) -> (Vec<InferredExpressionType>, Vec<TypeError>) {
     let mut known_types = [
         "Id",
         "Int",
@@ -534,25 +556,19 @@ fn check_program(
     for function in &crud_policy_functions {
         checker.check_function(function);
     }
-    if checker.errors.is_empty() {
-        checker.inferred_expression_types.sort_by_key(|inferred| {
-            (
-                inferred.span.source_id,
-                inferred.span.start,
-                inferred.span.end,
-                inferred.span.line,
-                inferred.span.column,
-            )
-        });
-        checker
-            .inferred_expression_types
-            .dedup_by(|current, previous| {
-                current.span == previous.span && current.ty == previous.ty
-            });
-        Ok(checker.inferred_expression_types)
-    } else {
-        Err(checker.errors)
-    }
+    checker.inferred_expression_types.sort_by_key(|inferred| {
+        (
+            inferred.span.source_id,
+            inferred.span.start,
+            inferred.span.end,
+            inferred.span.line,
+            inferred.span.column,
+        )
+    });
+    checker
+        .inferred_expression_types
+        .dedup_by(|current, previous| current.span == previous.span && current.ty == previous.ty);
+    (checker.inferred_expression_types, checker.errors)
 }
 
 fn valid_five_field_cron(expression: &str) -> bool {

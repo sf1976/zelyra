@@ -112,6 +112,15 @@ matching starter block. After confirming a completed import, Studio opens
 suggestions in the next editor section. Nothing is inserted
 without a selection, and Undo remains available.
 
+After a record expression such as `customer.na`, **Ctrl+Space** completes
+fields from the receiver type inferred by the compiler. Suggestions use the
+current unsaved source and public records from imported modules. For generic
+records, Studio shows concrete field types, such as `Customer<Int> → id: Int`.
+Studio does not guess fields when the type is unknown or project resolution is
+incomplete. The temporary analysis writes no files. Choosing an option replaces
+only the field name; the compiler remains authoritative for the final type
+check.
+
 Press **F2** on a resolved function, record type, or indexed record field to rename it. Studio
 previews every affected file and checks the candidate with the compiler. If an
 unindexed field use would break, the compiler rejects the plan before it can be

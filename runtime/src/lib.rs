@@ -174,10 +174,11 @@ pub use value::{normalize_map_entries, ClassObjectRef, FunctionValue, SqlRowsMet
 mod verifier;
 pub use verifier::{verify, ContractKind, VerificationResult, VerificationStatus};
 mod type_checker;
-pub use type_checker::{check, check_with_inferred_types};
+pub use type_checker::{
+    check, check_with_inferred_types, inspect_expression_types, substitute_generic_type,
+};
 pub(crate) use type_checker::{
     compatible, expand_type_aliases, infer_generic_types, singular_table_type,
-    substitute_generic_type,
 };
 mod capabilities;
 pub(crate) use capabilities::function_declares_capability;
