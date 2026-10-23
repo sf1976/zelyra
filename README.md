@@ -11,36 +11,20 @@ for database-backed business and web applications. It brings schema-aware SQL,
 forms, CRUD, views, and application logic together while keeping ordinary code
 and native SQL available.
 
-> **Release 1.2.55 · language compatibility line: 0.1** · [GitHub release](https://github.com/sf1976/zelyra/releases/tag/v1.2.55)
+> **Release 1.2.56 · language compatibility line: 0.1** · [GitHub release](https://github.com/sf1976/zelyra/releases/tag/v1.2.56)
 >
 > Compiler checks and the verifier cover defined scopes. They do not prove arbitrary applications correct. Review the documented support and limits for each workflow before deployment.
 
-Zelyra 1.2.55 brings the professional CSS 1.1.0 design system to generated
-applications, with refined CRUD, forms, tables, responsive layouts, and
-light/dark theme tokens. Studio adds a dedicated Project menu and suggestions
-for public declarations after an imported module namespace. Runtime settings
-can select experimental MIR and Bytecode backends for console projects; AST
-remains the default, and web previews remain AST-only. Zelyra 1.2.54 suggests
-matching project `.zyl` modules after `import "`,
-excluding the active file, duplicate imports, other file types, and comments.
-Version 1.2.53 added paired brackets and quotation marks and Zelyra-aware
-indentation; 1.2.52 added compiler-resolved function signatures,
-active-argument guidance, and record-field completion to Studio. Suggestions
-follow Zelyra's types and public module boundaries; unresolved record types do
-not produce guessed fields. The optional AI suggestion action requires
-explicit approval. Version 1.2.51 made Studio's project awareness visible from
-its welcome page and added SQL completion from declared Zelyra schemas.
-Version 1.2.50 aligned
-Studio source modules with generated browser assets for reproducible builds.
-Version 1.2.49 introduced the dedicated Zelyra Studio welcome screen,
-application menus, integrated Zelyra console, compiler-aware suggestions, and
-confirmed create, update, and delete operations for declared database tables.
-Version 1.2.48 advanced the experimental Bytecode backend to
-v30, fusing verified literal-increment array updates into one operation.
-Earlier 1.2.x releases added typed CRUD actions, compiler-checked uploads,
-computed table fields, business number series, a Laravel website importer,
-`zelyra db console` and `zelyra db query`, reusable billing packages, and typed
-CSV conversion. See the [1.2.55 release notes](docs/release-notes/1.2.55.en.md),
+Zelyra 1.2.56 adds a built-in Studio SQL workbench for MariaDB and
+PostgreSQL. Schema-aware completion, local drafts and query history, and
+bounded result tables support read-only `SELECT` and `WITH` queries. Studio
+also includes the original offline-served Zelyra logo, typed database-record
+editors, and compiler-guided suggestions for imports, record fields, and CRUD
+blocks. Suggestions are explicit and never insert code without selection.
+Earlier releases added the CSS 1.1.0 design system, compiler-aware editing,
+and the experimental MIR and Bytecode backends. See the
+[1.2.56 release notes](docs/release-notes/1.2.56.en.md),
+[1.2.55 release notes](docs/release-notes/1.2.55.en.md),
 [1.2.54 release notes](docs/release-notes/1.2.54.en.md),
 [1.2.53 release notes](docs/release-notes/1.2.53.en.md),
 [1.2.52 release notes](docs/release-notes/1.2.52.en.md),

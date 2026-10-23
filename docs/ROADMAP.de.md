@@ -28,7 +28,7 @@ Ressourcendisziplin und ehrliche Beweisaussagen leiten jede Phase. Das
 den tatsächlich implementierten Stand.
 
 Das aktuelle stabile Release ist
-[1.2.55](https://github.com/sf1976/zelyra/releases/tag/v1.2.55).
+[1.2.56](https://github.com/sf1976/zelyra/releases/tag/v1.2.56).
 **Aktuelle Meilensteine** ist die verbindliche Übersicht der nächsten Vorhaben.
 Ältere, nummerierte Release-
 Abschnitte bleiben als historische Planung und Nachweise erhalten; sie legen
