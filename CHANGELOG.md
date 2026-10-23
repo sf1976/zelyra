@@ -1,5 +1,12 @@
 ## Unreleased
 
+- Add a Studio SQL workbench with schema-aware completion and local query
+  history. Run one read-only `SELECT`/`WITH` query against MariaDB or PostgreSQL;
+  recognized side-effecting functions are rejected and results are capped.
+  / Einen SQL-Arbeitsplatz mit schemaabhängigen Vorschlägen und lokaler
+  Abfragehistorie in Studio ergänzen. Einzelne Nur-Lese-`SELECT`-/`WITH`-
+  Abfragen gegen MariaDB oder PostgreSQL ausführen; erkannte nebenwirkende
+  Funktionen werden abgewiesen und Ergebnisse begrenzt.
 - Show the original Zelyra logo on Studio's startup and welcome screens using a
   locally served asset, so branding is present without an internet connection.
   / Das originale Zelyra-Logo auf Start- und Begrüßungsbildschirm von Studio
