@@ -48,7 +48,7 @@ security and compatibility gates stated for that milestone.
 | 1.4.0 | Zelyra Visual Design Platform | A usable first release with a shared component registry and preview, Zelyra source as the only authoritative description, theme/style core, visual form editing, and safe source synchronization. Phase 0 analysis and specification starts after 1.3.0. |
 | 1.5.0 | Bytecode readiness and default gate | Bytecode becomes the default only with demonstrated parity, safe fail-closed behavior, verified artifact upgrades, and measured benefit. Otherwise AST remains the default and Bytecode stays optional. |
 | 1.6.0 | Packages, modules, and deployment | Reusable, trusted modules and reproducible offline/deployment bundles are accepted against real consumer projects; no stable native ABI is assumed. |
-| 1.7.0 | Verified business workflows | Selected query, tenant, request, job, audit, and ledger workflows are demonstrated as bounded Zelyra modules across compiler, runtime, and database. |
+| 1.7.0 | Verified business workflows | Selected workflows from real business applications are functionally demonstrated. These include safe tenant-scoped queries across related tables, campaign exclusions, and controlled delivery of structured e-invoice documents. |
 | 1.8.0 | Controlled integrations | Optional extensions such as Wasm or sidecars are added only with explicit capability, trust, update, and resource controls. Unverified plugins do not become standard. |
 | 1.9.0 | 2.0 hardening | Feature freeze, compatibility and migration rules, security/performance evidence, install/upgrade checks, and complete bilingual manuals. No new major features. |
 | 2.0.0 | Stable platform | Published language, package, runtime, CSS, and artifact contracts, plus an upgrade path and support matrix, are defined and verified. Optional backends need not be complete. |
@@ -57,6 +57,22 @@ The 1.6.0–1.8.0 goals are a prioritized planning sequence, not a blanket
 promise to deliver every conceivable feature. After each release, scope and
 evidence are reviewed against real Zelyra applications. Open 1.3.0 or 1.4.0
 acceptance criteria are not silently moved to later versions.
+
+The initial comparison identified two concrete capability gaps. First,
+Zelyra's compiler rejects custom SQL over tenant-scoped tables with
+`E-TENANT-003`. An attempt to select campaign recipients across customers,
+unsubscriptions, and campaign-specific exclusions therefore could not be
+safely expressed as a Zelyra workflow. This is an intentional security
+boundary and must not be bypassed by removing tenant scope. Version 1.7.0
+needs a compiler-enforced path for tenant-scoped multi-table queries, backed
+by isolation tests.
+
+Second, Zelyra's transactional outbox can currently attach generated PDF
+files, while the reference application also attaches Factur-X XML. Safely
+attaching validated, typed XML documents is also a 1.7.0 acceptance item.
+Neither capability may be described as supported until implemented and
+verified. Other workflows that have not yet been tested remain “not assessed”
+until a reproducible Zelyra attempt demonstrates the result.
 
 ### Continuous functional testing with a real business application
 
@@ -78,6 +94,8 @@ Document and prioritize larger language, runtime, or architecture gaps in
 this roadmap with evidence, impact, and a proposed release. Claims about
 Zelyra's capabilities must be based on these functional checks, not on
 Laravel or view similarity.
+The initial documented comparison and its test evidence are in the
+[business application capability benchmark](benchmarks/business-application-capability.en.md).
 
 - [ ] **1.1.5 — reusable Zelyra modules and packages:** Complete the local,
   offline package workflow, typed public APIs and effects, deterministic locks,
