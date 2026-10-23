@@ -139,7 +139,7 @@ the number `RE-2026-001`.
 - Lines 210–215 show a captioned responsive table with column and row headers and a real detail link.
 - Lines 216–229 show server-rendered bar, donut, and line charts. The line chart has a readable table alternative.
 - Lines 230–259 demonstrate progress, breadcrumbs, pagination, empty/loading/error states, toast, disclosure, dropdown, keyboard tabs, and dialog.
-- Lines 260–269 explain browser print/PDF, a local email draft prefilled with the invoice number, and the gallery print action. Save the invoice as a PDF first, then attach it to the draft manually. The email link does not send mail itself; server email uses an authorized route, `mail_queue`, and the outbox worker, which does not yet support attachments.
+- Lines 260–269 explain browser print/PDF, a local email draft prefilled with the invoice number, and the gallery print action. The button in this tutorial only opens a local email draft and sends nothing. Zelyra's server outbox can transactionally attach generated PDF files through `render_pdf` and `mail_queue`; see `examples/pdf_mail_outbox/main.zyl` for a complete example and `examples/typed_crud_actions/main.zyl` for a protected CRUD action. The outbox does not currently support Factur-X XML attachments.
 - The shared header's “Theme” control cycles between the system preference, dark, and light modes. The selection is saved in browser-local storage; project colors and sample-invoice styling are in `zelyra.theme.css`.
 - Lines 270–272 close the gallery and route.
 - Line 274 declares `page "/tour"` as an interactive architecture and code tour with collapsible source disclosures (`Disclosure`), code walkthroughs for all core modules, and a direct comparison with traditional multi-layer web stacks.

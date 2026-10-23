@@ -53,7 +53,7 @@ abgeschlossen.
 | 1.4.0 | Zelyra Visual Design Platform | Ein produktiver erster Schnitt mit gemeinsamem Komponentenregister und Vorschau, Zelyra-Quellcode als einziger maßgeblicher Beschreibung, Theme-/Style-Core, visueller Formularbearbeitung und sicherer Quellsynchronisierung. Phase 0 beginnt nach 1.3.0 mit Bestandsanalyse und Spezifikation. |
 | 1.5.0 | Bytecode-Reife und Standard-Gate | Bytecode wird nur bei belegter Parität, sicherem fail-closed Verhalten, geprüften Artefakt-Upgrades und messbarem Nutzen Standard. Andernfalls bleibt AST Standard und Bytecode optional. |
 | 1.6.0 | Pakete, Module und Deployment | Wiederverwendbare, vertrauensgeprüfte Module und reproduzierbare Offline-/Deployment-Bundles werden an realen Verbraucherprojekten abgenommen; keine stabile native ABI wird vorausgesetzt. |
-| 1.7.0 | Geprüfte Geschäftsabläufe | Ausgewählte Query-, Tenant-, Request-, Job-, Audit- und Ledger-Abläufe werden als begrenzte Zelyra-Module durch Compiler, Laufzeit und Datenbank nachgewiesen. |
+| 1.7.0 | Geprüfte Geschäftsabläufe | Ausgewählte Abläufe aus realen Geschäftsanwendungen werden funktional nachgewiesen. Dazu gehören sichere mandantengefilterte Abfragen über verbundene Tabellen, Kampagnenausschlüsse und der kontrollierte Versand strukturierter E-Rechnungsdokumente. |
 | 1.8.0 | Kontrollierte Integrationen | Optionale Erweiterungen wie Wasm oder Sidecars kommen nur mit expliziter Capability-, Vertrauens-, Update- und Ressourcenprüfung hinzu. Ungeprüfte Plugins werden kein Standard. |
 | 1.9.0 | 2.0-Härtung | Feature-Freeze, Kompatibilitäts- und Migrationsregeln, Sicherheits-/Performancebelege, Installations- und Upgradeprüfungen sowie vollständige zweisprachige Handbücher. Keine neuen Großfeatures. |
 | 2.0.0 | Stabile Plattform | Veröffentlichte Sprach-, Paket-, Laufzeit-, CSS- und Artefaktverträge samt Upgradepfad und Supportmatrix sind festgelegt und geprüft. Offene optionale Backends werden nicht als fertig vorausgesetzt. |
@@ -63,6 +63,24 @@ Vollständigkeitszusage für sämtliche denkbaren Funktionen. Nach jedem Release
 werden Umfang und Nachweise gegen reale Zelyra-Anwendungen überprüft. Offene
 1.3.0- oder 1.4.0-Abnahmekriterien werden nicht stillschweigend auf spätere
 Versionen verschoben.
+
+Der erste Abgleich hat zwei konkrete Fähigkeitslücken offengelegt. Erstens
+weist Zelyras Compiler benutzerdefinierte SQL-Abfragen über mandantengeschützte
+Tabellen mit `E-TENANT-003` zurück. Der Versuch, Empfänger für eine Kampagne
+über Kunden, Abmeldungen und kampagnenspezifische Ausschlüsse zu bestimmen,
+konnte deshalb nicht sicher als Zelyra-Ablauf umgesetzt werden. Das ist eine
+bewusste Schutzgrenze und darf nicht durch Entfernen der Mandantenmarkierung
+umgangen werden. 1.7.0 muss einen geprüften, compilergebundenen Weg für solche
+mandantengefilterten Mehrtabellenabfragen samt Isolationstests bereitstellen.
+
+Zweitens kann Zelyras transaktionale Outbox derzeit erzeugte PDF-Dateien
+anhängen; die Referenzanwendung hängt Rechnungen zusätzlich als Factur-X-XML
+an. Sicheres, typisiertes Anhängen validierter XML-Dokumente ist deshalb
+ebenfalls ein Abnahmepunkt für 1.7.0. Bis zur Implementierung und Prüfung wird
+keine dieser beiden Fähigkeiten als unterstützt dargestellt. Weitere noch
+nicht geprüfte Geschäftsabläufe sind keine bestätigte Sprachlücke; sie bleiben
+als „nicht bewertet“ markiert, bis ein reproduzierbarer Zelyra-Versuch das
+Ergebnis belegt.
 
 ### Laufender Funktionstest mit einer realen Geschäftsanwendung
 
@@ -86,6 +104,8 @@ Auswirkungen auf Sprache, Laufzeit oder Architektur werden mit Beleg,
 Auswirkung und vorgeschlagenem Release in diese Roadmap aufgenommen und
 priorisiert. Aussagen über Zelyras Fähigkeiten stützen sich auf diese
 Funktionsprüfungen und nicht auf eine bloße Laravel- oder View-Ähnlichkeit.
+Der erste dokumentierte Abgleich und seine Testbelege stehen im
+[Funktionsbenchmark](benchmarks/business-application-capability.de.md).
 
 - [ ] **1.1.5 — wiederverwendbare Zelyra-Module und Pakete:** Offline-
   Paketabläufe, typisierte öffentliche APIs und Effekte, deterministische

@@ -521,6 +521,11 @@ jobs:
           ZELYRA_E2E_DB_PASSWORD: root
           ZELYRA_BIN: target/debug/zelyra
         run: ./tests/mariadb-tenant-api-validation-e2e.sh
+      - name: Verify safe campaign unsubscribe flow
+        env:
+          ZELYRA_FORM_ROUTE_TEST_URL: mariadb://root:root@127.0.0.1:3306/zelyra_ci
+          ZELYRA_BIN: target/debug/zelyra
+        run: ./tests/mariadb-form-route-e2e.sh
       - name: Create isolated CRUD policy test database
         env:
           MYSQL_PWD: root
