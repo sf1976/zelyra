@@ -1,11 +1,12 @@
 ## Unreleased
 
+## 1.2.52 — Zelyra Studio contextual editing
+
 - Show compiler-resolved Zelyra function signatures and highlight the active
   argument while editing a call, including public imported functions. / Beim
   Schreiben eines Aufrufs compileraufgelöste Zelyra-Funktionssignaturen
   anzeigen und das aktive Argument hervorheben, auch bei öffentlichen
   importierten Funktionen.
-
 - Scope Studio completion after an imported `alias::` to that module's public
   declarations, using unsaved import changes from the active editor buffer.
   / Die Studio-Vervollständigung nach einem importierten `alias::` auf die
