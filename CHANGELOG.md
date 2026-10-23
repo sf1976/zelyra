@@ -31,6 +31,39 @@
   Datum/Uhrzeit und geprüfte JSON-Werte verwenden; JSON bleibt serverseitig ein
   gebundener JSON-Parameter.
 
+## 1.2.56 — Zelyra Studio SQL workbench
+
+- Add a Studio SQL workbench with schema-aware completion and local query
+  history. Run one read-only `SELECT`/`WITH` query against MariaDB or PostgreSQL;
+  recognized side-effecting functions are rejected and results are capped. /
+  Einen SQL-Arbeitsplatz mit schemaabhängigen Vorschlägen und lokaler
+  Abfragehistorie in Studio ergänzen. Einzelne Nur-Lese-`SELECT`-/`WITH`-
+  Abfragen gegen MariaDB oder PostgreSQL ausführen; erkannte nebenwirkende
+  Funktionen werden abgewiesen und Ergebnisse begrenzt.
+- Show the original Zelyra logo on Studio's startup and welcome screens using a
+  locally served asset, so branding is present without an internet connection.
+  / Das originale Zelyra-Logo auf Start- und Begrüßungsbildschirm von Studio
+  zeigen und lokal ausliefern, damit das Branding keine Internetverbindung
+  benötigt.
+- Use compiler-inferred local initializer types and the compiler's known-type
+  compatibility rule for expression-hole suggestions; never advertise values
+  with unknown types. / Compilerinferenz für lokale Initialisierungen und die
+  bekannte Typkompatibilitätsregel auch für Ausdruckslücken verwenden; Werte
+  mit unbekanntem Typ nie als Vorschlag anbieten.
+- Offer a compiler-guided CRUD block with explicit Ctrl+Space for a uniquely
+  named declared table that has no CRUD, only at a blank top-level position;
+  selecting the suggestion inserts code, while incomplete and ambiguous maps
+  are skipped. / Einen compilergeführten CRUD-Block mit ausdrücklichem
+  Strg+Leertaste für eine eindeutig benannte deklarierte Tabelle ohne CRUD
+  anbieten, nur an einer leeren Position auf oberster Ebene; Code wird erst
+  durch Auswahl eingefügt, unvollständige und mehrdeutige Projektkarten werden
+  ausgelassen.
+- Use SQL-type-aware Boolean/enum/date/time inputs and validated JSON values
+  in the Studio record editor; JSON remains a bound JSON parameter on the
+  server. / Im Studio-Datensatzeditor typgerechte Eingaben für Boolean/Enum/
+  Datum/Uhrzeit und geprüfte JSON-Werte verwenden; JSON bleibt serverseitig ein
+  gebundener JSON-Parameter.
+
 ## 1.2.55 — Zelyra Studio und professionelles UI-Designsystem
 
 - Refine the default Zelyra UI theme and version its generated design-system
