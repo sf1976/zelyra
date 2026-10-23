@@ -26,6 +26,13 @@ Von dort kannst du eine Zelyra-Datei öffnen, das Projekt prüfen, die Konsole
 starten oder das Datenbank-Studio aufrufen. So bleiben Compiler, SQL und
 Anwendungsvorschau als zusammenhängender Zelyra-Arbeitsfluss sichtbar.
 
+Die Startseite liest zusätzlich die lokale Compiler-Projektkarte und zeigt
+erkannte Module, Datenmodelle, Webflächen und SQL-Abfragen. Eine daraus
+abgeleitete nächste Aktion führt zum Projektcheck, zur Projektkarte, zum
+Datenbank-Studio oder zum Einstiegspunkt. Ist die Analyse unvollständig, zeigt
+Studio das ausdrücklich an und empfiehlt zuerst den Compilercheck. Die Übersicht
+ändert keine Quelldateien und benötigt keinen KI- oder Cloud-Dienst.
+
 Die Menüleiste ordnet die häufigen Wege nach **Datei**, **Bearbeiten**,
 **Ansicht**, **Ausführen**, **Datenbank** und **Hilfe**. Die Schnellaktionen
 Starten und Prüfen bleiben sichtbar; Spezialwerkzeuge erreichst du aus dem
