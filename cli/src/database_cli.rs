@@ -1686,7 +1686,7 @@ pub(super) fn read_only_statement(sql: &str, postgres: bool) -> bool {
         "IS_USED_LOCK(",
         "SLEEP(",
         "BENCHMARK(",
-        "PG_SLEEP(",
+        "PG_SLEEP",
         "PG_ADVISORY_",
         "PG_NOTIFY(",
         "PG_READ_FILE(",
@@ -1773,10 +1773,11 @@ fn compact_sql_for_safety(sql: &str, postgres: bool) -> Option<String> {
 
         if character == '\'' {
             let quote = character;
+            let backslash_escapes = !postgres || postgres_escape_string_at(&characters, index);
             index += 1;
             let mut closed = false;
             while index < characters.len() {
-                if characters[index] == '\\' {
+                if backslash_escapes && characters[index] == '\\' {
                     let slash_start = index;
                     while characters.get(index) == Some(&'\\') {
                         index += 1;
@@ -1784,9 +1785,6 @@ fn compact_sql_for_safety(sql: &str, postgres: bool) -> Option<String> {
                     let slash_count = index - slash_start;
                     if characters.get(index) == Some(&quote) {
                         if slash_count % 2 == 1 {
-                            if postgres {
-                                return None;
-                            }
                             index += 1;
                             continue;
                         }
@@ -1817,7 +1815,7 @@ fn compact_sql_for_safety(sql: &str, postgres: bool) -> Option<String> {
             index += 1;
             let mut closed = false;
             while index < characters.len() {
-                if quote == '"' && characters[index] == '\\' {
+                if !postgres && quote == '"' && characters[index] == '\\' {
                     let slash_start = index;
                     while characters.get(index) == Some(&'\\') {
                         index += 1;
@@ -1869,6 +1867,17 @@ fn compact_sql_for_safety(sql: &str, postgres: bool) -> Option<String> {
     )
 }
 
+fn postgres_escape_string_at(characters: &[char], quote_index: usize) -> bool {
+    if quote_index == 0 || !matches!(characters[quote_index - 1], 'e' | 'E') {
+        return false;
+    }
+    quote_index == 1 || !is_sql_identifier_character(characters[quote_index - 2])
+}
+
+fn is_sql_identifier_character(character: char) -> bool {
+    character.is_alphanumeric() || matches!(character, '_' | '$')
+}
+
 fn transactional_dml_statement(sql: &str) -> bool {
     matches!(
         first_sql_keyword(sql).as_str(),
@@ -1887,6 +1896,7 @@ pub(super) fn first_sql_keyword(sql: &str) -> String {
 pub(super) fn single_sql_statement(sql: &str, postgres: bool) -> bool {
     let bytes = sql.as_bytes();
     let (mut index, mut quote, mut line_comment, mut block_comment) = (0, None, false, false);
+    let mut quote_backslash_escapes = false;
     while index < bytes.len() {
         let byte = bytes[index];
         if line_comment {
@@ -1911,9 +1921,11 @@ pub(super) fn single_sql_statement(sql: &str, postgres: bool) -> bool {
                     index += 2;
                 } else {
                     quote = None;
+                    quote_backslash_escapes = false;
                     index += 1;
                 }
-            } else if byte == b'\\' && !postgres && matches!(delimiter, b'\'' | b'"') {
+            } else if byte == b'\\' && quote_backslash_escapes && matches!(delimiter, b'\'' | b'"')
+            {
                 index = (index + 2).min(bytes.len());
             } else {
                 index += 1;
@@ -1942,6 +1954,8 @@ pub(super) fn single_sql_statement(sql: &str, postgres: bool) -> bool {
             continue;
         }
         if matches!(byte, b'\'' | b'"' | b'`') {
+            quote_backslash_escapes =
+                !postgres || (byte == b'\'' && postgres_escape_string_at_bytes(bytes, index));
             quote = Some(byte);
             index += 1;
             continue;
@@ -1957,6 +1971,7 @@ pub(super) fn single_sql_statement(sql: &str, postgres: bool) -> bool {
 pub(super) fn strip_sql_terminator(sql: &str, postgres: bool) -> String {
     let bytes = sql.as_bytes();
     let (mut index, mut quote, mut line_comment, mut block_comment) = (0, None, false, false);
+    let mut quote_backslash_escapes = false;
     while index < bytes.len() {
         let byte = bytes[index];
         if line_comment {
@@ -1981,9 +1996,11 @@ pub(super) fn strip_sql_terminator(sql: &str, postgres: bool) -> String {
                     index += 2;
                 } else {
                     quote = None;
+                    quote_backslash_escapes = false;
                     index += 1;
                 }
-            } else if byte == b'\\' && !postgres && matches!(delimiter, b'\'' | b'"') {
+            } else if byte == b'\\' && quote_backslash_escapes && matches!(delimiter, b'\'' | b'"')
+            {
                 index = (index + 2).min(bytes.len());
             } else {
                 index += 1;
@@ -2012,6 +2029,8 @@ pub(super) fn strip_sql_terminator(sql: &str, postgres: bool) -> String {
             continue;
         }
         if matches!(byte, b'\'' | b'"' | b'`') {
+            quote_backslash_escapes =
+                !postgres || (byte == b'\'' && postgres_escape_string_at_bytes(bytes, index));
             quote = Some(byte);
             index += 1;
             continue;
@@ -2022,6 +2041,17 @@ pub(super) fn strip_sql_terminator(sql: &str, postgres: bool) -> String {
         index += 1;
     }
     sql.trim().to_owned()
+}
+
+fn postgres_escape_string_at_bytes(bytes: &[u8], quote_index: usize) -> bool {
+    if quote_index == 0 || !matches!(bytes[quote_index - 1], b'e' | b'E') {
+        return false;
+    }
+    quote_index == 1 || !is_sql_identifier_byte(bytes[quote_index - 2])
+}
+
+fn is_sql_identifier_byte(byte: u8) -> bool {
+    byte.is_ascii_alphanumeric() || matches!(byte, b'_' | b'$')
 }
 
 fn has_named_parameter(sql: &str, name: &str) -> bool {

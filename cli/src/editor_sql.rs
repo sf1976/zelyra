@@ -40,11 +40,7 @@ fn prepare_read_only_query(
         .min(MAX_RESULT_ROWS as u64)
         .max(1) as usize;
     let normalized = database_cli::strip_sql_terminator(sql, postgres);
-    let bounded_sql = format!(
-        "SELECT * FROM (\n{normalized}\n) AS _zelyra_studio_result LIMIT {}",
-        limit + 1
-    );
-    Ok((bounded_sql, limit))
+    Ok((normalized, limit))
 }
 
 pub(super) fn query(
@@ -76,14 +72,15 @@ pub(super) fn query(
         .map_err(|_| (422, "the project environment file could not be read".into()))?
         .ok_or((422, "database connection is not configured".into()))?;
     let postgres = zelyra_database::is_postgres_url(&database_url);
-    let (bounded_sql, limit) =
+    let (query_sql, limit) =
         prepare_read_only_query(sql, request.get("limit").and_then(Value::as_u64), postgres)?;
 
     let started = Instant::now();
-    let bounded_result = zelyra_database::execute_read_only_query_with_cell_limit(
+    let bounded_result = zelyra_database::execute_read_only_query_with_limits(
         &database_url,
-        &bounded_sql,
+        &query_sql,
         Vec::new(),
+        Some(limit + 1),
         MAX_CELL_CHARACTERS,
     )
     .map_err(|_| {

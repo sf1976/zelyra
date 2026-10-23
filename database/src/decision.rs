@@ -103,7 +103,7 @@ impl Executor for PostgresDecision<'_> {
     fn execute(&mut self, query: &Query) -> Result<QueryResult, DatabaseError> {
         self.set_timeout()?;
         let (sql, params) = prepare_postgres_query(query)?;
-        execute_prepared_postgres_query(&mut self.transaction, &sql, &params, None)
+        execute_prepared_postgres_query(&mut self.transaction, &sql, &params, None, None)
             .map(|(result, _)| result)
     }
 }

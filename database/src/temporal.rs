@@ -79,22 +79,42 @@ impl<'a> FromSql<'a> for TemporalText {
             }
             Type::TIMESTAMPTZ => {
                 let micros = i64::from_be_bytes(raw.try_into().map_err(|_| invalid())?);
-                if micros % 1000 != 0 {
-                    return Err(invalid());
-                }
-                let millis = (micros / 1000)
-                    .checked_add(PG_EPOCH_MILLIS)
-                    .filter(|value| valid_timestamp_millis(*value))
-                    .ok_or_else(invalid)?;
-                format_timestamp_utc(millis)
+                format_postgres_timestamp(micros, true)?
+            }
+            Type::TIMESTAMP => {
+                let micros = i64::from_be_bytes(raw.try_into().map_err(|_| invalid())?);
+                format_postgres_timestamp(micros, false)?
             }
             _ => return Err(invalid()),
         };
         Ok(Self(text))
     }
     fn accepts(ty: &Type) -> bool {
-        matches!(*ty, Type::DATE | Type::TIME | Type::TIMESTAMPTZ)
+        matches!(
+            *ty,
+            Type::DATE | Type::TIME | Type::TIMESTAMP | Type::TIMESTAMPTZ
+        )
     }
+}
+
+fn format_postgres_timestamp(micros: i64, with_timezone: bool) -> Result<String, CodecError> {
+    let millis = micros
+        .div_euclid(1000)
+        .checked_add(PG_EPOCH_MILLIS)
+        .filter(|value| valid_timestamp_millis(*value))
+        .ok_or_else(invalid)?;
+    let formatted = format_timestamp_utc(millis);
+    let without_zone = formatted.strip_suffix('Z').ok_or_else(invalid)?;
+    if without_zone.len() < 3 {
+        return Err(invalid());
+    }
+    let timestamp = &without_zone[..without_zone.len() - 3];
+    let fraction = micros.rem_euclid(1_000_000);
+    Ok(if with_timezone {
+        format!("{timestamp}{fraction:06}Z")
+    } else {
+        format!("{timestamp}{fraction:06}")
+    })
 }
 
 fn time_micros(value: &str) -> Option<i64> {
@@ -202,12 +222,24 @@ mod tests {
                 expected
             );
         }
+        let one_microsecond = 1_i64.to_be_bytes();
+        assert_eq!(
+            TemporalText::from_sql(&Type::TIMESTAMPTZ, &one_microsecond)
+                .unwrap()
+                .to_string(),
+            "2000-01-01T00:00:00.000001Z"
+        );
+        assert_eq!(
+            TemporalText::from_sql(&Type::TIMESTAMP, &one_microsecond)
+                .unwrap()
+                .to_string(),
+            "2000-01-01T00:00:00.000001"
+        );
         for (ty, bytes) in [
             (Type::DATE, i32::MAX.to_be_bytes().to_vec()),
             (Type::TIME, 86_400_000_000_i64.to_be_bytes().to_vec()),
             (Type::TIME, 1_i64.to_be_bytes().to_vec()),
             (Type::TIMESTAMPTZ, i64::MAX.to_be_bytes().to_vec()),
-            (Type::TIMESTAMPTZ, 1_i64.to_be_bytes().to_vec()),
             (Type::DATE, vec![]),
         ] {
             assert!(TemporalText::from_sql(&ty, &bytes).is_err());

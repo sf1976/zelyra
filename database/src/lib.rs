@@ -3595,6 +3595,7 @@ pub fn execute_postgres_query(
         false,
         false,
         None,
+        None,
     )
     .map(|mut results| results.pop().map(|(result, _)| result).unwrap_or_default())
 }
@@ -3623,6 +3624,7 @@ pub fn execute_postgres_queries(
         transaction,
         false,
         None,
+        None,
     )
     .map(|results| results.into_iter().map(|(result, _)| result).collect())
 }
@@ -3641,8 +3643,17 @@ pub fn execute_read_only_query(
         let prepared = vec![prepare_postgres_query(&query)?];
         let settings = MariaDbTimeouts::from_env()?;
         let tls = MariaDbTlsSettings::from_env()?;
-        return execute_postgres_batch(database_url, settings, tls, &prepared, true, true, None)
-            .map(|mut results| results.pop().map(|(result, _)| result).unwrap_or_default());
+        return execute_postgres_batch(
+            database_url,
+            settings,
+            tls,
+            &prepared,
+            true,
+            true,
+            None,
+            None,
+        )
+        .map(|mut results| results.pop().map(|(result, _)| result).unwrap_or_default());
     }
     execute_mariadb_queries_with_options(
         database_url,
@@ -3664,13 +3675,17 @@ pub fn execute_read_only_query_with_cell_limit(
     params: Vec<(String, QueryValue)>,
     max_characters: usize,
 ) -> Result<BoundedQueryResult, DatabaseError> {
-    execute_read_only_query_with_cell_limit_inner(database_url, sql, params, max_characters)
+    execute_read_only_query_with_limits(database_url, sql, params, None, max_characters)
 }
 
-fn execute_read_only_query_with_cell_limit_inner(
+/// Executes a read-only query while retaining at most `max_rows` decoded rows
+/// and bounding each decoded text result cell. Drivers continue consuming the
+/// result stream so pooled connections remain synchronized.
+pub fn execute_read_only_query_with_limits(
     database_url: &str,
     sql: &str,
     params: Vec<(String, QueryValue)>,
+    max_rows: Option<usize>,
     max_characters: usize,
 ) -> Result<BoundedQueryResult, DatabaseError> {
     if is_postgres_url(database_url) {
@@ -3688,6 +3703,7 @@ fn execute_read_only_query_with_cell_limit_inner(
             &prepared,
             true,
             true,
+            max_rows,
             Some(max_characters),
         )
         .map(|mut results| {
@@ -3705,6 +3721,7 @@ fn execute_read_only_query_with_cell_limit_inner(
             params,
         }],
         true,
+        max_rows,
         Some(max_characters),
     )
     .map(|mut results| {
@@ -3731,8 +3748,17 @@ pub fn execute_transactional_query(
         let prepared = vec![prepare_postgres_query(&query)?];
         let settings = MariaDbTimeouts::from_env()?;
         let tls = MariaDbTlsSettings::from_env()?;
-        return execute_postgres_batch(database_url, settings, tls, &prepared, true, false, None)
-            .map(|mut results| results.pop().map(|(result, _)| result).unwrap_or_default());
+        return execute_postgres_batch(
+            database_url,
+            settings,
+            tls,
+            &prepared,
+            true,
+            false,
+            None,
+            None,
+        )
+        .map(|mut results| results.pop().map(|(result, _)| result).unwrap_or_default());
     }
     execute_mariadb_queries_with_options(
         database_url,
@@ -3753,6 +3779,7 @@ fn execute_postgres_batch(
     prepared: &[(String, Vec<Box<dyn PostgresToSql + Sync>>)],
     transaction: bool,
     read_only: bool,
+    max_rows: Option<usize>,
     max_cell_characters: Option<usize>,
 ) -> Result<Vec<(QueryResult, bool)>, DatabaseError> {
     let pool = postgres_pool(database_url, settings, tls)?;
@@ -3766,6 +3793,7 @@ fn execute_postgres_batch(
                 prepared,
                 transaction,
                 read_only,
+                max_rows,
                 max_cell_characters,
             )
         }
@@ -3777,6 +3805,7 @@ fn execute_postgres_batch(
                 prepared,
                 transaction,
                 read_only,
+                max_rows,
                 max_cell_characters,
             )
         }
@@ -3810,6 +3839,7 @@ fn execute_postgres_prepared_batch(
     prepared: &[(String, Vec<Box<dyn PostgresToSql + Sync>>)],
     transaction: bool,
     read_only: bool,
+    max_rows: Option<usize>,
     max_cell_characters: Option<usize>,
 ) -> Result<Vec<(QueryResult, bool)>, DatabaseError> {
     if transaction {
@@ -3840,7 +3870,13 @@ fn execute_postgres_prepared_batch(
             }
             return Err(postgres_driver_error(error));
         }
-        match execute_prepared_postgres_query(&mut *client, sql, params, max_cell_characters) {
+        match execute_prepared_postgres_query(
+            &mut *client,
+            sql,
+            params,
+            max_rows,
+            max_cell_characters,
+        ) {
             Ok(result) => results.push(result),
             Err(error) => {
                 if transaction {
@@ -3922,6 +3958,7 @@ fn execute_prepared_postgres_query(
     client: &mut impl postgres::GenericClient,
     sql: &str,
     params: &[Box<dyn PostgresToSql + Sync>],
+    max_rows: Option<usize>,
     max_cell_characters: Option<usize>,
 ) -> Result<(QueryResult, bool), DatabaseError> {
     let params = params
@@ -3946,6 +3983,9 @@ fn execute_prepared_postgres_query(
         let mut cells_truncated = false;
         let mut cells = Vec::new();
         while let Some(row) = rows.next().map_err(postgres_driver_error)? {
+            if max_rows.is_some_and(|max_rows| cells.len() >= max_rows) {
+                continue;
+            }
             let (row_cells, truncated) = postgres_row_cells(&row, max_cell_characters)?;
             cells_truncated |= truncated;
             cells.push(row_cells);
@@ -3979,6 +4019,46 @@ fn execute_prepared_postgres_query(
     }
 }
 
+#[derive(Debug)]
+struct PostgresUuidText(String);
+
+impl std::fmt::Display for PostgresUuidText {
+    fn fmt(&self, out: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        out.write_str(&self.0)
+    }
+}
+
+impl<'a> postgres::types::FromSql<'a> for PostgresUuidText {
+    fn from_sql(
+        _: &PostgresType,
+        raw: &'a [u8],
+    ) -> Result<Self, Box<dyn std::error::Error + Sync + Send>> {
+        if raw.len() != 16 {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                "invalid PostgreSQL UUID result width",
+            )
+            .into());
+        }
+        let hex = raw
+            .iter()
+            .map(|byte| format!("{byte:02x}"))
+            .collect::<String>();
+        Ok(Self(format!(
+            "{}-{}-{}-{}-{}",
+            &hex[..8],
+            &hex[8..12],
+            &hex[12..16],
+            &hex[16..20],
+            &hex[20..]
+        )))
+    }
+
+    fn accepts(ty: &PostgresType) -> bool {
+        *ty == PostgresType::UUID
+    }
+}
+
 fn postgres_column_type(ty: &PostgresType) -> QueryColumnType {
     match *ty {
         PostgresType::JSON | PostgresType::JSONB => QueryColumnType::Json,
@@ -3988,7 +4068,8 @@ fn postgres_column_type(ty: &PostgresType) -> QueryColumnType {
         PostgresType::NUMERIC => QueryColumnType::Decimal,
         PostgresType::DATE => QueryColumnType::Date,
         PostgresType::TIME => QueryColumnType::Time,
-        PostgresType::TIMESTAMPTZ => QueryColumnType::Timestamp,
+        PostgresType::TIMESTAMP | PostgresType::TIMESTAMPTZ => QueryColumnType::Timestamp,
+        PostgresType::UUID => QueryColumnType::Text,
         PostgresType::TEXT | PostgresType::VARCHAR | PostgresType::BPCHAR | PostgresType::NAME => {
             QueryColumnType::Text
         }
@@ -4037,7 +4118,8 @@ fn postgres_row_cells(
                             .map_err(postgres_driver_error)
                     }
                 }
-                PostgresType::DATE | PostgresType::TIME | PostgresType::TIMESTAMPTZ => value!(temporal::TemporalText),
+                PostgresType::DATE | PostgresType::TIME | PostgresType::TIMESTAMP | PostgresType::TIMESTAMPTZ => value!(temporal::TemporalText),
+                PostgresType::UUID => value!(PostgresUuidText),
                 PostgresType::TEXT | PostgresType::VARCHAR | PostgresType::BPCHAR | PostgresType::NAME => row
                     .try_get::<_, Option<&str>>(index)
                     .map(|value| value.map(|value| {
@@ -4278,14 +4360,23 @@ fn execute_mariadb_queries_with_options(
     let settings = MariaDbTimeouts::from_env()?;
     let tls = MariaDbTlsSettings::from_env()?;
     let pool = mariadb_pool(database_url, settings, tls)?;
-    execute_mariadb_queries_on_pool_options(&pool, settings, queries, transaction, read_only, None)
-        .map(|results| results.into_iter().map(|(result, _)| result).collect())
+    execute_mariadb_queries_on_pool_options(
+        &pool,
+        settings,
+        queries,
+        transaction,
+        read_only,
+        None,
+        None,
+    )
+    .map(|results| results.into_iter().map(|(result, _)| result).collect())
 }
 
 fn execute_mariadb_queries_with_cell_limit(
     database_url: &str,
     queries: &[Query],
     transaction: bool,
+    max_rows: Option<usize>,
     max_cell_characters: Option<usize>,
 ) -> Result<Vec<(QueryResult, bool)>, DatabaseError> {
     let settings = MariaDbTimeouts::from_env()?;
@@ -4297,6 +4388,7 @@ fn execute_mariadb_queries_with_cell_limit(
         queries,
         transaction,
         true,
+        max_rows,
         max_cell_characters,
     )
 }
@@ -4326,7 +4418,7 @@ impl MariaDbTransaction<'_> {
                 .map_err(mariadb_driver_error)?;
         }
         let (sql, parameters) = prepare_mariadb_query(query)?;
-        execute_prepared_mariadb_query(self.connection, &sql, parameters, None)
+        execute_prepared_mariadb_query(self.connection, &sql, parameters, None, None)
             .map(|(result, _)| result)
     }
 }
@@ -4405,7 +4497,7 @@ fn execute_mariadb_queries_on_pool(
     queries: &[Query],
     transaction: bool,
 ) -> Result<Vec<QueryResult>, DatabaseError> {
-    execute_mariadb_queries_on_pool_options(pool, settings, queries, transaction, false, None)
+    execute_mariadb_queries_on_pool_options(pool, settings, queries, transaction, false, None, None)
         .map(|results| results.into_iter().map(|(result, _)| result).collect())
 }
 
@@ -4415,6 +4507,7 @@ fn execute_mariadb_queries_on_pool_options(
     queries: &[Query],
     transaction: bool,
     read_only: bool,
+    max_rows: Option<usize>,
     max_cell_characters: Option<usize>,
 ) -> Result<Vec<(QueryResult, bool)>, DatabaseError> {
     let prepared = queries
@@ -4476,6 +4569,7 @@ fn execute_mariadb_queries_on_pool_options(
             &mut connection.connection,
             &sql,
             parameters,
+            max_rows,
             max_cell_characters,
         ) {
             Ok(result) => results.push(result),
@@ -4584,6 +4678,7 @@ fn execute_prepared_mariadb_query(
     connection: &mut Conn,
     sql: &str,
     parameters: Vec<Value>,
+    max_rows: Option<usize>,
     max_cell_characters: Option<usize>,
 ) -> Result<(QueryResult, bool), DatabaseError> {
     let result = connection
@@ -4606,6 +4701,9 @@ fn execute_prepared_mariadb_query(
     let mut cells_truncated = false;
     for row in result {
         let values = row.map_err(mariadb_driver_error)?.unwrap();
+        if max_rows.is_some_and(|max_rows| rows.len() >= max_rows) {
+            continue;
+        }
         nulls.push(
             values
                 .iter()
@@ -5503,7 +5601,7 @@ impl MariaDbInteractiveTransaction {
                 .map_err(mariadb_driver_error)?;
         }
         let (sql, parameters) = prepare_mariadb_query(query)?;
-        execute_prepared_mariadb_query(&mut connection.connection, &sql, parameters, None)
+        execute_prepared_mariadb_query(&mut connection.connection, &sql, parameters, None, None)
             .map(|(result, _)| result)
     }
 
