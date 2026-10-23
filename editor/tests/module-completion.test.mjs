@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { importSignature, importedModuleAlias, importedModuleCompletion } from "../src/module-completion.js";
+import { importPathCompletion, importSignature, importedModuleAlias, importedModuleCompletion } from "../src/module-completion.js";
 
 const modules = [
   { alias: "math", symbols: [
@@ -31,4 +31,38 @@ assert.deepEqual(importedModuleCompletion("empty", [{ alias: "empty", symbols: [
   options: [],
 }, "an imported module without resolved declarations must not fall back to global symbols");
 
-console.log("Zelyra namespace completion stays within imported module exports.");
+const projectFiles = [
+  "main.zyl",
+  "src/customer.zyl",
+  "src/customer_view.zyl",
+  "src/invoice.zyl",
+  "README.md",
+  "src/customer.zyl",
+];
+const importSource = 'import "src/c\nfn main() {}';
+assert.deepEqual(importPathCompletion(importSource, 'import "src/c'.length, projectFiles, "main.zyl"), {
+  from: 'import "'.length,
+  options: [
+    { label: "src/customer_view.zyl", type: "namespace", detail: "customer_view" },
+    { label: "src/customer.zyl", type: "namespace", detail: "customer" },
+  ],
+}, "import path completion only offers matching Zelyra source files and deduplicates the workspace tree");
+const emptyImport = 'import "';
+assert.deepEqual(importPathCompletion(emptyImport, emptyImport.length, projectFiles, "main.zyl").options.map((option) => option.label), [
+  "src/customer_view.zyl", "src/customer.zyl", "src/invoice.zyl",
+], "opening an import quote offers project source modules");
+const repeatedImport = 'import "src/customer.zyl" as customer\nimport "src/c';
+assert.deepEqual(importPathCompletion(repeatedImport, repeatedImport.length, projectFiles, "main.zyl").options.map((option) => option.label), [
+  "src/customer_view.zyl",
+], "already imported modules are excluded");
+const importLikeString = 'let text = "import \\"src/c';
+assert.equal(importPathCompletion(importLikeString, importLikeString.length, projectFiles, "main.zyl"), null,
+  "import-like text inside a string does not start path completion");
+const importLikeComment = '##\nimport "src/c';
+assert.equal(importPathCompletion(importLikeComment, importLikeComment.length, projectFiles, "main.zyl"), null,
+  "import-like text inside a block comment does not start path completion");
+const selfImport = 'import "src/customer.zyl" as customer\nimport "src/i';
+assert.equal(importPathCompletion(selfImport, selfImport.length, projectFiles, "src/invoice.zyl").options.some((option) => option.label === "src/invoice.zyl"), false,
+  "a source file cannot import itself");
+
+console.log("Zelyra import paths and namespace completion stay within project files and imported exports.");
