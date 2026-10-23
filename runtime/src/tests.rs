@@ -365,6 +365,30 @@ fn checked_program_exposes_source_mapped_inferred_expression_types() {
 }
 
 #[test]
+fn type_compatibility_matches_checker_relations_and_rejects_nested_unknowns() {
+    let expected_function = Type::Function {
+        params: vec![],
+        return_type: Box::new(Type::String),
+        capabilities: vec!["Database(read)".into()],
+    };
+    let pure_function = Type::Function {
+        params: vec![],
+        return_type: Box::new(Type::String),
+        capabilities: vec![],
+    };
+    assert!(types_compatible(&expected_function, &pure_function));
+    assert!(types_compatible(
+        &Type::Option(Box::new(Type::String)),
+        &Type::Option(Box::new(Type::String))
+    ));
+    assert!(!types_compatible(
+        &Type::Option(Box::new(Type::String)),
+        &Type::Option(Box::new(Type::Unknown))
+    ));
+    assert!(!types_compatible(&Type::Unknown, &Type::String));
+}
+
+#[test]
 fn inferred_expression_types_are_not_returned_for_invalid_programs() {
     let program = parse(&lex("fn main() { value: Int = \"wrong\" }").unwrap()).unwrap();
     let errors =

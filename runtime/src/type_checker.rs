@@ -19,6 +19,50 @@ pub(super) use type_relations::{
     singular_table_type, validate_type,
 };
 
+/// Return whether a known actual type is accepted by the type checker's
+/// expected-type relation. Unknown types are rejected so advisory editor
+/// features cannot present an unresolved expression as a type-safe choice.
+pub fn types_compatible(expected: &Type, actual: &Type) -> bool {
+    !contains_unknown_type(expected)
+        && !contains_unknown_type(actual)
+        && compatible(expected, actual)
+}
+
+fn contains_unknown_type(ty: &Type) -> bool {
+    match ty {
+        Type::Unknown => true,
+        Type::Option(inner) | Type::Array(inner) | Type::Set(inner) | Type::HttpResult(inner) => {
+            contains_unknown_type(inner)
+        }
+        Type::Result(ok, error) | Type::Map(ok, error) => {
+            contains_unknown_type(ok) || contains_unknown_type(error)
+        }
+        Type::Tuple(items) | Type::Applied { args: items, .. } => {
+            items.iter().any(contains_unknown_type)
+        }
+        Type::Function {
+            params,
+            return_type,
+            ..
+        } => params.iter().any(contains_unknown_type) || contains_unknown_type(return_type),
+        Type::Int
+        | Type::UInt
+        | Type::Float
+        | Type::Decimal
+        | Type::Bool
+        | Type::String
+        | Type::Char
+        | Type::Bytes
+        | Type::Json
+        | Type::Timestamp
+        | Type::Date
+        | Type::Time
+        | Type::Duration
+        | Type::Unit
+        | Type::Named(_) => false,
+    }
+}
+
 #[derive(Clone)]
 struct Variable {
     ty: Type,

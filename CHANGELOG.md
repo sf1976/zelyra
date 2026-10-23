@@ -1,5 +1,11 @@
 ## Unreleased
 
+- Use compiler-inferred local initializer types and the compiler's known-type
+  compatibility rule for expression-hole suggestions; never advertise values
+  with unknown types. / Compilerinferenz für lokale Initialisierungen und die
+  bekannte Typkompatibilitätsregel auch für Ausdruckslücken verwenden; Werte
+  mit unbekanntem Typ nie als Vorschlag anbieten.
+
 ## 1.2.55 — Zelyra Studio und professionelles UI-Designsystem
 
 - Refine the default Zelyra UI theme and version its generated design-system
