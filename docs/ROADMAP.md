@@ -645,8 +645,9 @@ The initial documented comparison and its test evidence are in the
   schema changes.
 - [ ] **1.3.0 — canonical structure and experimental Bytecode:** Complete the
   opt-in versioned project layout (`routes/`, `domain/`, `schema/`, `public/`,
-  `assets/`, and `plugins/`), architecture checks, and safe layout migration
-  preview. Keep Bytecode opt-in and fail-closed; AST remains the reference and
+  and `assets/`), architecture checks, and safe layout migration preview.
+  `plugins/` remains deferred until a concrete secured loading format exists.
+  Keep Bytecode opt-in and fail-closed; AST remains the reference and
   default for `run`, `serve`, and declared tasks. Expand the supported Bytecode
   slice, differential checks, and security evidence incrementally. The decision
   to change the default is a separate release gate for 1.5.0.
@@ -658,11 +659,11 @@ The initial documented comparison and its test evidence are in the
 
 - [🧪] **1.3.0 — ARCH-001, SQL writes in API and form routes:** For `api` handlers and form/CRUD actions in `routes/`, `strict_architecture` follows statically resolved Zelyra function calls through all areas until the intended `domain/` boundary, including project-entry and package helpers. Write SQL reports `E-ARCH-002`; SQL that cannot be safely classified fails closed with `E-ARCH-003` and a source location. `E-ARCH-001` remains the declaration-placement rule and now points to the offending declaration. Put direct writes in callable `domain/` functions. Positive and negative CLI integration tests cover direct writes, route-local helpers, domain calls, read queries, form/CRUD actions, and source locations. Dynamic or unresolved calls remain an open boundary.
 
-- [🧪] **1.3.0 — source locations in the layout migration preview:** `migrate-layout --check --format json` now includes a stable rule identifier per file and, when a declaration or parse error is available, its start/end offsets, line, and column. Candidate destination, status, and reason remain present; the preview remains read-only. Findings are still file-level rather than separate diagnostics for every declaration.
+- [x] **1.3.0 — declaration-level locations in the layout migration preview:** `migrate-layout --check --format json` uses schema version 2 and includes each parsed declaration's kind, name, destination, status, rule, reason, and source offsets/line/column. Mixed files show a destination for each declaration; declarations found in the wrong standard area receive a manual-review finding. The file summary remains available, malformed non-entry files still produce a source-located review item, and preview remains deterministic and read-only. CLI unit and machine-interface tests cover ordering, mixed declarations, wrong-area placement, and JSON output.
 
 - [🧪] **1.3.0 — HTTP-independent domain modules:** `strict_architecture` reports direct imports of modules from `routes/` inside `domain/` as `E-ARCH-004` at the import site. Domain functions are called with business inputs instead of depending on route modules. Types for incoming requests, responses, sessions, or cookies are not currently exposed as usable Zelyra APIs, so deeper type checks for these values are not yet possible.
 
-- [🧪] **1.3.0 — Laravel application acceptance check:** A read-only run against `/opt/siedelmann-laravel/app` exposed a generator defect: selected customer/invoice tables omitted scalar foreign-key targets such as `tenants`, leaving the generated Zelyra schema uncompilable. Selection now follows both typed relations and `references_table` foreign keys. The selected `customers`, `invoices`, and `invoice_items` slice now includes `customer_groups`, `document_templates`, `suppliers`, `tenants`, and `users` and passes `zelyra check`. This does not prove that workflows, authorization, or tenant security have been ported.
+- [🧪] **1.3.0 — Laravel application acceptance check:** A read-only run against `/opt/siedelmann-laravel/app` exposed a generator defect: selected customer/invoice tables omitted scalar foreign-key targets such as `tenants`, leaving the generated Zelyra schema uncompilable. Selection now follows both typed relations and `references_table` foreign keys. The selected `customers`, `invoices`, and `invoice_items` slice now includes `customer_groups`, `document_templates`, `suppliers`, `tenants`, and `users` and passes `zelyra check`. A fresh static analysis on 2026-10-24 reports 2,279 findings (1,326 manual, 70 unresolved, 883 partial); the requested schema slice regenerated with eight dependency-closed tables and still passes `zelyra check`. Neither result proves workflow, authorization, tenant-security, or full feature parity. No PHP, environment files, database, or application rows were accessed in this run.
 
 - [🗺️] **1.5.0 — Bytecode as a candidate default backend:** Keep AST as the
   default through this milestone; MIR and Bytecode remain explicitly selectable
@@ -952,17 +953,17 @@ Verify the current parser, module resolution, project configuration, and
 compatibility behavior before changing syntax. See the detailed
 [project-layout plan](release-plans/1.3.0-project-layout.en.md).
 
-- [ ] **1.1.5 — Inventory and architecture contract:** Inventory project files,
+- [x] **1.1.5 — Inventory and architecture contract:** Inventory project files,
   `zelyra.toml`, `use`/package resolution, `zelyra new`, build/bundle paths,
   and route/SQL/domain boundaries. Define `routes/`, `domain/`, `schema/`,
   `public/`, `assets/`, and `plugins/` responsibilities without implicitly migrating
   existing projects.
-- [ ] **1.2.0 — Opt-in profile and module foundation:** Implement a versioned,
+- [x] **1.2.0 — Opt-in profile and module foundation:** Implement a versioned,
   backward-compatible profile and explicit namespace resolution where they fit
   the existing module architecture. Let `zelyra new` create it as an explicit
   template. Avoid implicit autoloading until import graphs, ambiguity, and
   diagnostics are specified.
-- [ ] **1.3.0 — Checker and safe migration:** Add source-mapped architecture
+- [🧪] **1.3.0 — Checker and safe migration:** Add source-mapped architecture
   rules for route mutations, HTTP-independent domain code, and declared state
   machines. Initially, `migrate-layout --check` reports deterministic
   findings and suggestions only; writes require preview, conflict checks, and

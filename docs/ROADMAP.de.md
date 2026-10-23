@@ -705,8 +705,9 @@ Der erste dokumentierte Abgleich und seine Testbelege stehen im
   Metadatenausschnitt.
 - [ ] **1.3.0 — kanonische Struktur und experimenteller Bytecode:** Das
   optionale, versionierte Projektlayout (`routes/`, `domain/`, `schema/`,
-  `public/`, `assets/`, `plugins/`), Architekturprüfungen und eine sichere
-  Migrationsvorschau abschließen. Bytecode bleibt optional und fail-closed;
+  `public/` und `assets/`), Architekturprüfungen und eine sichere
+  Migrationsvorschau abschließen. `plugins/` bleibt zurückgestellt, bis ein
+  konkretes, abgesichertes Ladeformat besteht. Bytecode bleibt optional und fail-closed;
   AST bleibt Referenz und Standard für `run`, `serve` und deklarierte Tasks.
   Den Bytecode-Ausschnitt, seine Differentialtests und Sicherheitsprüfungen
   schrittweise erweitern. Die Entscheidung über einen Standardwechsel ist ein
@@ -719,11 +720,11 @@ Der erste dokumentierte Abgleich und seine Testbelege stehen im
 
 - [🧪] **1.3.0 — ARCH-001, schreibendes SQL in API- und Formularrouten:** Bei `api`-Handlern sowie Form-/CRUD-Aktionen in `routes/` verfolgt `strict_architecture` statisch aufgelöste Zelyra-Funktionsaufrufe durch alle Bereiche bis zur vorgesehenen `domain/`-Grenze, auch über den Projekteinstieg und Pakete. Schreibendes SQL wird mit `E-ARCH-002`, nicht sicher klassifizierbares SQL fail-closed mit `E-ARCH-003` und Quellposition gemeldet; `E-ARCH-001` bleibt die Deklarationsplatzierungsregel und zeigt jetzt ebenfalls auf die betroffene Deklaration. Direkte Schreibzugriffe gehören in `domain/`, die von Routen aufgerufen werden dürfen. Positive und negative CLI-Integrationstests decken direkten Schreibzugriff, lokale Hilfsfunktionen, Domain-Aufrufe, lesende Abfragen, Form-/CRUD-Aktionen und Quellpositionen ab. Dynamische/unaufgelöste Aufrufe bleiben eine offene Grenze.
 
-- [🧪] **1.3.0 — Quellpositionen in der Layout-Migrationsvorschau:** `migrate-layout --check --format json` liefert je Datei jetzt zusätzlich eine stabile Regelkennung und – sofern eine Deklaration oder ein Parsefehler vorliegt – Start-/Endoffset, Zeile und Spalte. Zielvorschlag, Status und Begründung bleiben erhalten; die Vorschau ändert weiterhin keine Dateien. Die Vorschau ist dateibezogen und ersetzt noch keine separate Diagnose für jede Deklaration.
+- [x] **1.3.0 — Quellpositionen je Deklaration in der Layout-Migrationsvorschau:** `migrate-layout --check --format json` verwendet Schema-Version 2 und enthält für jede geparste Deklaration Typ, Name, Zielverzeichnis, Status, Regel, Begründung sowie Quelloffsets/Zeile/Spalte. Bei gemischten Dateien wird das Ziel je Deklaration ausgewiesen; Deklarationen im falschen Standardbereich erhalten einen Prüfhinweis. Die Dateizusammenfassung bleibt verfügbar, fehlerhafte Nicht-Einstiegsdateien ergeben weiterhin einen quellbezogenen Prüfhinweis, und die Vorschau bleibt deterministisch und schreibgeschützt. CLI-Unit- und Schnittstellentests prüfen Reihenfolge, gemischte Deklarationen, falsche Platzierung und JSON-Ausgabe.
 
 - [🧪] **1.3.0 — HTTP-unabhängige Domain-Module:** `strict_architecture` meldet direkte Importe von Modulen aus `routes/` in `domain/` mit `E-ARCH-004` an der Importstelle. Domain-Funktionen werden dadurch über ihre fachlichen Eingaben aufgerufen statt an die Route gekoppelt. Typen für eingehende Requests, Responses, Sessions oder Cookies existieren aktuell nicht als benutzbare Zelyra-API; eine weitergehende Typprüfung dieser Werte ist daher noch nicht möglich.
 
-- [🧪] **1.3.0 — Laravel-Anwendungsabgleich:** Ein read-only Lauf gegen `/opt/siedelmann-laravel/app` hat einen konkreten Generatorfehler offengelegt: ausgewählte Kunden-/Rechnungstabellen ließen skalare Fremdschlüsselziele wie `tenants` aus, wodurch das generierte Zelyra-Schema nicht kompilierte. Die Auswahl verfolgt jetzt sowohl typisierte Beziehungen als auch `references_table`-Fremdschlüssel. Der ausgewählte Ausschnitt für `customers`, `invoices` und `invoice_items` enthält nun `customer_groups`, `document_templates`, `suppliers`, `tenants` und `users` und besteht `zelyra check`. Geschäftsabläufe, Autorisierung und Mandantensicherheit sind damit nicht als portiert belegt.
+- [🧪] **1.3.0 — Laravel-Anwendungsabgleich:** Ein read-only Lauf gegen `/opt/siedelmann-laravel/app` hat einen konkreten Generatorfehler offengelegt: ausgewählte Kunden-/Rechnungstabellen ließen skalare Fremdschlüsselziele wie `tenants` aus, wodurch das generierte Zelyra-Schema nicht kompilierte. Die Auswahl verfolgt jetzt sowohl typisierte Beziehungen als auch `references_table`-Fremdschlüssel. Der ausgewählte Ausschnitt für `customers`, `invoices` und `invoice_items` enthält nun `customer_groups`, `document_templates`, `suppliers`, `tenants` und `users` und besteht `zelyra check`. Eine neue statische Analyse vom 24.10.2026 zählt 2.279 Befunde (1.326 manuell zu prüfen, 70 ungelöst, 883 teilweise unterstützt); der angeforderte Schemaschnitt wurde mit acht abhängigen Tabellen erneut erzeugt und besteht weiterhin `zelyra check`. Das belegt weder vollständige Geschäftsabläufe noch Autorisierung, Mandantensicherheit oder Funktionsparität. PHP, Umgebungsdateien, Datenbank und Anwendungsdaten wurden bei diesem Lauf nicht gelesen.
 
 - [🗺️] **1.5.0 — Bytecode als mögliches Standard-Backend:** AST bleibt bis dahin
   Standard; MIR und Bytecode bleiben ausdrücklich auswählbar und experimentell.
@@ -959,17 +960,17 @@ keine Behauptung, dass Manifestfelder, Autoloading, Scheduler-Syntax oder
 müssen Parser, Modulauflösung, Projektkonfiguration und Kompatibilität geprüft
 werden. Details stehen im [Projektlayout-Arbeitsplan](release-plans/1.3.0-project-layout.de.md).
 
-- [ ] **1.1.5 — Ist-Aufnahme und Architekturvertrag:** Projektdateien,
+- [x] **1.1.5 — Ist-Aufnahme und Architekturvertrag:** Projektdateien,
   `zelyra.toml`, `use`-/Paketauflösung, `zelyra new`, Build-/Bundlepfade sowie
   Route-, SQL- und Domain-Grenzen inventarisieren. Zuständigkeiten für
   `routes/`, `domain/`, `schema/`, `public/`, `assets/` und `plugins/` festlegen, ohne
   bestehende Projekte ungefragt umzustellen.
-- [ ] **1.2.0 — Opt-in-Profil und modulare Grundlage:** Ein versionsmarkiertes,
+- [x] **1.2.0 — Opt-in-Profil und modulare Grundlage:** Ein versionsmarkiertes,
   abwärtskompatibles Profil samt Validierung und expliziter Namespace-Auflösung
   implementieren, soweit es zur vorhandenen Modularchitektur passt.
   `zelyra new` kann es als ausdrückliche Vorlage erzeugen. Kein stilles
   Autoloading, bevor Importgraph, Mehrdeutigkeiten und Diagnostik feststehen.
-- [ ] **1.3.0 — Prüfer und sichere Migration:** Quellgebundene Regeln für
+- [🧪] **1.3.0 — Prüfer und sichere Migration:** Quellgebundene Regeln für
   Route-Schreibzugriffe, HTTP-unabhängige Domänen und deklarierte
   Zustandsautomaten umsetzen. `migrate-layout --check` liefert zunächst nur
   deterministische Funde und Vorschläge; Schreibmodus braucht Vorschau,
