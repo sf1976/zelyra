@@ -7,10 +7,11 @@
   "license": "MIT OR Apache-2.0",
   "scripts": {
     "build": "esbuild src/theme.js --bundle --minify --outfile=../cli/assets/theme.js && esbuild src/editor.js --bundle --minify --outfile=../cli/assets/editor.js && esbuild src/editor.css --bundle --minify --outfile=../cli/assets/editor.css",
-    "test": "npm run test:ui-metadata && npm run test:language && npm run test:sql-completion",
+    "test": "npm run test:ui-metadata && npm run test:language && npm run test:sql-completion && npm run test:module-completion",
     "test:ui-metadata": "node tests/zelyra-ui-metadata.test.mjs",
     "test:language": "node tests/zelyra-language.test.mjs",
     "test:sql-completion": "node tests/sql-completion.test.mjs",
+    "test:module-completion": "node tests/module-completion.test.mjs",
     "test:browser": "npm run test:browser-hover && npm run test:browser-pdf && npm run test:browser-rename && npm run test:browser-canvas && npm run test:browser-capability && npm run test:browser-runtime-budget && npm run test:browser-capabilities && npm run test:browser-external-change && npm run test:browser-pipeline && npm run test:browser-runtime && npm run test:browser-semantic && npm run test:browser-module-settings && npm run test:browser-console",
     "test:browser-hover": "node tests/studio-hover-browser-e2e.mjs",
     "test:browser-pdf": "node tests/studio-pdf-browser-e2e.mjs",

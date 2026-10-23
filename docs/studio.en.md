@@ -82,7 +82,10 @@ Project-wide free-text search remains a separate tool.
 
 Completion uses declarations resolved from the active module and its imports.
 After `import "src/customer.zyl" as customer`, **Ctrl+Space** offers exported
-names as `customer::Name`. While entering an import path, Studio suggests
+names as `customer::Name`; after `customer::`, suggestions are limited to
+public declarations from that module. The current editor buffer is used, so
+new or changed imports do not need to be saved first. Enum namespaces keep
+their normal completion behavior. While entering an import path, Studio suggests
 matching `.zyl` files from the project. SQL blocks offer SQL keywords and
 declared tables. Within a SQL body, completion also offers declared columns
 after a table reference or alias, and table names after `FROM` or `JOIN`. These

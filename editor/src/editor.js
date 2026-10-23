@@ -20,6 +20,7 @@ import {
 } from "./zelyra-ui-metadata.js";
 import { zelyraKeywords as keywords, zelyraLanguage } from "./zelyra-language.js";
 import { sqlBodyPrefix, sqlCompletionOptions } from "./sql-completion.js";
+import { importSignature, importedModuleAlias, importedModuleCompletion } from "./module-completion.js";
 import {
   crosshairCursor,
   drawSelection,
@@ -780,6 +781,7 @@ function renderTabs() {
 function completionSource(context) {
   const word = context.matchBefore(/[\w]+/);
   if (!word && !context.explicit) return null;
+  const completionPath = activePath;
   const source = context.state.doc.toString();
   if (word?.text === "_" && activePath?.endsWith(".zyl")) {
     const path = activePath;
@@ -808,27 +810,35 @@ function completionSource(context) {
   }
   const from = word ? word.from : context.pos;
   const sqlQuery = activePath?.endsWith(".zyl") ? sqlBodyPrefix(source, context.pos) : null;
+  const namespaceAlias = sqlQuery === null
+    ? importedModuleAlias(source.slice(0, from), source)
+    : null;
   const sqlKeywords = ["SELECT", "FROM", "WHERE", "JOIN", "ON", "ORDER BY", "GROUP BY", "LIMIT", "INSERT INTO", "UPDATE", "SET", "VALUES", "DELETE FROM"];
   const basicOptions = sqlQuery === null
     ? [...[...keywords].map((label) => ({ label, type: "keyword" })), { label: "main", type: "function", detail: t("symbolEntrypoint") }]
     : sqlKeywords.map((label) => ({ label, type: "keyword" }));
   const projectOptions = Promise.all([
-    sqlQuery === null ? loadProjectSymbols(activePath) : Promise.resolve([]),
-    sqlQuery === null ? loadLocalSymbols(activePath, source, context.pos) : Promise.resolve([]),
-    sqlQuery === null ? Promise.resolve(null) : sqlCompletionMap(activePath, source, context),
+    sqlQuery === null ? loadProjectSymbols(completionPath, namespaceAlias === null ? undefined : source) : Promise.resolve({ symbols: [], modules: [] }),
+    sqlQuery === null ? loadLocalSymbols(completionPath, source, context.pos) : Promise.resolve([]),
+    sqlQuery === null ? Promise.resolve(null) : sqlCompletionMap(completionPath, source, context),
   ]).then(([symbols, locals, sqlMap]) => {
+    if (activePath !== completionPath || editor?.state.doc.toString() !== source) return null;
+    const namespaceCompletion = sqlQuery === null
+      ? importedModuleCompletion(namespaceAlias, symbols.modules || [])
+      : null;
     const localOptions = [...new Map(locals.map((item) => [item.label, item])).values()].map((item) => ({
       label: item.label,
       type: "variable",
       detail: `${t(item.detail === "parameter" ? "localParameter" : item.detail === "loop value" ? "loopValue" : item.detail === "match value" ? "matchValue" : "localValue")}${item.valueType ? ` · ${item.valueType}` : ""}`,
     }));
     const localNames = new Set(localOptions.map((item) => item.label));
-    const projectOptions = symbols.filter((symbol) => !localNames.has(symbol.label)).map((symbol) => ({
+    const projectOptions = (symbols.symbols || []).filter((symbol) => !localNames.has(symbol.label)).map((symbol) => ({
       label: symbol.label,
       type: symbol.kind,
       detail: symbol.detail ? t(`symbol${symbol.detail[0].toUpperCase()}${symbol.detail.slice(1)}`) : t("symbolProject"),
     }));
     const sqlOptions = sqlQuery === null ? [] : sqlCompletionOptions(sqlQuery, sqlMap, t("symbolTable"));
+    if (namespaceCompletion) return namespaceCompletion.options;
     if (!localNames.has("main") && !projectOptions.some((item) => item.label === "main")) {
       projectOptions.push({ label: "main", type: "function", detail: t("symbolEntrypoint") });
     }
@@ -836,11 +846,13 @@ function completionSource(context) {
   });
   const fast = { from, options: basicOptions };
   const complete = projectOptions.then((options) => {
+    if (!options) return null;
+    if (namespaceAlias !== null) return { from, options };
     const merged = new Map(basicOptions.map((item) => [item.label, item]));
     for (const item of options) merged.set(item.label, item);
     return { from, options: [...merged.values()] };
   });
-  if (sqlQuery !== null) return complete;
+  if (sqlQuery !== null || namespaceAlias !== null) return complete;
   const fallback = new Promise((resolve) => setTimeout(() => resolve(fast), 300));
   return Promise.race([complete, fallback]);
 }
@@ -906,20 +918,30 @@ function openSemanticHover(view) {
   return true;
 }
 
-function loadProjectSymbols(path) {
-  if (!path?.endsWith(".zyl")) return Promise.resolve([]);
+function loadProjectSymbols(path, sourceOverride) {
+  if (!path?.endsWith(".zyl")) return Promise.resolve({ symbols: [], modules: [] });
   const cached = symbolCache.get(path);
-  if (cached && cached.expires > Date.now()) return Promise.resolve(cached.symbols);
-  if (symbolRequests.has(path)) return symbolRequests.get(path);
-  const request = api(`symbols?path=${encodeURIComponent(path)}`)
-    .then((result) => result.symbols || [])
-    .catch(() => [])
+  const sourceKey = sourceOverride === undefined ? undefined : importSignature(sourceOverride);
+  if (cached && cached.expires > Date.now() && cached.source === sourceKey) return Promise.resolve(cached.symbols);
+  const requestKey = `${path}\0${sourceKey ?? ""}`;
+  if (symbolRequests.has(requestKey)) return symbolRequests.get(requestKey);
+  const request = (sourceOverride === undefined
+    ? api(`symbols?path=${encodeURIComponent(path)}`)
+    : api("symbols", {
+      method: "POST",
+      body: JSON.stringify({ path, source: sourceOverride }),
+    }))
+    .then((result) => ({ symbols: result.symbols || [], modules: result.modules || [] }))
+    .catch(() => ({ symbols: [], modules: [] }))
     .then((symbols) => {
-      symbolCache.set(path, { symbols, expires: Date.now() + 2_000 });
-      symbolRequests.delete(path);
+      const currentSourceKey = activePath === path && editor ? importSignature(editor.state.doc.toString()) : null;
+      if (sourceOverride === undefined || currentSourceKey === sourceKey) {
+        symbolCache.set(path, { symbols, source: sourceKey, expires: Date.now() + 2_000 });
+      }
+      symbolRequests.delete(requestKey);
       return symbols;
     });
-  symbolRequests.set(path, request);
+  symbolRequests.set(requestKey, request);
   return request;
 }
 

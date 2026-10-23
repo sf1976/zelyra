@@ -25,7 +25,7 @@ let startupTimer;
 try {
   await mkdir(join(project, "src"));
   await writeFile(join(project, "main.zyl"), main);
-  await writeFile(join(project, "src/math.zyl"), "pub fn answer() -> Int requires { 1 < 2 } { return 42 }\npub fn dynamic(value: Int) requires { value >= 0 } {}\n");
+  await writeFile(join(project, "src/math.zyl"), "pub fn answer() -> Int requires { 1 < 2 } { return 42 }\npub fn dynamic(value: Int) requires { value >= 0 } {}\nfn private_helper() {}\n");
   const port = await new Promise((resolvePort, reject) => {
     const socket = createServer();
     socket.once("error", reject);
@@ -119,6 +119,21 @@ try {
   }
   await page.locator('.tree-item.file[title="main.zyl"]').click();
   await page.locator(".cm-content[contenteditable=true]").waitFor();
+  await page.locator(".cm-content[contenteditable=true]").click();
+  await page.keyboard.press("Control+A");
+  await page.keyboard.insertText('import "src/math.zyl" as math\nfn main() { let value = math::');
+  await page.keyboard.press("Escape");
+  await page.keyboard.press("Control+Space");
+  const moduleCompletion = page.locator(".cm-tooltip-autocomplete");
+  await moduleCompletion.waitFor();
+  const memberLabels = await moduleCompletion.locator(".cm-completionLabel").allTextContents();
+  assert.ok(memberLabels.includes("answer"), `imported public member missing: ${memberLabels}`);
+  assert.ok(memberLabels.includes("dynamic"), `second imported public member missing: ${memberLabels}`);
+  assert.ok(!memberLabels.includes("private_helper"), `private module member leaked: ${memberLabels}`);
+  assert.ok(!memberLabels.includes("main"), `global suggestions leaked into namespace completion: ${memberLabels}`);
+  await page.keyboard.press("Escape");
+  await page.keyboard.press("Control+A");
+  await page.keyboard.insertText(main);
   const direct = await page.evaluate(async ({ token, main }) => {
     const offset = main.indexOf("answer") + 1;
     const response = await fetch("/__zelyra/editor/api/semantic", {

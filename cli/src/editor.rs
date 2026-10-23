@@ -574,6 +574,18 @@ fn editor_response(
             editor_symbols(
                 state,
                 values.get("path").map(String::as_str).unwrap_or("main.zyl"),
+                None,
+            )
+        }
+        ("POST", "symbols") => {
+            let value = parse_json_body(&request.body)?;
+            editor_symbols(
+                state,
+                value
+                    .get("path")
+                    .and_then(Value::as_str)
+                    .unwrap_or("main.zyl"),
+                value.get("source").and_then(Value::as_str),
             )
         }
         ("POST", "locals") => local_editor_symbols(state, &parse_json_body(&request.body)?),
@@ -875,6 +887,7 @@ fn semantic_editor_query(
 fn editor_symbols(
     state: &EditorState,
     relative_entry: &str,
+    source_override: Option<&str>,
 ) -> Result<(u16, &'static str, String), (u16, String)> {
     let entry = safe_editor_path(&state.root, "main.zyl", false)?;
     let requested = safe_editor_path(&state.root, relative_entry, false)?;
@@ -889,33 +902,55 @@ fn editor_symbols(
             "project symbols are unavailable until the imported source parses".into(),
         )
     })?;
-    let active_source = fs::read_to_string(&requested)
-        .map_err(|_| (415, "active Zelyra source is not UTF-8 text".into()))?;
-    let active_tokens = lex(&active_source).map_err(|_| {
-        (
-            422,
-            "active source declarations are not parseable yet".into(),
-        )
-    })?;
-    let active_program = parse(&active_tokens).map_err(|_| {
-        (
-            422,
-            "active source declarations are not parseable yet".into(),
-        )
-    })?;
+    let active_source = match source_override {
+        Some(source) => source.to_owned(),
+        None => fs::read_to_string(&requested)
+            .map_err(|_| (415, "active Zelyra source is not UTF-8 text".into()))?,
+    };
+    let active_program = lex(&active_source)
+        .ok()
+        .and_then(|tokens| parse(&tokens).ok())
+        .or_else(|| editor_import_header_program(&active_source))
+        .ok_or_else(|| {
+            (
+                422,
+                "active source declarations are not parseable yet".into(),
+            )
+        })?;
     let imported_paths = active_program
         .imports
         .iter()
         .map(|import| import.path.as_str())
         .collect::<BTreeSet<_>>();
     let mut project_sources = loaded.sources.clone();
-    if !project_sources
-        .iter()
-        .any(|source| source.path == relative_path)
+    if let Some(source) = project_sources
+        .iter_mut()
+        .find(|source| source.path == relative_path)
     {
+        source.text.clone_from(&active_source);
+    } else {
         project_sources.push(project::ProjectSource {
             path: relative_path.clone(),
-            text: active_source,
+            text: active_source.clone(),
+        });
+    }
+    for import in &active_program.imports {
+        if project_sources
+            .iter()
+            .any(|source| source.path == import.path)
+            || import.path.starts_with("pkg:")
+        {
+            continue;
+        }
+        let Ok(path) = safe_editor_path(&state.root, &import.path, false) else {
+            continue;
+        };
+        let Ok(text) = fs::read_to_string(&path) else {
+            continue;
+        };
+        project_sources.push(project::ProjectSource {
+            path: import.path.clone(),
+            text,
         });
     }
     let mut symbols = Vec::new();
@@ -924,10 +959,12 @@ fn editor_symbols(
         source.path == relative_path || imported_paths.contains(source.path.as_str())
     }) {
         let is_local = source.path == relative_path;
-        let tokens = lex(&source.text)
-            .map_err(|_| (422, "project declarations are not parseable yet".into()))?;
-        let parsed = parse(&tokens)
-            .map_err(|_| (422, "project declarations are not parseable yet".into()))?;
+        let Ok(tokens) = lex(&source.text) else {
+            continue;
+        };
+        let Ok(parsed) = parse(&tokens) else {
+            continue;
+        };
         for item in &parsed.functions {
             if is_local || item.is_public {
                 push_editor_symbol(
@@ -1037,11 +1074,63 @@ fn editor_symbols(
             .iter()
             .map(|item| json!({"label": item.name, "kind": "class", "detail": "table"})),
     );
+    let modules = active_program
+        .imports
+        .iter()
+        .map(|import| {
+            let members = symbols
+                .iter()
+                .filter(|symbol| symbol["path"] == import.path)
+                .map(|symbol| {
+                    json!({
+                        "label": symbol["label"],
+                        "kind": symbol["kind"],
+                        "detail": symbol["detail"],
+                    })
+                })
+                .collect::<Vec<_>>();
+            json!({"alias": import.alias, "path": import.path, "symbols": members})
+        })
+        .collect::<Vec<_>>();
     Ok((
         200,
         "application/json; charset=utf-8",
-        json!({"symbols": symbols}).to_string(),
+        json!({"symbols": symbols, "modules": modules}).to_string(),
     ))
+}
+
+fn editor_import_header_program(source: &str) -> Option<Program> {
+    let mut imports = Vec::new();
+    let mut in_block_comment = false;
+    for line in source.lines() {
+        let trimmed = line.trim();
+        if in_block_comment {
+            if trimmed == "##" {
+                in_block_comment = false;
+            }
+            continue;
+        }
+        if trimmed == "##" {
+            in_block_comment = true;
+            continue;
+        }
+        if trimmed.is_empty() || trimmed.starts_with('#') || trimmed.starts_with("//") {
+            continue;
+        }
+        if trimmed
+            .strip_prefix("import")
+            .is_some_and(|rest| rest.starts_with(char::is_whitespace))
+        {
+            imports.push(line);
+            continue;
+        }
+        break;
+    }
+    let header = format!(
+        "{}\nfn __zelyra_studio_completion_context() {{}}\n",
+        imports.join("\n")
+    );
+    parse(&lex(&header).ok()?).ok()
 }
 
 fn editor_project_map(
@@ -7116,7 +7205,7 @@ fn main() {}
             "pub class Customer { id: Int }\nstruct Invoice { id: Int }\nfn main() {}\nfn calculate_total() -> Int { return 1 }\n",
         )
         .expect("write project declarations");
-        let response = editor_symbols(&state, "main.zyl").expect("load project symbols");
+        let response = editor_symbols(&state, "main.zyl", None).expect("load project symbols");
         let payload: Value = serde_json::from_str(&response.2).expect("decode symbols");
         let names = payload["symbols"]
             .as_array()
@@ -7134,6 +7223,41 @@ fn main() {}
             .expect("public class should be available to Studio navigation");
         assert_eq!(customer["kind"], "class");
         assert_eq!(customer["detail"], "class");
+        let _ = fs::remove_dir_all(state.root.clone());
+    }
+
+    #[test]
+    fn editor_symbols_resolve_import_namespace_members_from_unsaved_source() {
+        let state = project();
+        fs::create_dir_all(state.root.join("src")).unwrap();
+        fs::write(
+            state.root.join("src/math.zyl"),
+            "pub fn add(left: Int, right: Int) -> Int { return left + right }\nfn private_helper() -> Int { return 0 }\n",
+        )
+        .unwrap();
+        let overlay = "# project helper\n// module import\nimport \"src/math.zyl\" as arithmetic\nfn main() { let total = arithmetic:: }\n";
+        let response = editor_symbols(&state, "main.zyl", Some(overlay))
+            .expect("load namespace members from unsaved imports");
+        let payload: Value = serde_json::from_str(&response.2).unwrap();
+        assert_eq!(payload["modules"].as_array().unwrap().len(), 1);
+        assert_eq!(payload["modules"][0]["alias"], "arithmetic");
+        let names = payload["modules"][0]["symbols"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter_map(|item| item["label"].as_str())
+            .collect::<Vec<_>>();
+        assert_eq!(names, ["add"]);
+        assert!(!payload["symbols"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|item| item["label"] == "private_helper"));
+        assert_eq!(
+            fs::read_to_string(state.root.join("main.zyl")).unwrap(),
+            "fn main() {}\n",
+            "completion must not save or mutate the user's file"
+        );
         let _ = fs::remove_dir_all(state.root.clone());
     }
 
