@@ -149,6 +149,39 @@ project. Machine API/JSON contracts and compiler diagnostics remain language
 neutral or in their defined technical language; the UI locale does not change
 them.
 
+## Optional AI suggestions in Zelyra Studio
+
+The IDE can use an OpenAI-compatible chat-completions endpoint for suggestions
+requested manually for Zelyra source. The feature stays disabled unless both
+an endpoint and model are configured. It sends no code automatically, makes no
+background requests, and never applies generated changes. Studio displays the
+destination host, model, and exact selected source before sending. Only that
+selection and the instruction are transmitted; the whole project is not sent.
+Selection is limited to 16 KiB and the instruction to 2 KiB. The provider
+receives the selected source only after the explicit **Send selection to
+provider** click.
+
+| Variable | Default | Classification and use |
+|---|---|---|
+| `ZELYRA_STUDIO_AI_ENDPOINT` | unset | Not a secret. OpenAI-compatible URL ending in `/chat/completions`; HTTPS required, HTTP allowed only for loopback. |
+| `ZELYRA_STUDIO_AI_MODEL` | unset | Not a secret. Model identifier for the configured endpoint. |
+| `ZELYRA_STUDIO_AI_API_KEY` | unset | Secret. Optional bearer key; keep it in `.env` or the process environment and never commit it. |
+
+Precedence is process environment → project `.env`. There is no
+`zelyra.toml` setting and no default provider. Configure endpoint and model
+together to enable the feature; set the key only when the chosen provider
+requires one. Affected command: `zelyra editor`. The Studio API contacts the
+configured endpoint only after the Send button is clicked, follows no
+redirects, and never displays credentials. Provider error bodies are not
+forwarded to the browser.
+
+The settings support local services such as Ollama or a self-hosted compatible
+endpoint; loopback HTTP is allowed for these. Public services require HTTPS.
+Tests cover URL rules, size limits, payload content, and that only explicitly
+selected source is sent for a suggestion. The compiler and tests remain
+authoritative; AI output is untrusted and is never inserted into the editor
+automatically.
+
 ## Application email in 0.9.5
 
 The Zelyra email API uses the same SMTP variables as password recovery. Set

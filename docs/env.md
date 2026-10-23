@@ -161,6 +161,40 @@ aus einem Projekt. Maschinelle API-/JSON-Verträge und Compilerdiagnosen bleiben
 sprachneutral beziehungsweise in ihrer festgelegten technischen Sprache und
 werden nicht anhand der UI-Einstellung verändert.
 
+## Optionale KI-Vorschläge im Zelyra Studio
+
+Die IDE kann einen OpenAI-kompatiblen Chat-Completions-Endpunkt für manuell
+angeforderte Zelyra-Codevorschläge verwenden. Ohne Endpunkt und Modell bleibt
+die Funktion ausgeschaltet. Es gibt keine automatische Übertragung, keinen
+Hintergrundaufruf und keine automatische Übernahme vorgeschlagener Änderungen.
+Studio zeigt Zielhost, Modell und den exakten ausgewählten Quelltext vor dem
+Senden an. Nur diese Auswahl und die eingegebene Anweisung werden übertragen;
+der vollständige Projektinhalt wird nicht mitgesendet. Die Auswahl ist auf
+16 KiB, die Anweisung auf 2 KiB begrenzt. Der Anbieter erhält den markierten
+Quelltext nach dem ausdrücklichen Klick auf **Auswahl an Anbieter senden**.
+
+| Variable | Standard | Klassifizierung und Verwendung |
+|---|---|---|
+| `ZELYRA_STUDIO_AI_ENDPOINT` | nicht gesetzt | Kein Secret. OpenAI-kompatible URL, die auf `/chat/completions` endet; HTTPS erforderlich, HTTP nur für Loopback. |
+| `ZELYRA_STUDIO_AI_MODEL` | nicht gesetzt | Kein Secret. Modellbezeichner des konfigurierten Endpunkts. |
+| `ZELYRA_STUDIO_AI_API_KEY` | nicht gesetzt | Secret. Optionaler Bearer-Schlüssel; in `.env` oder Prozessumgebung ablegen und niemals einchecken. |
+
+Die Reihenfolge ist Prozessumgebung → `.env` im Projektverzeichnis. Es gibt
+keine `zelyra.toml`-Einstellung und keinen Anbieterstandard. Konfiguriere
+Endpunkt und Modell gemeinsam, um die Funktion freizuschalten; den Schlüssel
+nur, wenn der gewählte Anbieter ihn verlangt. Betroffener Befehl:
+`zelyra editor`. Die Studio-API spricht den konfigurierten Endpunkt nur nach
+dem Klick auf die Sende-Schaltfläche an, verwendet keine Weiterleitungen und
+zeigt keine Zugangsdaten in der Oberfläche an. Fehlerantworten des Anbieters
+werden nicht an den Browser durchgereicht.
+
+Die Optionen sind für lokale Anbieter wie Ollama oder einen selbst betriebenen
+kompatiblen Dienst gedacht; dabei kann Loopback-HTTP verwendet werden. Ein
+öffentlicher Dienst erfordert HTTPS. Tests prüfen URL-Regeln, Begrenzungen,
+Payload-Inhalt und dass nur der explizit ausgewählte Quelltext im Vorschlag
+landet. Compiler und Tests bleiben maßgeblich; KI-Ausgaben sind nicht
+vertrauenswürdig und werden nie automatisch in den Editor eingesetzt.
+
 ## Anwendungs-E-Mail ab 0.9.5
 
 Die Zelyra-Mail-API verwendet dieselben SMTP-Variablen wie die

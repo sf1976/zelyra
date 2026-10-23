@@ -222,6 +222,7 @@ const messages = {
     symbolForm: "Formular", symbolCrud: "CRUD-Ressource", symbolPage: "Seite", symbolApi: "API-Endpunkt",
     symbolTableview: "Abfrageansicht",
     taskFinder: "Aktionen", taskFinderTitle: "Was möchtest du tun?", taskFinderPlaceholder: "Aktion oder Befehl suchen",
+    aiAssistantTitle: "Zelyra KI-Vorschlag", aiAssistantLoading: "Optionale KI-Verbindung wird geprüft …", aiAssistantDisabled: "Nicht aktiviert. Konfiguriere ZELYRA_STUDIO_AI_ENDPOINT und ZELYRA_STUDIO_AI_MODEL.", aiAssistantNoSelection: "Markiere zuerst eine Zelyra-Codepassage im Editor.", aiAssistantInstruction: "Was soll die KI mit dieser Auswahl tun?", aiAssistantInstructionPlaceholder: "Erkläre, verbessere oder vervollständige den markierten Zelyra-Code", aiAssistantSelection: "Diese Zelyra-Auswahl wird gesendet", aiAssistantSend: "Auswahl an Anbieter senden", aiAssistantResult: "Vorschlag (nicht automatisch übernommen)", aiAssistantFooter: "Der Quelltext wird nur auf ausdrücklichen Klick übertragen.", aiAssistantDestination: "Ziel: {0} · Modell: {1}. Nur die unten gezeigte Auswahl und deine Anweisung werden übertragen.", aiAssistantWorking: "Vorschlag wird angefragt …", aiAssistantReady: "Bereit. Prüfe Ziel und Auswahl, bevor du sie sendest.", aiAssistantNeedInstruction: "Gib zuerst eine Anweisung für den Vorschlag ein.", aiAssistantCompleted: "Vorschlag von Modell {0} erhalten.", aiAssistantFailed: "Die optionale KI-Anfrage ist fehlgeschlagen: {0}", aiAssistantTooLarge: "Die Auswahl ist zu groß. Markiere höchstens 16 KiB Zelyra-Code.", aiAssistantCopy: "Vorschlag kopieren", aiAssistantCopied: "Vorschlag kopiert.",
     chooseAction: "Aktion auswählen", noMatchingTasks: "Keine passende Aktion gefunden.", taskOpenFile: "Datei öffnen", taskOpenFileHelp: "Projektdatei nach Namen suchen",
     taskCloseTab: "Aktive Datei schließen", taskCloseTabHelp: "Schließt den geöffneten Tab",
     taskNewFile: "Datei erstellen", taskNewFileHelp: "Neue Datei im Projekt anlegen", taskSave: "Aktive Datei speichern",
@@ -333,6 +334,7 @@ const messages = {
     symbolForm: "Form", symbolCrud: "CRUD resource", symbolPage: "Page", symbolApi: "API endpoint",
     symbolTableview: "Query view",
     taskFinder: "Actions", taskFinderTitle: "What would you like to do?", taskFinderPlaceholder: "Search actions or commands",
+    aiAssistantTitle: "Zelyra AI suggestion", aiAssistantLoading: "Checking optional AI connection …", aiAssistantDisabled: "Disabled. Configure ZELYRA_STUDIO_AI_ENDPOINT and ZELYRA_STUDIO_AI_MODEL.", aiAssistantNoSelection: "Select a Zelyra code passage in the editor first.", aiAssistantInstruction: "What should the AI do with this selection?", aiAssistantInstructionPlaceholder: "Explain, improve, or complete the selected Zelyra code", aiAssistantSelection: "This Zelyra selection will be sent", aiAssistantSend: "Send selection to provider", aiAssistantResult: "Suggestion (not applied automatically)", aiAssistantFooter: "Source is transmitted only after an explicit click.", aiAssistantDestination: "Destination: {0} · model: {1}. Only the selection shown below and your instruction are sent.", aiAssistantWorking: "Requesting a suggestion …", aiAssistantReady: "Ready. Review the destination and selection before sending.", aiAssistantNeedInstruction: "Enter an instruction for the suggestion first.", aiAssistantCompleted: "Suggestion received from model {0}.", aiAssistantFailed: "The optional AI request failed: {0}", aiAssistantTooLarge: "Selection is too large. Select at most 16 KiB of Zelyra source.", aiAssistantCopy: "Copy suggestion", aiAssistantCopied: "Suggestion copied.",
     chooseAction: "Choose action", noMatchingTasks: "No matching action found.", taskOpenFile: "Open file", taskOpenFileHelp: "Find a project file by name",
     taskCloseTab: "Close active file", taskCloseTabHelp: "Closes the current tab",
     taskNewFile: "Create file", taskNewFileHelp: "Add a new file to the project", taskSave: "Save active file",
@@ -1216,6 +1218,7 @@ const studioTasks = [
   ["canvasButton", "canvasTitle", ["canvas", "preview", "page", "view"], openCanvas],
   ["taskDatabase", "taskDatabaseHelp", ["database", "table", "relation", "schema"], () => openDatabaseWorkbench()],
   ["taskHelp", "taskHelpHelp", ["help", "documentation", "f1"], () => toggleAssistant("help")],
+  ["aiAssistantTitle", "aiAssistantInstruction", ["ai", "assistant", "ki", "vorschlag", "completion", "suggestion"], openAiAssistant],
   ["taskProperties", "taskPropertiesHelp", ["properties", "file", "settings"], () => toggleAssistant("properties")],
   ["taskSearch", "taskSearchHelp", ["find", "search", "text"], () => findInDocument()],
   ["taskGoToDefinition", "taskGoToDefinitionHelp", ["definition", "symbol", "function", "type", "f12"], () => void goToDefinition()],
@@ -1262,6 +1265,63 @@ function openTaskFinder() {
   $("task-finder-input").setAttribute("aria-expanded", "true");
   $("task-finder-input").value = ""; selectedTaskIndex = 0; renderTaskFinder();
   $("task-finder-input").focus();
+}
+
+async function openAiAssistant() {
+  const dialog = $("ai-assistant-dialog");
+  const selection = editor && activePath?.endsWith(".zyl")
+    ? editor.state.sliceDoc(editor.state.selection.main.from, editor.state.selection.main.to)
+    : "";
+  $("ai-assistant-selection").value = selection;
+  $("ai-assistant-instruction").value = "";
+  $("ai-assistant-result").textContent = "";
+  $("ai-assistant-result").hidden = true;
+  $("ai-assistant-result-label").hidden = true;
+  $("ai-assistant-send").disabled = true;
+  $("ai-assistant-destination").textContent = "";
+  $("ai-assistant-status").textContent = selection ? t("aiAssistantLoading") : t("aiAssistantNoSelection");
+  if (!dialog.open) dialog.showModal();
+  try {
+    const config = await api("ai-assistant");
+    if (!config.enabled) {
+      $("ai-assistant-status").textContent = t("aiAssistantDisabled");
+      return;
+    }
+    if (!selection) return;
+    $("ai-assistant-destination").textContent = t("aiAssistantDestination", config.host, config.model);
+    $("ai-assistant-status").textContent = new TextEncoder().encode(selection).length > 16 * 1024
+      ? t("aiAssistantTooLarge")
+      : t("aiAssistantReady");
+    $("ai-assistant-send").disabled = new TextEncoder().encode(selection).length > 16 * 1024;
+    $("ai-assistant-instruction").focus();
+  } catch (error) {
+    $("ai-assistant-status").textContent = t("aiAssistantFailed", error.message);
+  }
+}
+
+async function requestAiSuggestion() {
+  const selection = $("ai-assistant-selection").value;
+  const instruction = $("ai-assistant-instruction").value;
+  if (!selection || !instruction.trim()) {
+    $("ai-assistant-status").textContent = t("aiAssistantNeedInstruction");
+    return;
+  }
+  const send = $("ai-assistant-send");
+  send.disabled = true;
+  $("ai-assistant-status").textContent = t("aiAssistantWorking");
+  $("ai-assistant-result").hidden = true;
+  $("ai-assistant-result-label").hidden = true;
+  try {
+    const result = await api("ai-assistant", { method: "POST", body: JSON.stringify({ instruction, selection }) });
+    $("ai-assistant-result").textContent = result.text;
+    $("ai-assistant-result").hidden = false;
+    $("ai-assistant-result-label").hidden = false;
+    $("ai-assistant-status").textContent = t("aiAssistantCompleted", result.model);
+  } catch (error) {
+    $("ai-assistant-status").textContent = t("aiAssistantFailed", error.message);
+  } finally {
+    send.disabled = false;
+  }
 }
 
 function findInDocument() {
@@ -4250,6 +4310,12 @@ $("assistant-properties-tab").addEventListener("keydown", (event) => {
 $("assistant-format").addEventListener("click", formatActive);
 $("assistant-check").addEventListener("click", checkProject);
 $("task-finder-button").addEventListener("click", openTaskFinder);
+$("ai-assistant-button").addEventListener("click", openAiAssistant);
+$("ai-assistant-close").addEventListener("click", () => $("ai-assistant-dialog").close());
+$("ai-assistant-send").addEventListener("click", () => void requestAiSuggestion());
+$("ai-assistant-dialog").addEventListener("close", () => {
+  if (editor && activePath?.endsWith(".zyl")) editor.focus();
+});
 $("task-finder-close").addEventListener("click", () => $("task-finder").close());
 $("task-finder").addEventListener("close", () => $("task-finder-input").setAttribute("aria-expanded", "false"));
 $("project-search-button").addEventListener("click", openProjectSearch);

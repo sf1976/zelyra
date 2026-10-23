@@ -31,6 +31,22 @@ leads to the project check, project map, Database Studio, or entry point. When
 analysis is incomplete, Studio says so and recommends the compiler check first.
 The overview does not edit source files and needs no AI or cloud service.
 
+## Zelyra-aware suggestions with optional AI
+
+Use **Help → AI suggestion for selection** or the action finder to send a
+selected Zelyra source passage to a compatible AI endpoint. The feature is
+disabled by default. It requires `ZELYRA_STUDIO_AI_ENDPOINT` and
+`ZELYRA_STUDIO_AI_MODEL`; configure `ZELYRA_STUDIO_AI_API_KEY` if the provider
+requires a key. See the [environment reference](env.en.md) for configuration
+and security details.
+
+Before sending, Studio shows the destination host, model, and complete selected
+passage. Only **Send selection to provider** transmits that passage and your
+instruction. No other project source is attached. The suggestion is displayed
+as text and never inserted into the source automatically. Check it with the
+Zelyra compiler and project tests. The endpoint may be local or self-hosted;
+public endpoints must use HTTPS.
+
 The application menu groups common actions under **File**, **Edit**, **View**,
 **Run**, **Database**, and **Help**. Start and Check remain available as quick
 actions; specialist tools live in their matching menus or the command palette

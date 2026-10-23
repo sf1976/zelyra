@@ -5,6 +5,16 @@
   / Die Studio-Vervollständigung nach einem importierten `alias::` auf die
   öffentlichen Deklarationen dieses Moduls begrenzen und ungespeicherte
   Importänderungen aus dem aktiven Editor berücksichtigen.
+- Add an optional, Zelyra-aware AI suggestion action. It is disabled by
+  default, sends only the explicitly selected source and instruction after a
+  visible confirmation click, and never applies generated code automatically.
+  Support HTTPS endpoints and local loopback HTTP, with bounded input/output
+  and environment-based credentials. / Eine optionale, Zelyra-bewusste KI-
+  Vorschlagsaktion ergänzen. Sie ist standardmäßig deaktiviert, überträgt erst
+  nach sichtbarer Bestätigung ausschließlich die markierte Passage und die
+  Anweisung und setzt generierten Code nie automatisch ein. HTTPS-Endpunkte
+  und lokales Loopback-HTTP mit begrenzten Ein-/Ausgaben und
+  umgebungsbasierten Zugangsdaten unterstützen.
 
 ## 1.2.51 — Zelyra Studio compiler-aware workflow
 

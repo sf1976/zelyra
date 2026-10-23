@@ -11,6 +11,8 @@ use zelyra_web::{parse_request, Request};
 #[path = "editor_events.rs"]
 mod editor_events;
 use editor_events::EventHub;
+#[path = "editor_ai.rs"]
+mod editor_ai;
 #[path = "editor_canvas.rs"]
 mod editor_canvas;
 #[path = "editor_capabilities.rs"]
@@ -563,6 +565,8 @@ fn editor_response(
         ("POST", "database-chart-preview") => {
             database_chart_preview(state, parse_json_body(&request.body)?)
         }
+        ("GET", "ai-assistant") => editor_ai::status(state),
+        ("POST", "ai-assistant") => editor_ai::suggest(state, &parse_json_body(&request.body)?),
         ("GET", "symbols") => {
             let query = request
                 .target
