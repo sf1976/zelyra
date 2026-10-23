@@ -133,7 +133,7 @@ einem Arbeitsablauf:
   verifiziertes Bytecode (v30) — mit angeglichenen Diagnosen, Schrittbudgets
   und differenzieller Testabdeckung;
 - die Grenzen dieses Releases sind in den
-  [Release-Notizen 1.2.48](docs/release-notes/1.2.48.de.md) beschrieben;
+  [Release-Notizen 1.2.56](docs/release-notes/1.2.56.de.md) beschrieben;
 - lokales Text-PDF-Rendering und geprüfte PDF-Outbox-Anhänge mit Größen- und
   Zeilenlimits. Das Renderer-PDF übernimmt keine CSS-Layouts, Bilder oder
   Diagramme; für grafische Ausdrucke bleibt die Browser-Druckansicht verfügbar.
@@ -219,7 +219,7 @@ weitere Einstellungen stehen in der Umgebungsreferenz.
 | Zelyra UI verwenden möchtest | [Komponenten-, Formular-, Theme-, Druck-, Diagramm- und E-Mail-Referenz](docs/ui.de.md) · [English](docs/ui.en.md) |
 | die interaktive Sprachkonsole nutzen möchtest | [Anleitung zur Sprachkonsole](docs/language-console.de.md) · [English](docs/language-console.en.md) |
 | den implementierten Umfang und seine Grenzen prüfen möchtest | [Implementierte Funktionen](docs/implemented.de.md) · [English](docs/implemented.en.md) |
-| aktuelle und geplante Arbeiten prüfen möchtest | [Roadmap](docs/ROADMAP.de.md) · [Release-Notizen 1.2.48](docs/release-notes/1.2.48.de.md) |
+| aktuelle und geplante Arbeiten prüfen möchtest | [Roadmap](docs/ROADMAP.de.md) · [Release-Notizen 1.2.56](docs/release-notes/1.2.56.de.md) |
 | die Entwicklungsrichtung verstehen möchtest | [Manifest](docs/MANIFESTO.de.md) · [KI-native Architektur](docs/architecture/ai-native-development.de.md) · [Entwurf lesbarer Regex-Textbearbeitung](docs/design/readable-regex-text-editing.de.md) |
 | konkrete Release-Änderungen suchst | [Changelog](CHANGELOG.md) · [GitHub-Releases](https://github.com/sf1976/zelyra/releases) |
 

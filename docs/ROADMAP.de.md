@@ -48,8 +48,9 @@ abgeschlossen.
 
 | Version | Schwerpunkt | Abschlusskriterium |
 | --- | --- | --- |
-| 1.2.56 | Studio-Menüs Datei/Bearbeiten, lesbare UI und SQL-Arbeitsplatz | Release-Kandidat; vor dem stabilen Tag muss die vollständige CI bestehen. |
+| 1.2.56 | Studio-Menüs Datei/Bearbeiten, lesbare UI und SQL-Arbeitsplatz | Als [v1.2.56](https://github.com/sf1976/zelyra/releases/tag/v1.2.56) veröffentlicht; vollständige PR-CI, reproduzierbare Linux-/Windows-Pakete, Prüfsummen und SPDX-SBOMs bestanden. |
 | 1.3.0 | Compiler- und Studio-Grundlage | Kanonisches Projektlayout, Architekturprüfung/Migrationsvorschau und compilerbewusster Studio-Arbeitsfluss sind nachvollziehbar geprüft. AST bleibt Standard; MIR/Bytecode bleiben optional und nicht unterstützte Pfade scheitern sicher. |
+| 1.3.1–1.3.50 | Härtung an einem praktischen Zelyra-Kundenbereich | Nach Veröffentlichung von 1.3.0 werden breite neue Features eingefroren. Im Mittelpunkt stehen Fehlerkorrekturen sowie Sicherheits-, Zuverlässigkeits-, Kompatibilitäts- und Performancebelege aus dem Kundenbereich. Erste Anwendung ist ein vollständig und idiomatisch in Zelyra geschriebener Passwortgenerator. Nur die dafür zwingend fehlende native Sprach-/Laufzeitunterstützung wird gezielt ergänzt und im Projekt geprüft. |
 | 1.4.0 | Zelyra Visual Design Platform | Ein produktiver erster Schnitt mit gemeinsamem Komponentenregister und Vorschau, Zelyra-Quellcode als einziger maßgeblicher Beschreibung, Theme-/Style-Core, visueller Formularbearbeitung und sicherer Quellsynchronisierung. Phase 0 beginnt nach 1.3.0 mit Bestandsanalyse und Spezifikation. |
 | 1.5.0 | Bytecode-Reife und Standard-Gate | Bytecode wird nur bei belegter Parität, sicherem fail-closed Verhalten, geprüften Artefakt-Upgrades und messbarem Nutzen Standard. Andernfalls bleibt AST Standard und Bytecode optional. |
 | 1.6.0 | Pakete, Module und Deployment | Wiederverwendbare, vertrauensgeprüfte Module und reproduzierbare Offline-/Deployment-Bundles werden an realen Verbraucherprojekten abgenommen; keine stabile native ABI wird vorausgesetzt. |
@@ -81,6 +82,20 @@ keine dieser beiden Fähigkeiten als unterstützt dargestellt. Weitere noch
 nicht geprüfte Geschäftsabläufe sind keine bestätigte Sprachlücke; sie bleiben
 als „nicht bewertet“ markiert, bis ein reproduzierbarer Zelyra-Versuch das
 Ergebnis belegt.
+
+### Härtungsprojekt 1.3.1–1.3.50: Kundenbereich und Passwortgenerator
+
+Diese Phase beginnt nach Abschluss von 1.3.0. Zelyra selbst wird unter
+`/opt/` installiert und betreibt einen Kundenbereich ohne öffentliche
+Selbstregistrierung. Benutzerkonten werden manuell angelegt; nach erfolgreichem
+Login öffnet sich ein Dashboard mit Anwendungen. Erste Anwendung ist ein
+Passwortgenerator, der ausschließlich mit Zelyras eigener Syntax sowie
+Compiler-, Laufzeit- und UI-Funktionalität umgesetzt wird. Er läuft mit
+`ZELYRA_LEVEL=work` und zunächst deutscher Oberfläche. Keine andere Sprache
+und keinen untypischen Umweg verwenden. Fehlt eine benötigte Fähigkeit, wird
+zuerst die kleinstmögliche native Zelyra-Unterstützung ergänzt und im Projekt
+geprüft. Weitere Anwendungen folgen erst nach dem funktionierenden ersten
+Ablauf und dessen Regressionstests.
 
 ### Laufender Funktionstest mit einer realen Geschäftsanwendung
 
@@ -720,7 +735,7 @@ Der erste dokumentierte Abgleich und seine Testbelege stehen im
   Regression zeigen. AST bleibt Referenz und Differentialtest-Backend.
 
 - [x] **Zelyra-Studio-Projektmenü (veröffentlicht in 1.2.55):** Ein eigenes Menü „Projekt“ bietet die Prüfung von Capabilities/Pfadfreigaben und Paket-/Moduleinstellungen an. Ansicht, Ausführen, Datei und Datenbank führen ihre Aktionen ebenfalls über die sichtbare Menüleiste, wenn die alten Toolbar-Schaltflächen ausgeblendet sind. Browser-E2E-Tests benutzen diese sichtbaren Menüpfade; die Desktop-Screenshot-Baseline bildet das aktuelle Menülayout ab.
-- [🧪] **1.2.56 — Studio-Menüs und Lesbarkeit (Release-Kandidat):** Datei- und Bearbeiten-Menüs enthalten übliche Dateiaktionen sowie Rückgängig/Wiederholen, Ausschneiden/Kopieren/Einfügen, Alles auswählen und Dokument-Suche. Strg+H öffnet Suchen und Ersetzen im aktiven Dokument; Strg+Umschalt+F bleibt die Projektsuche. Menüleiste, Schnellaktionen und Dateileiste erhalten eine gut lesbare Standardschrift; optionale mittlere und große Schriftstufen bleiben verfügbar.
+- [x] **1.2.56 — Studio-Menüs und Lesbarkeit (veröffentlicht):** Datei- und Bearbeiten-Menüs enthalten übliche Dateiaktionen sowie Rückgängig/Wiederholen, Ausschneiden/Kopieren/Einfügen, Alles auswählen und Dokument-Suche. Strg+H öffnet Suchen und Ersetzen im aktiven Dokument; Strg+Umschalt+F bleibt die Projektsuche. Menüleiste, Schnellaktionen und Dateileiste erhalten eine gut lesbare Standardschrift; optionale mittlere und große Schriftstufen bleiben verfügbar. Geprüfte Linux-/Windows-Pakete und Release-Nachweise sind veröffentlicht.
 
 **Nach 1.3.0 oder bei ausdrücklicher Neubewertung:** Ein natives AOT-Backend
 bleibt optional und hängt von Benchmarks ab. Kein offener Punkt entfällt stillschweigend: Arbeit, deren
