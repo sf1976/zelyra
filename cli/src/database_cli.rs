@@ -1685,10 +1685,7 @@ pub(super) fn read_only_statement(sql: &str) -> bool {
         "SLEEP(",
         "BENCHMARK(",
         "PG_SLEEP(",
-        "PG_ADVISORY_LOCK(",
-        "PG_TRY_ADVISORY_LOCK(",
-        "PG_ADVISORY_XACT_LOCK(",
-        "PG_TRY_ADVISORY_XACT_LOCK(",
+        "PG_ADVISORY_",
         "PG_NOTIFY(",
         "PG_READ_FILE(",
         "PG_READ_BINARY_FILE(",
@@ -1696,8 +1693,13 @@ pub(super) fn read_only_statement(sql: &str) -> bool {
         "PG_CANCEL_BACKEND(",
         "PG_TERMINATE_BACKEND(",
         "PG_STAT_RESET(",
-        "DBLINK_EXEC(",
-        "DBLINK_CONNECT(",
+        "PG_LOGICAL_EMIT_MESSAGE(",
+        "DBLINK(",
+        "DBLINK_",
+        "LAST_INSERT_ID(",
+        "LO_CREATE(",
+        "LO_UNLINK(",
+        "LO_PUT(",
         "LO_IMPORT(",
         "LO_EXPORT(",
         "SYS_EXEC(",
@@ -2299,6 +2301,11 @@ mod tests {
         assert!(!read_only_statement(
             "SELECT pg_notify('channel', 'payload')"
         ));
+        assert!(!read_only_statement("SELECT pg_advisory_lock_shared(1)"));
+        assert!(!read_only_statement(
+            "SELECT * FROM dblink('remote', 'DELETE FROM customers') AS result(id INT)"
+        ));
+        assert!(!read_only_statement("SELECT LAST_INSERT_ID(123)"));
         assert!(!read_only_statement(
             "SELECT \"pg_notify\"('channel', 'payload')"
         ));

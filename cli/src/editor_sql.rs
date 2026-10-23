@@ -178,6 +178,9 @@ mod tests {
             "SELECT LOAD_FILE/**/('/etc/passwd')",
             "SELECT /*!80000 SLEEP(30) */ 1",
             "SELECT pg_notify('channel', 'payload')",
+            "SELECT pg_advisory_lock_shared(1)",
+            "SELECT * FROM dblink('remote', 'DELETE FROM customers') AS result(id INT)",
+            "SELECT LAST_INSERT_ID(123)",
         ] {
             assert!(prepare_read_only_query(query, None).is_err());
         }
