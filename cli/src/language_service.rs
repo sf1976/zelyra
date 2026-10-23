@@ -5,6 +5,7 @@
 //! exact unsaved text rather than to a copied temporary project.
 
 use super::*;
+use crate::holes::collect_typed_holes_with_inferred_types;
 use std::path::Path;
 
 #[derive(Clone, Debug)]
@@ -144,7 +145,21 @@ pub fn verification_entries(analysis: &Analysis) -> Vec<Value> {
 /// safe replacements. `_` in a pattern is never an expression hole.
 pub fn typed_hole_entry(analysis: &Analysis, path: &str, byte_offset: usize) -> Option<Value> {
     let program = analysis.program.as_ref()?;
-    let holes = collect_typed_holes(program);
+    let has_hole = collect_typed_holes(program).iter().any(|hole| {
+        analysis
+            .sources
+            .get(hole.span.source_id as usize)
+            .is_some_and(|source| {
+                source.path == path
+                    && hole.span.start <= byte_offset
+                    && byte_offset <= hole.span.end
+            })
+    });
+    if !has_hole {
+        return None;
+    }
+    let inferred_types = zelyra_runtime::inspect_expression_types(program).0;
+    let holes = collect_typed_holes_with_inferred_types(program, &inferred_types);
     let hole = holes.into_iter().find(|hole| {
         analysis
             .sources
@@ -158,7 +173,7 @@ pub fn typed_hole_entry(analysis: &Analysis, path: &str, byte_offset: usize) -> 
     let mut suggestions = Vec::new();
     if let Some(expected) = expected {
         for (name, ty) in &hole.typed_values {
-            if ty == expected {
+            if zelyra_runtime::types_compatible(expected, ty) {
                 suggestions.push(json!({
                     "expression":name,"kind":"value","type":ty.to_string(),
                     "contractReview":false
@@ -167,7 +182,10 @@ pub fn typed_hole_entry(analysis: &Analysis, path: &str, byte_offset: usize) -> 
         }
         for function in &program.functions {
             if !function.params.is_empty()
-                || function.return_type.as_ref() != Some(expected)
+                || !function
+                    .return_type
+                    .as_ref()
+                    .is_some_and(|actual| zelyra_runtime::types_compatible(expected, actual))
                 || !function
                     .capabilities
                     .iter()
@@ -424,6 +442,51 @@ mod tests {
                 path: "main.zyl".into(),
                 text: candidate,
                 version: 5,
+            }],
+        );
+        assert!(checked.success, "{:?}", checked.diagnostics);
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn hole_suggestions_include_compiler_inferred_local_types() {
+        let root = std::env::temp_dir().join(format!(
+            "zelyra-hole-inferred-values-{}-{:?}",
+            std::process::id(),
+            std::thread::current().id()
+        ));
+        fs::create_dir_all(&root).unwrap();
+        let source = r#"
+fn make_name() -> String { return "Anna" }
+fn make_count() -> Int { return 3 }
+fn target() -> String {
+    name = make_name()
+    count = make_count()
+    selected: String = _
+    return selected
+}
+fn main() {}
+"#;
+        fs::write(root.join("main.zyl"), source).unwrap();
+        let analysis = analyze(&root.join("main.zyl"), &[]);
+        let hole =
+            typed_hole_entry(&analysis, "main.zyl", source.find("= _").unwrap() + 2).unwrap();
+        let expressions = hole["suggestions"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter_map(|item| item["expression"].as_str())
+            .collect::<Vec<_>>();
+        assert!(expressions.contains(&"name"), "{expressions:?}");
+        assert!(!expressions.contains(&"count"), "{expressions:?}");
+
+        let candidate = source.replacen("= _", "= name", 1);
+        let checked = analyze(
+            &root.join("main.zyl"),
+            &[SourceOverlay {
+                path: "main.zyl".into(),
+                text: candidate,
+                version: 2,
             }],
         );
         assert!(checked.success, "{:?}", checked.diagnostics);

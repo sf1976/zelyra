@@ -176,6 +176,7 @@ pub use verifier::{verify, ContractKind, VerificationResult, VerificationStatus}
 mod type_checker;
 pub use type_checker::{
     check, check_with_inferred_types, inspect_expression_types, substitute_generic_type,
+    types_compatible,
 };
 pub(crate) use type_checker::{
     compatible, expand_type_aliases, infer_generic_types, singular_table_type,

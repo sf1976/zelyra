@@ -183,13 +183,15 @@ showing a stale proof. The gutter follows the current document; background
 checks use document versions to discard late responses.
 
 At an expression hole `_`, **Ctrl+Space** opens a CodeMirror completion menu
-from the compiler's hole context. Suggestions use visible bindings with known
-matching types and zero-argument functions whose declared Capabilities fit the
-current function. Candidates with contracts are labeled for review. Choose a
-suggestion with the keyboard or click; only the `_` span is replaced, and
-ordinary Undo restores it. A `_` wildcard in a match pattern is not a hole.
-Type inference for unannotated local values and general subtyping are not yet
-used for hole suggestions, so the list may omit valid expressions.
+from the compiler's hole context. Suggestions use visible bindings whose
+types are explicit or inferred by the compiler from their initializers, plus
+zero-argument functions whose return types are accepted by the same known-type
+compatibility relation used by type checking. Candidate functions must declare
+only capabilities available to the current function; candidates with contracts
+are labeled for review. Unknown types are never presented as safe matches. A
+`_` wildcard in a match pattern is not a hole. Choose a suggestion with the
+keyboard or click; only the `_` span is replaced, and ordinary Undo restores
+it.
 
 ### Local event stream
 

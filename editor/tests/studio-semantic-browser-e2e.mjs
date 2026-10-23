@@ -187,7 +187,7 @@ try {
   assert.match(await page.locator(".verify-gutter .verify-marker.proven").getAttribute("aria-label"), /PROVEN V-001/);
   const holeSource = "pub fn answer() -> Int requires { 1 < 2 } { return 42 }\n"
     + "pub fn pure() -> String { return \"x\" }\n"
-    + "pub fn target(name: String) -> String { message: String = _ return message }\n";
+    + "pub fn target(name: String) -> String {\n inferred_name = pure()\n message: String = _\n return message\n";
   const answerPoint = await page.evaluate(() => {
     const walker = document.createTreeWalker(document.querySelector(".cm-content"), NodeFilter.SHOW_TEXT);
     while (walker.nextNode()) {
@@ -212,6 +212,8 @@ try {
   const holePoint = await page.evaluate(() => {
     const walker = document.createTreeWalker(document.querySelector(".cm-content"), NodeFilter.SHOW_TEXT);
     while (walker.nextNode()) {
+      const line = walker.currentNode.parentElement?.closest(".cm-line")?.textContent || "";
+      if (!line.includes("= _")) continue;
       const offset = walker.currentNode.textContent.indexOf("_");
       if (offset < 0) continue;
       const range = document.createRange();
@@ -226,10 +228,10 @@ try {
   await page.mouse.click(holePoint.x, holePoint.y);
   await page.keyboard.press("ArrowRight");
   await page.keyboard.press("Control+Space");
-  const nameSuggestion = page.locator(".cm-tooltip-autocomplete li").filter({ hasText: /^name/ });
-  await nameSuggestion.waitFor({ timeout: 10_000 });
-  await nameSuggestion.click();
-  await page.waitForFunction(() => document.querySelector(".cm-content")?.textContent?.includes("message: String = name"), undefined, { timeout: 10_000 });
+  const inferredSuggestion = page.locator(".cm-tooltip-autocomplete li").filter({ hasText: /^inferred_name/ });
+  await inferredSuggestion.waitFor({ timeout: 10_000 });
+  await inferredSuggestion.click();
+  await page.waitForFunction(() => document.querySelector(".cm-content")?.textContent?.includes("message: String = inferred_name"), undefined, { timeout: 10_000 });
   await page.keyboard.press("Control+Z");
   await page.waitForFunction(() => document.querySelector(".cm-content")?.textContent?.includes("message: String = _"), undefined, { timeout: 10_000 });
   await page.locator("#problems-panel:not([hidden])").waitFor({ timeout: 10_000 });

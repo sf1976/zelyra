@@ -3,6 +3,7 @@ use std::collections::HashMap;
 use zelyra_ast::{
     BinaryOp, Block, Expr, ExprKind, Function, Pattern, PatternKind, Span, Stmt, Type,
 };
+use zelyra_runtime::InferredExpressionType;
 
 #[derive(Clone, Debug)]
 pub struct TypedHole {
@@ -16,6 +17,13 @@ pub struct TypedHole {
 }
 
 pub fn collect_typed_holes(program: &zelyra_ast::Program) -> Vec<TypedHole> {
+    collect_typed_holes_with_inferred_types(program, &[])
+}
+
+pub fn collect_typed_holes_with_inferred_types(
+    program: &zelyra_ast::Program,
+    inferred_types: &[InferredExpressionType],
+) -> Vec<TypedHole> {
     let visible_functions = visible_functions(program);
     let function_parameters = program
         .functions
@@ -50,6 +58,19 @@ pub fn collect_typed_holes(program: &zelyra_ast::Program) -> Vec<TypedHole> {
         visible_functions,
         function_parameters,
         record_fields,
+        inferred_types: inferred_types
+            .iter()
+            .map(|inferred| {
+                (
+                    (
+                        inferred.span.source_id,
+                        inferred.span.start,
+                        inferred.span.end,
+                    ),
+                    inferred.ty.clone(),
+                )
+            })
+            .collect(),
         holes: Vec::new(),
     };
     for function in &program.functions {
@@ -63,6 +84,7 @@ struct Collector {
     visible_functions: Vec<String>,
     function_parameters: HashMap<String, Vec<Type>>,
     record_fields: HashMap<String, HashMap<String, Type>>,
+    inferred_types: HashMap<(u32, usize, usize), Type>,
     holes: Vec<TypedHole>,
 }
 
@@ -158,12 +180,25 @@ impl Collector {
             Stmt::Let {
                 name, ty, value, ..
             } => {
-                self.expression(value, ty.clone(), scope, capabilities, contract_spans);
-                scope.add(name, ty.clone());
+                let inferred = self.inferred_type(value);
+                let value_type = ty.clone().or(inferred);
+                self.expression(
+                    value,
+                    value_type.clone(),
+                    scope,
+                    capabilities,
+                    contract_spans,
+                );
+                scope.add(name, value_type);
             }
             Stmt::BindOrAssign { name, value, .. } => {
+                let is_new_binding = !scope.values.iter().any(|visible| visible == name);
                 let expected = scope.types.get(name).cloned();
+                let inferred = is_new_binding.then(|| self.inferred_type(value)).flatten();
                 self.expression(value, expected, scope, capabilities, contract_spans);
+                if is_new_binding {
+                    scope.add(name, inferred);
+                }
             }
             Stmt::TupleBindOrAssign { value, .. } => {
                 self.expression(value, None, scope, capabilities, contract_spans);
@@ -426,6 +461,17 @@ impl Collector {
             | ExprKind::FunctionValue(_)
             | ExprKind::Sql { .. } => {}
         }
+    }
+
+    fn inferred_type(&self, expression: &Expr) -> Option<Type> {
+        self.inferred_types
+            .get(&(
+                expression.span.source_id,
+                expression.span.start,
+                expression.span.end,
+            ))
+            .filter(|ty| **ty != Type::Unknown)
+            .cloned()
     }
 }
 

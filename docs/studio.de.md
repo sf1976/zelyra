@@ -202,14 +202,15 @@ Marker, statt einen veralteten Beweis anzuzeigen. Die Leiste folgt dem aktuellen
 Dokument; Dokumentversionen verhindern verspätete Ergebnisse.
 
 Bei einer Ausdruckslücke `_` öffnet **Strg+Leertaste** die CodeMirror-
-Vorschläge aus dem Compilerkontext. Sie enthalten sichtbare Bindungen mit
-bekanntem passenden Typ sowie parameterlose Funktionen, deren deklarierte
-Capabilities zum aktuellen Funktionskontext passen. Vorschläge mit Contracts
-sind zur Prüfung gekennzeichnet. Wähle per Tastatur oder Klick; nur die Stelle
-von `_` wird ersetzt und Undo stellt sie wieder her. Ein `_`-Wildcard in einem
-Match-Muster ist keine Ausdruckslücke. Typinferenz für unannotierte lokale
-Werte und allgemeine Subtypisierung werden für diese Vorschläge noch nicht
-genutzt; deshalb können gültige Ausdrücke fehlen.
+Vorschläge aus dem Compilerkontext. Sie berücksichtigen sichtbare Bindungen
+mit ausdrücklich annotierten Typen oder Typen, die der Compiler aus ihren
+Initialisierungen herleitet. Parameterlose Funktionen werden aufgenommen,
+wenn ihr Rückgabetyp von derselben bekannten Typkompatibilitätsregel akzeptiert
+wird wie bei der Typprüfung. Ihre deklarierten Capabilities müssen im aktuellen
+Funktionskontext verfügbar sein; Funktionen mit Contracts sind zur Prüfung
+gekennzeichnet. Unbekannte Typen gelten nie als sichere Treffer. Ein `_`-
+Wildcard in einem Match-Muster ist keine Ausdruckslücke. Wähle per Tastatur oder
+Klick; nur die Stelle von `_` wird ersetzt und Undo stellt sie wieder her.
 
 ### Lokaler Ereigniskanal
 
