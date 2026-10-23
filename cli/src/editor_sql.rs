@@ -17,7 +17,7 @@ fn prepare_read_only_query(
     if sql.is_empty() || sql.len() > MAX_QUERY_BYTES {
         return Err((400, "SQL must contain 1 to 16,384 bytes".into()));
     }
-    if !database_cli::single_sql_statement(sql) {
+    if !database_cli::single_sql_statement(sql, postgres) {
         return Err((400, "Studio accepts exactly one SQL statement".into()));
     }
     if !database_cli::read_only_statement(sql, postgres)
@@ -39,7 +39,7 @@ fn prepare_read_only_query(
         .unwrap_or(MAX_RESULT_ROWS as u64)
         .min(MAX_RESULT_ROWS as u64)
         .max(1) as usize;
-    let normalized = database_cli::strip_sql_terminator(sql);
+    let normalized = database_cli::strip_sql_terminator(sql, postgres);
     let bounded_sql = format!(
         "SELECT * FROM (\n{normalized}\n) AS _zelyra_studio_result LIMIT {}",
         limit + 1
@@ -80,17 +80,24 @@ pub(super) fn query(
         prepare_read_only_query(sql, request.get("limit").and_then(Value::as_u64), postgres)?;
 
     let started = Instant::now();
-    let result = zelyra_database::execute_read_only_query(&database_url, &bounded_sql, Vec::new())
-        .map_err(|_| {
-            (
-                422,
-                "query failed; check the SQL, connection, and database permissions".into(),
-            )
-        })?;
+    let bounded_result = zelyra_database::execute_read_only_query_with_cell_limit(
+        &database_url,
+        &bounded_sql,
+        Vec::new(),
+        MAX_CELL_CHARACTERS,
+    )
+    .map_err(|_| {
+        (
+            422,
+            "query failed; check the SQL, connection, and database permissions".into(),
+        )
+    })?;
+    let database_cells_truncated = bounded_result.cells_truncated;
+    let result = bounded_result.result;
     let elapsed_ms = started.elapsed().as_millis();
     let rows_truncated = result.rows.len() > limit;
     let columns_truncated = result.columns.len() > MAX_RESULT_COLUMNS;
-    let mut cells_truncated = false;
+    let mut cells_truncated = database_cells_truncated;
     let columns = result
         .columns
         .iter()
@@ -172,7 +179,7 @@ mod tests {
     #[test]
     fn sql_workbench_accepts_only_one_read_only_select_family_statement() {
         for query in ["SELECT 1", "WITH item AS (SELECT 1) SELECT * FROM item"] {
-            assert!(database_cli::single_sql_statement(query));
+            assert!(database_cli::single_sql_statement(query, false));
             assert!(database_cli::read_only_statement(query, false));
         }
         for query in [

@@ -288,8 +288,13 @@ request("database-query", "POST", {"sql": "SELECT LOAD_FILE/**/('/etc/passwd')"}
 request("database-query", "POST", {"sql": "SELECT /*!80000 SLEEP(0) */ 1"}, expect=403)
 request("database-query", "POST", {"sql": "SELECT pg_notify('channel', 'payload')"}, expect=403)
 request("database-query", "POST", {"sql": "SELECT \"pg_notify\"('channel', 'payload')"}, expect=403)
+request("database-query", "POST", {"sql": r"SELECT 'a\'b' AS x, SLEEP(0)"}, expect=403)
+request("database-query", "POST", {"sql": "SELECT SLEEP# hidden\n(0)"}, expect=403)
 literal_sql_row = request("database-query", "POST", {"sql": "SELECT 'SLEEP(30)' AS harmless_text"})
 assert literal_sql_row["rows"] == [["SLEEP(30)"]], literal_sql_row
+long_cell = request("database-query", "POST", {"sql": "SELECT REPEAT('x', 1000000) AS long_value"})
+assert long_cell["cellsTruncated"] is True and long_cell["cellLimit"] == 512, long_cell
+assert len(long_cell["rows"][0][0]) == 513 and long_cell["rows"][0][0].endswith("…"), long_cell
 bounded_sql_rows = request("database-query", "POST", {
     "sql": "WITH RECURSIVE numbers(n) AS (SELECT 1 UNION ALL SELECT n + 1 FROM numbers WHERE n < 250) SELECT n FROM numbers",
     "limit": 9999,

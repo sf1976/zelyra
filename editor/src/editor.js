@@ -1979,9 +1979,12 @@ async function loadDatabaseSchema() {
   try {
     databaseMap = await api("database-schema");
     databaseTables = flattenDatabaseMap(databaseMap);
-    $("database-query-workbench").hidden = databaseMap.live_connected === false;
-    if (databaseMap.live_connected !== false) ensureDatabaseQueryEditor();
-    state.textContent = databaseMap.live_connected === false
+    const databaseBackend = String(databaseMap.backend || "").toLowerCase();
+    const supportsSqlWorkbench = ["mariadb", "mysql", "postgres"].includes(databaseBackend);
+    const sqlWorkbenchAvailable = databaseMap.live_connected !== false && supportsSqlWorkbench;
+    $("database-query-workbench").hidden = !sqlWorkbenchAvailable;
+    if (sqlWorkbenchAvailable) ensureDatabaseQueryEditor();
+    state.textContent = !sqlWorkbenchAvailable
       ? `${t("schemaLoaded")} (deklariert) · ${databaseMap.backend || ""}`
       : `${t("schemaLoaded")} · ${databaseMap.backend || ""}`;
     state.dataset.kind = "success";

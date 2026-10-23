@@ -18,6 +18,7 @@ try {
   let schemaApplyRequest = null;
   let schemaSourceHash = "";
   let schemaCandidateContent = "";
+  let schemaBackend = "mariadb";
   const base = `http://127.0.0.1:${port}/__zelyra/editor`;
   const url = `${base}/#${token}`;
   page.on("pageerror", (error) => browserErrors.push(error.message));
@@ -25,7 +26,7 @@ try {
     status: 200,
     contentType: "application/json",
     body: JSON.stringify({
-      backend: "mariadb",
+      backend: schemaBackend,
       modules: [{ source_module: "main.zyl", tables: [{
         name: "customers", status: "matched", declared_columns: [
           { name: "id", type: "BIGINT", nullable: false, primary_key: true, auto_increment: true, unique: false },
@@ -474,6 +475,12 @@ try {
   const cellTruncatedStatus = await page.locator("#database-query-status").textContent();
   assert.match(cellTruncatedStatus, /Zellenwerte wurden nach 512 Zeichen gekürzt/);
   await page.locator("#database-query-clear").click();
+  schemaBackend = "sqlite";
+  await page.locator("#database-refresh").click();
+  await page.waitForFunction(() => document.querySelector("#database-query-workbench")?.hidden === true);
+  schemaBackend = "mariadb";
+  await page.locator("#database-refresh").click();
+  await page.waitForFunction(() => document.querySelector("#database-query-workbench")?.hidden === false);
   await page.locator("#database-create").waitFor({ state: "visible" });
   assert.equal(await page.locator(".database-header").evaluate((element) => getComputedStyle(element).backgroundColor), "rgb(255, 255, 255)");
   page.once("dialog", async (dialog) => {

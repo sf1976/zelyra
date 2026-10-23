@@ -1611,7 +1611,7 @@ fn database_query(path: &str, args: &[String]) -> ExitCode {
         }
     };
     let postgres = zelyra_database::is_postgres_url(&url);
-    if !single_sql_statement(&sql) {
+    if !single_sql_statement(&sql, postgres) {
         eprintln!("error[E-CLI-DB-004]: db query accepts exactly one SQL statement");
         return ExitCode::from(2);
     }
@@ -1633,7 +1633,7 @@ fn database_query(path: &str, args: &[String]) -> ExitCode {
             eprintln!("error[E-CLI-DB-003]: --limit is supported only for SELECT and WITH queries");
             return ExitCode::from(2);
         }
-        let statement = strip_sql_terminator(&sql);
+        let statement = strip_sql_terminator(&sql, postgres);
         sql = format!("SELECT * FROM (\n{statement}\n) AS _zelyra_query_limit LIMIT {limit}");
     }
     if tenant.is_some() && !has_named_parameter(&sql, "tenant_id") {
@@ -1749,6 +1749,14 @@ fn compact_sql_for_safety(sql: &str, postgres: bool) -> Option<String> {
             continue;
         }
 
+        if character == '#' && !postgres {
+            while index < characters.len() && characters[index] != '\n' {
+                index += 1;
+            }
+            compact.push(' ');
+            continue;
+        }
+
         if character == '-'
             && next == Some('-')
             && (postgres
@@ -1776,7 +1784,11 @@ fn compact_sql_for_safety(sql: &str, postgres: bool) -> Option<String> {
                     let slash_count = index - slash_start;
                     if characters.get(index) == Some(&quote) {
                         if slash_count % 2 == 1 {
-                            return None;
+                            if postgres {
+                                return None;
+                            }
+                            index += 1;
+                            continue;
                         }
                         index += 1;
                         closed = true;
@@ -1813,7 +1825,12 @@ fn compact_sql_for_safety(sql: &str, postgres: bool) -> Option<String> {
                     let slash_count = index - slash_start;
                     if characters.get(index) == Some(&quote) {
                         if slash_count % 2 == 1 {
-                            return None;
+                            if postgres {
+                                return None;
+                            }
+                            compact.push(quote);
+                            index += 1;
+                            continue;
                         }
                         index += 1;
                         closed = true;
@@ -1867,7 +1884,7 @@ pub(super) fn first_sql_keyword(sql: &str) -> String {
         .to_ascii_uppercase()
 }
 
-pub(super) fn single_sql_statement(sql: &str) -> bool {
+pub(super) fn single_sql_statement(sql: &str, postgres: bool) -> bool {
     let bytes = sql.as_bytes();
     let (mut index, mut quote, mut line_comment, mut block_comment) = (0, None, false, false);
     while index < bytes.len() {
@@ -1896,16 +1913,27 @@ pub(super) fn single_sql_statement(sql: &str) -> bool {
                     quote = None;
                     index += 1;
                 }
-            } else if byte == b'\\' && matches!(delimiter, b'\'' | b'"') {
+            } else if byte == b'\\' && !postgres && matches!(delimiter, b'\'' | b'"') {
                 index = (index + 2).min(bytes.len());
             } else {
                 index += 1;
             }
             continue;
         }
-        if byte == b'-' && bytes.get(index + 1) == Some(&b'-') {
+        if byte == b'-'
+            && bytes.get(index + 1) == Some(&b'-')
+            && (postgres
+                || bytes
+                    .get(index + 2)
+                    .is_none_or(|next| next.is_ascii_whitespace() || next.is_ascii_control()))
+        {
             line_comment = true;
             index += 2;
+            continue;
+        }
+        if byte == b'#' && !postgres {
+            line_comment = true;
+            index += 1;
             continue;
         }
         if byte == b'/' && bytes.get(index + 1) == Some(&b'*') {
@@ -1919,14 +1947,14 @@ pub(super) fn single_sql_statement(sql: &str) -> bool {
             continue;
         }
         if byte == b';' {
-            return only_sql_trivia(&bytes[index + 1..]);
+            return only_sql_trivia(&bytes[index + 1..], postgres);
         }
         index += 1;
     }
     quote.is_none() && !block_comment
 }
 
-pub(super) fn strip_sql_terminator(sql: &str) -> String {
+pub(super) fn strip_sql_terminator(sql: &str, postgres: bool) -> String {
     let bytes = sql.as_bytes();
     let (mut index, mut quote, mut line_comment, mut block_comment) = (0, None, false, false);
     while index < bytes.len() {
@@ -1955,16 +1983,27 @@ pub(super) fn strip_sql_terminator(sql: &str) -> String {
                     quote = None;
                     index += 1;
                 }
-            } else if byte == b'\\' && matches!(delimiter, b'\'' | b'"') {
+            } else if byte == b'\\' && !postgres && matches!(delimiter, b'\'' | b'"') {
                 index = (index + 2).min(bytes.len());
             } else {
                 index += 1;
             }
             continue;
         }
-        if byte == b'-' && bytes.get(index + 1) == Some(&b'-') {
+        if byte == b'-'
+            && bytes.get(index + 1) == Some(&b'-')
+            && (postgres
+                || bytes
+                    .get(index + 2)
+                    .is_none_or(|next| next.is_ascii_whitespace() || next.is_ascii_control()))
+        {
             line_comment = true;
             index += 2;
+            continue;
+        }
+        if byte == b'#' && !postgres {
+            line_comment = true;
+            index += 1;
             continue;
         }
         if byte == b'/' && bytes.get(index + 1) == Some(&b'*') {
@@ -2058,13 +2097,24 @@ fn has_named_parameter(sql: &str, name: &str) -> bool {
     false
 }
 
-fn only_sql_trivia(bytes: &[u8]) -> bool {
+fn only_sql_trivia(bytes: &[u8], postgres: bool) -> bool {
     let mut index = 0;
     while index < bytes.len() {
         if bytes[index].is_ascii_whitespace() {
             index += 1;
-        } else if bytes[index] == b'-' && bytes.get(index + 1) == Some(&b'-') {
+        } else if bytes[index] == b'-'
+            && bytes.get(index + 1) == Some(&b'-')
+            && (postgres
+                || bytes
+                    .get(index + 2)
+                    .is_none_or(|next| next.is_ascii_whitespace() || next.is_ascii_control()))
+        {
             index += 2;
+            while index < bytes.len() && bytes[index] != b'\n' {
+                index += 1;
+            }
+        } else if bytes[index] == b'#' && !postgres {
+            index += 1;
             while index < bytes.len() && bytes[index] != b'\n' {
                 index += 1;
             }
@@ -2287,10 +2337,13 @@ mod tests {
     #[test]
     fn accepts_one_statement_with_trailing_semicolon_and_quoted_semicolons() {
         assert!(single_sql_statement(
-            "SELECT ';' AS value; -- trailing comment"
+            "SELECT ';' AS value; -- trailing comment",
+            false
         ));
-        assert!(single_sql_statement("SELECT 1 /* ; */;"));
-        assert!(!single_sql_statement("SELECT 1; DROP TABLE users"));
+        assert!(single_sql_statement("SELECT 1 /* ; */;", false));
+        assert!(!single_sql_statement("SELECT 1; DROP TABLE users", false));
+        assert!(single_sql_statement("SELECT 1 # ; hidden\n", false));
+        assert!(single_sql_statement("SELECT pg_sleep--hidden\n(30)", true));
     }
 
     #[test]
@@ -2322,9 +2375,9 @@ mod tests {
         ));
         assert!(!read_only_statement("SELECT /*!80000 SLEEP(1) */ 1", false));
         let escaped = r#"SELECT 'a\'b' AS x, SLEEP(30)"#;
-        assert!(single_sql_statement(escaped));
+        assert!(single_sql_statement(escaped, false));
         assert!(!read_only_statement(escaped, false));
-        assert!(!read_only_statement(escaped, true));
+        assert!(read_only_statement("SELECT 'customer\\'s name'", false));
         assert!(!read_only_statement(
             r#"SELECT 'a\\'b' AS x, SLEEP(30)"#,
             false
@@ -2351,6 +2404,7 @@ mod tests {
             true
         ));
         assert!(!read_only_statement("SELECT pg_sleep--hidden\n(30)", true));
+        assert!(!read_only_statement("SELECT SLEEP# hidden\n(30)", false));
         assert!(!read_only_statement(
             "SELECT * FROM dblink('remote', 'DELETE FROM customers') AS result(id INT)",
             true
@@ -2389,7 +2443,7 @@ mod tests {
     #[test]
     fn limit_wrapper_removes_only_the_statement_terminator() {
         assert_eq!(
-            strip_sql_terminator("SELECT ';' AS value; -- done"),
+            strip_sql_terminator("SELECT ';' AS value; -- done", false),
             "SELECT ';' AS value"
         );
     }
