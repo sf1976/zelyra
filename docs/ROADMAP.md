@@ -645,8 +645,9 @@ The initial documented comparison and its test evidence are in the
   schema changes.
 - [ ] **1.3.0 — canonical structure and experimental Bytecode:** Complete the
   opt-in versioned project layout (`routes/`, `domain/`, `schema/`, `public/`,
-  `assets/`, and `plugins/`), architecture checks, and safe layout migration
-  preview. Keep Bytecode opt-in and fail-closed; AST remains the reference and
+  and `assets/`), architecture checks, and safe layout migration preview.
+  `plugins/` remains deferred until a concrete secured loading format exists.
+  Keep Bytecode opt-in and fail-closed; AST remains the reference and
   default for `run`, `serve`, and declared tasks. Expand the supported Bytecode
   slice, differential checks, and security evidence incrementally. The decision
   to change the default is a separate release gate for 1.5.0.
@@ -952,17 +953,17 @@ Verify the current parser, module resolution, project configuration, and
 compatibility behavior before changing syntax. See the detailed
 [project-layout plan](release-plans/1.3.0-project-layout.en.md).
 
-- [ ] **1.1.5 — Inventory and architecture contract:** Inventory project files,
+- [x] **1.1.5 — Inventory and architecture contract:** Inventory project files,
   `zelyra.toml`, `use`/package resolution, `zelyra new`, build/bundle paths,
   and route/SQL/domain boundaries. Define `routes/`, `domain/`, `schema/`,
   `public/`, `assets/`, and `plugins/` responsibilities without implicitly migrating
   existing projects.
-- [ ] **1.2.0 — Opt-in profile and module foundation:** Implement a versioned,
+- [x] **1.2.0 — Opt-in profile and module foundation:** Implement a versioned,
   backward-compatible profile and explicit namespace resolution where they fit
   the existing module architecture. Let `zelyra new` create it as an explicit
   template. Avoid implicit autoloading until import graphs, ambiguity, and
   diagnostics are specified.
-- [ ] **1.3.0 — Checker and safe migration:** Add source-mapped architecture
+- [🧪] **1.3.0 — Checker and safe migration:** Add source-mapped architecture
   rules for route mutations, HTTP-independent domain code, and declared state
   machines. Initially, `migrate-layout --check` reports deterministic
   findings and suggestions only; writes require preview, conflict checks, and

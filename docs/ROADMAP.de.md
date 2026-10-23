@@ -705,8 +705,9 @@ Der erste dokumentierte Abgleich und seine Testbelege stehen im
   Metadatenausschnitt.
 - [ ] **1.3.0 — kanonische Struktur und experimenteller Bytecode:** Das
   optionale, versionierte Projektlayout (`routes/`, `domain/`, `schema/`,
-  `public/`, `assets/`, `plugins/`), Architekturprüfungen und eine sichere
-  Migrationsvorschau abschließen. Bytecode bleibt optional und fail-closed;
+  `public/` und `assets/`), Architekturprüfungen und eine sichere
+  Migrationsvorschau abschließen. `plugins/` bleibt zurückgestellt, bis ein
+  konkretes, abgesichertes Ladeformat besteht. Bytecode bleibt optional und fail-closed;
   AST bleibt Referenz und Standard für `run`, `serve` und deklarierte Tasks.
   Den Bytecode-Ausschnitt, seine Differentialtests und Sicherheitsprüfungen
   schrittweise erweitern. Die Entscheidung über einen Standardwechsel ist ein
@@ -959,17 +960,17 @@ keine Behauptung, dass Manifestfelder, Autoloading, Scheduler-Syntax oder
 müssen Parser, Modulauflösung, Projektkonfiguration und Kompatibilität geprüft
 werden. Details stehen im [Projektlayout-Arbeitsplan](release-plans/1.3.0-project-layout.de.md).
 
-- [ ] **1.1.5 — Ist-Aufnahme und Architekturvertrag:** Projektdateien,
+- [x] **1.1.5 — Ist-Aufnahme und Architekturvertrag:** Projektdateien,
   `zelyra.toml`, `use`-/Paketauflösung, `zelyra new`, Build-/Bundlepfade sowie
   Route-, SQL- und Domain-Grenzen inventarisieren. Zuständigkeiten für
   `routes/`, `domain/`, `schema/`, `public/`, `assets/` und `plugins/` festlegen, ohne
   bestehende Projekte ungefragt umzustellen.
-- [ ] **1.2.0 — Opt-in-Profil und modulare Grundlage:** Ein versionsmarkiertes,
+- [x] **1.2.0 — Opt-in-Profil und modulare Grundlage:** Ein versionsmarkiertes,
   abwärtskompatibles Profil samt Validierung und expliziter Namespace-Auflösung
   implementieren, soweit es zur vorhandenen Modularchitektur passt.
   `zelyra new` kann es als ausdrückliche Vorlage erzeugen. Kein stilles
   Autoloading, bevor Importgraph, Mehrdeutigkeiten und Diagnostik feststehen.
-- [ ] **1.3.0 — Prüfer und sichere Migration:** Quellgebundene Regeln für
+- [🧪] **1.3.0 — Prüfer und sichere Migration:** Quellgebundene Regeln für
   Route-Schreibzugriffe, HTTP-unabhängige Domänen und deklarierte
   Zustandsautomaten umsetzen. `migrate-layout --check` liefert zunächst nur
   deterministische Funde und Vorschläge; Schreibmodus braucht Vorschau,
