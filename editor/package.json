@@ -12,7 +12,7 @@
     "test:language": "node tests/zelyra-language.test.mjs",
     "test:sql-completion": "node tests/sql-completion.test.mjs",
     "test:module-completion": "node tests/module-completion.test.mjs",
-    "test:browser": "npm run test:browser-hover && npm run test:browser-pdf && npm run test:browser-rename && npm run test:browser-canvas && npm run test:browser-capability && npm run test:browser-runtime-budget && npm run test:browser-capabilities && npm run test:browser-external-change && npm run test:browser-pipeline && npm run test:browser-runtime && npm run test:browser-semantic && npm run test:browser-module-settings && npm run test:browser-console && npm run test:browser-ai",
+    "test:browser": "npm run test:browser-hover && npm run test:browser-pdf && npm run test:browser-rename && npm run test:browser-canvas && npm run test:browser-capability && npm run test:browser-runtime-budget && npm run test:browser-capabilities && npm run test:browser-external-change && npm run test:browser-pipeline && npm run test:browser-runtime && npm run test:browser-semantic && npm run test:browser-module-settings && npm run test:browser-console && npm run test:browser-ai && npm run test:browser-field-completion",
     "test:browser-hover": "node tests/studio-hover-browser-e2e.mjs",
     "test:browser-pdf": "node tests/studio-pdf-browser-e2e.mjs",
     "test:browser-rename": "node tests/studio-rename-browser-e2e.mjs",
@@ -27,7 +27,8 @@
     "test:browser-outbox": "node tests/studio-outbox-browser-e2e.mjs",
     "test:browser-module-settings": "node tests/studio-module-settings-browser-e2e.mjs",
     "test:browser-console": "node tests/studio-console-browser-e2e.mjs",
-    "test:browser-ai": "node tests/studio-ai-assistant-browser-e2e.mjs"
+    "test:browser-ai": "node tests/studio-ai-assistant-browser-e2e.mjs",
+    "test:browser-field-completion": "node tests/studio-field-completion-browser-e2e.mjs"
   },
   "dependencies": {
     "@codemirror/autocomplete": "^6.18.6",

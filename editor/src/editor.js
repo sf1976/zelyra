@@ -782,9 +782,34 @@ function renderTabs() {
 
 function completionSource(context) {
   const word = context.matchBefore(/[\w]+/);
-  if (!word && !context.explicit) return null;
   const completionPath = activePath;
   const source = context.state.doc.toString();
+  const beforeCursor = source.slice(0, context.pos);
+  const fieldAccess = completionPath?.endsWith(".zyl") && sqlBodyPrefix(source, context.pos) === null
+    ? /\.([A-Za-z_]\w*)?$/.exec(beforeCursor)
+    : null;
+  if (fieldAccess) {
+    const prefixLength = fieldAccess[1]?.length || 0;
+    const dotEnd = context.pos - prefixLength;
+    let request;
+    try {
+      request = analysisRequest(completionPath, source);
+    } catch {
+      return null;
+    }
+    return api("field-completion", {
+      method: "POST",
+      body: JSON.stringify({ ...request, dotEnd, cursor: context.pos }),
+    }).then((result) => {
+      if (!result.found || activePath !== completionPath || editor?.state.doc.toString() !== source) return null;
+      return {
+        from: result.from,
+        to: result.to,
+        options: result.options || [],
+      };
+    }).catch(() => null);
+  }
+  if (!word && !context.explicit) return null;
   if (word?.text === "_" && activePath?.endsWith(".zyl")) {
     const path = activePath;
     let request;

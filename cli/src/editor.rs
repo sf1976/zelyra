@@ -17,6 +17,8 @@ mod editor_ai;
 mod editor_canvas;
 #[path = "editor_capabilities.rs"]
 mod editor_capabilities;
+#[path = "editor_completion.rs"]
+mod editor_completion;
 #[path = "editor_module_settings.rs"]
 mod editor_module_settings;
 pub(crate) use editor_module_settings::ProjectModuleSettingsStore;
@@ -618,6 +620,9 @@ fn editor_response(
         ("POST", "check") => check_project(state, &parse_json_body(&request.body)?),
         ("POST", "verify") => verify_editor_project(state, &parse_json_body(&request.body)?),
         ("POST", "typed-hole") => editor_typed_hole(state, &parse_json_body(&request.body)?),
+        ("POST", "field-completion") => {
+            editor_completion::field_completion(state, &parse_json_body(&request.body)?)
+        }
         ("POST", "runtime-profile") => runtime_profile(state, &parse_json_body(&request.body)?),
         ("POST", "run") => run_editor_program(state, &parse_json_body(&request.body)?),
         ("POST", "run-input") => {
@@ -6978,6 +6983,70 @@ fn main() {}
             .iter()
             .any(|item| item["expression"] == "name"));
         assert_eq!(fs::read_to_string(path).unwrap(), original);
+        fs::remove_dir_all(state.root.clone()).unwrap();
+    }
+
+    #[test]
+    fn studio_field_completion_uses_the_receiver_type_in_unsaved_source() {
+        let state = project();
+        let source = "struct Customer { name: String, email: String }\nfn main() { customer: Customer = Customer { name: \"Ada\", email: \"ada@example.test\" } print(customer.na) }\n";
+        let disk_source = "fn main() {}\n";
+        fs::write(state.root.join("main.zyl"), disk_source).unwrap();
+        let byte_dot_end = source.find("customer.na").unwrap() + "customer.".len();
+        let byte_cursor = source.find("customer.na").unwrap() + "customer.na".len();
+        let dot_end = byte_to_utf16(source, byte_dot_end);
+        let cursor = byte_to_utf16(source, byte_cursor);
+        let response = editor_completion::field_completion(
+            &state,
+            &json!({
+                "path":"main.zyl",
+                "source":source,
+                "dotEnd":dot_end,
+                "cursor":cursor,
+                "version":4,
+                "overlays":[]
+            }),
+        )
+        .unwrap();
+        let result: Value = serde_json::from_str(&response.2).unwrap();
+        let options = result["options"].as_array().unwrap();
+        assert_eq!(result["found"], true);
+        assert_eq!(result["from"], dot_end);
+        assert_eq!(result["to"], cursor);
+        assert!(options.iter().any(|item| item["label"] == "name"));
+        assert!(options.iter().any(|item| item["label"] == "email"));
+        assert_eq!(
+            fs::read_to_string(state.root.join("main.zyl")).unwrap(),
+            disk_source
+        );
+        fs::remove_dir_all(state.root.clone()).unwrap();
+    }
+
+    #[test]
+    fn studio_field_completion_does_not_guess_for_non_record_types() {
+        let state = project();
+        let source = "fn main() { value: Int = 7 print(value.) }\n";
+        fs::write(state.root.join("main.zyl"), source).unwrap();
+        let dot_end = byte_to_utf16(source, source.find("value.").unwrap() + "value.".len());
+        let response = editor_completion::field_completion(
+            &state,
+            &json!({
+                "path":"main.zyl",
+                "source":source,
+                "dotEnd":dot_end,
+                "cursor":dot_end,
+                "version":0,
+                "overlays":[]
+            }),
+        )
+        .unwrap();
+        let result: Value = serde_json::from_str(&response.2).unwrap();
+        assert_eq!(result["found"], false);
+        assert!(result["options"].as_array().unwrap().is_empty());
+        assert_eq!(
+            fs::read_to_string(state.root.join("main.zyl")).unwrap(),
+            source
+        );
         fs::remove_dir_all(state.root.clone()).unwrap();
     }
 

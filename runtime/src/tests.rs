@@ -374,6 +374,24 @@ fn inferred_expression_types_are_not_returned_for_invalid_programs() {
 }
 
 #[test]
+fn partial_type_inspection_keeps_receiver_types_without_weakening_check() {
+    let source = "struct Customer { name: String } fn main() { customer: Customer = Customer { name: \"Ada\" } print(customer.__zelyra_completion_hole) }";
+    let program = parse(&lex(source).unwrap()).unwrap();
+    let (inferred, errors) = inspect_expression_types(&program);
+    assert!(errors
+        .iter()
+        .any(|error| error.message.contains("unknown field")));
+    let receiver_start = source.rfind("customer.__zelyra_completion_hole").unwrap();
+    assert!(inferred.iter().any(|item| {
+        item.span.start == receiver_start
+            && item.span.end == receiver_start + "customer".len()
+            && item.ty == Type::Named("Customer".into())
+    }));
+    assert!(check_with_inferred_types(&program).is_err());
+    assert!(check(&program).is_err());
+}
+
+#[test]
 fn expected_types_flow_into_empty_collections_and_result_match_arms() {
     let source = r#"
 fn as_result(flag: Bool) -> Result<Int, String> {

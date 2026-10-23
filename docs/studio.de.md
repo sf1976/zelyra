@@ -123,6 +123,13 @@ Funktionskopf bietet Studio passende Startbausteine an. Nach dem Bestätigen
 eines Imports öffnet Studio die Vorschläge im nächsten Editorabschnitt. Nichts
 wird ohne Auswahl eingefügt; **Rückgängig** bleibt verfügbar.
 
+Nach einem Record-Ausdruck wie `customer.na` ergänzt **Strg+Leertaste** die
+Felder des vom Compiler ermittelten Empfängertyps. Die Vorschläge verwenden
+auch den ungespeicherten Quelltext; bei unbekanntem Typ oder unvollständiger
+Projektauflösung werden keine Felder geraten. Die temporäre Analyse ändert
+keine Datei. Eine Auswahl ersetzt nur den Feldnamen; der Compiler bleibt für
+die abschließende Typprüfung maßgeblich.
+
 Mit **F2** lassen sich aufgelöste Funktionen, Record-Typen und indexierte
 Record-Felder umbenennen. Studio zeigt vorab alle betroffenen Dateien und prüft die Änderung
 mit dem Compiler. Ein nicht indexierter Feldzugriff, der dadurch ungültig
