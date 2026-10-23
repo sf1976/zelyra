@@ -21,6 +21,7 @@ import { zelyraKeywords as keywords, zelyraLanguage } from "./zelyra-language.js
 import { zelyraEditingExtensions, zelyraEditingKeymap } from "./zelyra-editing.js";
 import { sqlBodyPrefix, sqlCompletionOptions } from "./sql-completion.js";
 import { importPathCompletion, importSignature, importedModuleAlias, importedModuleAliasAtCursor, importedModuleCompletion } from "./module-completion.js";
+import { isTopLevelBlankPosition, nextCrudCompletions } from "./next-step-completion.js";
 import {
   crosshairCursor,
   drawSelection,
@@ -855,6 +856,8 @@ function completionSource(context) {
   const word = context.matchBefore(/[\w]+/);
   const completionPath = activePath;
   const source = context.state.doc.toString();
+  const nextStepContext = context.explicit && !word && completionPath?.endsWith(".zyl")
+    && isTopLevelBlankPosition(source, context.pos);
   const importPaths = completionPath?.endsWith(".zyl")
     ? importPathCompletion(source, context.pos, treeFiles, completionPath)
     : null;
@@ -924,7 +927,10 @@ function completionSource(context) {
     sqlQuery === null ? loadProjectSymbols(completionPath, namespaceAlias === null ? undefined : source) : Promise.resolve({ symbols: [], modules: [] }),
     sqlQuery === null ? loadLocalSymbols(completionPath, source, context.pos) : Promise.resolve([]),
     sqlQuery === null ? Promise.resolve(null) : sqlCompletionMap(completionPath, source, context),
-  ]).then(([symbols, locals, sqlMap]) => {
+    nextStepContext
+      ? api("project-map", { method: "POST", body: JSON.stringify(projectMapRequest(completionPath, source)) }).catch(() => null)
+      : Promise.resolve(null),
+  ]).then(([symbols, locals, sqlMap, projectMap]) => {
     if (activePath !== completionPath || editor?.state.doc.toString() !== source) return null;
     const namespaceCompletion = sqlQuery === null
       ? importedModuleCompletion(namespaceAlias, symbols.modules || [])
@@ -945,7 +951,7 @@ function completionSource(context) {
     if (!localNames.has("main") && !projectOptions.some((item) => item.label === "main")) {
       projectOptions.push({ label: "main", type: "function", detail: t("symbolEntrypoint") });
     }
-    return [...localOptions, ...projectOptions, ...sqlOptions];
+    return [...localOptions, ...projectOptions, ...sqlOptions, ...nextCrudCompletions(projectMap, language)];
   });
   const fast = { from, options: basicOptions };
   const complete = projectOptions.then((options) => {
@@ -955,7 +961,7 @@ function completionSource(context) {
     for (const item of options) merged.set(item.label, item);
     return { from, options: [...merged.values()] };
   });
-  if (sqlQuery !== null || namespaceAlias !== null) return complete;
+  if (sqlQuery !== null || namespaceAlias !== null || nextStepContext) return complete;
   const fallback = new Promise((resolve) => setTimeout(() => resolve(fast), 300));
   return Promise.race([complete, fallback]);
 }

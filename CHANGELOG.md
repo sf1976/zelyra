@@ -5,6 +5,14 @@
   with unknown types. / Compilerinferenz für lokale Initialisierungen und die
   bekannte Typkompatibilitätsregel auch für Ausdruckslücken verwenden; Werte
   mit unbekanntem Typ nie als Vorschlag anbieten.
+- Offer a compiler-guided CRUD block with explicit Ctrl+Space for a uniquely
+  named declared table that has no CRUD, only at a blank top-level position;
+  selecting the suggestion inserts code, while incomplete and ambiguous maps
+  are skipped. / Einen compilergeführten CRUD-Block mit ausdrücklichem
+  Strg+Leertaste für eine eindeutig benannte deklarierte Tabelle ohne CRUD
+  anbieten, nur an einer leeren Position auf oberster Ebene; Code wird erst
+  durch Auswahl eingefügt, unvollständige und mehrdeutige Projektkarten werden
+  ausgelassen.
 
 ## 1.2.55 — Zelyra Studio und professionelles UI-Designsystem
 
