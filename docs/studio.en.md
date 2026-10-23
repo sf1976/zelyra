@@ -354,14 +354,25 @@ Nullable values can be marked NULL; a blank create field preserves a database
 default when one is declared. Edit and delete require a primary key. Unknown tables,
 undeclared fields, and tables without a live connection are rejected.
 Credentials stay on the local Studio server, and values are rendered as text.
-Opening the workbench does not fetch records automatically. The browser does
-not accept arbitrary SQL or cross-table writes.
+Opening the workbench does not fetch records automatically. Cross-table
+writes are not part of the record browser.
+
+The **SQL workbench** in Database Studio provides a separate editor for manual
+queries. It suggests tables and columns from the detected database schema and
+runs exactly one `SELECT` or `WITH` statement in a read-only transaction. The
+result grid displays at most 200 rows and truncates larger results. Run a query
+with `⌘/Ctrl + Enter` or the button. The draft and the last twelve queries are
+stored locally in the browser for each database connection. Writing SQL,
+multiple statements, and projects without a MariaDB or PostgreSQL connection
+are rejected. Use the confirmation-based record browser to change records,
+and the column editor and database plan to change the schema.
 
 The **chart assistant** creates a grouped bar or line chart from a declared
 live table. Choose the grouping and measure from fields. Available operations
 are count, sum, average, minimum, and maximum. Sum and average require a
 numeric database column. Studio builds a read-only query from schema
-identifiers and displays at most 20 groups. It does not accept arbitrary SQL.
+identifiers and displays at most 20 groups. Its query is built from the chart
+controls rather than entered as free-form SQL.
 You can set an exact text filter and an inclusive range on a `DATE` column.
 Values are bound as parameters, and table/column selections stay limited to
 declared project fields that also exist in the live database. The chart

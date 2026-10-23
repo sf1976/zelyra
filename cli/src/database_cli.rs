@@ -1664,26 +1664,40 @@ fn database_query(path: &str, args: &[String]) -> ExitCode {
     }
 }
 
-fn read_only_statement(sql: &str) -> bool {
+pub(super) fn read_only_statement(sql: &str) -> bool {
     let first = first_sql_keyword(sql);
     let upper = sql.to_ascii_uppercase();
+    let compact = upper
+        .chars()
+        .filter(|character| !character.is_whitespace())
+        .collect::<String>();
     matches!(
         first.as_str(),
         "SELECT" | "WITH" | "SHOW" | "DESCRIBE" | "DESC" | "EXPLAIN"
     ) && ![
-        "INTO OUTFILE",
-        "INTO DUMPFILE",
-        "FOR UPDATE",
-        "LOCK IN SHARE MODE",
+        "INTOOUTFILE",
+        "INTODUMPFILE",
+        "FORUPDATE",
+        "LOCKINSHAREMODE",
         "LOAD_FILE(",
         "GET_LOCK(",
         "RELEASE_LOCK(",
         "IS_FREE_LOCK(",
         "IS_USED_LOCK(",
+        "SLEEP(",
+        "BENCHMARK(",
+        "PG_SLEEP(",
+        "PG_ADVISORY_LOCK(",
+        "PG_TRY_ADVISORY_LOCK(",
+        "PG_ADVISORY_XACT_LOCK(",
+        "PG_TRY_ADVISORY_XACT_LOCK(",
+        "NEXTVAL(",
+        "SETVAL(",
+        "SET_CONFIG(",
         ":=",
     ]
     .iter()
-    .any(|unsafe_clause| upper.contains(unsafe_clause))
+    .any(|unsafe_clause| compact.contains(unsafe_clause))
 }
 
 fn transactional_dml_statement(sql: &str) -> bool {
@@ -1693,7 +1707,7 @@ fn transactional_dml_statement(sql: &str) -> bool {
     )
 }
 
-fn first_sql_keyword(sql: &str) -> String {
+pub(super) fn first_sql_keyword(sql: &str) -> String {
     sql.trim_start()
         .split(|character: char| !character.is_ascii_alphabetic())
         .next()
@@ -1701,7 +1715,7 @@ fn first_sql_keyword(sql: &str) -> String {
         .to_ascii_uppercase()
 }
 
-fn single_sql_statement(sql: &str) -> bool {
+pub(super) fn single_sql_statement(sql: &str) -> bool {
     let bytes = sql.as_bytes();
     let (mut index, mut quote, mut line_comment, mut block_comment) = (0, None, false, false);
     while index < bytes.len() {
@@ -1760,7 +1774,7 @@ fn single_sql_statement(sql: &str) -> bool {
     quote.is_none() && !block_comment
 }
 
-fn strip_sql_terminator(sql: &str) -> String {
+pub(super) fn strip_sql_terminator(sql: &str) -> String {
     let bytes = sql.as_bytes();
     let (mut index, mut quote, mut line_comment, mut block_comment) = (0, None, false, false);
     while index < bytes.len() {

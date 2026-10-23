@@ -30,6 +30,8 @@ mod editor_database_records;
 mod editor_outbox;
 #[path = "editor_pdf.rs"]
 mod editor_pdf;
+#[path = "editor_sql.rs"]
+mod editor_sql;
 #[path = "editor_terminal.rs"]
 mod editor_terminal;
 #[path = "editor_transactions.rs"]
@@ -567,6 +569,7 @@ fn editor_response(
         ("GET", "database-schema") => database_schema_response(state),
         ("GET", "database-target") => database_target_response(state),
         ("GET", "database-rows") => database_rows_response(state, request),
+        ("POST", "database-query") => editor_sql::query(state, &parse_json_body(&request.body)?),
         ("POST", "database-record-mutate") => {
             editor_database_records::mutate(state, &parse_json_body(&request.body)?)
         }
