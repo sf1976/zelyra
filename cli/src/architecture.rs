@@ -16,6 +16,18 @@ struct FilePlan {
     status: &'static str,
     reason: String,
     span: Option<Span>,
+    declarations: Vec<DeclarationPlan>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct DeclarationPlan {
+    kind: &'static str,
+    name: String,
+    proposed_directory: String,
+    status: &'static str,
+    rule: &'static str,
+    reason: String,
+    span: Span,
 }
 
 #[derive(Debug)]
@@ -696,6 +708,20 @@ pub(super) fn migrate_layout(mut arguments: impl Iterator<Item = String>) -> Exi
                             "line": span.line,
                             "column": span.column,
                         })),
+                        "declarations": file.declarations.iter().map(|declaration| serde_json::json!({
+                            "kind": declaration.kind,
+                            "name": declaration.name,
+                            "proposed_directory": declaration.proposed_directory,
+                            "status": declaration.status,
+                            "rule": declaration.rule,
+                            "reason": declaration.reason,
+                            "span": {
+                                "start": declaration.span.start,
+                                "end": declaration.span.end,
+                                "line": declaration.span.line,
+                                "column": declaration.span.column,
+                            },
+                        })).collect::<Vec<_>>(),
                     })).collect::<Vec<_>>(),
                     "summary": {
                         "classified": plan.summary.classified,
@@ -766,6 +792,7 @@ fn build_plan(entry: &Path) -> Result<MigrationPlan, String> {
                     status: "needs-manual-review",
                     reason: format!("source does not parse: {error}"),
                     span: Some(span),
+                    declarations: Vec::new(),
                 });
                 continue;
             }
@@ -779,22 +806,36 @@ fn build_plan(entry: &Path) -> Result<MigrationPlan, String> {
                 status: "unchanged-entrypoint",
                 reason: "the selected entry file remains at the project root".into(),
                 span: None,
+                declarations: Vec::new(),
             });
             continue;
         }
         if let Some(directory) = standard_directory(relative) {
+            let declarations = declaration_plans(&program, Some(directory));
+            let mismatched = declarations
+                .iter()
+                .any(|declaration| declaration.status == "needs-manual-review");
+            if mismatched {
+                manual_review += 1;
+            }
             files.push(FilePlan {
                 path: display,
                 rule: "LAYOUT-PLACEMENT-001",
                 proposed_directory: directory.into(),
-                status: "already-standard",
-                reason: format!("source is already inside the `{directory}/` project area"),
+                status: if mismatched { "needs-manual-review" } else { "already-standard" },
+                reason: if mismatched {
+                    format!("one or more declarations do not belong in the current `{directory}/` project area")
+                } else {
+                    format!("source is already inside the `{directory}/` project area")
+                },
                 span: first_declaration_span(&program),
+                declarations,
             });
             continue;
         }
         let destinations = destinations(&program);
         let span = first_declaration_span(&program);
+        let declarations = declaration_plans(&program, None);
         let (directory, status, reason) = match destinations.as_slice() {
             [directory] => (
                 directory.to_string(),
@@ -826,10 +867,11 @@ fn build_plan(entry: &Path) -> Result<MigrationPlan, String> {
             status,
             reason,
             span,
+            declarations,
         });
     }
     Ok(MigrationPlan {
-        schema_version: 1,
+        schema_version: 2,
         mode: "read-only-check",
         summary: Summary {
             classified: files
@@ -841,6 +883,159 @@ fn build_plan(entry: &Path) -> Result<MigrationPlan, String> {
         },
         files,
     })
+}
+
+fn declaration_plans(program: &Program, current_directory: Option<&str>) -> Vec<DeclarationPlan> {
+    let mut declarations = Vec::new();
+    macro_rules! add {
+        ($items:expr, $kind:literal, $name:expr, $span:expr, $destination:literal) => {
+            for item in &$items {
+                let (status, rule, reason) = match current_directory {
+                    Some(directory) if directory == $destination => (
+                        "already-standard",
+                        "LAYOUT-PLACEMENT-001",
+                        format!("{} belongs in the current `{directory}/` area", $kind),
+                    ),
+                    Some(directory) => (
+                        "needs-manual-review",
+                        "LAYOUT-PLACEMENT-002",
+                        format!(
+                            "{} belongs in `{}/`, not the current `{directory}/` area",
+                            $kind, $destination
+                        ),
+                    ),
+                    None => (
+                        "classified",
+                        "LAYOUT-CLASSIFY-001",
+                        format!("{} belongs in the `{}/` area", $kind, $destination),
+                    ),
+                };
+                declarations.push(DeclarationPlan {
+                    kind: $kind,
+                    name: ($name)(item),
+                    proposed_directory: $destination.into(),
+                    status,
+                    rule,
+                    reason,
+                    span: ($span)(item),
+                });
+            }
+        };
+    }
+    add!(
+        program.databases,
+        "database",
+        |item: &zelyra_ast::DatabaseDef| item.name.clone(),
+        |item: &zelyra_ast::DatabaseDef| item.span,
+        "schema"
+    );
+    add!(
+        program.tables,
+        "table",
+        |item: &zelyra_ast::TableDef| item.name.clone(),
+        |item: &zelyra_ast::TableDef| item.span,
+        "schema"
+    );
+    add!(
+        program.types,
+        "type",
+        |item: &zelyra_ast::TypeDef| item.name.clone(),
+        |item: &zelyra_ast::TypeDef| item.span,
+        "domain"
+    );
+    add!(
+        program.records,
+        "record",
+        |item: &zelyra_ast::RecordDef| item.name.clone(),
+        |item: &zelyra_ast::RecordDef| item.span,
+        "domain"
+    );
+    add!(
+        program.enums,
+        "enum",
+        |item: &zelyra_ast::EnumDef| item.name.clone(),
+        |item: &zelyra_ast::EnumDef| item.span,
+        "domain"
+    );
+    add!(
+        program.views,
+        "view",
+        |item: &zelyra_ast::ViewDef| item.name.clone(),
+        |item: &zelyra_ast::ViewDef| item.span,
+        "routes"
+    );
+    add!(
+        program.components,
+        "component",
+        |item: &zelyra_ast::ComponentDef| item.name.clone(),
+        |item: &zelyra_ast::ComponentDef| item.span,
+        "routes"
+    );
+    add!(
+        program.pages,
+        "page",
+        |item: &zelyra_ast::PageDef| item.path.clone(),
+        |item: &zelyra_ast::PageDef| item.span,
+        "routes"
+    );
+    add!(
+        program.tableviews,
+        "tableview",
+        |item: &zelyra_ast::TableViewDef| item.name.clone(),
+        |item: &zelyra_ast::TableViewDef| item.span,
+        "routes"
+    );
+    add!(
+        program.forms,
+        "form",
+        |item: &zelyra_ast::FormDef| item.name.clone(),
+        |item: &zelyra_ast::FormDef| item.span,
+        "routes"
+    );
+    add!(
+        program.cruds,
+        "crud",
+        |item: &zelyra_ast::CrudDef| item.name.clone(),
+        |item: &zelyra_ast::CrudDef| item.span,
+        "routes"
+    );
+    add!(
+        program.auth,
+        "auth",
+        |item: &zelyra_ast::AuthDef| item.name.clone(),
+        |item: &zelyra_ast::AuthDef| item.span,
+        "routes"
+    );
+    add!(
+        program.apis,
+        "api",
+        |item: &zelyra_ast::ApiDef| format!("{} {}", item.method, item.path),
+        |item: &zelyra_ast::ApiDef| item.span,
+        "routes"
+    );
+    add!(
+        program.commands,
+        "command",
+        |item: &zelyra_ast::CommandDef| item.name.clone(),
+        |item: &zelyra_ast::CommandDef| item.span,
+        "domain"
+    );
+    add!(
+        program.schedules,
+        "schedule",
+        |item: &zelyra_ast::ScheduleDef| item.name.clone(),
+        |item: &zelyra_ast::ScheduleDef| item.span,
+        "domain"
+    );
+    add!(
+        program.functions,
+        "function",
+        |item: &zelyra_ast::Function| item.name.clone(),
+        |item: &zelyra_ast::Function| item.span,
+        "domain"
+    );
+    declarations.sort_by_key(|declaration| declaration.span.start);
+    declarations
 }
 
 fn first_declaration_span(program: &Program) -> Option<Span> {
@@ -955,6 +1150,20 @@ fn print_human(plan: &MigrationPlan) {
             "{}:{} -> {} [{}] {}: {}",
             file.path, location, file.proposed_directory, file.status, file.rule, file.reason
         );
+        for declaration in &file.declarations {
+            println!(
+                "  {}:{}:{} {} `{}` -> {} [{}] {}: {}",
+                file.path,
+                declaration.span.line,
+                declaration.span.column,
+                declaration.kind,
+                declaration.name,
+                declaration.proposed_directory,
+                declaration.status,
+                declaration.rule,
+                declaration.reason
+            );
+        }
     }
     println!(
         "Summary: {} classified, {} need manual review, {} entrypoint(s) unchanged. No files were modified.",
@@ -1045,8 +1254,14 @@ mod tests {
         assert_eq!(logic.proposed_directory, "domain");
         assert_eq!(logic.rule, "LAYOUT-CLASSIFY-001");
         assert_eq!(logic.span.map(|span| span.line), Some(1));
+        assert_eq!(logic.declarations.len(), 1);
+        assert_eq!(logic.declarations[0].kind, "function");
+        assert_eq!(logic.declarations[0].name, "total");
+        assert_eq!(logic.declarations[0].status, "classified");
         assert_eq!(schema.proposed_directory, "schema");
         assert_eq!(schema.rule, "LAYOUT-CLASSIFY-001");
+        assert_eq!(schema.declarations[0].kind, "table");
+        assert_eq!(schema.declarations[0].name, "Customer");
         assert_eq!(schema.span.map(|span| span.line), Some(1));
         assert_eq!(entry.status, "unchanged-entrypoint");
         assert!(first.files.iter().any(|file| {
@@ -1069,6 +1284,41 @@ mod tests {
             .files
             .iter()
             .all(|file| file.status != "classified" || file.path == "main.zyl"));
+        let mixed = plan
+            .files
+            .iter()
+            .find(|file| file.path == "mixed.zyl")
+            .unwrap();
+        assert_eq!(mixed.declarations.len(), 2);
+        assert_eq!(mixed.declarations[0].proposed_directory, "schema");
+        assert_eq!(mixed.declarations[1].proposed_directory, "domain");
+        assert!(mixed.declarations[0].span.start < mixed.declarations[1].span.start);
+    }
+
+    #[test]
+    fn declarations_in_the_wrong_standard_area_are_reported_individually() {
+        let project = TempProject::new();
+        fs::create_dir(project.0.join("domain")).unwrap();
+        fs::write(
+            project.0.join("domain/misplaced.zyl"),
+            "fn calculate() -> Int { return 1 }\ntable Customer { id: Id }\n",
+        )
+        .unwrap();
+
+        let plan = build_plan(&project.0.join("main.zyl")).unwrap();
+        let file = plan
+            .files
+            .iter()
+            .find(|file| file.path == "domain/misplaced.zyl")
+            .unwrap();
+        assert_eq!(file.status, "needs-manual-review");
+        assert_eq!(file.declarations.len(), 2);
+        assert_eq!(file.declarations[0].name, "calculate");
+        assert_eq!(file.declarations[0].status, "already-standard");
+        assert_eq!(file.declarations[1].name, "Customer");
+        assert_eq!(file.declarations[1].proposed_directory, "schema");
+        assert_eq!(file.declarations[1].status, "needs-manual-review");
+        assert_eq!(plan.summary.manual_review, 1);
     }
 
     #[test]

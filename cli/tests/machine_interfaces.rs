@@ -2489,7 +2489,7 @@ fn new_standard_layout_generates_a_checkable_project_tree() {
         String::from_utf8_lossy(&migration.stderr)
     );
     let migration_report: serde_json::Value = serde_json::from_slice(&migration.stdout).unwrap();
-    assert_eq!(migration_report["schema_version"], 1);
+    assert_eq!(migration_report["schema_version"], 2);
     assert_eq!(migration_report["mode"], "read-only-check");
     assert_eq!(migration_report["summary"]["manual_review"], 0);
     let existing_domain = migration_report["files"]
@@ -2500,6 +2500,12 @@ fn new_standard_layout_generates_a_checkable_project_tree() {
         .unwrap();
     assert_eq!(existing_domain["rule"], "LAYOUT-PLACEMENT-001");
     assert_eq!(existing_domain["span"]["line"], 1);
+    assert_eq!(existing_domain["declarations"][0]["kind"], "function");
+    assert_eq!(
+        existing_domain["declarations"][0]["name"],
+        "welcome_message"
+    );
+    assert_eq!(existing_domain["declarations"][0]["span"]["line"], 1);
     fs::remove_dir_all(directory.join("assets")).unwrap();
     let invalid = Command::new(binary())
         .args(["check", entry.to_str().unwrap(), "--format=json"])
