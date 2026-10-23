@@ -148,7 +148,7 @@
     border-bottom: 1px solid var(--z-color-border);
   }
   :where(html[data-z-ui]) .zelyra-crud-card dl:last-child { border-bottom: 0; }
-  :where(html[data-z-ui]) .zelyra-crud-card dt { color: var(--z-color-text-muted); font-size: .76rem; font-weight: 600; }
+  :where(html[data-z-ui]) .zelyra-crud-card dt { color: var(--z-color-text-muted); font-size: .8rem; font-weight: 600; }
   :where(html[data-z-ui]) .zelyra-crud-card dd { min-width: 0; margin: 0; overflow-wrap: anywhere; color: var(--z-color-text); font-weight: 650; }
   :where(html[data-z-ui]) .zelyra-crud-detail-card dl { display: grid; grid-template-columns: minmax(8rem, .35fr) minmax(0, 1fr); margin: 0; }
   :where(html[data-z-ui]) .zelyra-crud-detail-card dt,
