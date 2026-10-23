@@ -167,7 +167,11 @@ mod tests {
             "DROP TABLE customers",
             "SELECT id INTO @customer_id FROM customers",
             "SELECT SLEEP (30)",
+            "SELECT SLEEP/* comment */(30)",
             "SELECT LOAD_FILE ('/etc/passwd')",
+            "SELECT LOAD_FILE/**/('/etc/passwd')",
+            "SELECT /*!80000 SLEEP(30) */ 1",
+            "SELECT pg_notify('channel', 'payload')",
         ] {
             assert!(prepare_read_only_query(query, None).is_err());
         }

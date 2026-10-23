@@ -1666,11 +1666,7 @@ fn database_query(path: &str, args: &[String]) -> ExitCode {
 
 pub(super) fn read_only_statement(sql: &str) -> bool {
     let first = first_sql_keyword(sql);
-    let upper = sql.to_ascii_uppercase();
-    let compact = upper
-        .chars()
-        .filter(|character| !character.is_whitespace())
-        .collect::<String>();
+    let compact = compact_sql_for_safety(sql);
     matches!(
         first.as_str(),
         "SELECT" | "WITH" | "SHOW" | "DESCRIBE" | "DESC" | "EXPLAIN"
@@ -1691,6 +1687,19 @@ pub(super) fn read_only_statement(sql: &str) -> bool {
         "PG_TRY_ADVISORY_LOCK(",
         "PG_ADVISORY_XACT_LOCK(",
         "PG_TRY_ADVISORY_XACT_LOCK(",
+        "PG_NOTIFY(",
+        "PG_READ_FILE(",
+        "PG_READ_BINARY_FILE(",
+        "PG_RELOAD_CONF(",
+        "PG_CANCEL_BACKEND(",
+        "PG_TERMINATE_BACKEND(",
+        "PG_STAT_RESET(",
+        "DBLINK_EXEC(",
+        "DBLINK_CONNECT(",
+        "LO_IMPORT(",
+        "LO_EXPORT(",
+        "SYS_EXEC(",
+        "SYS_EVAL(",
         "NEXTVAL(",
         "SETVAL(",
         "SET_CONFIG(",
@@ -1698,6 +1707,101 @@ pub(super) fn read_only_statement(sql: &str) -> bool {
     ]
     .iter()
     .any(|unsafe_clause| compact.contains(unsafe_clause))
+}
+
+fn compact_sql_for_safety(sql: &str) -> String {
+    let characters = sql.chars().collect::<Vec<_>>();
+    let mut compact = String::with_capacity(sql.len());
+    let mut index = 0;
+
+    while index < characters.len() {
+        let character = characters[index];
+        let next = characters.get(index + 1).copied();
+
+        if character == '/' && next == Some('*') {
+            let executable = characters.get(index + 2) == Some(&'!')
+                || (characters.get(index + 2) == Some(&'M')
+                    && characters.get(index + 3) == Some(&'!'));
+            let body_start = index
+                + if characters.get(index + 2) == Some(&'M') {
+                    4
+                } else {
+                    3
+                };
+            index += if executable { body_start - index } else { 2 };
+            while index < characters.len() {
+                if characters[index] == '*' && characters.get(index + 1) == Some(&'/') {
+                    index += 2;
+                    break;
+                }
+                if executable {
+                    compact.push(characters[index]);
+                }
+                index += 1;
+            }
+            compact.push(' ');
+            continue;
+        }
+
+        if character == '-'
+            && next == Some('-')
+            && characters
+                .get(index + 2)
+                .is_none_or(|next| next.is_whitespace() || next.is_control())
+        {
+            while index < characters.len() && characters[index] != '\n' {
+                index += 1;
+            }
+            compact.push(' ');
+            continue;
+        }
+
+        if character == '\'' {
+            let quote = character;
+            index += 1;
+            while index < characters.len() {
+                if characters[index] == quote {
+                    if characters.get(index + 1) == Some(&quote) {
+                        index += 2;
+                        continue;
+                    }
+                    index += 1;
+                    break;
+                }
+                index += 1;
+            }
+            compact.push(' ');
+            continue;
+        }
+
+        if character == '`' || character == '"' {
+            let quote = character;
+            index += 1;
+            while index < characters.len() {
+                if characters[index] == quote {
+                    if characters.get(index + 1) == Some(&quote) {
+                        compact.push(quote);
+                        index += 2;
+                        continue;
+                    }
+                    index += 1;
+                    break;
+                }
+                compact.push(characters[index]);
+                index += 1;
+            }
+            continue;
+        }
+
+        compact.push(character.to_ascii_uppercase());
+        index += 1;
+    }
+
+    compact
+        .to_ascii_uppercase()
+        .chars()
+        .filter(|character| !character.is_whitespace())
+        .collect()
 }
 
 fn transactional_dml_statement(sql: &str) -> bool {
@@ -2153,6 +2257,19 @@ mod tests {
         assert!(!read_only_statement("SELECT id FROM users FOR UPDATE"));
         assert!(!read_only_statement("SELECT GET_LOCK('name', 0)"));
         assert!(!read_only_statement("SELECT @value := 1"));
+        assert!(!read_only_statement("SELECT SLEEP/* hidden gap */ (1)"));
+        assert!(!read_only_statement("SELECT LOAD_FILE/**/('/etc/passwd')"));
+        assert!(!read_only_statement("SELECT /*!80000 SLEEP(1) */ 1"));
+        assert!(!read_only_statement(
+            "SELECT pg_notify('channel', 'payload')"
+        ));
+        assert!(!read_only_statement(
+            "SELECT \"pg_notify\"('channel', 'payload')"
+        ));
+        assert!(!read_only_statement(
+            "SELECT document #>> '{}' FROM items WHERE pg_notify('channel', 'payload') IS NULL"
+        ));
+        assert!(read_only_statement("SELECT 'SLEEP(1)' AS harmless_text"));
         assert!(transactional_dml_statement("INSERT INTO users VALUES (1)"));
         assert!(!transactional_dml_statement("DROP TABLE users"));
     }
