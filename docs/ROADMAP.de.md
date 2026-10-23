@@ -704,6 +704,8 @@ Der erste dokumentierte Abgleich und seine Testbelege stehen im
 
 - [🧪] **1.3.0 — ARCH-001, schreibendes SQL in API-Routen:** Bei `api`-Handlern in `routes/` verfolgt `strict_architecture` statisch aufgelöste Zelyra-Funktionsaufrufe. Schreibendes SQL wird mit `E-ARCH-002`, nicht sicher klassifizierbares SQL fail-closed mit `E-ARCH-003` und Quellposition gemeldet; `E-ARCH-001` bleibt die Deklarationsplatzierungsregel. Direkte Schreibzugriffe gehören in `domain/`, die von Routen aufgerufen werden dürfen. Positive und negative CLI-Integrationstests decken direkten Schreibzugriff, lokale Hilfsfunktionen, Domain-Aufrufe, lesende Abfragen und Quellpositionen ab. Eingebettete Form-/CRUD-Aktionskörper und dynamische/unaufgelöste Aufrufe sind noch nicht abgedeckt.
 
+- [🧪] **1.3.0 — Quellpositionen in der Layout-Migrationsvorschau:** `migrate-layout --check --format json` liefert je Datei jetzt zusätzlich eine stabile Regelkennung und – sofern eine Deklaration oder ein Parsefehler vorliegt – Start-/Endoffset, Zeile und Spalte. Zielvorschlag, Status und Begründung bleiben erhalten; die Vorschau ändert weiterhin keine Dateien. Die Vorschau ist dateibezogen und ersetzt noch keine separate Diagnose für jede Deklaration.
+
 - [🗺️] **1.5.0 — Bytecode als mögliches Standard-Backend:** AST bleibt bis dahin
   Standard; MIR und Bytecode bleiben ausdrücklich auswählbar und experimentell.
   Ein Standardwechsel wird nur freigegeben, wenn unterstützte Sprach-, SQL-,

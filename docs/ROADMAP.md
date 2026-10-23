@@ -644,6 +644,8 @@ The initial documented comparison and its test evidence are in the
 
 - [🧪] **1.3.0 — ARCH-001, SQL writes in API routes:** For `api` handlers in `routes/`, `strict_architecture` follows statically resolved Zelyra function calls. Write SQL reports `E-ARCH-002`; SQL that cannot be safely classified fails closed with `E-ARCH-003` and a source location. `E-ARCH-001` remains the declaration-placement rule. Put direct writes in callable `domain/` functions. Positive and negative CLI integration tests cover direct writes, route-local helpers, domain calls, read queries, and source locations. Embedded form/CRUD action bodies and dynamic or unresolved calls are not covered yet.
 
+- [🧪] **1.3.0 — source locations in the layout migration preview:** `migrate-layout --check --format json` now includes a stable rule identifier per file and, when a declaration or parse error is available, its start/end offsets, line, and column. Candidate destination, status, and reason remain present; the preview remains read-only. Findings are still file-level rather than separate diagnostics for every declaration.
+
 - [🗺️] **1.5.0 — Bytecode as a candidate default backend:** Keep AST as the
   default through this milestone; MIR and Bytecode remain explicitly selectable
   and experimental. Promote Bytecode only after supported language, SQL,

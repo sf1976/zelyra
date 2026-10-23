@@ -7,6 +7,10 @@
   API-Handlern in `routes/` verfolgt und schreibendes beziehungsweise nicht
   sicher klassifizierbares SQL gemeldet werden; fachliche Schreibzugriffe
   gehören nach `domain/`.
+- Add source locations and stable rule identifiers to the read-only project
+  layout migration preview, alongside its reason and candidate destination. /
+  Die schreibgeschützte Projektlayout-Vorschau um Quellpositionen und stabile
+  Regelkennungen ergänzen; Grund und Zielvorschlag bleiben ebenfalls sichtbar.
 
 ## 1.2.56 — Zelyra Studio SQL workbench and editor usability
 

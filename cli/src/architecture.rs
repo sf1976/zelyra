@@ -11,9 +11,11 @@ use zelyra_parser::parse;
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct FilePlan {
     path: String,
+    rule: &'static str,
     proposed_directory: String,
     status: &'static str,
     reason: String,
+    span: Option<Span>,
 }
 
 #[derive(Debug)]
@@ -493,9 +495,16 @@ pub(super) fn migrate_layout(mut arguments: impl Iterator<Item = String>) -> Exi
                     "mode": plan.mode,
                     "files": plan.files.iter().map(|file| serde_json::json!({
                         "path": file.path,
+                        "rule": file.rule,
                         "proposed_directory": file.proposed_directory,
                         "status": file.status,
                         "reason": file.reason,
+                        "span": file.span.map(|span| serde_json::json!({
+                            "start": span.start,
+                            "end": span.end,
+                            "line": span.line,
+                            "column": span.column,
+                        })),
                     })).collect::<Vec<_>>(),
                     "summary": {
                         "classified": plan.summary.classified,
@@ -550,20 +559,22 @@ fn build_plan(entry: &Path) -> Result<MigrationPlan, String> {
         let source = fs::read_to_string(&path)
             .map_err(|error| format!("cannot read `{}`: {error}", path.display()))?;
         let parsed = lex(&source)
-            .map_err(|error| error.message)
-            .and_then(|tokens| parse(&tokens).map_err(|error| error.message));
+            .map_err(|error| (error.message, error.span))
+            .and_then(|tokens| parse(&tokens).map_err(|error| (error.message, error.span)));
         let program = match parsed {
             Ok(program) => program,
-            Err(error) if path == canonical_entry => {
+            Err((error, _span)) if path == canonical_entry => {
                 return Err(format!("{display}: {error}"));
             }
-            Err(error) => {
+            Err((error, span)) => {
                 manual_review += 1;
                 files.push(FilePlan {
                     path: display,
+                    rule: "LAYOUT-PARSE-001",
                     proposed_directory: "(manual decision)".into(),
                     status: "needs-manual-review",
                     reason: format!("source does not parse: {error}"),
+                    span: Some(span),
                 });
                 continue;
             }
@@ -572,22 +583,27 @@ fn build_plan(entry: &Path) -> Result<MigrationPlan, String> {
             unchanged_entrypoints += 1;
             files.push(FilePlan {
                 path: display,
+                rule: "LAYOUT-ENTRY-001",
                 proposed_directory: "(project root)".into(),
                 status: "unchanged-entrypoint",
                 reason: "the selected entry file remains at the project root".into(),
+                span: None,
             });
             continue;
         }
         if let Some(directory) = standard_directory(relative) {
             files.push(FilePlan {
                 path: display,
+                rule: "LAYOUT-PLACEMENT-001",
                 proposed_directory: directory.into(),
                 status: "already-standard",
                 reason: format!("source is already inside the `{directory}/` project area"),
+                span: first_declaration_span(&program),
             });
             continue;
         }
         let destinations = destinations(&program);
+        let span = first_declaration_span(&program);
         let (directory, status, reason) = match destinations.as_slice() {
             [directory] => (
                 directory.to_string(),
@@ -610,9 +626,15 @@ fn build_plan(entry: &Path) -> Result<MigrationPlan, String> {
         }
         files.push(FilePlan {
             path: display,
+            rule: if status == "classified" {
+                "LAYOUT-CLASSIFY-001"
+            } else {
+                "LAYOUT-REVIEW-001"
+            },
             proposed_directory: directory,
             status,
             reason,
+            span,
         });
     }
     Ok(MigrationPlan {
@@ -628,6 +650,29 @@ fn build_plan(entry: &Path) -> Result<MigrationPlan, String> {
         },
         files,
     })
+}
+
+fn first_declaration_span(program: &Program) -> Option<Span> {
+    program
+        .databases
+        .iter()
+        .map(|item| item.span)
+        .chain(program.tables.iter().map(|item| item.span))
+        .chain(program.types.iter().map(|item| item.span))
+        .chain(program.records.iter().map(|item| item.span))
+        .chain(program.enums.iter().map(|item| item.span))
+        .chain(program.views.iter().map(|item| item.span))
+        .chain(program.components.iter().map(|item| item.span))
+        .chain(program.pages.iter().map(|item| item.span))
+        .chain(program.tableviews.iter().map(|item| item.span))
+        .chain(program.forms.iter().map(|item| item.span))
+        .chain(program.cruds.iter().map(|item| item.span))
+        .chain(program.auth.iter().map(|item| item.span))
+        .chain(program.apis.iter().map(|item| item.span))
+        .chain(program.commands.iter().map(|item| item.span))
+        .chain(program.schedules.iter().map(|item| item.span))
+        .chain(program.functions.iter().map(|item| item.span))
+        .min_by_key(|span| span.start)
 }
 
 fn collect_sources(root: &Path, directory: &Path, paths: &mut Vec<PathBuf>) -> Result<(), String> {
@@ -711,9 +756,13 @@ fn print_human(plan: &MigrationPlan) {
         plan.schema_version
     );
     for file in &plan.files {
+        let location = file.span.map_or_else(
+            || "-".to_owned(),
+            |span| format!("{}:{}", span.line, span.column),
+        );
         println!(
-            "{} -> {} [{}]: {}",
-            file.path, file.proposed_directory, file.status, file.reason
+            "{}:{} -> {} [{}] {}: {}",
+            file.path, location, file.proposed_directory, file.status, file.rule, file.reason
         );
     }
     println!(
@@ -803,7 +852,11 @@ mod tests {
             .find(|file| file.path == "main.zyl")
             .unwrap();
         assert_eq!(logic.proposed_directory, "domain");
+        assert_eq!(logic.rule, "LAYOUT-CLASSIFY-001");
+        assert_eq!(logic.span.map(|span| span.line), Some(1));
         assert_eq!(schema.proposed_directory, "schema");
+        assert_eq!(schema.rule, "LAYOUT-CLASSIFY-001");
+        assert_eq!(schema.span.map(|span| span.line), Some(1));
         assert_eq!(entry.status, "unchanged-entrypoint");
         assert!(first.files.iter().any(|file| {
             file.path == "domain/existing.zyl" && file.status == "already-standard"

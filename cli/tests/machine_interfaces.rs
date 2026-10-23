@@ -2492,6 +2492,14 @@ fn new_standard_layout_generates_a_checkable_project_tree() {
     assert_eq!(migration_report["schema_version"], 1);
     assert_eq!(migration_report["mode"], "read-only-check");
     assert_eq!(migration_report["summary"]["manual_review"], 0);
+    let existing_domain = migration_report["files"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|file| file["path"] == "domain/dashboard/actions.zyl")
+        .unwrap();
+    assert_eq!(existing_domain["rule"], "LAYOUT-PLACEMENT-001");
+    assert_eq!(existing_domain["span"]["line"], 1);
     fs::remove_dir_all(directory.join("assets")).unwrap();
     let invalid = Command::new(binary())
         .args(["check", entry.to_str().unwrap(), "--format=json"])
