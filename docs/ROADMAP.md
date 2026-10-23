@@ -589,6 +589,7 @@ security and compatibility gates stated for that milestone.
 - [🧪] **1.3.0 — compiler-inferred expression-hole assistance:** At `_`, Studio now includes types inferred from local initializers and applies the same known-type compatibility relation as the compiler. Unknown types, including nested unknown generic arguments, are excluded. Targeted tests prove the suggested local can be selected and the completed source type-checks; broader compiler-guided suggestions for the next declaration or block remain open.
 
 - [x] **Zelyra Studio project menu (released in 1.2.55):** a dedicated Project menu exposes capability/path review and package/module settings, while View, Run, File, and Database keep their corresponding actions discoverable after the legacy toolbar buttons are hidden. Browser E2E tests follow these visible menu paths, and the screenshot baseline matches the current menu layout.
+- [🧪] **1.2.56 — File and Edit menus (in progress):** The Studio menus gain the expected file actions plus undo/redo, cut/copy/paste, select all, and document search. Ctrl+H opens Find and Replace in the active document; Ctrl+Shift+F remains project-wide search.
 
 **Post-1.3.0 or explicitly reprioritized:** a native AOT backend is optional
 and depends on benchmark evidence. No open task is silently dropped: work that cannot meet its release

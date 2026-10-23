@@ -643,6 +643,7 @@ abgeschlossen.
 - [🧪] **1.3.0 — compilerinferenzbasierte Ausdruckslückenhilfe:** An `_` berücksichtigt Studio jetzt auch Typen, die der Compiler aus lokalen Initialisierungen herleitet, und nutzt dieselbe bekannte Typkompatibilitätsregel wie die Typprüfung. Unbekannte Typen – auch in verschachtelten generischen Argumenten – werden ausgeschlossen. Gezielte Tests belegen, dass ein solcher lokaler Wert vorgeschlagen, eingesetzt und der fertige Quelltext erfolgreich typgeprüft wird. Allgemeinere compilergeführte Vorschläge für die nächste Deklaration oder den nächsten Block bleiben offen.
 
 - [x] **Zelyra-Studio-Projektmenü (veröffentlicht in 1.2.55):** Ein eigenes Menü „Projekt“ bietet die Prüfung von Capabilities/Pfadfreigaben und Paket-/Moduleinstellungen an. Ansicht, Ausführen, Datei und Datenbank führen ihre Aktionen ebenfalls über die sichtbare Menüleiste, wenn die alten Toolbar-Schaltflächen ausgeblendet sind. Browser-E2E-Tests benutzen diese sichtbaren Menüpfade; die Desktop-Screenshot-Baseline bildet das aktuelle Menülayout ab.
+- [🧪] **1.2.56 — Datei- und Bearbeiten-Menüs (in Arbeit):** Die Studio-Menüs erhalten übliche Dateiaktionen sowie Rückgängig/Wiederholen, Ausschneiden/Kopieren/Einfügen, Alles auswählen und Dokument-Suche. Strg+H öffnet Suchen und Ersetzen im aktiven Dokument; Strg+Umschalt+F bleibt die Projektsuche.
 
 **Nach 1.3.0 oder bei ausdrücklicher Neubewertung:** Ein natives AOT-Backend
 bleibt optional und hängt von Benchmarks ab. Kein offener Punkt entfällt stillschweigend: Arbeit, deren
