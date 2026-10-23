@@ -1,5 +1,22 @@
 ## Unreleased
 
+## 1.2.55 — Zelyra Studio und professionelles UI-Designsystem
+
+- Refine the default Zelyra UI theme and version its generated design-system
+  bundle as CSS 1.1.0, with responsive CRUD, form, table, navigation, and
+  light/dark theme tokens. / Das Zelyra-Standarddesign überarbeiten und das
+  generierte Designsystem-Bundle als CSS 1.1.0 versionieren – mit responsivem
+  CRUD-, Formular-, Tabellen- und Navigationsdesign sowie Hell-/Dunkel-Tokens.
+- Add a dedicated Project menu for Studio project capabilities, path review,
+  and package/module settings. / Ein eigenes Projektmenü für Projektfähigkeiten,
+  Pfadprüfung und Paket-/Moduleinstellungen ergänzen.
+- Suggest public declarations after an imported module namespace and expose
+  experimental MIR/Bytecode execution in Studio settings; AST remains the
+  default, and web previews remain AST-only. / Nach einem importierten
+  Modulnamespace öffentliche Deklarationen vorschlagen und experimentelle
+  MIR-/Bytecode-Ausführung in den Studio-Einstellungen anbieten; AST bleibt
+  Standard, Webvorschauen verwenden weiterhin ausschließlich AST.
+
 ## 1.2.54 — Studio import guidance
 
 - Suggest matching project `.zyl` modules after `import "`, excluding the active

@@ -11,11 +11,18 @@ Business-, Datenbank- und Webanwendungen. Schemaabhängiges SQL, Formulare,
 CRUD, Views und Geschäftslogik greifen ineinander; gewöhnlicher Programmcode
 und natives SQL bleiben jederzeit möglich.
 
-> **Release 1.2.54 · Sprachkompatibilitätslinie: 0.1** · [GitHub-Release](https://github.com/sf1976/zelyra/releases/tag/v1.2.54)
+> **Release 1.2.55 · Sprachkompatibilitätslinie: 0.1** · [GitHub-Release](https://github.com/sf1976/zelyra/releases/tag/v1.2.55)
 >
 > Die Compilerprüfung und der Verifier decken klar abgegrenzte Bereiche ab. Sie beweisen nicht die Korrektheit beliebiger Anwendungen. Prüfe vor dem Einsatz die unterstützten Abläufe und Grenzen in der jeweiligen Dokumentation.
 
-Zelyra 1.2.54 schlägt beim Schreiben eines `import`-Pfads passende
+Zelyra 1.2.55 bringt das professionelle CSS-1.1.0-Designsystem in generierte
+Anwendungen: mit überarbeitetem CRUD-, Formular-, Tabellen- und responsivem
+Layout sowie Hell-/Dunkel-Tokens. Das Studio erhält ein eigenes Projektmenü
+und Vorschläge öffentlicher Deklarationen nach einem importierten
+Modulnamespace. In den Laufeinstellungen lassen sich MIR und Bytecode für
+Konsolenprojekte experimentell wählen; AST bleibt Standard, Webvorschauen
+verwenden weiterhin ausschließlich AST. Zelyra 1.2.54 schlägt beim Schreiben
+eines `import`-Pfads passende
 Zelyra-Quelldateien aus dem Projekt vor. Aktive Datei, bereits importierte
 Module, Nicht-Zelyra-Dateien und Kommentartext werden ausgelassen. Version
 1.2.53 ergänzte automatische Klammerpaare und Einrückung; 1.2.52 ergänzte
@@ -36,7 +43,8 @@ in einer Instruktion zusammen. Frühere 1.2.x-Releases ergänzten typisierte
 CRUD-Aktionen, compilergeprüfte Uploads, berechnete Tabellenfelder,
 Geschäftsnummernkreise, einen Laravel-Website-Importer, `zelyra db console` und
 `zelyra db query`, Abrechnungspakete sowie typisierte CSV-Konvertierung.
-Siehe die [Release-Notizen 1.2.54](docs/release-notes/1.2.54.de.md),
+Siehe die [Release-Notizen 1.2.55](docs/release-notes/1.2.55.de.md),
+[Release-Notizen 1.2.54](docs/release-notes/1.2.54.de.md),
 [Release-Notizen 1.2.53](docs/release-notes/1.2.53.de.md),
 [Release-Notizen 1.2.52](docs/release-notes/1.2.52.de.md),
 [Release-Notizen 1.2.51](docs/release-notes/1.2.51.de.md),
