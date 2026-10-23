@@ -26,7 +26,7 @@ proof claims guide every phase. The [manifesto](MANIFESTO.md) states the
 principles; the roadmap below tracks what is actually implemented.
 
 The current stable release is
-[1.2.52](https://github.com/sf1976/zelyra/releases/tag/v1.2.52).
+[1.2.53](https://github.com/sf1976/zelyra/releases/tag/v1.2.53).
 **Current milestones** is the source of near-term commitments. Older numbered release sections below are retained as
 historical planning and evidence; they do not by themselves define current
 release targets. Longer-term ideas remain in the post-1.0 evolution section.
@@ -1040,6 +1040,7 @@ compatibility behavior before changing syntax. See the detailed
 - [x] **1.2.50 — reproducible Studio assets:** Align the Studio source modules with generated browser bundles, verify reproducible builds, and document the PostgreSQL REPL sandbox constraint. Published with Linux/Windows packages, checksums, SPDX SBOMs, and release attestations on [GitHub Releases](https://github.com/sf1976/zelyra/releases/tag/v1.2.50).
 - [x] **1.2.51 — compiler-aware Studio and SQL completion:** Present the local compiler project map on the Studio welcome page with a context-dependent next action; complete SQL from declared tables and unambiguous columns, including table aliases. Suggestions require no live database. Published with Linux/Windows packages, checksums, SPDX SBOMs, and release attestations on [GitHub Releases](https://github.com/sf1976/zelyra/releases/tag/v1.2.51).
 - [x] **1.2.52 — contextual Zelyra Studio editing:** Resolve function signatures and active arguments, complete record fields from compiler-inferred types and public imports, and scope module completion to public declarations. Optional AI suggestions require explicit confirmation and never apply code automatically. Full PR CI and the Linux/Windows release workflow passed; packages, checksums, SPDX SBOMs, and release attestations are published on [GitHub Releases](https://github.com/sf1976/zelyra/releases/tag/v1.2.52). Zelyra 1.3.0 remains in progress.
+- [x] **1.2.53 — Zelyra-aware editor behavior:** Pair brackets and quotes, indent Zelyra blocks with four spaces, and support Tab/Shift+Tab. Indentation follows block structure and ignores braces in comments and strings. Full PR CI and the Linux/Windows tag workflows passed, including reproducible builds, checksums, SPDX SBOMs, and release attestations. The published Linux install and update smoke test passed. See [GitHub Releases](https://github.com/sf1976/zelyra/releases/tag/v1.2.53). Zelyra 1.3.0 remains in progress.
 
 - [ ] **1.2.0 — Compose check in the installer:** Installers detect
   Docker Compose v2 or newer and distinguish it from obsolete Python Compose
