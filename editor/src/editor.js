@@ -6,7 +6,6 @@ import {
   foldGutter,
   HighlightStyle,
   foldKeymap,
-  indentOnInput,
   syntaxHighlighting,
 } from "@codemirror/language";
 import { linter, setDiagnostics } from "@codemirror/lint";
@@ -19,6 +18,7 @@ import {
   zelyraUiDefaultAppearance,
 } from "./zelyra-ui-metadata.js";
 import { zelyraKeywords as keywords, zelyraLanguage } from "./zelyra-language.js";
+import { zelyraEditingExtensions, zelyraEditingKeymap } from "./zelyra-editing.js";
 import { sqlBodyPrefix, sqlCompletionOptions } from "./sql-completion.js";
 import { importSignature, importedModuleAlias, importedModuleCompletion } from "./module-completion.js";
 import {
@@ -1640,7 +1640,7 @@ function createView(path, state) {
   const extensions = [
     lineNumbers(), highlightActiveLineGutter(), foldGutter(), verificationGutter, undoRedoHistory(), drawSelection(),
     rectangularSelection(), crosshairCursor(), highlightActiveLine(), bracketMatching(),
-    indentOnInput(), highlightSelectionMatches(), zelyraLanguage,
+    ...zelyraEditingExtensions, highlightSelectionMatches(), zelyraLanguage,
     syntaxHighlighting(defaultHighlightStyle, { fallback: true }), zelyraHighlight,
     autocompletion({ override: [completionSource], activateOnTyping: true }),
     semanticHover,
@@ -1651,6 +1651,7 @@ function createView(path, state) {
       message: `${item.code ? `${item.code}: ` : ""}${item.message}`,
     }))),
     keymap.of([
+      ...zelyraEditingKeymap,
       { key: "Mod-s", run: () => { saveActive(); return true; } },
       { key: "Mod-Space", run: startCompletion },
       { key: "F12", run: () => { void goToDefinition(); return true; } },

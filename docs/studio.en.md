@@ -76,6 +76,12 @@ control remains reachable without horizontal overflow.
 
 ## Use the IDE tools
 
+The Zelyra editor inserts matching closing brackets and quotation marks while
+you type. New blocks use four-space indentation; **Tab** indents the current
+line or selection, and **Shift+Tab** outdents it. Pressing Enter inside a block
+continues its indentation and aligns a closing bracket with the start of that
+block.
+
 Press **F1** or choose the help action to see a description, options, and an
 example for a supported language term. **Ctrl+Shift+P** opens the searchable
 action finder. **Ctrl+Space** requests completion; available suggestions include
