@@ -1,5 +1,17 @@
 ## Unreleased
 
+## 1.2.54 — Studio import guidance
+
+- Suggest matching project `.zyl` modules after `import "`, excluding the active
+  file, duplicate imports, non-Zelyra files, and comment text. / Nach `import
+  "` passende Projektmodule mit `.zyl`-Endung vorschlagen; aktive Datei,
+  doppelte Imports, andere Dateitypen und Kommentartext auslassen.
+- Update the transitive `ctutils` dependency to 0.4.5 to resolve
+  [RUSTSEC-2026-0385](https://rustsec.org/advisories/RUSTSEC-2026-0385.html).
+  / Die transitive Abhängigkeit `ctutils` auf 0.4.5 aktualisieren, um
+  [RUSTSEC-2026-0385](https://rustsec.org/advisories/RUSTSEC-2026-0385.html)
+  zu beheben.
+
 ## 1.2.53 — Zelyra-aware editing
 
 - Add Zelyra-aware editor behavior: auto-paired brackets and quotes, four-space
