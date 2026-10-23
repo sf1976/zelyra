@@ -1,5 +1,13 @@
 ## Unreleased
 
+- Extend strict architecture checks to follow statically resolved calls from
+  API handlers in `routes/`, reporting write SQL and SQL whose effects cannot
+  be safely classified; keep business writes in `domain/`. / Strenge
+  Architekturprüfungen so erweitern, dass statisch aufgelöste Aufrufe aus
+  API-Handlern in `routes/` verfolgt und schreibendes beziehungsweise nicht
+  sicher klassifizierbares SQL gemeldet werden; fachliche Schreibzugriffe
+  gehören nach `domain/`.
+
 ## 1.2.56 — Zelyra Studio SQL workbench and editor usability
 
 - Add a Studio SQL workbench with schema-aware completion and local query

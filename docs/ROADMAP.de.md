@@ -702,6 +702,8 @@ Der erste dokumentierte Abgleich und seine Testbelege stehen im
 
 - [🧪] **1.3.0 — compilerinferenzbasierte Ausdruckslückenhilfe:** An `_` berücksichtigt Studio jetzt auch Typen, die der Compiler aus lokalen Initialisierungen herleitet, und nutzt dieselbe bekannte Typkompatibilitätsregel wie die Typprüfung. Unbekannte Typen – auch in verschachtelten generischen Argumenten – werden ausgeschlossen. Gezielte Tests belegen, dass ein solcher lokaler Wert vorgeschlagen, eingesetzt und der fertige Quelltext erfolgreich typgeprüft wird. Allgemeinere compilergeführte Vorschläge für die nächste Deklaration oder den nächsten Block bleiben offen.
 
+- [🧪] **1.3.0 — ARCH-001, schreibendes SQL in API-Routen:** Bei `api`-Handlern in `routes/` verfolgt `strict_architecture` statisch aufgelöste Zelyra-Funktionsaufrufe. Schreibendes SQL wird mit `E-ARCH-002`, nicht sicher klassifizierbares SQL fail-closed mit `E-ARCH-003` und Quellposition gemeldet; `E-ARCH-001` bleibt die Deklarationsplatzierungsregel. Direkte Schreibzugriffe gehören in `domain/`, die von Routen aufgerufen werden dürfen. Positive und negative CLI-Integrationstests decken direkten Schreibzugriff, lokale Hilfsfunktionen, Domain-Aufrufe, lesende Abfragen und Quellpositionen ab. Eingebettete Form-/CRUD-Aktionskörper und dynamische/unaufgelöste Aufrufe sind noch nicht abgedeckt.
+
 - [🗺️] **1.5.0 — Bytecode als mögliches Standard-Backend:** AST bleibt bis dahin
   Standard; MIR und Bytecode bleiben ausdrücklich auswählbar und experimentell.
   Ein Standardwechsel wird nur freigegeben, wenn unterstützte Sprach-, SQL-,

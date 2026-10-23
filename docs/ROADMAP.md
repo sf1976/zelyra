@@ -642,6 +642,8 @@ The initial documented comparison and its test evidence are in the
 
 - [🧪] **1.3.0 — compiler-inferred expression-hole assistance:** At `_`, Studio now includes types inferred from local initializers and applies the same known-type compatibility relation as the compiler. Unknown types, including nested unknown generic arguments, are excluded. Targeted tests prove the suggested local can be selected and the completed source type-checks; broader compiler-guided suggestions for the next declaration or block remain open.
 
+- [🧪] **1.3.0 — ARCH-001, SQL writes in API routes:** For `api` handlers in `routes/`, `strict_architecture` follows statically resolved Zelyra function calls. Write SQL reports `E-ARCH-002`; SQL that cannot be safely classified fails closed with `E-ARCH-003` and a source location. `E-ARCH-001` remains the declaration-placement rule. Put direct writes in callable `domain/` functions. Positive and negative CLI integration tests cover direct writes, route-local helpers, domain calls, read queries, and source locations. Embedded form/CRUD action bodies and dynamic or unresolved calls are not covered yet.
+
 - [🗺️] **1.5.0 — Bytecode as a candidate default backend:** Keep AST as the
   default through this milestone; MIR and Bytecode remain explicitly selectable
   and experimental. Promote Bytecode only after supported language, SQL,

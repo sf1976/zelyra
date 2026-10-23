@@ -2534,6 +2534,98 @@ fn strict_architecture_rejects_route_declarations_inside_domain_modules() {
 }
 
 #[test]
+fn strict_architecture_checks_reachable_route_sql_and_preserves_domain_writes() {
+    fn check_project(name: &str, route: &str, domain: Option<&str>) -> serde_json::Value {
+        let directory = temporary_directory(name);
+        for path in ["schema", "domain", "routes", "public", "assets"] {
+            fs::create_dir_all(directory.join(path)).unwrap();
+        }
+        fs::write(
+            directory.join("zelyra.toml"),
+            "[project]\nname = \"strict-route-sql\"\nlayout = \"standard\"\nstrict_architecture = true\n\n[capabilities]\ndatabase = true\n",
+        )
+        .unwrap();
+        fs::write(
+            directory.join("main.zyl"),
+            "import \"schema::db\" as db\nimport \"routes::customers\" as routes\nfn main() {}\n",
+        )
+        .unwrap();
+        fs::write(
+            directory.join("schema/db.zyl"),
+            "database Main { engine: mariadb }\ntable customers { id: Id primary auto name: String required access { read: [\"routes/customers.zyl\"] write: [\"domain/actions.zyl\"] } }\n",
+        )
+        .unwrap();
+        fs::write(
+            directory.join("routes/customers.zyl"),
+            format!("import \"schema::db\" as db\n{route}"),
+        )
+        .unwrap();
+        if let Some(domain) = domain {
+            fs::write(
+                directory.join("domain/actions.zyl"),
+                format!("import \"schema::db\" as db\n{domain}"),
+            )
+            .unwrap();
+        }
+        let output = Command::new(binary())
+            .args([
+                "check",
+                directory.join("main.zyl").to_str().unwrap(),
+                "--format=json",
+            ])
+            .output()
+            .unwrap();
+        let report: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+        fs::remove_dir_all(directory).unwrap();
+        report
+    }
+
+    let direct = check_project(
+        "strict-route-sql-direct",
+        "fn create_customer() -> Int uses Database {\n    sql { INSERT INTO customers (name) VALUES ('Ada') }\n    return 1\n}\napi POST \"/customers\" { handler create_customer output Int }\n",
+        None,
+    );
+    let diagnostic = &direct["diagnostics"][0];
+    assert_eq!(diagnostic["code"], "E-ARCH-002");
+    assert_eq!(diagnostic["file"], "routes/customers.zyl");
+    assert_eq!(diagnostic["span"]["start"]["line"], 3);
+
+    let through_local_helper = check_project(
+        "strict-route-sql-helper",
+        "fn write_customer() -> Int uses Database {\n    sql { INSERT INTO customers (name) VALUES ('Ada') }\n    return 1\n}\nfn create_customer() -> Int { return write_customer() }\napi POST \"/customers\" { handler create_customer output Int }\n",
+        None,
+    );
+    assert_eq!(through_local_helper["diagnostics"][0]["code"], "E-ARCH-002");
+
+    let through_domain = check_project(
+        "strict-route-sql-domain",
+        "import \"domain::actions\" as actions\nfn create_customer() -> Int uses Database { return actions::create_customer() }\napi POST \"/customers\" { handler create_customer output Int }\n",
+        Some("pub fn create_customer() -> Int uses Database {\n    sql { INSERT INTO customers (name) VALUES ('Ada') }\n    return 1\n}\n"),
+    );
+    assert!(
+        through_domain["diagnostics"].as_array().unwrap().is_empty(),
+        "unexpected diagnostics: {through_domain}"
+    );
+
+    let read_query = check_project(
+        "strict-route-sql-read",
+        "fn get_count() -> Int uses Database(read) { return sql<Int> { SELECT 1 FROM customers LIMIT 1 } }\napi GET \"/customers/count\" { handler get_count output Int }\n",
+        None,
+    );
+    assert!(
+        read_query["diagnostics"].as_array().unwrap().is_empty(),
+        "unexpected diagnostics: {read_query}"
+    );
+
+    let unknown_query = check_project(
+        "strict-route-sql-unknown",
+        "fn get_value() -> Int uses Database { return sql<Int> { SELECT SLEEP(1) FROM customers } }\napi GET \"/customers/value\" { handler get_value output Int }\n",
+        None,
+    );
+    assert_eq!(unknown_query["diagnostics"][0]["code"], "E-ARCH-003");
+}
+
+#[test]
 fn serve_loads_project_theme_and_locale_catalogs() {
     let directory = temporary_directory("serve-theme");
     fs::create_dir_all(&directory).unwrap();
