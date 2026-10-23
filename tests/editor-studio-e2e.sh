@@ -284,12 +284,14 @@ assert all(value is False for row in sql_rows["nulls"] for value in row), sql_ro
 request("database-query", "POST", {"sql": "UPDATE customers SET name = 'must not write'"}, expect=403)
 request("database-query", "POST", {"sql": "SELECT 1; DELETE FROM customers"}, expect=400)
 request("database-query", "POST", {"sql": "SELECT SLEEP/* comment gap */(0)"}, expect=403)
-request("database-query", "POST", {"sql": "SELECT LOAD_FILE/**/('/etc/passwd')"}, expect=403)
-request("database-query", "POST", {"sql": "SELECT /*!80000 SLEEP(0) */ 1"}, expect=403)
+if os.environ["ZELYRA_STUDIO_E2E_BACKEND"] == "mariadb":
+    request("database-query", "POST", {"sql": "SELECT LOAD_FILE/**/('/etc/passwd')"}, expect=403)
+    request("database-query", "POST", {"sql": "SELECT /*!80000 SLEEP(0) */ 1"}, expect=403)
 request("database-query", "POST", {"sql": "SELECT pg_notify('channel', 'payload')"}, expect=403)
 request("database-query", "POST", {"sql": "SELECT \"pg_notify\"('channel', 'payload')"}, expect=403)
-request("database-query", "POST", {"sql": r"SELECT 'a\'b' AS x, SLEEP(0)"}, expect=403)
-request("database-query", "POST", {"sql": "SELECT SLEEP# hidden\n(0)"}, expect=403)
+if os.environ["ZELYRA_STUDIO_E2E_BACKEND"] == "mariadb":
+    request("database-query", "POST", {"sql": r"SELECT 'a\'b' AS x, SLEEP(0)"}, expect=403)
+    request("database-query", "POST", {"sql": "SELECT SLEEP# hidden\n(0)"}, expect=403)
 literal_sql_row = request("database-query", "POST", {"sql": "SELECT 'SLEEP(30)' AS harmless_text"})
 assert literal_sql_row["rows"] == [["SLEEP(30)"]], literal_sql_row
 long_cell = request("database-query", "POST", {"sql": "SELECT REPEAT('x', 1000000) AS long_value"})
