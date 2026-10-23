@@ -1,5 +1,7 @@
 ## Unreleased
 
+## 1.2.51 — Zelyra Studio compiler-aware workflow
+
 - Add schema-aware Zelyra SQL completion: suggest declared tables after
   `FROM`/`JOIN` and unambiguous declared columns after table names or aliases.
   Suggestions come from the local compiler project map, including open source
@@ -8,6 +10,12 @@
   nach Tabellenbezug oder Alias ergänzen. Die Vorschläge stammen aus der
   lokalen Compiler-Projektkarte einschließlich offener Quelltext-Overlays und
   fragen keine Live-Datenbank ab.
+- Add a compiler-aware Studio welcome page that summarizes recognized project
+  modules, data models, web surfaces, and SQL queries, then recommends a
+  context-dependent next action. Incomplete analysis stays visible. / Eine
+  compilerbewusste Studio-Startseite zeigt erkannte Projektmodule,
+  Datenmodelle, Webflächen und SQL-Abfragen und empfiehlt den passenden
+  nächsten Schritt. Eine unvollständige Analyse bleibt sichtbar.
 
 ## 1.2.50 — Studio-Buildabgleich
 
