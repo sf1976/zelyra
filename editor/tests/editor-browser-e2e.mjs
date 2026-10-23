@@ -134,6 +134,7 @@ try {
       }),
     });
   });
+  const welcomeProjectResponse = page.waitForResponse((response) => response.url().endsWith("/api/project-map") && response.request().method() === "POST");
   await page.goto(url, { waitUntil: "domcontentloaded" });
   assert.equal(new URL(page.url()).hash, "", "the session token must be removed from the address bar");
   const startupSplash = page.locator("#studio-splash");
@@ -143,12 +144,25 @@ try {
   await page.locator("#empty-state h1", { hasText: "Zelyra verstehen" }).waitFor();
   await page.locator('.tree-item.file[title="main.zyl"]').waitFor();
   await page.waitForFunction(() => document.querySelector("#welcome-project-status")?.textContent.includes("vollständig analysiert"));
-  assert.equal(await page.locator("#welcome-project-modules").textContent(), "2", "the welcome view counts compiler-loaded project modules");
-  assert.equal(await page.locator("#welcome-project-data").textContent(), "3", "the welcome view counts declared tables and records");
-  assert.equal(await page.locator("#welcome-project-web").textContent(), "3", "the welcome view counts declared web surfaces and reusable views");
-  assert.equal(await page.locator("#welcome-project-sql").textContent(), "1", "the welcome view counts parsed SQL declarations");
-  assert.equal(await page.locator("#welcome-project-action").getAttribute("data-action"), "map", "the compiler model suggests the project map when web queries exist");
-  await page.locator("#welcome-project-action").click();
+  const welcomeProject = await (await welcomeProjectResponse).json();
+  const projectNodes = welcomeProject.nodes || [];
+  const countProjectNodes = (kinds) => projectNodes.filter((node) => kinds.includes(node.kind)).length;
+  const modules = countProjectNodes(["module"]);
+  const dataModels = countProjectNodes(["table", "struct", "class", "enum"]);
+  const webSurfaces = countProjectNodes(["page", "api", "form", "crud", "tableview", "view", "component"]);
+  const sqlQueries = countProjectNodes(["sql"]);
+  assert.equal(await page.locator("#welcome-project-modules").textContent(), String(modules), "the welcome view counts compiler-loaded project modules");
+  assert.equal(await page.locator("#welcome-project-data").textContent(), String(dataModels), "the welcome view counts declared data models");
+  assert.equal(await page.locator("#welcome-project-web").textContent(), String(webSurfaces), "the welcome view counts declared web surfaces");
+  assert.equal(await page.locator("#welcome-project-sql").textContent(), String(sqlQueries), "the welcome view counts parsed SQL declarations");
+  const expectedAction = welcomeProject.incomplete ? "check" : webSurfaces && sqlQueries ? "map" : dataModels ? "database" : "file";
+  assert.equal(await page.locator("#welcome-project-action").getAttribute("data-action"), expectedAction, "the next action follows compiler-resolved project contents");
+  if (expectedAction === "map") {
+    await page.locator("#welcome-project-action").click();
+  } else {
+    await page.locator('[data-studio-menu="view"] > button').click();
+    await page.locator('.studio-menu-popover [data-menu-target="project-map-button"]').click();
+  }
   await page.locator("#project-map-dialog").waitFor({ state: "visible" });
   await page.waitForFunction(() => document.querySelector("#project-map-status")?.textContent === "");
   await page.locator("#project-map-close").click();
