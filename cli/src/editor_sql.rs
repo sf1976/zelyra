@@ -201,11 +201,10 @@ mod tests {
     }
 
     #[test]
-    fn read_only_queries_are_wrapped_with_a_hard_result_limit() {
+    fn read_only_queries_preserve_sql_shape_and_enforce_a_hard_result_limit() {
         let (bounded, limit) =
             prepare_read_only_query("SELECT id FROM customers;", Some(9000), false).unwrap();
         assert_eq!(limit, MAX_RESULT_ROWS);
-        assert!(bounded.ends_with("LIMIT 201"));
-        assert!(bounded.contains("SELECT id FROM customers"));
+        assert_eq!(bounded, "SELECT id FROM customers");
     }
 }

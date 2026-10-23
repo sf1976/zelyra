@@ -1,5 +1,5 @@
 import { autocompletion, startCompletion } from "@codemirror/autocomplete";
-import { defaultKeymap, history as undoRedoHistory, historyKeymap } from "@codemirror/commands";
+import { defaultKeymap, history as undoRedoHistory, historyKeymap, redo, selectAll, undo } from "@codemirror/commands";
 import {
   bracketMatching,
   defaultHighlightStyle,
@@ -856,6 +856,13 @@ function renderTabs() {
   const protectedFile = activePath === "main.zyl" || activePath === "zelyra.toml";
   $("rename-file-button").disabled = !activePath || protectedFile;
   $("delete-file-button").disabled = !activePath || protectedFile;
+  for (const command of document.querySelectorAll("[data-menu-command]")) {
+    const name = command.dataset.menuCommand;
+    command.disabled = name === "open-file" ? false
+      : name === "save-all" ? dirtyCount() === 0
+        : name === "close-file" ? !activePath
+          : !editor;
+  }
   if (!$("studio-assistant").hidden) renderFileProperties(activePath);
 }
 
@@ -1438,10 +1445,59 @@ async function requestAiSuggestion() {
   }
 }
 
-function findInDocument() {
+function findInDocument(replace = false) {
   if (!editor) return;
   editor.focus();
-  import("@codemirror/search").then(({ openSearchPanel }) => openSearchPanel(editor));
+  import("@codemirror/search").then(({ openSearchPanel }) => {
+    openSearchPanel(editor);
+    if (replace) requestAnimationFrame(() => editor?.dom.querySelector(".cm-search [name=replace]")?.focus());
+  });
+}
+
+function openFilePrompt() {
+  const query = prompt(t("chooseFile"));
+  if (!query) return;
+  const match = treeFiles.find((path) => path.toLowerCase().includes(query.toLowerCase()));
+  if (match) void openFile(match);
+}
+
+function runStudioMenuCommand(name) {
+  if (name === "open-file") { openFilePrompt(); return; }
+  if (name === "save-all") { void saveAll(); return; }
+  if (name === "close-file") { if (activePath) closeTab(activePath); return; }
+  if (!editor) return;
+  if (name === "find") { findInDocument(); return; }
+  if (name === "replace") { findInDocument(true); return; }
+  if (["cut", "copy", "paste"].includes(name)) { void runClipboardMenuCommand(name); return; }
+  editor.focus();
+  const commands = { undo, redo, "select-all": selectAll };
+  commands[name]?.(editor);
+}
+
+async function runClipboardMenuCommand(name) {
+  const view = editor;
+  if (!view) return;
+  const state = view.state;
+  const { from, to } = view.state.selection.main;
+  try {
+    if (name === "paste") {
+      const text = await navigator.clipboard.readText();
+      if (editor !== view || view.state !== state) return;
+      view.dispatch({ changes: { from, to, insert: text }, selection: { anchor: from + text.length } });
+      view.focus();
+      return;
+    }
+    if (from === to) return;
+    await navigator.clipboard.writeText(state.sliceDoc(from, to));
+    if (name === "cut" && editor === view && view.state === state) {
+      view.dispatch({ changes: { from, to, insert: "" }, selection: { anchor: from } });
+    }
+    view.focus();
+  } catch (error) {
+    announce(language === "de"
+      ? `Zwischenablage nicht verfügbar: ${error.message}`
+      : `Clipboard unavailable: ${error.message}`, "error");
+  }
 }
 
 function openProjectSearch() {
@@ -4871,10 +4927,15 @@ for (const item of document.querySelectorAll(".studio-menu")) {
   });
   item.addEventListener("click", (event) => {
     const target = event.target.closest("[data-menu-target]");
-    if (!target) return;
+    const command = event.target.closest("[data-menu-command]");
+    if (!target && !command) return;
     event.preventDefault();
-    const action = document.getElementById(target.dataset.menuTarget);
-    if (action && !action.disabled) action.click();
+    if (target) {
+      const action = document.getElementById(target.dataset.menuTarget);
+      if (action && !action.disabled) action.click();
+    } else if (!command.disabled) {
+      runStudioMenuCommand(command.dataset.menuCommand);
+    }
     closeStudioMenus();
     trigger.focus();
   });
@@ -4958,12 +5019,15 @@ window.addEventListener("keydown", (event) => {
   if (event.key === "Escape" && $("project-search").open) { event.preventDefault(); $("project-search").close(); }
   if ((event.ctrlKey || event.metaKey) && event.shiftKey && event.key.toLowerCase() === "p") { event.preventDefault(); openTaskFinder(); }
   if ((event.ctrlKey || event.metaKey) && event.shiftKey && event.key.toLowerCase() === "f") { event.preventDefault(); openProjectSearch(); }
+  if ((event.ctrlKey || event.metaKey) && event.shiftKey && event.key.toLowerCase() === "s") { event.preventDefault(); void saveAll(); }
+  if ((event.ctrlKey || event.metaKey) && !event.shiftKey && event.key.toLowerCase() === "n") { event.preventDefault(); $("new-file-button").click(); }
+  if ((event.ctrlKey || event.metaKey) && !event.shiftKey && event.key.toLowerCase() === "w") { event.preventDefault(); if (activePath) closeTab(activePath); }
+  if ((event.ctrlKey || event.metaKey) && !event.shiftKey && event.key.toLowerCase() === "h") { event.preventDefault(); findInDocument(true); }
   if (event.key === "F1") { event.preventDefault(); toggleAssistant("help"); }
   if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "s") { event.preventDefault(); saveActive(); }
   if ((event.ctrlKey || event.metaKey) && !event.shiftKey && event.key.toLowerCase() === "p") {
     event.preventDefault();
-    const query = prompt(t("chooseFile"));
-    if (query) { const match = treeFiles.find((path) => path.toLowerCase().includes(query.toLowerCase())); if (match) void openFile(match); }
+    openFilePrompt();
   }
 });
 
