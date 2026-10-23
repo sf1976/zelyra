@@ -229,52 +229,53 @@ fn route_handler_sql_issues(
         let Some(handler) = api.handler.as_deref() else {
             continue;
         };
-        let mut pending = vec![handler.to_owned()];
-        let mut visited = std::collections::HashSet::new();
-        while let Some(name) = pending.pop() {
-            if !visited.insert(name.clone()) {
-                continue;
-            }
-            let Some(function) = functions.get(name.as_str()).copied() else {
-                continue;
-            };
-            let Some(function_source) = sources.get(function.span.source_id as usize) else {
-                continue;
-            };
-            if function_source
-                .path
-                .replace('\\', "/")
-                .starts_with("domain/")
-            {
-                // Business writes in domain modules are the intended separation.
-                continue;
-            }
+        issues.extend(reachable_route_sql_issues(
+            &functions,
+            sources,
+            vec![handler.to_owned()],
+            Vec::new(),
+            route_source.path.clone(),
+            format!("API handler `{handler}`"),
+        ));
+    }
 
-            let mut calls = Vec::new();
-            let mut sql = Vec::new();
-            inspect_block(&function.body, &mut calls, &mut sql);
-            pending.extend(calls);
-            for (query, span) in sql {
-                match sql_effect(&query) {
-                    SqlEffect::Write => issues.push(ArchitectureIssue {
-                        path: function_source.path.clone(),
-                        code: "E-ARCH-002",
-                        message: format!(
-                            "route handler `{name}` reaches a write SQL statement; move the business write into a `domain/` function"
-                        ),
-                        span: Some(span),
-                    }),
-                    SqlEffect::Unknown => issues.push(ArchitectureIssue {
-                        path: function_source.path.clone(),
-                        code: "E-ARCH-003",
-                        message: format!(
-                            "route handler `{name}` reaches SQL that cannot be classified safely; move it into a `domain/` function"
-                        ),
-                        span: Some(span),
-                    }),
-                    SqlEffect::Read => {}
-                }
-            }
+    for form in &program.forms {
+        let Some(source) = sources.get(form.span.source_id as usize) else {
+            continue;
+        };
+        if !source.path.replace('\\', "/").starts_with("routes/") {
+            continue;
+        }
+        for action in &form.actions {
+            let (calls, sql) = inspect_action(action);
+            issues.extend(reachable_route_sql_issues(
+                &functions,
+                sources,
+                calls,
+                sql,
+                source.path.clone(),
+                format!("form action `{}.{}`", form.name, action.name),
+            ));
+        }
+    }
+
+    for crud in &program.cruds {
+        let Some(source) = sources.get(crud.span.source_id as usize) else {
+            continue;
+        };
+        if !source.path.replace('\\', "/").starts_with("routes/") {
+            continue;
+        }
+        for action in &crud.actions {
+            let (calls, sql) = inspect_action(action);
+            issues.extend(reachable_route_sql_issues(
+                &functions,
+                sources,
+                calls,
+                sql,
+                source.path.clone(),
+                format!("CRUD action `{}.{}`", crud.name, action.name),
+            ));
         }
     }
     issues.sort_by(|left, right| {
@@ -291,6 +292,95 @@ fn route_handler_sql_issues(
         left.path == right.path && left.code == right.code && left.span == right.span
     });
     issues
+}
+
+fn inspect_action(action: &zelyra_ast::FormAction) -> (Vec<String>, Vec<(String, Span)>) {
+    let mut calls = Vec::new();
+    let mut sql = Vec::new();
+    inspect_block(
+        &Block {
+            statements: action.statements.clone(),
+            span: action.span,
+        },
+        &mut calls,
+        &mut sql,
+    );
+    if let Some(body) = &action.execute_body {
+        inspect_block(body, &mut calls, &mut sql);
+    }
+    if let Some(guard) = &action.guard {
+        inspect_expr(&guard.condition, &mut calls, &mut sql);
+    }
+    (calls, sql)
+}
+
+fn reachable_route_sql_issues(
+    functions: &std::collections::HashMap<&str, &zelyra_ast::Function>,
+    sources: &[crate::project::ProjectSource],
+    initial_calls: Vec<String>,
+    initial_sql: Vec<(String, Span)>,
+    initial_path: String,
+    entry_label: String,
+) -> Vec<ArchitectureIssue> {
+    let mut issues = Vec::new();
+    append_sql_issues(&mut issues, &initial_path, &entry_label, initial_sql);
+    let mut pending = initial_calls;
+    let mut visited = std::collections::HashSet::new();
+    while let Some(name) = pending.pop() {
+        if !visited.insert(name.clone()) {
+            continue;
+        }
+        let Some(function) = functions.get(name.as_str()).copied() else {
+            continue;
+        };
+        let Some(function_source) = sources.get(function.span.source_id as usize) else {
+            continue;
+        };
+        if function_source
+            .path
+            .replace('\\', "/")
+            .starts_with("domain/")
+        {
+            // Business writes in domain modules are the intended separation.
+            continue;
+        }
+
+        let mut calls = Vec::new();
+        let mut sql = Vec::new();
+        inspect_block(&function.body, &mut calls, &mut sql);
+        pending.extend(calls);
+        append_sql_issues(&mut issues, &function_source.path, &entry_label, sql);
+    }
+    issues
+}
+
+fn append_sql_issues(
+    issues: &mut Vec<ArchitectureIssue>,
+    path: &str,
+    entry_label: &str,
+    sql: Vec<(String, Span)>,
+) {
+    for (query, span) in sql {
+        match sql_effect(&query) {
+            SqlEffect::Write => issues.push(ArchitectureIssue {
+                path: path.to_owned(),
+                code: "E-ARCH-002",
+                message: format!(
+                    "{entry_label} reaches a write SQL statement; move the business write into a `domain/` function"
+                ),
+                span: Some(span),
+            }),
+            SqlEffect::Unknown => issues.push(ArchitectureIssue {
+                path: path.to_owned(),
+                code: "E-ARCH-003",
+                message: format!(
+                    "{entry_label} reaches SQL that cannot be classified safely; move it into a `domain/` function"
+                ),
+                span: Some(span),
+            }),
+            SqlEffect::Read => {}
+        }
+    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -1095,6 +1185,21 @@ mod tests {
         assert_eq!(issues.len(), 1);
         assert_eq!(issues[0].path, "main.zyl");
         assert_eq!(issues[0].code, "E-ARCH-002");
+    }
+
+    #[test]
+    fn route_form_and_crud_actions_are_checked_for_sql_writes() {
+        let source = "form CustomerCreate { action save { sql { INSERT INTO customers (name) VALUES ('Ada') } } }\ncrud Customer -> customers { action archive { sql { UPDATE customers SET active = false } } }\n";
+        let program = parse(&lex(source).unwrap()).unwrap();
+        let sources = vec![crate::project::ProjectSource {
+            path: "routes/customers.zyl".into(),
+            text: source.into(),
+        }];
+        let issues = route_handler_sql_issues(&program, &sources);
+        assert_eq!(issues.len(), 2);
+        assert!(issues.iter().all(|issue| issue.code == "E-ARCH-002"));
+        assert!(issues[0].message.contains("form action"));
+        assert!(issues[1].message.contains("CRUD action"));
     }
 
     #[cfg(unix)]

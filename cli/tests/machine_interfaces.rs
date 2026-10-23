@@ -2638,6 +2638,20 @@ fn strict_architecture_checks_reachable_route_sql_and_preserves_domain_writes() 
         None,
     );
     assert_eq!(unknown_query["diagnostics"][0]["code"], "E-ARCH-003");
+
+    let form_action = check_project(
+        "strict-route-sql-form-action",
+        "form CustomerCreate -> customers { fields { name } action save { sql { INSERT INTO customers (name) VALUES ('Ada') } } }\n",
+        None,
+    );
+    assert_eq!(form_action["diagnostics"][0]["code"], "E-ARCH-002");
+
+    let crud_action = check_project(
+        "strict-route-sql-crud-action",
+        "crud Customer -> customers { action archive { sql { UPDATE customers SET name = 'Archived' } } }\n",
+        None,
+    );
+    assert_eq!(crud_action["diagnostics"][0]["code"], "E-ARCH-002");
 }
 
 #[test]

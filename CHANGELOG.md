@@ -24,6 +24,9 @@
   source-mapped architecture diagnostic. / Direkte Importe aus `routes/` in
   `domain/`-Modulen mit einer quellpositionierten Architekturdiagnose
   zurückweisen.
+- Apply the route SQL boundary check to embedded form and CRUD actions as well
+  as API handlers. / Die SQL-Grenzprüfung für Routen auch auf eingebettete
+  Form- und CRUD-Aktionen anwenden.
 
 ## 1.2.56 — Zelyra Studio SQL workbench and editor usability
 
