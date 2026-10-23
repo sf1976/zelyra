@@ -33,6 +33,23 @@ Datenbank-Studio oder zum Einstiegspunkt. Ist die Analyse unvollständig, zeigt
 Studio das ausdrücklich an und empfiehlt zuerst den Compilercheck. Die Übersicht
 ändert keine Quelldateien und benötigt keinen KI- oder Cloud-Dienst.
 
+## Zelyra-bewusste Vorschläge mit optionaler KI
+
+Über **Hilfe → KI-Vorschlag für Auswahl** oder den Aktionsfinder kannst du
+eine markierte Zelyra-Codepassage gezielt an einen kompatiblen KI-Endpunkt
+senden. Die Funktion ist standardmäßig ausgeschaltet. Sie benötigt
+`ZELYRA_STUDIO_AI_ENDPOINT` und `ZELYRA_STUDIO_AI_MODEL`; einen Schlüssel
+konfigurierst du bei Bedarf über `ZELYRA_STUDIO_AI_API_KEY`. Details und
+Sicherheitsregeln stehen in der [Umgebungsvariablen-Referenz](env.md).
+
+Vor dem Senden zeigt Studio den Zielhost, das Modell und den vollständigen
+Text der ausgewählten Passage. Erst **Auswahl an Anbieter senden** überträgt
+diese Passage und deine Anweisung. Kein anderer Projekttext wird angehängt.
+Der Vorschlag wird als Text angezeigt, nicht automatisch in den Quelltext
+eingesetzt. Prüfe ihn mit dem Zelyra-Compiler und den Projekttests. Der
+Endpunkt kann lokal oder selbst gehostet sein; öffentliche Endpunkte müssen
+HTTPS verwenden.
+
 Die Menüleiste ordnet die häufigen Wege nach **Datei**, **Bearbeiten**,
 **Ansicht**, **Ausführen**, **Datenbank** und **Hilfe**. Die Schnellaktionen
 Starten und Prüfen bleiben sichtbar; Spezialwerkzeuge erreichst du aus dem

@@ -58,7 +58,7 @@
           <button role="menuitem" data-menu-target="database-button"><span data-lang-de="Datenbank-Studio öffnen" data-lang-en="Open Database Studio">Datenbank-Studio öffnen</span></button><button role="menuitem" data-menu-target="module-settings-button"><span data-lang-de="Paket- und Moduleinstellungen" data-lang-en="Package and Module Settings">Paket- und Moduleinstellungen</span></button><button role="menuitem" data-menu-target="outbox-button"><span data-lang-de="Mail-Outbox ansehen" data-lang-en="Inspect Mail Outbox">Mail-Outbox ansehen</span></button>
         </div></div>
         <div class="studio-menu"><button type="button" role="menuitem" aria-haspopup="true" aria-expanded="false" data-studio-menu="help"><span data-lang-de="Hilfe" data-lang-en="Help">Hilfe</span></button><div class="studio-menu-popover" role="menu" hidden>
-          <button role="menuitem" data-menu-target="assistant-toggle"><span data-lang-de="Kontexthilfe und Eigenschaften" data-lang-en="Context Help and Properties">Kontexthilfe und Eigenschaften</span><kbd>F1</kbd></button><a role="menuitem" href="https://siedelmann.com/handbuch" target="_blank" rel="noreferrer"><span data-lang-de="Zelyra-Handbuch öffnen" data-lang-en="Open Zelyra Handbook">Zelyra-Handbuch öffnen</span><span aria-hidden="true">↗</span></a><button role="menuitem" data-menu-target="task-finder-button"><span data-lang-de="Alle Studio-Aktionen suchen" data-lang-en="Search All Studio Actions">Alle Studio-Aktionen suchen</span><kbd>Ctrl+Shift+P</kbd></button>
+          <button role="menuitem" data-menu-target="assistant-toggle"><span data-lang-de="Kontexthilfe und Eigenschaften" data-lang-en="Context Help and Properties">Kontexthilfe und Eigenschaften</span><kbd>F1</kbd></button><button role="menuitem" data-menu-target="ai-assistant-button"><span data-lang-de="KI-Vorschlag für Auswahl" data-lang-en="AI suggestion for selection">KI-Vorschlag für Auswahl</span></button><a role="menuitem" href="https://siedelmann.com/handbuch" target="_blank" rel="noreferrer"><span data-lang-de="Zelyra-Handbuch öffnen" data-lang-en="Open Zelyra Handbook">Zelyra-Handbuch öffnen</span><span aria-hidden="true">↗</span></a><button role="menuitem" data-menu-target="task-finder-button"><span data-lang-de="Alle Studio-Aktionen suchen" data-lang-en="Search All Studio Actions">Alle Studio-Aktionen suchen</span><kbd>Ctrl+Shift+P</kbd></button>
         </div></div>
       </div>
       <div class="menubar-quick-actions"><span class="menubar-project-context" data-lang-de="Lokales Projekt · Compiler, SQL und Vorschau" data-lang-en="Local Project · Compiler, SQL and Preview">Lokales Projekt · Compiler, SQL und Vorschau</span><button type="button" class="menubar-action" data-menu-target="run-button">▶ <span data-lang-de="Starten" data-lang-en="Run">Starten</span></button><button type="button" class="menubar-action primary" data-menu-target="check-button">✓ <span data-lang-de="Prüfen" data-lang-en="Check">Prüfen</span></button></div>
@@ -227,6 +227,7 @@
         </footer>
       </main>
     </div>
+    <button id="ai-assistant-button" type="button" hidden aria-hidden="true" tabindex="-1"></button>
   </div>
   <dialog id="task-finder" class="task-finder" aria-labelledby="task-finder-title">
     <header><h2 id="task-finder-title" data-i18n="taskFinderTitle">Was möchtest du tun?</h2><button id="task-finder-close" aria-label="Schließen" data-i18n-aria="close">×</button></header>
@@ -234,6 +235,19 @@
     <div id="task-finder-results" class="task-finder-results" role="listbox" aria-label="Aktionen" data-i18n-aria="taskFinderResults"></div>
     <p id="task-finder-empty" class="task-finder-empty" hidden data-i18n="noMatchingTasks">Keine passende Aktion gefunden.</p>
     <footer><kbd>↑</kbd><kbd>↓</kbd><kbd>Enter</kbd><span data-i18n="chooseAction">Aktion auswählen</span><kbd>Esc</kbd><span data-i18n="close">Schließen</span></footer>
+  </dialog>
+  <dialog id="ai-assistant-dialog" class="task-finder ai-assistant-dialog" aria-labelledby="ai-assistant-title">
+    <header><h2 id="ai-assistant-title" data-i18n="aiAssistantTitle">Zelyra KI-Vorschlag</h2><button id="ai-assistant-close" type="button" aria-label="Schließen" data-i18n-aria="close">×</button></header>
+    <p id="ai-assistant-status" role="status" aria-live="polite" data-i18n="aiAssistantLoading">Optionale KI-Verbindung wird geprüft …</p>
+    <p id="ai-assistant-destination" class="ai-assistant-notice"></p>
+    <label for="ai-assistant-instruction" data-i18n="aiAssistantInstruction">Was soll die KI mit dieser Auswahl tun?</label>
+    <textarea id="ai-assistant-instruction" rows="3" maxlength="2048" data-i18n-placeholder="aiAssistantInstructionPlaceholder" placeholder="Erkläre, verbessere oder vervollständige den markierten Zelyra-Code"></textarea>
+    <label for="ai-assistant-selection" data-i18n="aiAssistantSelection">Diese Zelyra-Auswahl wird gesendet</label>
+    <textarea id="ai-assistant-selection" rows="8" readonly spellcheck="false"></textarea>
+    <button id="ai-assistant-send" type="button" class="primary-button" disabled data-i18n="aiAssistantSend">Auswahl an Anbieter senden</button>
+    <p id="ai-assistant-result-label" hidden data-i18n="aiAssistantResult">Vorschlag (nicht automatisch übernommen)</p>
+    <pre id="ai-assistant-result" class="ai-assistant-result" hidden></pre>
+    <footer><span data-i18n="aiAssistantFooter">Der Quelltext wird nur auf ausdrücklichen Klick übertragen.</span><kbd>Esc</kbd><span data-i18n="close">Schließen</span></footer>
   </dialog>
   <dialog id="capability-dialog" class="project-map-dialog capability-dialog" aria-labelledby="capability-title">
     <header class="project-map-header"><div><h2 id="capability-title" data-i18n="capabilityTitle">Capability- und Sicherheitsmatrix</h2></div><button id="capability-close" type="button" aria-label="Schließen" data-i18n-aria="close">×</button></header>
