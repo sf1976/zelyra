@@ -46,6 +46,7 @@ if (storedFontSize && ["medium", "large"].includes(storedFontSize)) {
   root.dataset.fontSize = storedFontSize;
 }
 const editorSessionStorageKey = "zelyra-editor-session-token";
+const runBackendPreferenceKey = "zelyra-studio-run-backend";
 const fragmentToken = location.hash.slice(1);
 const token = /^[0-9a-f]{64}$/.test(fragmentToken)
   ? fragmentToken
@@ -247,7 +248,7 @@ const messages = {
     canvasThemeToken: "Theme-Farbe", canvasThemeColor: "Farbwert", canvasThemeApply: "Im Quelltext ändern", canvasThemeMissing: "Für Farbbearbeitung zelyra.theme.css im Projekt anlegen.", canvasThemeNoHex: "Keine unterstützte --z-color-*-Farbe mit hexadezimalem Wert gefunden.", canvasThemeChanged: "Theme-Farbe im ungespeicherten Quelltext geändert. Speichern übernimmt sie ins Projekt.", canvasThemeStale: "Theme-Datei wurde verändert. Farbe erneut auswählen.", canvasThemeError: "Theme-Bearbeitung fehlgeschlagen: {0}",
     runButton: "Starten", runButtonTitle: "main.zyl ausführen oder Webanwendung starten",
     runOutputTitle: "Programmausgabe", runStarting: "Anwendung wird vorbereitet und gestartet …", runSuccess: "Programm erfolgreich beendet", runFailure: "Programm mit Fehler beendet", runTimeout: "Ausführung nach 15 Sekunden beendet", runOutputTruncated: "Die Ausgabe ist auf 64 KiB je Stream begrenzt.", runNoOutput: "Keine Ausgabe.", runStdout: "AUSGABE", runStderr: "FEHLER", runConsoleInput: "Eingabe für read_console", runConsoleSubmit: "Eingabe senden", runConsoleEof: "Eingabe beenden (EOF)", runConsoleSent: "Eingabe wurde übermittelt.", runConsoleError: "Eingabe konnte nicht gesendet werden: {0}", runWebReady: "Webanwendung läuft lokal:", runWebOpen: "Anwendung im Browser öffnen", runWebStop: "Vorschau beenden", runWebStopped: "Lokale Vorschau wurde beendet.",
-    runtimeBudgetButton: "Budget", runtimeBudgetTitle: "Laufzeitbudget und Rekursion", runtimeBudgetEnable: "Schrittbudget für Konsolenprogramme aktivieren", runtimeBudgetRange: "Schrittbudget (Regler: 1.000 bis 1.000.000)", runtimeBudgetNumber: "Maximale Schritte (1 bis 100.000.000)", runtimeBudgetWebHint: "Der Regler gilt für diesen Konsolenlauf. Das Projektlimit aus zelyra.toml gilt auch für API-Handler und geplante Commands.", runtimeProjectSteps: "Projektlimit für Interpreterläufe: {0}", runtimeStepsUnbounded: "nicht gesetzt (AST ohne Schrittlimit)", runtimeStepsConfigured: "{0} Schritte", runtimeSchedulerTimeout: "Zeitlimit je Scheduler-Auftrag: {0} Sekunden ({1})", runtimeSchedulerTimeoutConfigured: "konfiguriert", runtimeSchedulerTimeoutDefault: "Standard", runtimeRecursionTitle: "Mögliche Rekursion", runtimeRecursionNone: "Keine direkte oder gegenseitige Rekursion im analysierten Funktionsgraphen gefunden.", runtimeRecursionIncomplete: "Der Funktionsgraph ist zu groß; die Rekursionsanalyse ist unvollständig.", runtimeRecursionDirect: "Direkte Rekursion", runtimeRecursionMutual: "Gegenseitige Rekursion", runtimeStackDepth: "Maximale Stacktiefe laut Projekt: {0} ({1})", runtimeStackConfigured: "konfiguriert", runtimeStackDefault: "Standard", runtimeProfileError: "Laufzeitprofil konnte nicht gelesen werden: {0}", runtimeBudgetInvalid: "Bitte eine ganze Schrittzahl von 1 bis 100.000.000 eingeben.", runtimeBudgetExceeded: "Schrittbudget überschritten", runCancel: "Ausführung abbrechen", runCancelRequested: "Abbruch angefordert …", runCancelled: "Ausführung abgebrochen", runtimeProfileInvalid: "Der ungespeicherte Quelltext ist nicht vollständig analysierbar.",
+    runtimeBudgetButton: "Budget", runtimeBudgetTitle: "Laufzeitbudget, Backend und Rekursion", runtimeBackendLabel: "Ausführungs-Backend", runtimeBackendAst: "AST · Standard", runtimeBackendMir: "MIR · experimentell", runtimeBackendBytecode: "Bytecode · experimentell", runtimeBackendHint: "MIR und Bytecode unterstützen Teilmengen und melden nicht unterstützte Sprachkonstrukte. Webvorschauen laufen mit AST.", runtimeBackendInvalid: "Bitte ein verfügbares Zelyra-Backend auswählen.", runtimeBudgetEnable: "Schrittbudget für Konsolenprogramme aktivieren", runtimeBudgetRange: "Schrittbudget (Regler: 1.000 bis 1.000.000)", runtimeBudgetNumber: "Maximale Schritte (1 bis 100.000.000)", runtimeBudgetWebHint: "Der Regler gilt für diesen Konsolenlauf. Das Projektlimit aus zelyra.toml gilt auch für API-Handler und geplante Commands.", runtimeProjectSteps: "Projektlimit für Interpreterläufe: {0}", runtimeStepsUnbounded: "nicht gesetzt (AST ohne Schrittlimit)", runtimeStepsConfigured: "{0} Schritte", runtimeSchedulerTimeout: "Zeitlimit je Scheduler-Auftrag: {0} Sekunden ({1})", runtimeSchedulerTimeoutConfigured: "konfiguriert", runtimeSchedulerTimeoutDefault: "Standard", runtimeRecursionTitle: "Mögliche Rekursion", runtimeRecursionNone: "Keine direkte oder gegenseitige Rekursion im analysierten Funktionsgraphen gefunden.", runtimeRecursionIncomplete: "Der Funktionsgraph ist zu groß; die Rekursionsanalyse ist unvollständig.", runtimeRecursionDirect: "Direkte Rekursion", runtimeRecursionMutual: "Gegenseitige Rekursion", runtimeStackDepth: "Maximale Stacktiefe laut Projekt: {0} ({1})", runtimeStackConfigured: "konfiguriert", runtimeStackDefault: "Standard", runtimeProfileError: "Laufzeitprofil konnte nicht gelesen werden: {0}", runtimeBudgetInvalid: "Bitte eine ganze Schrittzahl von 1 bis 100.000.000 eingeben.", runtimeBudgetExceeded: "Schrittbudget überschritten", runCancel: "Ausführung abbrechen", runCancelRequested: "Abbruch angefordert …", runCancelled: "Ausführung abgebrochen", runtimeProfileInvalid: "Der ungespeicherte Quelltext ist nicht vollständig analysierbar.",
     logs: "Logs", logsTitle: "Zelyra-Logs", logsLoading: "Logs werden geladen …", logsUnavailable: "Logs konnten nicht geladen werden.", logsEmpty: "Noch keine Programmausgabe protokolliert.", logsLevel: "Stufe", logsAll: "Alle", logsSearch: "Text filtern", logsRetention: "Lokal gespeichert; begrenzte Rotation", logsCount: "{0} Einträge angezeigt",
     taskHelp: "Kontexthilfe öffnen", taskHelpHelp: "Hilfe zum Begriff am Cursor anzeigen", taskProperties: "Dateieigenschaften öffnen",
     taskPropertiesHelp: "Informationen und Aktionen zur aktuellen Datei anzeigen", taskSearch: "Text suchen", taskSearchHelp: "Im aktuellen Dokument suchen",
@@ -359,7 +360,7 @@ const messages = {
     canvasThemeToken: "Theme color", canvasThemeColor: "Color value", canvasThemeApply: "Edit source", canvasThemeMissing: "Create zelyra.theme.css in the project to edit colors.", canvasThemeNoHex: "No supported --z-color-* declaration with a hex value was found.", canvasThemeChanged: "Theme color changed in the unsaved source. Save to apply it to the project.", canvasThemeStale: "Theme file changed. Select the color again.", canvasThemeError: "Theme edit failed: {0}",
     runButton: "Run", runButtonTitle: "Run main.zyl or start the web application",
     runOutputTitle: "Program output", runStarting: "Preparing and starting the application …", runSuccess: "Program finished successfully", runFailure: "Program finished with an error", runTimeout: "Execution stopped after 15 seconds", runOutputTruncated: "Output is limited to 64 KiB per stream.", runNoOutput: "No output.", runStdout: "OUTPUT", runStderr: "ERROR", runConsoleInput: "Input for read_console", runConsoleSubmit: "Send input", runConsoleEof: "End input (EOF)", runConsoleSent: "Input sent.", runConsoleError: "Could not send input: {0}", runWebReady: "Web application is running locally:", runWebOpen: "Open application in browser", runWebStop: "Stop preview", runWebStopped: "Local preview stopped.",
-    runtimeBudgetButton: "Budget", runtimeBudgetTitle: "Runtime budget and recursion", runtimeBudgetEnable: "Enable a step budget for console programs", runtimeBudgetRange: "Step budget (slider: 1,000 to 1,000,000)", runtimeBudgetNumber: "Maximum steps (1 to 100,000,000)", runtimeBudgetWebHint: "The slider applies to this console run. The project limit in zelyra.toml also applies to API handlers and scheduled commands.", runtimeProjectSteps: "Project interpreter limit: {0}", runtimeStepsUnbounded: "not set (AST has no step limit)", runtimeStepsConfigured: "{0} steps", runtimeSchedulerTimeout: "Scheduler job time limit: {0} seconds ({1})", runtimeSchedulerTimeoutConfigured: "configured", runtimeSchedulerTimeoutDefault: "default", runtimeRecursionTitle: "Possible recursion", runtimeRecursionNone: "No direct or mutual recursion found in the analyzed function graph.", runtimeRecursionIncomplete: "The function graph is too large; recursion analysis is incomplete.", runtimeRecursionDirect: "Direct recursion", runtimeRecursionMutual: "Mutual recursion", runtimeStackDepth: "Project maximum stack depth: {0} ({1})", runtimeStackConfigured: "configured", runtimeStackDefault: "default", runtimeProfileError: "Could not read runtime profile: {0}", runtimeBudgetInvalid: "Enter an integer step count from 1 to 100,000,000.", runtimeBudgetExceeded: "Step budget exceeded", runCancel: "Cancel execution", runCancelRequested: "Cancellation requested …", runCancelled: "Execution cancelled", runtimeProfileInvalid: "The unsaved source cannot be fully analyzed.",
+    runtimeBudgetButton: "Budget", runtimeBudgetTitle: "Runtime budget, backend, and recursion", runtimeBackendLabel: "Execution backend", runtimeBackendAst: "AST · default", runtimeBackendMir: "MIR · experimental", runtimeBackendBytecode: "Bytecode · experimental", runtimeBackendHint: "MIR and Bytecode support subsets and report unsupported language constructs. Web previews use AST.", runtimeBackendInvalid: "Choose an available Zelyra backend.", runtimeBudgetEnable: "Enable a step budget for console programs", runtimeBudgetRange: "Step budget (slider: 1,000 to 1,000,000)", runtimeBudgetNumber: "Maximum steps (1 to 100,000,000)", runtimeBudgetWebHint: "The slider applies to this console run. The project limit in zelyra.toml also applies to API handlers and scheduled commands.", runtimeProjectSteps: "Project interpreter limit: {0}", runtimeStepsUnbounded: "not set (AST has no step limit)", runtimeStepsConfigured: "{0} steps", runtimeSchedulerTimeout: "Scheduler job time limit: {0} seconds ({1})", runtimeSchedulerTimeoutConfigured: "configured", runtimeSchedulerTimeoutDefault: "default", runtimeRecursionTitle: "Possible recursion", runtimeRecursionNone: "No direct or mutual recursion found in the analyzed function graph.", runtimeRecursionIncomplete: "The function graph is too large; recursion analysis is incomplete.", runtimeRecursionDirect: "Direct recursion", runtimeRecursionMutual: "Mutual recursion", runtimeStackDepth: "Project maximum stack depth: {0} ({1})", runtimeStackConfigured: "configured", runtimeStackDefault: "default", runtimeProfileError: "Could not read runtime profile: {0}", runtimeBudgetInvalid: "Enter an integer step count from 1 to 100,000,000.", runtimeBudgetExceeded: "Step budget exceeded", runCancel: "Cancel execution", runCancelRequested: "Cancellation requested …", runCancelled: "Execution cancelled", runtimeProfileInvalid: "The unsaved source cannot be fully analyzed.",
     logs: "Logs", logsTitle: "Zelyra logs", logsLoading: "Loading logs …", logsUnavailable: "Could not load logs.", logsEmpty: "No program output has been recorded yet.", logsLevel: "Level", logsAll: "All", logsSearch: "Filter text", logsRetention: "Stored locally; bounded rotation", logsCount: "Showing {0} entries",
     taskHelp: "Open contextual help", taskHelpHelp: "Show help for the term at the cursor", taskProperties: "Open file properties",
     taskPropertiesHelp: "Show information and actions for the active file", taskSearch: "Find text", taskSearchHelp: "Search in the active document",
@@ -445,6 +446,9 @@ const messages = {
     table: "Table", field: "Field", moduleUnknown: "Source module unknown", selectTarget: "Choose source file"
   }
 };
+
+const storedRunBackend = localStorage.getItem(runBackendPreferenceKey);
+if (["ast", "mir", "bytecode"].includes(storedRunBackend)) $("run-backend").value = storedRunBackend;
 let language = localStorage.getItem("zelyra-editor-language") === "en" ? "en" : "de";
 function t(key, ...values) {
   return values.reduce(
@@ -3266,6 +3270,11 @@ async function openRuntimeBudget() {
 }
 
 async function runProject() {
+  const backend = $("run-backend").value;
+  if (!["ast", "mir", "bytecode"].includes(backend)) {
+    announce(t("runtimeBackendInvalid"), "error");
+    return;
+  }
   let maxSteps = null;
   if ($("runtime-budget-enabled").checked) {
     maxSteps = Number($("runtime-budget-number").value);
@@ -3299,7 +3308,7 @@ async function runProject() {
   try {
     const entryPath = studioEntryPath();
     let runSettled = false;
-    const runRequest = api("run", { method: "POST", body: JSON.stringify({ path: entryPath, maxSteps }) })
+    const runRequest = api("run", { method: "POST", body: JSON.stringify({ path: entryPath, maxSteps, backend }) })
       .finally(() => { runSettled = true; });
     while (!runSettled) {
       try {
@@ -4359,6 +4368,11 @@ $("runtime-budget-close").addEventListener("click", () => $("runtime-budget-dial
 $("runtime-budget-run").addEventListener("click", () => {
   $("runtime-budget-dialog").close();
   void runProject();
+});
+$("run-backend").addEventListener("change", (event) => {
+  if (["ast", "mir", "bytecode"].includes(event.target.value)) {
+    localStorage.setItem(runBackendPreferenceKey, event.target.value);
+  }
 });
 $("runtime-budget-enabled").addEventListener("change", (event) => {
   $("runtime-budget-range").disabled = !event.target.checked;

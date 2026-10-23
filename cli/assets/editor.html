@@ -292,6 +292,13 @@
   <dialog id="runtime-budget-dialog" class="task-finder runtime-budget-dialog" aria-labelledby="runtime-budget-title">
     <header><h2 id="runtime-budget-title" data-i18n="runtimeBudgetTitle">Laufzeitbudget und Rekursion</h2><button id="runtime-budget-close" type="button" aria-label="Schließen" data-i18n-aria="close">×</button></header>
     <div class="runtime-budget-content">
+      <label for="run-backend" data-i18n="runtimeBackendLabel">Ausführungs-Backend</label>
+      <select id="run-backend" class="runtime-backend-select">
+        <option value="ast" data-i18n="runtimeBackendAst">AST · Standard</option>
+        <option value="mir" data-i18n="runtimeBackendMir">MIR · experimentell</option>
+        <option value="bytecode" data-i18n="runtimeBackendBytecode">Bytecode · experimentell</option>
+      </select>
+      <p data-i18n="runtimeBackendHint">MIR und Bytecode unterstützen Teilmengen und melden nicht unterstützte Sprachkonstrukte. Webvorschauen laufen mit AST.</p>
       <label class="runtime-budget-enable"><input id="runtime-budget-enabled" type="checkbox"> <span data-i18n="runtimeBudgetEnable">Schrittbudget für Konsolenprogramme aktivieren</span></label>
       <label for="runtime-budget-range" data-i18n="runtimeBudgetRange">Schrittbudget (Regler: 1.000 bis 1.000.000)</label>
       <input id="runtime-budget-range" type="range" min="1000" max="1000000" step="1000" value="100000" disabled>
