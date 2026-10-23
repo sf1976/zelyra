@@ -28,7 +28,7 @@ Ressourcendisziplin und ehrliche Beweisaussagen leiten jede Phase. Das
 den tatsächlich implementierten Stand.
 
 Das aktuelle stabile Release ist
-[1.2.51](https://github.com/sf1976/zelyra/releases/tag/v1.2.51).
+[1.2.52](https://github.com/sf1976/zelyra/releases/tag/v1.2.52).
 **Aktuelle Meilensteine** ist die verbindliche Übersicht der nächsten Vorhaben.
 Ältere, nummerierte Release-
 Abschnitte bleiben als historische Planung und Nachweise erhalten; sie legen
@@ -1069,6 +1069,7 @@ werden. Details stehen im [Projektlayout-Arbeitsplan](release-plans/1.3.0-projec
 - [x] **1.2.49 — Zelyra Studio IDE:** Zelyra-Startansicht, Anwendungsmenüs, compilerbewusste Vorschläge, integrierte `zelyra console` sowie ausdrücklich bestätigtes Anlegen, Bearbeiten und Löschen deklarierter Tabellen. PostgreSQL-Projekte zeigen die bestehende REPL-Sandboxgrenze; das Datenbank-Studio bleibt verfügbar.
 - [x] **1.2.50 — reproduzierbare Studio-Assets:** Studio-Quellmodule und generierte Browser-Bundles abgeglichen, reproduzierbare Builds geprüft und PostgreSQL-REPL-Sandboxgrenze dokumentiert. Veröffentlicht mit Linux-/Windows-Paketen, Prüfsummen, SPDX-SBOMs und Release-Attestierungen auf [GitHub Releases](https://github.com/sf1976/zelyra/releases/tag/v1.2.50).
 - [x] **1.2.51 — compilerbewusstes Studio und SQL-Vervollständigung:** Die lokale Compiler-Projektkarte mit kontextbezogenem nächsten Schritt auf der Studio-Startseite zeigen; SQL aus deklarierten Tabellen und eindeutigen Spalten einschließlich Aliasen vervollständigen. Vorschläge benötigen keine Live-Datenbank. Veröffentlicht mit Linux-/Windows-Paketen, Prüfsummen, SPDX-SBOMs und Release-Attestierungen auf [GitHub Releases](https://github.com/sf1976/zelyra/releases/tag/v1.2.51).
+- [x] **1.2.52 — kontextbezogenes Zelyra-Studio:** Funktionssignaturen und aktive Argumente auflösen, Record-Felder anhand compilerinferierter Typen und öffentlicher Imports vervollständigen sowie Modulvorschläge auf öffentliche Deklarationen begrenzen. Optionale KI-Vorschläge erfordern eine ausdrückliche Bestätigung und übernehmen Code nie automatisch. Vollständige PR-CI und Linux-/Windows-Releaseworkflow bestanden; Pakete, Prüfsummen, SPDX-SBOMs und Release-Attestierungen sind auf [GitHub Releases](https://github.com/sf1976/zelyra/releases/tag/v1.2.52) verfügbar. Zelyra 1.3.0 wird weiterentwickelt.
 
 - [ ] **1.2.0 — Compose-Prüfung im Installer:** Die Installer
   erkennen Docker Compose v2 oder neuer und unterscheiden es von der veralteten
