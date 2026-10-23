@@ -112,10 +112,15 @@ fn format_postgres_timestamp(micros: i64, with_timezone: bool) -> Result<String,
     // with the exact six-digit fraction from PostgreSQL's binary value.
     let timestamp = &without_zone[..without_zone.len() - 4];
     let fraction = micros.rem_euclid(1_000_000);
-    Ok(if with_timezone {
-        format!("{timestamp}{fraction:06}Z")
+    let fraction = if fraction % 1000 == 0 {
+        format!("{:03}", fraction / 1000)
     } else {
-        format!("{timestamp}{fraction:06}")
+        format!("{fraction:06}")
+    };
+    Ok(if with_timezone {
+        format!("{timestamp}.{fraction}Z")
+    } else {
+        format!("{timestamp}.{fraction}")
     })
 }
 
