@@ -125,7 +125,9 @@ wird ohne Auswahl eingefügt; **Rückgängig** bleibt verfügbar.
 
 Nach einem Record-Ausdruck wie `customer.na` ergänzt **Strg+Leertaste** die
 Felder des vom Compiler ermittelten Empfängertyps. Die Vorschläge verwenden
-auch den ungespeicherten Quelltext; bei unbekanntem Typ oder unvollständiger
+auch den ungespeicherten Quelltext und öffentliche Records aus importierten
+Modulen. Bei generischen Records zeigt Studio die konkreten Feldtypen, zum
+Beispiel `Customer<Int> → id: Int`. Bei unbekanntem Typ oder unvollständiger
 Projektauflösung werden keine Felder geraten. Die temporäre Analyse ändert
 keine Datei. Eine Auswahl ersetzt nur den Feldnamen; der Compiler bleibt für
 die abschließende Typprüfung maßgeblich.

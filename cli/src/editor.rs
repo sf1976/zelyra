@@ -7054,6 +7054,46 @@ fn main() {}
     }
 
     #[test]
+    fn studio_field_completion_resolves_public_imported_generic_records() {
+        let state = project();
+        fs::create_dir_all(state.root.join("src")).unwrap();
+        let module = "pub struct Customer<T> { name: String, id: T }\n";
+        let source = "import \"src/customer.zyl\" as customers\nfn main() { customer: customers::Customer<Int> = customers::Customer<Int> { name: \"Ada\", id: 7 } print(customer.na) }\n";
+        fs::write(state.root.join("src/customer.zyl"), module).unwrap();
+        fs::write(state.root.join("main.zyl"), "fn main() {}\n").unwrap();
+        let byte_dot_end = source.find("customer.na").unwrap() + "customer.".len();
+        let byte_cursor = source.find("customer.na").unwrap() + "customer.na".len();
+        let dot_end = byte_to_utf16(source, byte_dot_end);
+        let cursor = byte_to_utf16(source, byte_cursor);
+        let response = editor_completion::field_completion(
+            &state,
+            &json!({
+                "path":"main.zyl",
+                "source":source,
+                "dotEnd":dot_end,
+                "cursor":cursor,
+                "version":2,
+                "overlays":[]
+            }),
+        )
+        .unwrap();
+        let result: Value = serde_json::from_str(&response.2).unwrap();
+        let options = result["options"].as_array().unwrap();
+        assert_eq!(result["found"], true);
+        assert!(options
+            .iter()
+            .any(|item| item["label"] == "name" && item["detail"] == "String"));
+        assert!(options
+            .iter()
+            .any(|item| item["label"] == "id" && item["detail"] == "Int"));
+        assert_eq!(
+            fs::read_to_string(state.root.join("main.zyl")).unwrap(),
+            "fn main() {}\n"
+        );
+        fs::remove_dir_all(state.root.clone()).unwrap();
+    }
+
+    #[test]
     fn runtime_profile_uses_project_stack_setting_and_unsaved_call_graph() {
         let state = project();
         let original = "fn main() {}\n";

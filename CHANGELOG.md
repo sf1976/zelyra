@@ -16,9 +16,10 @@
   und lokales Loopback-HTTP mit begrenzten Ein-/Ausgaben und
   umgebungsbasierten Zugangsdaten unterstützen.
 - Add compiler-backed record-field completion after `receiver.`. It uses
-  source-mapped inferred receiver types, including unsaved editor source, and
-  offers no guessed members when the type is unresolved. Partial type
-  information remains advisory; normal compiler checks stay authoritative. /
+  source-mapped inferred receiver types, including unsaved editor source,
+  imported public records, and concrete generic field types, and offers no
+  guessed members when the type is unresolved. Partial type information remains
+  advisory; normal compiler checks stay authoritative. /
   Compilerbasierte Record-Feldvervollständigung nach `empfänger.` ergänzen.
   Sie nutzt quellbezogene inferierte Empfängertypen einschließlich
   ungespeicherter Editorinhalte und rät keine Felder bei unbekanntem Typ.
