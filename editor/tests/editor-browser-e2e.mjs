@@ -54,7 +54,7 @@ try {
   await page.route("**/__zelyra/editor/api/database-target", (route) => route.fulfill({
     status: 200,
     contentType: "application/json",
-    body: JSON.stringify({ engine: "mariadb", database: "studio_db", configured: true, creationSupported: true }),
+    body: JSON.stringify({ projectScope: "0123456789abcdef", engine: "mariadb", database: "studio_db", configured: true, creationSupported: true }),
   }));
   await page.route("**/__zelyra/editor/api/database-create", async (route) => {
     databaseCreateRequest = route.request().postDataJSON();
@@ -114,7 +114,33 @@ try {
     await route.fulfill({
       status: 200,
       contentType: "application/json",
-      body: JSON.stringify({ readOnly: true, columns: ["name", "email"], rows: [["<script>alert(1)</script>Anna", "\\N"]], nulls: [[false, true]], rowCount: 1, limit: 200, truncated: false, elapsedMs: 4 }),
+      body: JSON.stringify(query.sql.includes("columns_truncated")
+        ? {
+            readOnly: true,
+            columns: Array.from({ length: 50 }, (_, index) => `column_${index + 1}`),
+            rows: [Array.from({ length: 50 }, (_, index) => `value_${index + 1}`)],
+            nulls: [Array(50).fill(false)],
+            rowCount: 1,
+            limit: 200,
+            columnLimit: 50,
+            truncated: true,
+            rowsTruncated: false,
+            columnsTruncated: true,
+            elapsedMs: 4,
+          }
+        : {
+            readOnly: true,
+            columns: ["name", "email"],
+            rows: [["<script>alert(1)</script>Anna", "\\N"]],
+            nulls: [[false, true]],
+            rowCount: 1,
+            limit: 200,
+            columnLimit: 50,
+            truncated: false,
+            rowsTruncated: false,
+            columnsTruncated: false,
+            elapsedMs: 4,
+          }),
     });
   });
   await page.route("**/__zelyra/editor/api/schema-column-preview", async (route) => {
@@ -397,18 +423,32 @@ try {
   await page.locator("#database-button").click();
   await page.locator("#database-query-workbench").waitFor({ state: "visible" });
   const sqlEditor = page.locator("#database-query-editor .cm-content[contenteditable=true]");
+  await sqlEditor.fill("SELECT name FROM customers WHERE ");
+  await page.keyboard.press("Control+Space");
+  await page.locator(".cm-tooltip-autocomplete").waitFor();
+  const suggestions = await page.locator(".cm-tooltip-autocomplete li").allTextContents();
+  assert.ok(suggestions.some((suggestion) => suggestion.includes("amount")), "SQL workbench completion uses live schema columns");
+  await page.keyboard.press("Escape");
   await sqlEditor.fill("SELECT name FROM customers;");
   await page.locator("#database-query-run").click();
   await page.getByRole("columnheader", { name: "name" }).waitFor();
   await page.getByRole("cell", { name: "<script>alert(1)</script>Anna" }).waitFor();
   await page.getByRole("cell", { name: "NULL" }).waitFor();
   assert.equal(await page.locator("#database-query-results script").count(), 0, "SQL results must be rendered as text, never markup");
-  assert.deepEqual(sqlQueryRequests, [{ sql: "SELECT name FROM customers;", limit: 200 }]);
+  assert.deepEqual(sqlQueryRequests[0], { sql: "SELECT name FROM customers;", limit: 200 });
+  assert.ok(await page.evaluate(() => localStorage.getItem("zelyra-studio-sql:0123456789abcdef:mariadb:studio_db") !== null), "SQL drafts are scoped to the project and database");
   assert.match(await page.locator("#database-query-status").textContent(), /1 Zeile · 4 ms/);
   await page.locator("#database-query-history").selectOption("0");
   assert.match(await page.locator("#database-query-editor .cm-content").textContent(), /SELECT name FROM customers/);
   await page.locator("#database-query-clear").click();
   assert.equal(await page.locator("#database-query-editor .cm-content").textContent(), "");
+  await sqlEditor.fill("SELECT columns_truncated FROM customers;");
+  await page.locator("#database-query-run").click();
+  await page.getByRole("columnheader", { name: "column_1", exact: true }).waitFor();
+  const truncatedStatus = await page.locator("#database-query-status").textContent();
+  assert.match(truncatedStatus, /Spalten/);
+  assert.doesNotMatch(truncatedStatus, /Zeilen vorhanden/);
+  await page.locator("#database-query-clear").click();
   await page.locator("#database-create").waitFor({ state: "visible" });
   assert.equal(await page.locator(".database-header").evaluate((element) => getComputedStyle(element).backgroundColor), "rgb(255, 255, 255)");
   page.once("dialog", async (dialog) => {

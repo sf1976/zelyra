@@ -66,11 +66,16 @@ export function createSqlWorkbenchEditor(parent, { initial = "", getTables, run,
     const word = context.matchBefore(/[A-Za-z_][\w$]*/);
     if (!word && !context.explicit) return null;
     const query = context.state.doc.sliceString(0, context.pos);
-    const tables = (getTables() || []).map((table) => ({
-      kind: "table",
-      label: table.name,
-      columns: (table.columns || []).map((column) => typeof column === "string" ? column : column.name),
-    }));
+    const tables = (getTables() || []).map((table) => {
+      const columns = Array.isArray(table.live_columns) && table.live_columns.length
+        ? table.live_columns
+        : (table.declared_columns || []);
+      return {
+        kind: "table",
+        label: table.name,
+        columns: columns.map((column) => typeof column === "string" ? column : column.name),
+      };
+    });
     return {
       from: word?.from ?? context.pos,
       options: [

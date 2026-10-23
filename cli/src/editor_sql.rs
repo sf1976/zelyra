@@ -87,7 +87,9 @@ pub(super) fn query(
             )
         })?;
     let elapsed_ms = started.elapsed().as_millis();
-    let truncated = result.rows.len() > limit || result.columns.len() > MAX_RESULT_COLUMNS;
+    let rows_truncated = result.rows.len() > limit;
+    let columns_truncated = result.columns.len() > MAX_RESULT_COLUMNS;
+    let truncated = rows_truncated || columns_truncated;
     let columns = result
         .columns
         .iter()
@@ -124,7 +126,10 @@ pub(super) fn query(
         "nulls": nulls,
         "rowCount": row_count,
         "limit": limit,
+        "columnLimit": MAX_RESULT_COLUMNS,
         "truncated": truncated,
+        "rowsTruncated": rows_truncated,
+        "columnsTruncated": columns_truncated,
         "elapsedMs": elapsed_ms,
     });
     Ok((200, "application/json; charset=utf-8", response.to_string()))
@@ -168,6 +173,7 @@ mod tests {
             "SELECT id INTO @customer_id FROM customers",
             "SELECT SLEEP (30)",
             "SELECT SLEEP/* comment */(30)",
+            r#"SELECT 'a\'b' AS x, SLEEP(30)"#,
             "SELECT LOAD_FILE ('/etc/passwd')",
             "SELECT LOAD_FILE/**/('/etc/passwd')",
             "SELECT /*!80000 SLEEP(30) */ 1",

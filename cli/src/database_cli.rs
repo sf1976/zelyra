@@ -1666,7 +1666,9 @@ fn database_query(path: &str, args: &[String]) -> ExitCode {
 
 pub(super) fn read_only_statement(sql: &str) -> bool {
     let first = first_sql_keyword(sql);
-    let compact = compact_sql_for_safety(sql);
+    let Some(compact) = compact_sql_for_safety(sql) else {
+        return false;
+    };
     matches!(
         first.as_str(),
         "SELECT" | "WITH" | "SHOW" | "DESCRIBE" | "DESC" | "EXPLAIN"
@@ -1709,7 +1711,7 @@ pub(super) fn read_only_statement(sql: &str) -> bool {
     .any(|unsafe_clause| compact.contains(unsafe_clause))
 }
 
-fn compact_sql_for_safety(sql: &str) -> String {
+fn compact_sql_for_safety(sql: &str) -> Option<String> {
     let characters = sql.chars().collect::<Vec<_>>();
     let mut compact = String::with_capacity(sql.len());
     let mut index = 0;
@@ -1760,7 +1762,16 @@ fn compact_sql_for_safety(sql: &str) -> String {
             let quote = character;
             index += 1;
             while index < characters.len() {
-                if characters[index] == quote {
+                if characters[index] == '\\' {
+                    let slash_start = index;
+                    while characters.get(index) == Some(&'\\') {
+                        index += 1;
+                    }
+                    let slash_count = index - slash_start;
+                    if characters.get(index) == Some(&quote) && slash_count % 2 == 1 {
+                        return None;
+                    }
+                } else if characters[index] == quote {
                     if characters.get(index + 1) == Some(&quote) {
                         index += 2;
                         continue;
@@ -1778,7 +1789,18 @@ fn compact_sql_for_safety(sql: &str) -> String {
             let quote = character;
             index += 1;
             while index < characters.len() {
-                if characters[index] == quote {
+                if characters[index] == '\\' {
+                    let slash_start = index;
+                    while characters.get(index) == Some(&'\\') {
+                        index += 1;
+                    }
+                    let slash_count = index - slash_start;
+                    if quote == '"' && characters.get(index) == Some(&quote) && slash_count % 2 == 1
+                    {
+                        return None;
+                    }
+                    compact.push_str(&" ".repeat(slash_count));
+                } else if characters[index] == quote {
                     if characters.get(index + 1) == Some(&quote) {
                         compact.push(quote);
                         index += 2;
@@ -1797,11 +1819,13 @@ fn compact_sql_for_safety(sql: &str) -> String {
         index += 1;
     }
 
-    compact
-        .to_ascii_uppercase()
-        .chars()
-        .filter(|character| !character.is_whitespace())
-        .collect()
+    Some(
+        compact
+            .to_ascii_uppercase()
+            .chars()
+            .filter(|character| !character.is_whitespace())
+            .collect(),
+    )
 }
 
 fn transactional_dml_statement(sql: &str) -> bool {
@@ -2260,6 +2284,9 @@ mod tests {
         assert!(!read_only_statement("SELECT SLEEP/* hidden gap */ (1)"));
         assert!(!read_only_statement("SELECT LOAD_FILE/**/('/etc/passwd')"));
         assert!(!read_only_statement("SELECT /*!80000 SLEEP(1) */ 1"));
+        assert!(!read_only_statement(r#"SELECT 'a\'b' AS x, SLEEP(30)"#));
+        assert!(!read_only_statement(r#"SELECT "a\"b" AS x, SLEEP(30)"#));
+        assert!(read_only_statement(r#"SELECT 'a\\' AS x"#));
         assert!(!read_only_statement(
             "SELECT pg_notify('channel', 'payload')"
         ));
