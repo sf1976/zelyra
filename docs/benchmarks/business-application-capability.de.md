@@ -48,6 +48,12 @@ mandantengeschützte Tabellen per benutzerdefiniertem SQL liest. Der Compiler
 weist diese Form zurück, statt einen vom Aufrufer gelieferten Tenant-Wert als
 vertrauenswürdig zu behandeln. Dadurch ist die Lücke konkret reproduzierbar.
 
+Als Referenzverhalten bestanden außerdem alle drei Tests aus
+`CsvMailerImmediateSendingTest` (13 Assertions) in der Laravel-Arbeitskopie.
+Diese Tests erzwingen SQLite `:memory:` und verwenden `Queue::fake()` sowie
+`Process::fake()`; dabei wurden weder Produktivdaten noch SMTP oder externe
+Prozesse angesprochen.
+
 ## Wiederholbarer Prüfablauf
 
 1. Einen konkreten Geschäftsablauf aus der Referenz auswählen und gewünschtes

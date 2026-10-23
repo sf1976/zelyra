@@ -46,6 +46,12 @@ A separate compilation attempt for campaign recipient selection failed with
 custom SQL. The compiler rejects this form instead of trusting a tenant value
 supplied by the caller. This makes the gap reproducible.
 
+As a reference-behavior check, all three tests in
+`CsvMailerImmediateSendingTest` passed (13 assertions) in the Laravel working
+copy. They assert SQLite `:memory:` and use `Queue::fake()` and
+`Process::fake()`; no production data, SMTP server, or external process was
+accessed.
+
 ## Repeatable review process
 
 1. Select a concrete business workflow from the reference and record its
