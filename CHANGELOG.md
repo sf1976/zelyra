@@ -1,5 +1,7 @@
 ## Unreleased
 
+## 1.2.53 — Zelyra-aware editing
+
 - Add Zelyra-aware editor behavior: auto-paired brackets and quotes, four-space
   block indentation, and Tab/Shift+Tab indentation. / Zelyra-spezifische
   Editorhilfen ergänzen: automatische Klammer- und Anführungszeichenpaare,
