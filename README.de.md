@@ -11,39 +11,24 @@ Business-, Datenbank- und Webanwendungen. Schemaabhängiges SQL, Formulare,
 CRUD, Views und Geschäftslogik greifen ineinander; gewöhnlicher Programmcode
 und natives SQL bleiben jederzeit möglich.
 
-> **Release 1.2.55 · Sprachkompatibilitätslinie: 0.1** · [GitHub-Release](https://github.com/sf1976/zelyra/releases/tag/v1.2.55)
+> **Release 1.2.56 · Sprachkompatibilitätslinie: 0.1** · [GitHub-Release](https://github.com/sf1976/zelyra/releases/tag/v1.2.56)
 >
 > Die Compilerprüfung und der Verifier decken klar abgegrenzte Bereiche ab. Sie beweisen nicht die Korrektheit beliebiger Anwendungen. Prüfe vor dem Einsatz die unterstützten Abläufe und Grenzen in der jeweiligen Dokumentation.
 
-Zelyra 1.2.55 bringt das professionelle CSS-1.1.0-Designsystem in generierte
-Anwendungen: mit überarbeitetem CRUD-, Formular-, Tabellen- und responsivem
-Layout sowie Hell-/Dunkel-Tokens. Das Studio erhält ein eigenes Projektmenü
-und Vorschläge öffentlicher Deklarationen nach einem importierten
-Modulnamespace. In den Laufeinstellungen lassen sich MIR und Bytecode für
-Konsolenprojekte experimentell wählen; AST bleibt Standard, Webvorschauen
-verwenden weiterhin ausschließlich AST. Zelyra 1.2.54 schlägt beim Schreiben
-eines `import`-Pfads passende
-Zelyra-Quelldateien aus dem Projekt vor. Aktive Datei, bereits importierte
-Module, Nicht-Zelyra-Dateien und Kommentartext werden ausgelassen. Version
-1.2.53 ergänzte automatische Klammerpaare und Einrückung; 1.2.52 ergänzte
-compileraufgelöste Funktionssignaturen, Hinweise auf das aktuelle Argument und
-Record-Feldvervollständigung im Studio. Vorschläge folgen
-Zelyras Typen und öffentlichen Modulgrenzen; bei nicht auflösbaren Record-Typen
-werden keine Felder geraten. Die optionale KI-Vorschlagsaktion erfordert eine
-ausdrückliche Bestätigung. Version 1.2.51 machte das Compiler-Projektverständnis
-auf der Studio-Startseite sichtbar und ergänzte SQL-Vervollständigung aus
-deklarierten Zelyra-Schemata. Version 1.2.50 glich Studio-Quellmodule mit den
-generierten Browser-Assets ab und ermöglicht reproduzierbare Builds. Version
-1.2.49 führte die dedizierte
-Zelyra-Studio-Startansicht, Anwendungsmenüs, die integrierte Zelyra-Konsole,
-compilerbewusste Vorschläge und bestätigtes Anlegen, Bearbeiten und Löschen von
-Datensätzen deklarierter Tabellen ein. Version 1.2.48 hob das experimentelle
-Bytecode-Backend auf v30 und fasste verifizierte Literal-Inkrement-Arrayupdates
-in einer Instruktion zusammen. Frühere 1.2.x-Releases ergänzten typisierte
-CRUD-Aktionen, compilergeprüfte Uploads, berechnete Tabellenfelder,
-Geschäftsnummernkreise, einen Laravel-Website-Importer, `zelyra db console` und
-`zelyra db query`, Abrechnungspakete sowie typisierte CSV-Konvertierung.
-Siehe die [Release-Notizen 1.2.55](docs/release-notes/1.2.55.de.md),
+Zelyra 1.2.56 ergänzt einen SQL-Arbeitsplatz im Studio für MariaDB und
+PostgreSQL. Schemaabhängige Vorschläge, lokale Entwürfe und Abfragehistorie
+sowie begrenzte Ergebnistabellen unterstützen Nur-Lese-`SELECT`- und `WITH`-
+Abfragen. Studio enthält außerdem das lokal ausgelieferte originale
+Zelyra-Logo, typgerechte Datenbank-Datensatzeditoren und compilergeführte
+Vorschläge für Imports, Record-Felder und CRUD-Blöcke. Vorschläge sind
+explizit und fügen erst nach Auswahl Code ein. Die Menüs Datei und Bearbeiten
+bieten gängige Aktionen einschließlich Suchen und Ersetzen im aktiven Dokument.
+Menüs, Werkzeugleisten und Dateileiste haben nun eine gut lesbare Standardschrift;
+mittlere und große Stufen bleiben verfügbar. Frühere Releases ergänzten das
+CSS-1.1.0-Designsystem, compilerbewusstes Editieren sowie die experimentellen
+MIR- und Bytecode-Backends. Siehe die
+[Release-Notizen 1.2.56](docs/release-notes/1.2.56.de.md),
+[Release-Notizen 1.2.55](docs/release-notes/1.2.55.de.md),
 [Release-Notizen 1.2.54](docs/release-notes/1.2.54.de.md),
 [Release-Notizen 1.2.53](docs/release-notes/1.2.53.de.md),
 [Release-Notizen 1.2.52](docs/release-notes/1.2.52.de.md),

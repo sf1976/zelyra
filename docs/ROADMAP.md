@@ -26,7 +26,7 @@ proof claims guide every phase. The [manifesto](MANIFESTO.md) states the
 principles; the roadmap below tracks what is actually implemented.
 
 The current stable release is
-[1.2.55](https://github.com/sf1976/zelyra/releases/tag/v1.2.55).
+[1.2.56](https://github.com/sf1976/zelyra/releases/tag/v1.2.56).
 **Current milestones** is the source of near-term commitments. Older numbered release sections below are retained as
 historical planning and evidence; they do not by themselves define current
 release targets. Longer-term ideas remain in the post-1.0 evolution section.
@@ -43,7 +43,7 @@ security and compatibility gates stated for that milestone.
 
 | Version | Focus | Exit criteria |
 | --- | --- | --- |
-| 1.2.56 | Studio File/Edit menus and SQL workbench | Menus are on `main`; the SQL workbench and release artifacts pass full CI. |
+| 1.2.56 | Studio File/Edit menus, readable UI, and SQL workbench | Release candidate; full CI must pass before the stable tag is published. |
 | 1.3.0 | Compiler and Studio foundations | Canonical project layout, architecture checks/migration preview, and a compiler-aware Studio workflow are verified. AST remains the default; MIR/Bytecode stay optional, and unsupported paths fail safely. |
 | 1.4.0 | Zelyra Visual Design Platform | A usable first release with a shared component registry and preview, Zelyra source as the only authoritative description, theme/style core, visual form editing, and safe source synchronization. Phase 0 analysis and specification starts after 1.3.0. |
 | 1.5.0 | Bytecode readiness and default gate | Bytecode becomes the default only with demonstrated parity, safe fail-closed behavior, verified artifact upgrades, and measured benefit. Otherwise AST remains the default and Bytecode stays optional. |
@@ -652,7 +652,7 @@ The initial documented comparison and its test evidence are in the
   differential-test backend.
 
 - [x] **Zelyra Studio project menu (released in 1.2.55):** a dedicated Project menu exposes capability/path review and package/module settings, while View, Run, File, and Database keep their corresponding actions discoverable after the legacy toolbar buttons are hidden. Browser E2E tests follow these visible menu paths, and the screenshot baseline matches the current menu layout.
-- [🧪] **1.2.56 — Studio menus and readability (in progress):** File and Edit menus provide the expected file actions plus undo/redo, cut/copy/paste, select all, and document search. Ctrl+H opens Find and Replace in the active document; Ctrl+Shift+F remains project-wide search. The menu bar, quick actions, and file sidebar use a comfortable default font size while retaining the optional medium and large settings.
+- [🧪] **1.2.56 — Studio menus and readability (release candidate):** File and Edit menus provide the expected file actions plus undo/redo, cut/copy/paste, select all, and document search. Ctrl+H opens Find and Replace in the active document; Ctrl+Shift+F remains project-wide search. The menu bar, quick actions, and file sidebar use a comfortable default font size while retaining the optional medium and large settings.
 
 **Post-1.3.0 or explicitly reprioritized:** a native AOT backend is optional
 and depends on benchmark evidence. No open task is silently dropped: work that cannot meet its release

@@ -1,5 +1,7 @@
 ## Unreleased
 
+## 1.2.56 — Zelyra Studio SQL workbench and editor usability
+
 - Add a Studio SQL workbench with schema-aware completion and local query
   history. Run one read-only `SELECT`/`WITH` query against MariaDB or PostgreSQL;
   recognized side-effecting functions are rejected and results are capped.
@@ -35,6 +37,14 @@
   and large settings. / Die Standardschrift in Studio-Menüs, Werkzeugleisten
   und Dateileiste auf eine gut lesbare Größe anheben; die optionalen mittleren
   und großen Einstellungen bleiben erhalten.
+- Add standard File and Edit menu actions, including document search and
+  replace, while keeping project-wide search available separately. / Übliche
+  Aktionen in den Menüs Datei und Bearbeiten ergänzen, einschließlich Suchen
+  und Ersetzen im Dokument; die projektweite Suche bleibt separat verfügbar.
+- Raise the default font sizes across Studio menus, toolbars, and the file
+  sidebar, while preserving the optional medium and large settings. / Die
+  Standardschrift in Studio-Menüs, Werkzeugleisten und Dateileiste auf eine
+  gut lesbare Größe anheben; mittlere und große Einstellungen bleiben erhalten.
 
 ## 1.2.55 — Zelyra Studio und professionelles UI-Designsystem
 
