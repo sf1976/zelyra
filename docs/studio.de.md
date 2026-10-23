@@ -92,7 +92,12 @@ seinen Imports ein. Nach `import "src/customer.zyl" as customer` zeigt
 **Strg+Leertaste** die exportierten Namen als `customer::Name` an. Während du
 einen Importpfad schreibst, schlägt Studio passende `.zyl`-Dateien aus dem
 Projekt vor. In SQL-Blöcken erscheinen SQL-Schlüsselwörter und deklarierte
-Tabellen. An einer leeren Datei oder nach einem Datenbank-, Tabellen- oder
+Tabellen. Innerhalb einer SQL-Abfrage schlägt die Vervollständigung außerdem
+deklarierte Spalten nach einem Tabellenbezug oder Alias sowie Tabellennamen
+nach `FROM` und `JOIN` vor. Die Angaben kommen aus der lokalen
+Compiler-Projektkarte einschließlich offener Quelltext-Overlays;
+mehrdeutige Tabellennamen werden ausgelassen und es wird keine Live-Datenbank
+abgefragt. An einer leeren Datei oder nach einem Datenbank-, Tabellen- oder
 Funktionskopf bietet Studio passende Startbausteine an. Nach dem Bestätigen
 eines Imports öffnet Studio die Vorschläge im nächsten Editorabschnitt. Nichts
 wird ohne Auswahl eingefügt; **Rückgängig** bleibt verfügbar.
