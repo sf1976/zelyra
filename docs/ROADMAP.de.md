@@ -35,7 +35,7 @@ Abschnitte bleiben als historische Planung und Nachweise erhalten; sie legen
 für sich keine aktuellen Releaseziele fest. Langfristige Ideen stehen im
 Abschnitt zur Weiterentwicklung nach 1.0.0.
 
-## Releasefolge bis 1.3.0
+## Releasefolge bis 2.0.0
 
 Diese Folge ist der verbindliche Plan für aktive Arbeiten. Jedes aktive offene
 Ziel ist einem Release zugeordnet; historische Backlog-Einträge bleiben als
@@ -43,6 +43,26 @@ Kontext erhalten und sind keine zusätzlichen, unversionierten Zusagen. Ein
 Release gilt erst nach Implementierung, Dokumentation, positiven und negativen
 Tests sowie den jeweiligen Sicherheits- und Kompatibilitätsprüfungen als
 abgeschlossen.
+
+### Produktetappen
+
+| Version | Schwerpunkt | Abschlusskriterium |
+| --- | --- | --- |
+| 1.2.56 | Studio-Datei-/Bearbeiten-Menüs und SQL-Arbeitsplatz | Menüs sind auf `main`; die SQL-Werkbank und die Release-Artefakte bestehen die vollständige CI. |
+| 1.3.0 | Compiler- und Studio-Grundlage | Kanonisches Projektlayout, Architekturprüfung/Migrationsvorschau und compilerbewusster Studio-Arbeitsfluss sind nachvollziehbar geprüft. AST bleibt Standard; MIR/Bytecode bleiben optional und nicht unterstützte Pfade scheitern sicher. |
+| 1.4.0 | Zelyra Visual Design Platform | Ein produktiver erster Schnitt mit gemeinsamem Komponentenregister und Vorschau, Zelyra-Quellcode als einziger maßgeblicher Beschreibung, Theme-/Style-Core, visueller Formularbearbeitung und sicherer Quellsynchronisierung. Phase 0 beginnt nach 1.3.0 mit Bestandsanalyse und Spezifikation. |
+| 1.5.0 | Bytecode-Reife und Standard-Gate | Bytecode wird nur bei belegter Parität, sicherem fail-closed Verhalten, geprüften Artefakt-Upgrades und messbarem Nutzen Standard. Andernfalls bleibt AST Standard und Bytecode optional. |
+| 1.6.0 | Pakete, Module und Deployment | Wiederverwendbare, vertrauensgeprüfte Module und reproduzierbare Offline-/Deployment-Bundles werden an realen Verbraucherprojekten abgenommen; keine stabile native ABI wird vorausgesetzt. |
+| 1.7.0 | Geprüfte Geschäftsabläufe | Ausgewählte Query-, Tenant-, Request-, Job-, Audit- und Ledger-Abläufe werden als begrenzte Zelyra-Module durch Compiler, Laufzeit und Datenbank nachgewiesen. |
+| 1.8.0 | Kontrollierte Integrationen | Optionale Erweiterungen wie Wasm oder Sidecars kommen nur mit expliziter Capability-, Vertrauens-, Update- und Ressourcenprüfung hinzu. Ungeprüfte Plugins werden kein Standard. |
+| 1.9.0 | 2.0-Härtung | Feature-Freeze, Kompatibilitäts- und Migrationsregeln, Sicherheits-/Performancebelege, Installations- und Upgradeprüfungen sowie vollständige zweisprachige Handbücher. Keine neuen Großfeatures. |
+| 2.0.0 | Stabile Plattform | Veröffentlichte Sprach-, Paket-, Laufzeit-, CSS- und Artefaktverträge samt Upgradepfad und Supportmatrix sind festgelegt und geprüft. Offene optionale Backends werden nicht als fertig vorausgesetzt. |
+
+Die Ziele 1.6.0 bis 1.8.0 sind eine priorisierte Planungsfolge, keine pauschale
+Vollständigkeitszusage für sämtliche denkbaren Funktionen. Nach jedem Release
+werden Umfang und Nachweise gegen reale Zelyra-Anwendungen überprüft. Offene
+1.3.0- oder 1.4.0-Abnahmekriterien werden nicht stillschweigend auf spätere
+Versionen verschoben.
 
 - [ ] **1.1.5 — wiederverwendbare Zelyra-Module und Pakete:** Offline-
   Paketabläufe, typisierte öffentliche APIs und Effekte, deterministische

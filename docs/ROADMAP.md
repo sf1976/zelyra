@@ -31,13 +31,32 @@ The current stable release is
 historical planning and evidence; they do not by themselves define current
 release targets. Longer-term ideas remain in the post-1.0 evolution section.
 
-## Release sequence through 1.3.0
+## Release sequence through 2.0.0
 
 This sequence is the authoritative schedule for active work. Every active open
 item below is assigned to a release; historical backlog entries are retained
 for context and are not additional unscheduled commitments. Release completion
 requires implementation, documentation, positive and negative tests, and the
 security and compatibility gates stated for that milestone.
+
+### Product milestones
+
+| Version | Focus | Exit criteria |
+| --- | --- | --- |
+| 1.2.56 | Studio File/Edit menus and SQL workbench | Menus are on `main`; the SQL workbench and release artifacts pass full CI. |
+| 1.3.0 | Compiler and Studio foundations | Canonical project layout, architecture checks/migration preview, and a compiler-aware Studio workflow are verified. AST remains the default; MIR/Bytecode stay optional, and unsupported paths fail safely. |
+| 1.4.0 | Zelyra Visual Design Platform | A usable first release with a shared component registry and preview, Zelyra source as the only authoritative description, theme/style core, visual form editing, and safe source synchronization. Phase 0 analysis and specification starts after 1.3.0. |
+| 1.5.0 | Bytecode readiness and default gate | Bytecode becomes the default only with demonstrated parity, safe fail-closed behavior, verified artifact upgrades, and measured benefit. Otherwise AST remains the default and Bytecode stays optional. |
+| 1.6.0 | Packages, modules, and deployment | Reusable, trusted modules and reproducible offline/deployment bundles are accepted against real consumer projects; no stable native ABI is assumed. |
+| 1.7.0 | Verified business workflows | Selected query, tenant, request, job, audit, and ledger workflows are demonstrated as bounded Zelyra modules across compiler, runtime, and database. |
+| 1.8.0 | Controlled integrations | Optional extensions such as Wasm or sidecars are added only with explicit capability, trust, update, and resource controls. Unverified plugins do not become standard. |
+| 1.9.0 | 2.0 hardening | Feature freeze, compatibility and migration rules, security/performance evidence, install/upgrade checks, and complete bilingual manuals. No new major features. |
+| 2.0.0 | Stable platform | Published language, package, runtime, CSS, and artifact contracts, plus an upgrade path and support matrix, are defined and verified. Optional backends need not be complete. |
+
+The 1.6.0–1.8.0 goals are a prioritized planning sequence, not a blanket
+promise to deliver every conceivable feature. After each release, scope and
+evidence are reviewed against real Zelyra applications. Open 1.3.0 or 1.4.0
+acceptance criteria are not silently moved to later versions.
 
 - [ ] **1.1.5 — reusable Zelyra modules and packages:** Complete the local,
   offline package workflow, typed public APIs and effects, deterministic locks,
