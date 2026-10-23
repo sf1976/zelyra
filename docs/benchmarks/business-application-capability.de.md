@@ -1,6 +1,7 @@
 # Funktionsabgleich mit einer realen Geschäftsanwendung
 
-**Stand:** 23. Oktober 2026  
+**Stand:** 23. Oktober 2026
+
 **Referenz:** `/opt/siedelmann-laravel/app`
 
 Dieser Abgleich prüft die fachlichen Fähigkeiten von Zelyra. Er ist keine

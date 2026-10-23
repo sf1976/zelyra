@@ -1,6 +1,7 @@
 # Functional comparison with a real business application
 
-**As of:** 23 October 2026  
+**As of:** 23 October 2026
+
 **Reference:** `/opt/siedelmann-laravel/app`
 
 This comparison tests Zelyra's business capabilities. It is not a Laravel
