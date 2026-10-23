@@ -64,6 +64,29 @@ werden Umfang und Nachweise gegen reale Zelyra-Anwendungen überprüft. Offene
 1.3.0- oder 1.4.0-Abnahmekriterien werden nicht stillschweigend auf spätere
 Versionen verschoben.
 
+### Laufender Funktionstest mit einer realen Geschäftsanwendung
+
+Die Geschäftsfunktionen der Anwendung unter
+`/opt/siedelmann-laravel/app` sind ein fortlaufender Praxistest für Zelyra.
+Geprüft wird, ob Zelyra die dort benötigten Abläufe, Datenbeziehungen,
+Berechtigungen, Validierungen, Hintergrundaufgaben und Integrationen
+grundsätzlich ausdrücken und zuverlässig ausführen kann. Die Anwendung ist
+dabei ein fachlicher Anforderungskatalog; Laravel-Code, Laravel-Architektur
+und die bestehenden Views werden nicht 1:1 nachgebaut. Die Umsetzung soll
+idiomatisch mit Zelyras eigenen Sprach-, Compiler-, Laufzeit- und
+Datenbankkonzepten erfolgen.
+
+Bei relevanten Compiler-, Laufzeit-, Datenbank-, Paket- und Studioänderungen
+werden passende Geschäftsabläufe wiederholt geprüft. Maßstab ist nicht nur,
+ob eine Seite ähnlich aussieht oder der Code kompiliert: Auch Datenfluss,
+Fehlerfälle, Berechtigungen und persistierte Ergebnisse müssen stimmen.
+Ergebnisse und reproduzierbare Regressionen werden dokumentiert. Kleine,
+klar begrenzte Fähigkeitslücken werden direkt behoben. Größere Lücken mit
+Auswirkungen auf Sprache, Laufzeit oder Architektur werden mit Beleg,
+Auswirkung und vorgeschlagenem Release in diese Roadmap aufgenommen und
+priorisiert. Aussagen über Zelyras Fähigkeiten stützen sich auf diese
+Funktionsprüfungen und nicht auf eine bloße Laravel- oder View-Ähnlichkeit.
+
 - [ ] **1.1.5 — wiederverwendbare Zelyra-Module und Pakete:** Offline-
   Paketabläufe, typisierte öffentliche APIs und Effekte, deterministische
   Lockfiles, wiederverwendbare Geschäftsmodule, sichere Einstellungen und

@@ -58,6 +58,27 @@ promise to deliver every conceivable feature. After each release, scope and
 evidence are reviewed against real Zelyra applications. Open 1.3.0 or 1.4.0
 acceptance criteria are not silently moved to later versions.
 
+### Continuous functional testing with a real business application
+
+The business capabilities of the application in
+`/opt/siedelmann-laravel/app` are an ongoing practical test for Zelyra. The
+question is whether Zelyra can express and reliably execute the required
+workflows, data relationships, permissions, validation, background tasks, and
+integrations. The application is a source of business requirements; its
+Laravel code, architecture, and views are not to be reproduced one-to-one.
+Implementations should use Zelyra's own language, compiler, runtime, and
+database concepts idiomatically.
+
+Relevant compiler, runtime, database, package, and Studio changes should
+trigger repeat checks of the applicable business workflows. Success means
+more than a similar-looking page or code that compiles: data flow, error
+cases, permissions, and persisted results must also be correct. Record results
+and reproducible regressions. Fix small, bounded capability gaps directly.
+Document and prioritize larger language, runtime, or architecture gaps in
+this roadmap with evidence, impact, and a proposed release. Claims about
+Zelyra's capabilities must be based on these functional checks, not on
+Laravel or view similarity.
+
 - [ ] **1.1.5 — reusable Zelyra modules and packages:** Complete the local,
   offline package workflow, typed public APIs and effects, deterministic locks,
   reusable business modules, safe settings management, and documented
