@@ -235,7 +235,10 @@ For usage details see the [web and database quickstart](getting-started.md),
   (at most 25 per page), and can apply simple column changes as checked source
   previews. It does not apply migrations. MySQL live introspection, full
   semantic references, and an unrestricted visual database designer are not
-  included. See the [Studio guide](studio.en.md).
+  included. Explicit Ctrl+Space at a blank top-level position can also insert a
+  compiler-map-derived CRUD block for a uniquely named table without one; it
+  suppresses suggestions for incomplete/ambiguous maps and code blocks. See the
+  [Studio guide](studio.en.md).
 - ✅ `zelyra text edit <plan.zedit>` previews text edits from TOML plans using
   linear regular expressions, expected match counts, a source-bound plan ID,
   and explicit apply. Project boundaries and unchanged inputs are checked

@@ -259,8 +259,11 @@ der [Setup-Anleitung](setup-web.de.md) und den
   pro Seite) und kann einfache Spaltenänderungen als geprüfte Quelltextvorschau
   übernehmen. Sie wendet keine Migration an. MySQL-Live-Introspektion,
   vollständige semantische Referenzen und ein allgemeiner visueller
-  Datenbankdesigner sind nicht enthalten.
-  Einzelheiten: [Studio-Anleitung](studio.de.md).
+  Datenbankdesigner sind nicht enthalten. Strg+Leertaste kann an einer leeren
+  Position auf oberster Ebene außerdem einen aus der Compiler-Projektkarte
+  abgeleiteten CRUD-Block für eine eindeutige Tabelle ohne CRUD einfügen; bei
+  unvollständiger/mehrdeutiger Analyse und innerhalb eines Codeblocks wird er
+  nicht angeboten. Einzelheiten: [Studio-Anleitung](studio.de.md).
 - ✅ `zelyra text edit <plan.zedit>` bietet vorschau-basierte Textänderungen aus
   TOML-Plänen mit linearen regulären Ausdrücken, erwarteter Trefferzahl,
   quellgebundener Plan-ID und ausdrücklichem Anwenden. Projektgrenzen und

@@ -123,6 +123,12 @@ An empty file or a database, table, or function declaration can offer a
 matching starter block. After confirming a completed import, Studio opens
 suggestions in the next editor section. Nothing is inserted
 without a selection, and Undo remains available.
+On a blank top-level line, explicit **Ctrl+Space** also offers a block such as
+`crud Customers -> customers {}` when the compiler map contains exactly one table
+with that name and no CRUD already uses it. The identifier is derived from the
+table name; incomplete or ambiguous maps and positions inside a code block do
+not produce this suggestion. Selecting it inserts the code, which remains subject
+to the normal compiler check.
 
 After a record expression such as `customer.na`, **Ctrl+Space** completes
 fields from the receiver type inferred by the compiler. Suggestions use the

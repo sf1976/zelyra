@@ -135,6 +135,13 @@ abgefragt. An einer leeren Datei oder nach einem Datenbank-, Tabellen- oder
 Funktionskopf bietet Studio passende Startbausteine an. Nach dem Bestätigen
 eines Imports öffnet Studio die Vorschläge im nächsten Editorabschnitt. Nichts
 wird ohne Auswahl eingefügt; **Rückgängig** bleibt verfügbar.
+An einer leeren Position auf oberster Ebene bietet ausdrückliches
+**Strg+Leertaste** außerdem einen Block wie `crud Customers -> customers {}`
+an, wenn die Compiler-Projektkarte genau eine Tabelle dieses Namens enthält und
+noch kein CRUD sie verwendet. Der Bezeichner wird aus dem Tabellennamen
+ableitet. Bei unvollständiger oder mehrdeutiger Projektkarte und innerhalb eines
+Codeblocks erscheint der Vorschlag nicht. Erst die Auswahl fügt den Code ein;
+der Compiler prüft ihn wie jeden anderen Quelltext.
 
 Nach einem Record-Ausdruck wie `customer.na` ergänzt **Strg+Leertaste** die
 Felder des vom Compiler ermittelten Empfängertyps. Die Vorschläge verwenden
