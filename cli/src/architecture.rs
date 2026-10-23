@@ -89,6 +89,31 @@ pub(super) fn validate_project_modules(
             .and_then(|source| {
                 declaration_spans(&source.text, source_id_for_path(sources, &path)?)
             });
+        if path.starts_with("domain/") {
+            let import_spans = sources
+                .iter()
+                .find(|source| source.path.replace('\\', "/") == path)
+                .and_then(|source| {
+                    source_import_spans(&source.text, source_id_for_path(sources, &path)?)
+                });
+            for import in module
+                .imports
+                .iter()
+                .filter(|import| import.path.replace('\\', "/").starts_with("routes/"))
+            {
+                issues.push(ArchitectureIssue {
+                    path: module.path.clone(),
+                    code: "E-ARCH-004",
+                    message: format!(
+                        "domain module must not import route module `{}`; pass domain values to route handlers instead",
+                        import.alias
+                    ),
+                    span: import_spans
+                        .as_ref()
+                        .and_then(|spans| spans.get(&import.alias).copied()),
+                });
+            }
+        }
         for declaration in &module.declarations {
             let kind = declaration
                 .split_once(':')
@@ -166,6 +191,21 @@ fn declaration_spans(
         );
     }
     Some(declarations)
+}
+
+fn source_import_spans(
+    source: &str,
+    source_id: u32,
+) -> Option<std::collections::HashMap<String, Span>> {
+    let tokens = lex(source).ok()?;
+    let program = parse(&tokens).ok()?;
+    Some(
+        program
+            .imports
+            .into_iter()
+            .map(|import| (import.alias, import.span.with_source_id(source_id)))
+            .collect(),
+    )
 }
 
 fn route_handler_sql_issues(

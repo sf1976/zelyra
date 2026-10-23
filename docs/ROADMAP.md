@@ -646,6 +646,8 @@ The initial documented comparison and its test evidence are in the
 
 - [🧪] **1.3.0 — source locations in the layout migration preview:** `migrate-layout --check --format json` now includes a stable rule identifier per file and, when a declaration or parse error is available, its start/end offsets, line, and column. Candidate destination, status, and reason remain present; the preview remains read-only. Findings are still file-level rather than separate diagnostics for every declaration.
 
+- [🧪] **1.3.0 — HTTP-independent domain modules:** `strict_architecture` reports direct imports of modules from `routes/` inside `domain/` as `E-ARCH-004` at the import site. Domain functions are called with business inputs instead of depending on route modules. Types for incoming requests, responses, sessions, or cookies are not currently exposed as usable Zelyra APIs, so deeper type checks for these values are not yet possible.
+
 - [🗺️] **1.5.0 — Bytecode as a candidate default backend:** Keep AST as the
   default through this milestone; MIR and Bytecode remain explicitly selectable
   and experimental. Promote Bytecode only after supported language, SQL,

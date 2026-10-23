@@ -20,6 +20,10 @@
   helpers. / Die SQL-Prüfung von Routen durch alle statisch erreichbaren
   Module bis zur vorgesehenen `domain/`-Grenze fortsetzen, auch über Hilfen
   im Projekteinstieg und in Paketen.
+- Reject direct imports from `routes/` inside `domain/` modules with a
+  source-mapped architecture diagnostic. / Direkte Importe aus `routes/` in
+  `domain/`-Modulen mit einer quellpositionierten Architekturdiagnose
+  zurückweisen.
 
 ## 1.2.56 — Zelyra Studio SQL workbench and editor usability
 

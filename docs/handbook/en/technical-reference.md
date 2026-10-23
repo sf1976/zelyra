@@ -3140,7 +3140,7 @@ use domain::invoices::actions as invoice_ops
 
 In a standard layout, setting `strict_architecture = true` in `zelyra.toml` enables several boundary checks. `E-ARCH-001` reports declaration kinds that do not belong in their project area. For `api ... { handler ... }` declarations in `routes/`, the checker follows statically resolved Zelyra function calls: write SQL (`INSERT`, `UPDATE`, `DELETE`, `REPLACE`, and recognized DDL keywords) reports `E-ARCH-002`; SQL that cannot be safely classified fails closed with `E-ARCH-003`. Read queries must also pass the read-only check.
 
-Keep direct database mutations in `domain/<feature>/actions.zyl`. An API handler may call a domain function; the existing import and table-access checks still apply. This analysis covers API handlers and statically resolved Zelyra calls, not arbitrary dynamic calls or embedded form/CRUD action bodies.
+Keep direct database mutations in `domain/<feature>/actions.zyl`. An API handler may call a domain function; the existing import and table-access checks still apply. Domain modules may not import modules from `routes/` (`E-ARCH-004`). This analysis covers API handlers and statically resolved Zelyra calls, not arbitrary dynamic calls or embedded form/CRUD action bodies. Request, Response, Session, and Cookie types are not currently exposed as usable Zelyra APIs.
 
 ```bash
 # Check layout migration without moving or modifying files

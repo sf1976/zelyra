@@ -706,6 +706,8 @@ Der erste dokumentierte Abgleich und seine Testbelege stehen im
 
 - [🧪] **1.3.0 — Quellpositionen in der Layout-Migrationsvorschau:** `migrate-layout --check --format json` liefert je Datei jetzt zusätzlich eine stabile Regelkennung und – sofern eine Deklaration oder ein Parsefehler vorliegt – Start-/Endoffset, Zeile und Spalte. Zielvorschlag, Status und Begründung bleiben erhalten; die Vorschau ändert weiterhin keine Dateien. Die Vorschau ist dateibezogen und ersetzt noch keine separate Diagnose für jede Deklaration.
 
+- [🧪] **1.3.0 — HTTP-unabhängige Domain-Module:** `strict_architecture` meldet direkte Importe von Modulen aus `routes/` in `domain/` mit `E-ARCH-004` an der Importstelle. Domain-Funktionen werden dadurch über ihre fachlichen Eingaben aufgerufen statt an die Route gekoppelt. Typen für eingehende Requests, Responses, Sessions oder Cookies existieren aktuell nicht als benutzbare Zelyra-API; eine weitergehende Typprüfung dieser Werte ist daher noch nicht möglich.
+
 - [🗺️] **1.5.0 — Bytecode als mögliches Standard-Backend:** AST bleibt bis dahin
   Standard; MIR und Bytecode bleiben ausdrücklich auswählbar und experimentell.
   Ein Standardwechsel wird nur freigegeben, wenn unterstützte Sprach-, SQL-,

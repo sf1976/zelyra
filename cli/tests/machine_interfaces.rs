@@ -2641,6 +2641,47 @@ fn strict_architecture_checks_reachable_route_sql_and_preserves_domain_writes() 
 }
 
 #[test]
+fn strict_architecture_keeps_domain_modules_independent_from_routes() {
+    let directory = temporary_directory("strict-domain-route-import");
+    for path in ["schema", "domain", "routes", "public", "assets"] {
+        fs::create_dir_all(directory.join(path)).unwrap();
+    }
+    fs::write(
+        directory.join("zelyra.toml"),
+        "[project]\nname = \"strict-domain-route-import\"\nlayout = \"standard\"\nstrict_architecture = true\n",
+    )
+    .unwrap();
+    fs::write(
+        directory.join("main.zyl"),
+        "import \"routes::web\" as web\nimport \"domain::actions\" as actions\nfn main() {}\n",
+    )
+    .unwrap();
+    fs::write(
+        directory.join("routes/web.zyl"),
+        "pub fn route_data() -> Int { return 1 }\napi GET \"/value\" { handler route_data output Int }\n",
+    )
+    .unwrap();
+    fs::write(
+        directory.join("domain/actions.zyl"),
+        "import \"routes::web\" as web\npub fn calculate() -> Int { return web::route_data() }\n",
+    )
+    .unwrap();
+    let checked = Command::new(binary())
+        .args([
+            "check",
+            directory.join("main.zyl").to_str().unwrap(),
+            "--format=json",
+        ])
+        .output()
+        .unwrap();
+    let report: serde_json::Value = serde_json::from_slice(&checked.stdout).unwrap();
+    assert_eq!(report["diagnostics"][0]["code"], "E-ARCH-004");
+    assert_eq!(report["diagnostics"][0]["file"], "domain/actions.zyl");
+    assert_eq!(report["diagnostics"][0]["span"]["start"]["line"], 1);
+    fs::remove_dir_all(directory).unwrap();
+}
+
+#[test]
 fn serve_loads_project_theme_and_locale_catalogs() {
     let directory = temporary_directory("serve-theme");
     fs::create_dir_all(&directory).unwrap();
