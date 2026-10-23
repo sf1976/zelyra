@@ -25,6 +25,8 @@ Beim Öffnen zeigt Studio zunächst einen projektbezogenen Einstiegsbildschirm.
 Von dort kannst du eine Zelyra-Datei öffnen, das Projekt prüfen, die Konsole
 starten oder das Datenbank-Studio aufrufen. So bleiben Compiler, SQL und
 Anwendungsvorschau als zusammenhängender Zelyra-Arbeitsfluss sichtbar.
+Das originale Zelyra-Logo erscheint bereits beim Start und wird als lokale
+Studio-Ressource ausgeliefert.
 
 Die Startseite liest zusätzlich die lokale Compiler-Projektkarte und zeigt
 erkannte Module, Datenmodelle, Webflächen und SQL-Abfragen. Eine daraus

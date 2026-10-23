@@ -61,7 +61,13 @@ try {
   const page = await browser.newPage({ viewport: { width: 800, height: 800 } });
   const pageErrors = [];
   page.on("pageerror", (error) => pageErrors.push(error.message));
+  const logoResponse = page.waitForResponse((response) =>
+    response.url().endsWith("/__zelyra/editor/assets/zelyra-logo.png"));
   await page.goto(url, { waitUntil: "domcontentloaded" });
+  const logo = await logoResponse;
+  assert.equal(logo.status(), 200);
+  assert.match(logo.headers()["content-type"], /image\/png/);
+  await page.waitForFunction(() => document.querySelector(".studio-splash-logo img")?.naturalWidth > 0);
   await page.locator('.tree-item.file[title="main.zyl"]').click();
   await page.locator(".cm-content[contenteditable=true]").waitFor();
 
