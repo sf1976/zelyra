@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { importPathCompletion, importSignature, importedModuleAlias, importedModuleCompletion } from "../src/module-completion.js";
+import { importPathCompletion, importSignature, importedModuleAlias, importedModuleAliasAtCursor, importedModuleCompletion } from "../src/module-completion.js";
 
 const modules = [
   { alias: "math", symbols: [
@@ -13,6 +13,20 @@ const source = 'import "src/math.zyl" as math\nimport "src/invoice.zyl" as invoi
 assert.equal(importedModuleAlias("print(total)", source), null);
 assert.equal(importedModuleAlias("math::", source), "math");
 assert.equal(importedModuleAlias("Maybe::", source), null, "enum namespaces keep ordinary completion behavior");
+const namespacePrefix = source.slice(0, source.indexOf("math::") + "math::".length);
+assert.equal(importedModuleAliasAtCursor(namespacePrefix, namespacePrefix.length), "math",
+  "typing an imported namespace delimiter resolves its public module");
+const namespaceString = `${source}\nlet note = "math::`;
+assert.equal(importedModuleAliasAtCursor(namespaceString, namespaceString.length), null,
+  "namespace suggestions do not activate inside strings");
+const namespaceComment = `${source}\n# math::`;
+assert.equal(importedModuleAliasAtCursor(namespaceComment, namespaceComment.length), null,
+  "namespace suggestions do not activate inside line comments");
+const namespaceBlockComment = `${source}\n##\nmath::`;
+assert.equal(importedModuleAliasAtCursor(namespaceBlockComment, namespaceBlockComment.length), null,
+  "namespace suggestions do not activate inside block comments");
+assert.equal(importedModuleAlias("math::", '##\nimport "src/math.zyl" as math\n##\nfn main() {}'), null,
+  "commented imports cannot authorize namespace suggestions");
 assert.equal(importSignature(`${source}\nfn main() { math::add(1, 2) }`), 'import "src/math.zyl" as math\nimport "src/invoice.zyl" as invoice');
 assert.deepEqual(importedModuleCompletion("math", modules), {
   alias: "math",
