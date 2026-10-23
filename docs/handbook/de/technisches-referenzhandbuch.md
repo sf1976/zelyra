@@ -3326,11 +3326,9 @@ use schema::tables::*
 use domain::invoices::actions as invoice_ops
 ```
 
-Wird in der `zelyra.toml` der Schalter `strict_architecture = true` aktiviert, erzwingt der Zelyra-Linter folgende Kardinalregel:
+Wird in einem Standardlayout in der `zelyra.toml` `strict_architecture = true` aktiviert, prüft der Zelyra-Linter mehrere Grenzen. `E-ARCH-001` kennzeichnet unzulässige Deklarationstypen im jeweiligen Projektbereich. Für API-Handler sowie Form-/CRUD-Aktionen in `routes/` verfolgt er statisch aufgelöste Zelyra-Funktionsaufrufe: Schreibendes SQL (`INSERT`, `UPDATE`, `DELETE`, `REPLACE` und bekannte DDL-Schlüsselwörter) führt zu `E-ARCH-002`; nicht sicher klassifizierbares SQL führt fail-closed zu `E-ARCH-003`. Lesendes SQL muss zusätzlich die Read-only-Prüfung bestehen.
 
-> **Keine direkten Datenbankmutationen in Routen-Dateien (`routes/*.zyl`).**
-
-Schreibende Operationen (`insert`, `update`, `delete`) innerhalb von Routen führen zum Abbruch mit dem Compilerfehler `E-ARCH-001`. Fachlogik muss in `domain/<feature>/actions.zyl` implementiert und getestet werden.
+Direkte Datenbankmutationen gehören in `domain/<feature>/actions.zyl`. API-Handler und eingebettete Form-/CRUD-Aktionen dürfen solche Domain-Funktionen aufrufen; die vorhandenen Import- und Tabellenzugriffsregeln gelten weiterhin. Domain-Module dürfen keine Module aus `routes/` importieren (`E-ARCH-004`). Die Analyse folgt statisch auflösbaren Zelyra-Aufrufen, aber keinen beliebigen dynamischen oder unaufgelösten Aufrufen. Request-, Response-, Session- und Cookie-Typen sind derzeit keine benutzbare Zelyra-API.
 
 ```bash
 # Migrationsvorschau auf das Standardlayout prüfen (schreibgeschützt, verändert keine Dateien)

@@ -1,5 +1,39 @@
 ## Unreleased
 
+- Extend strict architecture checks to follow statically resolved calls from
+  API handlers in `routes/`, reporting write SQL and SQL whose effects cannot
+  be safely classified; keep business writes in `domain/`. / Strenge
+  Architekturprüfungen so erweitern, dass statisch aufgelöste Aufrufe aus
+  API-Handlern in `routes/` verfolgt und schreibendes beziehungsweise nicht
+  sicher klassifizierbares SQL gemeldet werden; fachliche Schreibzugriffe
+  gehören nach `domain/`.
+- Add source locations and stable rule identifiers to the read-only project
+  layout migration preview, alongside its reason and candidate destination. /
+  Die schreibgeschützte Projektlayout-Vorschau um Quellpositionen und stabile
+  Regelkennungen ergänzen; Grund und Zielvorschlag bleiben ebenfalls sichtbar.
+- Attach declaration source spans to strict architecture placement
+  diagnostics, instead of pointing every finding at line 1. / Bei Verstößen
+  gegen die strenge Architektur die Quellposition der Deklaration melden,
+  statt alle Befunde auf Zeile 1 zu verweisen.
+- Continue route SQL analysis through every statically reachable module until
+  the intentional `domain/` boundary, including project entrypoint and package
+  helpers. / Die SQL-Prüfung von Routen durch alle statisch erreichbaren
+  Module bis zur vorgesehenen `domain/`-Grenze fortsetzen, auch über Hilfen
+  im Projekteinstieg und in Paketen.
+- Reject direct imports from `routes/` inside `domain/` modules with a
+  source-mapped architecture diagnostic. / Direkte Importe aus `routes/` in
+  `domain/`-Modulen mit einer quellpositionierten Architekturdiagnose
+  zurückweisen.
+- Apply the route SQL boundary check to embedded form and CRUD actions as well
+  as API handlers. / Die SQL-Grenzprüfung für Routen auch auf eingebettete
+  Form- und CRUD-Aktionen anwenden.
+- Include scalar foreign-key targets when selecting Laravel schema
+  dependencies, so generated customer and invoice subsets compile with their
+  referenced tenant and user tables. / Bei der Auswahl von Laravel-Schema-
+  Abhängigkeiten auch skalare Fremdschlüsselziele aufnehmen, damit generierte
+  Kunden- und Rechnungsausschnitte samt Tenant- und Benutzertabellen
+  kompilieren.
+
 ## 1.2.56 — Zelyra Studio SQL workbench and editor usability
 
 - Add a Studio SQL workbench with schema-aware completion and local query

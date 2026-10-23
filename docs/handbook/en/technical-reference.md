@@ -3138,11 +3138,9 @@ use schema::tables::*
 use domain::invoices::actions as invoice_ops
 ```
 
-Setting `strict_architecture = true` in `zelyra.toml` activates compile-time architecture linting:
+In a standard layout, setting `strict_architecture = true` in `zelyra.toml` enables several boundary checks. `E-ARCH-001` reports declaration kinds that do not belong in their project area. For API handlers and form/CRUD actions in `routes/`, the checker follows statically resolved Zelyra function calls: write SQL (`INSERT`, `UPDATE`, `DELETE`, `REPLACE`, and recognized DDL keywords) reports `E-ARCH-002`; SQL that cannot be safely classified fails closed with `E-ARCH-003`. Read queries must also pass the read-only check.
 
-> **Direct database mutations inside route handlers (`routes/*.zyl`) are strictly forbidden.**
-
-Mutating queries (`insert`, `update`, `delete`) in route files fail the build with `E-ARCH-001`. Domain logic must reside in `domain/<feature>/actions.zyl`.
+Keep direct database mutations in `domain/<feature>/actions.zyl`. API handlers and embedded form/CRUD actions may call domain functions; existing import and table-access checks still apply. Domain modules may not import modules from `routes/` (`E-ARCH-004`). The analysis follows statically resolved Zelyra calls but not arbitrary dynamic or unresolved calls. Request, Response, Session, and Cookie types are not currently exposed as usable Zelyra APIs.
 
 ```bash
 # Check layout migration without moving or modifying files

@@ -4,16 +4,18 @@ use std::{
     process::ExitCode,
 };
 
-use zelyra_ast::Program;
+use zelyra_ast::{Block, Expr, ExprKind, Program, Span, Stmt};
 use zelyra_lexer::lex;
 use zelyra_parser::parse;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct FilePlan {
     path: String,
+    rule: &'static str,
     proposed_directory: String,
     status: &'static str,
     reason: String,
+    span: Option<Span>,
 }
 
 #[derive(Debug)]
@@ -34,12 +36,16 @@ struct Summary {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(super) struct ArchitectureIssue {
     pub(super) path: String,
+    pub(super) code: &'static str,
     pub(super) message: String,
+    pub(super) span: Option<Span>,
 }
 
 pub(super) fn validate_project_modules(
     entry_path: &str,
     modules: &[crate::project::ProjectModule],
+    program: &Program,
+    sources: &[crate::project::ProjectSource],
 ) -> Result<(), Vec<ArchitectureIssue>> {
     let entry = Path::new(entry_path);
     let root = entry
@@ -49,7 +55,9 @@ pub(super) fn validate_project_modules(
     let strict = crate::project_layout::strict_architecture_enabled(root).map_err(|error| {
         vec![ArchitectureIssue {
             path: error.path,
+            code: error.code,
             message: error.message,
+            span: None,
         }]
     })?;
     if !strict {
@@ -69,10 +77,43 @@ pub(super) fn validate_project_modules(
         let Some(allowed) = architecture_declarations(directory) else {
             issues.push(ArchitectureIssue {
                 path: module.path.clone(),
+                code: "E-ARCH-001",
                 message: "strict architecture requires project modules under `schema/`, `domain/`, or `routes/`".into(),
+                span: None,
             });
             continue;
         };
+        let declaration_spans = sources
+            .iter()
+            .find(|source| source.path.replace('\\', "/") == path)
+            .and_then(|source| {
+                declaration_spans(&source.text, source_id_for_path(sources, &path)?)
+            });
+        if path.starts_with("domain/") {
+            let import_spans = sources
+                .iter()
+                .find(|source| source.path.replace('\\', "/") == path)
+                .and_then(|source| {
+                    source_import_spans(&source.text, source_id_for_path(sources, &path)?)
+                });
+            for import in module
+                .imports
+                .iter()
+                .filter(|import| import.path.replace('\\', "/").starts_with("routes/"))
+            {
+                issues.push(ArchitectureIssue {
+                    path: module.path.clone(),
+                    code: "E-ARCH-004",
+                    message: format!(
+                        "domain module must not import route module `{}`; pass domain values to route handlers instead",
+                        import.alias
+                    ),
+                    span: import_spans
+                        .as_ref()
+                        .and_then(|spans| spans.get(&import.alias).copied()),
+                });
+            }
+        }
         for declaration in &module.declarations {
             let kind = declaration
                 .split_once(':')
@@ -80,17 +121,509 @@ pub(super) fn validate_project_modules(
             if !allowed.contains(&kind) {
                 issues.push(ArchitectureIssue {
                     path: module.path.clone(),
+                    code: "E-ARCH-001",
                     message: format!(
                         "`{kind}` declarations are not allowed under `{directory}/`; move this declaration to its matching project area"
                     ),
+                    span: declaration_spans
+                        .as_ref()
+                        .and_then(|spans| spans.get(declaration).copied()),
                 });
             }
         }
     }
+    issues.extend(route_handler_sql_issues(program, sources));
     if issues.is_empty() {
         Ok(())
     } else {
         Err(issues)
+    }
+}
+
+fn source_id_for_path(sources: &[crate::project::ProjectSource], path: &str) -> Option<u32> {
+    sources
+        .iter()
+        .position(|source| source.path.replace('\\', "/") == path)
+        .and_then(|index| u32::try_from(index).ok())
+}
+
+fn declaration_spans(
+    source: &str,
+    source_id: u32,
+) -> Option<std::collections::HashMap<String, Span>> {
+    let tokens = lex(source).ok()?;
+    let program = parse(&tokens).ok()?;
+    let mut declarations = std::collections::HashMap::new();
+    macro_rules! add {
+        ($items:expr, $kind:literal) => {
+            for item in $items {
+                declarations.insert(
+                    format!("{}:{}", $kind, item.name),
+                    item.span.with_source_id(source_id),
+                );
+            }
+        };
+    }
+    add!(program.databases, "database");
+    add!(program.tables, "table");
+    add!(program.tableviews, "tableview");
+    add!(program.types, "type");
+    add!(program.enums, "enum");
+    add!(program.records, "record");
+    add!(program.views, "view");
+    add!(program.components, "component");
+    for page in program.pages {
+        declarations.insert(
+            format!("page:{}", page.path),
+            page.span.with_source_id(source_id),
+        );
+    }
+    add!(program.forms, "form");
+    add!(program.cruds, "crud");
+    add!(program.auth, "auth");
+    add!(program.commands, "command");
+    add!(program.schedules, "schedule");
+    add!(program.functions, "function");
+    for api in program.apis {
+        declarations.insert(
+            format!("api:{} {}", api.method, api.path),
+            api.span.with_source_id(source_id),
+        );
+    }
+    Some(declarations)
+}
+
+fn source_import_spans(
+    source: &str,
+    source_id: u32,
+) -> Option<std::collections::HashMap<String, Span>> {
+    let tokens = lex(source).ok()?;
+    let program = parse(&tokens).ok()?;
+    Some(
+        program
+            .imports
+            .into_iter()
+            .map(|import| (import.alias, import.span.with_source_id(source_id)))
+            .collect(),
+    )
+}
+
+fn route_handler_sql_issues(
+    program: &Program,
+    sources: &[crate::project::ProjectSource],
+) -> Vec<ArchitectureIssue> {
+    let functions = program
+        .functions
+        .iter()
+        .map(|function| (function.name.as_str(), function))
+        .collect::<std::collections::HashMap<_, _>>();
+    let mut issues = Vec::new();
+
+    for api in &program.apis {
+        let Some(route_source) = sources.get(api.span.source_id as usize) else {
+            continue;
+        };
+        if !route_source.path.replace('\\', "/").starts_with("routes/") {
+            continue;
+        }
+        let Some(handler) = api.handler.as_deref() else {
+            continue;
+        };
+        issues.extend(reachable_route_sql_issues(
+            &functions,
+            sources,
+            vec![handler.to_owned()],
+            Vec::new(),
+            route_source.path.clone(),
+            format!("API handler `{handler}`"),
+        ));
+    }
+
+    for form in &program.forms {
+        let Some(source) = sources.get(form.span.source_id as usize) else {
+            continue;
+        };
+        if !source.path.replace('\\', "/").starts_with("routes/") {
+            continue;
+        }
+        for action in &form.actions {
+            let (calls, sql) = inspect_action(action);
+            issues.extend(reachable_route_sql_issues(
+                &functions,
+                sources,
+                calls,
+                sql,
+                source.path.clone(),
+                format!("form action `{}.{}`", form.name, action.name),
+            ));
+        }
+    }
+
+    for crud in &program.cruds {
+        let Some(source) = sources.get(crud.span.source_id as usize) else {
+            continue;
+        };
+        if !source.path.replace('\\', "/").starts_with("routes/") {
+            continue;
+        }
+        for action in &crud.actions {
+            let (calls, sql) = inspect_action(action);
+            issues.extend(reachable_route_sql_issues(
+                &functions,
+                sources,
+                calls,
+                sql,
+                source.path.clone(),
+                format!("CRUD action `{}.{}`", crud.name, action.name),
+            ));
+        }
+    }
+    issues.sort_by(|left, right| {
+        left.path
+            .cmp(&right.path)
+            .then_with(|| {
+                left.span
+                    .map(|span| span.start)
+                    .cmp(&right.span.map(|span| span.start))
+            })
+            .then_with(|| left.code.cmp(right.code))
+    });
+    issues.dedup_by(|left, right| {
+        left.path == right.path && left.code == right.code && left.span == right.span
+    });
+    issues
+}
+
+fn inspect_action(action: &zelyra_ast::FormAction) -> (Vec<String>, Vec<(String, Span)>) {
+    let mut calls = Vec::new();
+    let mut sql = Vec::new();
+    inspect_block(
+        &Block {
+            statements: action.statements.clone(),
+            span: action.span,
+        },
+        &mut calls,
+        &mut sql,
+    );
+    if let Some(body) = &action.execute_body {
+        inspect_block(body, &mut calls, &mut sql);
+    }
+    if let Some(guard) = &action.guard {
+        inspect_expr(&guard.condition, &mut calls, &mut sql);
+    }
+    (calls, sql)
+}
+
+fn reachable_route_sql_issues(
+    functions: &std::collections::HashMap<&str, &zelyra_ast::Function>,
+    sources: &[crate::project::ProjectSource],
+    initial_calls: Vec<String>,
+    initial_sql: Vec<(String, Span)>,
+    initial_path: String,
+    entry_label: String,
+) -> Vec<ArchitectureIssue> {
+    let mut issues = Vec::new();
+    append_sql_issues(&mut issues, &initial_path, &entry_label, initial_sql);
+    let mut pending = initial_calls;
+    let mut visited = std::collections::HashSet::new();
+    while let Some(name) = pending.pop() {
+        if !visited.insert(name.clone()) {
+            continue;
+        }
+        let Some(function) = functions.get(name.as_str()).copied() else {
+            continue;
+        };
+        let Some(function_source) = sources.get(function.span.source_id as usize) else {
+            continue;
+        };
+        if function_source
+            .path
+            .replace('\\', "/")
+            .starts_with("domain/")
+        {
+            // Business writes in domain modules are the intended separation.
+            continue;
+        }
+
+        let mut calls = Vec::new();
+        let mut sql = Vec::new();
+        inspect_block(&function.body, &mut calls, &mut sql);
+        pending.extend(calls);
+        append_sql_issues(&mut issues, &function_source.path, &entry_label, sql);
+    }
+    issues
+}
+
+fn append_sql_issues(
+    issues: &mut Vec<ArchitectureIssue>,
+    path: &str,
+    entry_label: &str,
+    sql: Vec<(String, Span)>,
+) {
+    for (query, span) in sql {
+        match sql_effect(&query) {
+            SqlEffect::Write => issues.push(ArchitectureIssue {
+                path: path.to_owned(),
+                code: "E-ARCH-002",
+                message: format!(
+                    "{entry_label} reaches a write SQL statement; move the business write into a `domain/` function"
+                ),
+                span: Some(span),
+            }),
+            SqlEffect::Unknown => issues.push(ArchitectureIssue {
+                path: path.to_owned(),
+                code: "E-ARCH-003",
+                message: format!(
+                    "{entry_label} reaches SQL that cannot be classified safely; move it into a `domain/` function"
+                ),
+                span: Some(span),
+            }),
+            SqlEffect::Read => {}
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum SqlEffect {
+    Read,
+    Write,
+    Unknown,
+}
+
+fn sql_effect(query: &str) -> SqlEffect {
+    let Some(keyword) = sql_main_keyword(query) else {
+        return SqlEffect::Unknown;
+    };
+    match keyword.as_str() {
+        "INSERT" | "UPDATE" | "DELETE" | "REPLACE" | "MERGE" | "CREATE" | "ALTER" | "DROP"
+        | "TRUNCATE" | "GRANT" | "REVOKE" => SqlEffect::Write,
+        "SELECT" | "WITH" | "SHOW" | "DESCRIBE" | "DESC" | "EXPLAIN" | "VALUES"
+            if crate::database_cli::read_only_statement(query, false)
+                && crate::database_cli::read_only_statement(query, true) =>
+        {
+            SqlEffect::Read
+        }
+        _ => SqlEffect::Unknown,
+    }
+}
+
+fn sql_main_keyword(query: &str) -> Option<String> {
+    let bytes = query.as_bytes();
+    let mut index = 0;
+    let mut depth = 0usize;
+    let mut first = None;
+    while index < bytes.len() {
+        match bytes[index] {
+            byte if byte.is_ascii_whitespace() => index += 1,
+            b'-' if bytes.get(index + 1) == Some(&b'-') => {
+                index += 2;
+                while index < bytes.len() && bytes[index] != b'\n' {
+                    index += 1;
+                }
+            }
+            b'#' => {
+                index += 1;
+                while index < bytes.len() && bytes[index] != b'\n' {
+                    index += 1;
+                }
+            }
+            b'/' if bytes.get(index + 1) == Some(&b'*') => {
+                if bytes.get(index + 2) == Some(&b'!') {
+                    return None;
+                }
+                index += 2;
+                while index + 1 < bytes.len() && !(bytes[index] == b'*' && bytes[index + 1] == b'/')
+                {
+                    index += 1;
+                }
+                if index + 1 >= bytes.len() {
+                    return None;
+                }
+                index += 2;
+            }
+            b'\'' | b'"' | b'`' => {
+                let quote = bytes[index];
+                index += 1;
+                let mut closed = false;
+                while index < bytes.len() {
+                    if bytes[index] == quote {
+                        if bytes.get(index + 1) == Some(&quote) {
+                            index += 2;
+                        } else {
+                            index += 1;
+                            closed = true;
+                            break;
+                        }
+                    } else if bytes[index] == b'\\' && quote != b'`' {
+                        index = (index + 2).min(bytes.len());
+                    } else {
+                        index += 1;
+                    }
+                }
+                if !closed {
+                    return None;
+                }
+            }
+            b'(' => {
+                depth += 1;
+                index += 1;
+            }
+            b')' => {
+                depth = depth.saturating_sub(1);
+                index += 1;
+            }
+            byte if byte.is_ascii_alphabetic() || byte == b'_' => {
+                let start = index;
+                index += 1;
+                while index < bytes.len()
+                    && (bytes[index].is_ascii_alphanumeric() || bytes[index] == b'_')
+                {
+                    index += 1;
+                }
+                if depth == 0 {
+                    let word = std::str::from_utf8(&bytes[start..index])
+                        .ok()?
+                        .to_ascii_uppercase();
+                    if first.is_none() {
+                        first = Some(word.clone());
+                        if word != "WITH" {
+                            return Some(word);
+                        }
+                    } else if matches!(
+                        word.as_str(),
+                        "SELECT" | "INSERT" | "UPDATE" | "DELETE" | "REPLACE" | "MERGE"
+                    ) {
+                        return Some(word);
+                    }
+                }
+            }
+            _ => index += 1,
+        }
+    }
+    first.filter(|keyword| keyword != "WITH")
+}
+
+fn inspect_block(block: &Block, calls: &mut Vec<String>, sql: &mut Vec<(String, Span)>) {
+    for statement in &block.statements {
+        match statement {
+            Stmt::Let { value, .. }
+            | Stmt::BindOrAssign { value, .. }
+            | Stmt::TupleBindOrAssign { value, .. }
+            | Stmt::Expr(value)
+            | Stmt::Return {
+                value: Some(value), ..
+            } => inspect_expr(value, calls, sql),
+            Stmt::ArrayIndexAssign { index, value, .. } => {
+                inspect_expr(index, calls, sql);
+                inspect_expr(value, calls, sql);
+            }
+            Stmt::Return { value: None, .. } | Stmt::Break { .. } | Stmt::Continue { .. } => {}
+            Stmt::If {
+                condition,
+                then_block,
+                else_block,
+                ..
+            } => {
+                inspect_expr(condition, calls, sql);
+                inspect_block(then_block, calls, sql);
+                if let Some(block) = else_block {
+                    inspect_block(block, calls, sql);
+                }
+            }
+            Stmt::While {
+                condition,
+                invariants,
+                body,
+                ..
+            } => {
+                inspect_expr(condition, calls, sql);
+                for invariant in invariants {
+                    inspect_expr(invariant, calls, sql);
+                }
+                inspect_block(body, calls, sql);
+            }
+            Stmt::For { iterable, body, .. } => {
+                inspect_expr(iterable, calls, sql);
+                inspect_block(body, calls, sql);
+            }
+            Stmt::Loop {
+                invariants, body, ..
+            } => {
+                for invariant in invariants {
+                    inspect_expr(invariant, calls, sql);
+                }
+                inspect_block(body, calls, sql);
+            }
+            Stmt::Match { value, arms, .. } => {
+                inspect_expr(value, calls, sql);
+                for arm in arms {
+                    if let Some(guard) = &arm.guard {
+                        inspect_expr(guard, calls, sql);
+                    }
+                    inspect_block(&arm.body, calls, sql);
+                }
+            }
+            Stmt::Transaction { body, .. } | Stmt::Parallel { body, .. } => {
+                inspect_block(body, calls, sql)
+            }
+        }
+    }
+}
+
+fn inspect_expr(expression: &Expr, calls: &mut Vec<String>, sql: &mut Vec<(String, Span)>) {
+    match &expression.kind {
+        ExprKind::Array(items) => {
+            for item in items {
+                inspect_expr(item, calls, sql);
+            }
+        }
+        ExprKind::Map(items) => {
+            for (key, value) in items {
+                inspect_expr(key, calls, sql);
+                inspect_expr(value, calls, sql);
+            }
+        }
+        ExprKind::Record { fields, .. } => {
+            for (_, value) in fields {
+                inspect_expr(value, calls, sql);
+            }
+        }
+        ExprKind::Lambda { body, .. } => inspect_expr(body, calls, sql),
+        ExprKind::Index { target, index } => {
+            inspect_expr(target, calls, sql);
+            inspect_expr(index, calls, sql);
+        }
+        ExprKind::Field { target, .. }
+        | ExprKind::Unary { expr: target, .. }
+        | ExprKind::Await(target) => inspect_expr(target, calls, sql),
+        ExprKind::Call { name, args, .. } => {
+            calls.push(name.clone());
+            for argument in args {
+                inspect_expr(argument, calls, sql);
+            }
+        }
+        ExprKind::Binary { left, right, .. } => {
+            inspect_expr(left, calls, sql);
+            inspect_expr(right, calls, sql);
+        }
+        ExprKind::Sql { query, .. } => sql.push((query.clone(), expression.span)),
+        ExprKind::Match { value, arms } => {
+            inspect_expr(value, calls, sql);
+            for arm in arms {
+                if let Some(guard) = &arm.guard {
+                    inspect_expr(guard, calls, sql);
+                }
+                inspect_expr(&arm.value, calls, sql);
+            }
+        }
+        ExprKind::Int(_)
+        | ExprKind::UInt(_)
+        | ExprKind::Float(_)
+        | ExprKind::Bool(_)
+        | ExprKind::String(_)
+        | ExprKind::Char(_)
+        | ExprKind::FunctionValue(_)
+        | ExprKind::Variable(_) => {}
     }
 }
 
@@ -153,9 +686,16 @@ pub(super) fn migrate_layout(mut arguments: impl Iterator<Item = String>) -> Exi
                     "mode": plan.mode,
                     "files": plan.files.iter().map(|file| serde_json::json!({
                         "path": file.path,
+                        "rule": file.rule,
                         "proposed_directory": file.proposed_directory,
                         "status": file.status,
                         "reason": file.reason,
+                        "span": file.span.map(|span| serde_json::json!({
+                            "start": span.start,
+                            "end": span.end,
+                            "line": span.line,
+                            "column": span.column,
+                        })),
                     })).collect::<Vec<_>>(),
                     "summary": {
                         "classified": plan.summary.classified,
@@ -210,20 +750,22 @@ fn build_plan(entry: &Path) -> Result<MigrationPlan, String> {
         let source = fs::read_to_string(&path)
             .map_err(|error| format!("cannot read `{}`: {error}", path.display()))?;
         let parsed = lex(&source)
-            .map_err(|error| error.message)
-            .and_then(|tokens| parse(&tokens).map_err(|error| error.message));
+            .map_err(|error| (error.message, error.span))
+            .and_then(|tokens| parse(&tokens).map_err(|error| (error.message, error.span)));
         let program = match parsed {
             Ok(program) => program,
-            Err(error) if path == canonical_entry => {
+            Err((error, _span)) if path == canonical_entry => {
                 return Err(format!("{display}: {error}"));
             }
-            Err(error) => {
+            Err((error, span)) => {
                 manual_review += 1;
                 files.push(FilePlan {
                     path: display,
+                    rule: "LAYOUT-PARSE-001",
                     proposed_directory: "(manual decision)".into(),
                     status: "needs-manual-review",
                     reason: format!("source does not parse: {error}"),
+                    span: Some(span),
                 });
                 continue;
             }
@@ -232,22 +774,27 @@ fn build_plan(entry: &Path) -> Result<MigrationPlan, String> {
             unchanged_entrypoints += 1;
             files.push(FilePlan {
                 path: display,
+                rule: "LAYOUT-ENTRY-001",
                 proposed_directory: "(project root)".into(),
                 status: "unchanged-entrypoint",
                 reason: "the selected entry file remains at the project root".into(),
+                span: None,
             });
             continue;
         }
         if let Some(directory) = standard_directory(relative) {
             files.push(FilePlan {
                 path: display,
+                rule: "LAYOUT-PLACEMENT-001",
                 proposed_directory: directory.into(),
                 status: "already-standard",
                 reason: format!("source is already inside the `{directory}/` project area"),
+                span: first_declaration_span(&program),
             });
             continue;
         }
         let destinations = destinations(&program);
+        let span = first_declaration_span(&program);
         let (directory, status, reason) = match destinations.as_slice() {
             [directory] => (
                 directory.to_string(),
@@ -270,9 +817,15 @@ fn build_plan(entry: &Path) -> Result<MigrationPlan, String> {
         }
         files.push(FilePlan {
             path: display,
+            rule: if status == "classified" {
+                "LAYOUT-CLASSIFY-001"
+            } else {
+                "LAYOUT-REVIEW-001"
+            },
             proposed_directory: directory,
             status,
             reason,
+            span,
         });
     }
     Ok(MigrationPlan {
@@ -288,6 +841,29 @@ fn build_plan(entry: &Path) -> Result<MigrationPlan, String> {
         },
         files,
     })
+}
+
+fn first_declaration_span(program: &Program) -> Option<Span> {
+    program
+        .databases
+        .iter()
+        .map(|item| item.span)
+        .chain(program.tables.iter().map(|item| item.span))
+        .chain(program.types.iter().map(|item| item.span))
+        .chain(program.records.iter().map(|item| item.span))
+        .chain(program.enums.iter().map(|item| item.span))
+        .chain(program.views.iter().map(|item| item.span))
+        .chain(program.components.iter().map(|item| item.span))
+        .chain(program.pages.iter().map(|item| item.span))
+        .chain(program.tableviews.iter().map(|item| item.span))
+        .chain(program.forms.iter().map(|item| item.span))
+        .chain(program.cruds.iter().map(|item| item.span))
+        .chain(program.auth.iter().map(|item| item.span))
+        .chain(program.apis.iter().map(|item| item.span))
+        .chain(program.commands.iter().map(|item| item.span))
+        .chain(program.schedules.iter().map(|item| item.span))
+        .chain(program.functions.iter().map(|item| item.span))
+        .min_by_key(|span| span.start)
 }
 
 fn collect_sources(root: &Path, directory: &Path, paths: &mut Vec<PathBuf>) -> Result<(), String> {
@@ -371,9 +947,13 @@ fn print_human(plan: &MigrationPlan) {
         plan.schema_version
     );
     for file in &plan.files {
+        let location = file.span.map_or_else(
+            || "-".to_owned(),
+            |span| format!("{}:{}", span.line, span.column),
+        );
         println!(
-            "{} -> {} [{}]: {}",
-            file.path, file.proposed_directory, file.status, file.reason
+            "{}:{} -> {} [{}] {}: {}",
+            file.path, location, file.proposed_directory, file.status, file.rule, file.reason
         );
     }
     println!(
@@ -386,6 +966,28 @@ fn print_human(plan: &MigrationPlan) {
 mod tests {
     use super::*;
     use std::time::{SystemTime, UNIX_EPOCH};
+
+    fn empty_program() -> Program {
+        Program {
+            imports: Vec::new(),
+            databases: Vec::new(),
+            tables: Vec::new(),
+            types: Vec::new(),
+            records: Vec::new(),
+            enums: Vec::new(),
+            views: Vec::new(),
+            components: Vec::new(),
+            pages: Vec::new(),
+            tableviews: Vec::new(),
+            forms: Vec::new(),
+            cruds: Vec::new(),
+            auth: Vec::new(),
+            apis: Vec::new(),
+            commands: Vec::new(),
+            schedules: Vec::new(),
+            functions: Vec::new(),
+        }
+    }
 
     struct TempProject(PathBuf);
 
@@ -441,7 +1043,11 @@ mod tests {
             .find(|file| file.path == "main.zyl")
             .unwrap();
         assert_eq!(logic.proposed_directory, "domain");
+        assert_eq!(logic.rule, "LAYOUT-CLASSIFY-001");
+        assert_eq!(logic.span.map(|span| span.line), Some(1));
         assert_eq!(schema.proposed_directory, "schema");
+        assert_eq!(schema.rule, "LAYOUT-CLASSIFY-001");
+        assert_eq!(schema.span.map(|span| span.line), Some(1));
         assert_eq!(entry.status, "unchanged-entrypoint");
         assert!(first.files.iter().any(|file| {
             file.path == "domain/existing.zyl" && file.status == "already-standard"
@@ -511,15 +1117,89 @@ mod tests {
                 &["api:GET /customers", "function:list"],
             ),
         ];
-        assert!(
-            validate_project_modules(project.0.join("main.zyl").to_str().unwrap(), &valid).is_ok()
-        );
+        assert!(validate_project_modules(
+            project.0.join("main.zyl").to_str().unwrap(),
+            &valid,
+            &empty_program(),
+            &[],
+        )
+        .is_ok());
         let invalid = vec![module("domain/http.zyl", &["api:GET /remote"])];
-        let issues =
-            validate_project_modules(project.0.join("main.zyl").to_str().unwrap(), &invalid)
-                .unwrap_err();
+        let issues = validate_project_modules(
+            project.0.join("main.zyl").to_str().unwrap(),
+            &invalid,
+            &empty_program(),
+            &[],
+        )
+        .unwrap_err();
         assert_eq!(issues[0].path, "domain/http.zyl");
         assert!(issues[0].message.contains("not allowed under `domain/`"));
+    }
+
+    #[test]
+    fn route_sql_effect_classification_handles_comments_ctes_and_unknowns() {
+        assert_eq!(
+            sql_effect("INSERT INTO customers (name) VALUES ('Ada')"),
+            SqlEffect::Write
+        );
+        assert_eq!(
+            sql_effect("/* audit */ UPDATE customers SET name = 'Ada'"),
+            SqlEffect::Write
+        );
+        assert_eq!(
+            sql_effect("WITH candidates AS (SELECT id FROM customers) DELETE FROM customers WHERE id IN (SELECT id FROM candidates)"),
+            SqlEffect::Write
+        );
+        assert_eq!(
+            sql_effect("SELECT 'INSERT INTO customers' FROM customers"),
+            SqlEffect::Read
+        );
+        assert_eq!(
+            sql_effect("SELECT SLEEP(1) FROM customers"),
+            SqlEffect::Unknown
+        );
+        assert_eq!(
+            sql_effect("CALL refresh_customer_cache()"),
+            SqlEffect::Unknown
+        );
+        assert_eq!(sql_effect("/* unterminated"), SqlEffect::Unknown);
+    }
+
+    #[test]
+    fn route_sql_analysis_continues_through_non_domain_modules() {
+        let source = "fn helper() -> Int { sql { INSERT INTO customers (name) VALUES ('Ada') } return 1 }\nfn serve_customer() -> Int { return helper() }\napi POST \"/customers\" { handler serve_customer output Int }\n";
+        let mut program = parse(&lex(source).unwrap()).unwrap();
+        program.functions[0].span = program.functions[0].span.with_source_id(1);
+        program.functions[1].span = program.functions[1].span.with_source_id(0);
+        let sources = vec![
+            crate::project::ProjectSource {
+                path: "routes/customers.zyl".into(),
+                text: source.into(),
+            },
+            crate::project::ProjectSource {
+                path: "main.zyl".into(),
+                text: source.into(),
+            },
+        ];
+        let issues = route_handler_sql_issues(&program, &sources);
+        assert_eq!(issues.len(), 1);
+        assert_eq!(issues[0].path, "main.zyl");
+        assert_eq!(issues[0].code, "E-ARCH-002");
+    }
+
+    #[test]
+    fn route_form_and_crud_actions_are_checked_for_sql_writes() {
+        let source = "form CustomerCreate { action save { sql { INSERT INTO customers (name) VALUES ('Ada') } } }\ncrud Customer -> customers { action archive { sql { UPDATE customers SET active = false } } }\n";
+        let program = parse(&lex(source).unwrap()).unwrap();
+        let sources = vec![crate::project::ProjectSource {
+            path: "routes/customers.zyl".into(),
+            text: source.into(),
+        }];
+        let issues = route_handler_sql_issues(&program, &sources);
+        assert_eq!(issues.len(), 2);
+        assert!(issues.iter().all(|issue| issue.code == "E-ARCH-002"));
+        assert!(issues[0].message.contains("form action"));
+        assert!(issues[1].message.contains("CRUD action"));
     }
 
     #[cfg(unix)]

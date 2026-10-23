@@ -2492,6 +2492,14 @@ fn new_standard_layout_generates_a_checkable_project_tree() {
     assert_eq!(migration_report["schema_version"], 1);
     assert_eq!(migration_report["mode"], "read-only-check");
     assert_eq!(migration_report["summary"]["manual_review"], 0);
+    let existing_domain = migration_report["files"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|file| file["path"] == "domain/dashboard/actions.zyl")
+        .unwrap();
+    assert_eq!(existing_domain["rule"], "LAYOUT-PLACEMENT-001");
+    assert_eq!(existing_domain["span"]["line"], 1);
     fs::remove_dir_all(directory.join("assets")).unwrap();
     let invalid = Command::new(binary())
         .args(["check", entry.to_str().unwrap(), "--format=json"])
@@ -2525,11 +2533,165 @@ fn strict_architecture_rejects_route_declarations_inside_domain_modules() {
     )
     .unwrap();
     let checked = Command::new(binary())
-        .args(["check", directory.join("main.zyl").to_str().unwrap()])
+        .args([
+            "check",
+            directory.join("main.zyl").to_str().unwrap(),
+            "--format=json",
+        ])
         .output()
         .unwrap();
     assert!(!checked.status.success());
-    assert!(String::from_utf8_lossy(&checked.stderr).contains("E-ARCH-001"));
+    let report: serde_json::Value = serde_json::from_slice(&checked.stdout).unwrap();
+    assert_eq!(report["diagnostics"][0]["code"], "E-ARCH-001");
+    assert_eq!(report["diagnostics"][0]["file"], "domain/bad.zyl");
+    assert_eq!(report["diagnostics"][0]["span"]["start"]["line"], 1);
+    fs::remove_dir_all(directory).unwrap();
+}
+
+#[test]
+fn strict_architecture_checks_reachable_route_sql_and_preserves_domain_writes() {
+    fn check_project(name: &str, route: &str, domain: Option<&str>) -> serde_json::Value {
+        let directory = temporary_directory(name);
+        for path in ["schema", "domain", "routes", "public", "assets"] {
+            fs::create_dir_all(directory.join(path)).unwrap();
+        }
+        fs::write(
+            directory.join("zelyra.toml"),
+            "[project]\nname = \"strict-route-sql\"\nlayout = \"standard\"\nstrict_architecture = true\n\n[capabilities]\ndatabase = true\n",
+        )
+        .unwrap();
+        fs::write(
+            directory.join("main.zyl"),
+            "import \"schema::db\" as db\nimport \"routes::customers\" as routes\nfn main() {}\n",
+        )
+        .unwrap();
+        fs::write(
+            directory.join("schema/db.zyl"),
+            "database Main { engine: mariadb }\ntable customers { id: Id primary auto name: String required access { read: [\"routes/customers.zyl\"] write: [\"domain/actions.zyl\"] } }\n",
+        )
+        .unwrap();
+        fs::write(
+            directory.join("routes/customers.zyl"),
+            format!("import \"schema::db\" as db\n{route}"),
+        )
+        .unwrap();
+        if let Some(domain) = domain {
+            fs::write(
+                directory.join("domain/actions.zyl"),
+                format!("import \"schema::db\" as db\n{domain}"),
+            )
+            .unwrap();
+        }
+        let output = Command::new(binary())
+            .args([
+                "check",
+                directory.join("main.zyl").to_str().unwrap(),
+                "--format=json",
+            ])
+            .output()
+            .unwrap();
+        let report: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+        fs::remove_dir_all(directory).unwrap();
+        report
+    }
+
+    let direct = check_project(
+        "strict-route-sql-direct",
+        "fn create_customer() -> Int uses Database {\n    sql { INSERT INTO customers (name) VALUES ('Ada') }\n    return 1\n}\napi POST \"/customers\" { handler create_customer output Int }\n",
+        None,
+    );
+    let diagnostic = &direct["diagnostics"][0];
+    assert_eq!(diagnostic["code"], "E-ARCH-002");
+    assert_eq!(diagnostic["file"], "routes/customers.zyl");
+    assert_eq!(diagnostic["span"]["start"]["line"], 3);
+
+    let through_local_helper = check_project(
+        "strict-route-sql-helper",
+        "fn write_customer() -> Int uses Database {\n    sql { INSERT INTO customers (name) VALUES ('Ada') }\n    return 1\n}\nfn create_customer() -> Int { return write_customer() }\napi POST \"/customers\" { handler create_customer output Int }\n",
+        None,
+    );
+    assert_eq!(through_local_helper["diagnostics"][0]["code"], "E-ARCH-002");
+
+    let through_domain = check_project(
+        "strict-route-sql-domain",
+        "import \"domain::actions\" as actions\nfn create_customer() -> Int uses Database { return actions::create_customer() }\napi POST \"/customers\" { handler create_customer output Int }\n",
+        Some("pub fn create_customer() -> Int uses Database {\n    sql { INSERT INTO customers (name) VALUES ('Ada') }\n    return 1\n}\n"),
+    );
+    assert!(
+        through_domain["diagnostics"].as_array().unwrap().is_empty(),
+        "unexpected diagnostics: {through_domain}"
+    );
+
+    let read_query = check_project(
+        "strict-route-sql-read",
+        "fn get_count() -> Int uses Database(read) { return sql<Int> { SELECT 1 FROM customers LIMIT 1 } }\napi GET \"/customers/count\" { handler get_count output Int }\n",
+        None,
+    );
+    assert!(
+        read_query["diagnostics"].as_array().unwrap().is_empty(),
+        "unexpected diagnostics: {read_query}"
+    );
+
+    let unknown_query = check_project(
+        "strict-route-sql-unknown",
+        "fn get_value() -> Int uses Database { return sql<Int> { SELECT SLEEP(1) FROM customers } }\napi GET \"/customers/value\" { handler get_value output Int }\n",
+        None,
+    );
+    assert_eq!(unknown_query["diagnostics"][0]["code"], "E-ARCH-003");
+
+    let form_action = check_project(
+        "strict-route-sql-form-action",
+        "form CustomerCreate -> customers { fields { name } action save { sql { INSERT INTO customers (name) VALUES ('Ada') } } }\n",
+        None,
+    );
+    assert_eq!(form_action["diagnostics"][0]["code"], "E-ARCH-002");
+
+    let crud_action = check_project(
+        "strict-route-sql-crud-action",
+        "crud Customer -> customers { action archive { sql { UPDATE customers SET name = 'Archived' } } }\n",
+        None,
+    );
+    assert_eq!(crud_action["diagnostics"][0]["code"], "E-ARCH-002");
+}
+
+#[test]
+fn strict_architecture_keeps_domain_modules_independent_from_routes() {
+    let directory = temporary_directory("strict-domain-route-import");
+    for path in ["schema", "domain", "routes", "public", "assets"] {
+        fs::create_dir_all(directory.join(path)).unwrap();
+    }
+    fs::write(
+        directory.join("zelyra.toml"),
+        "[project]\nname = \"strict-domain-route-import\"\nlayout = \"standard\"\nstrict_architecture = true\n",
+    )
+    .unwrap();
+    fs::write(
+        directory.join("main.zyl"),
+        "import \"routes::web\" as web\nimport \"domain::actions\" as actions\nfn main() {}\n",
+    )
+    .unwrap();
+    fs::write(
+        directory.join("routes/web.zyl"),
+        "pub fn route_data() -> Int { return 1 }\napi GET \"/value\" { handler route_data output Int }\n",
+    )
+    .unwrap();
+    fs::write(
+        directory.join("domain/actions.zyl"),
+        "import \"routes::web\" as web\npub fn calculate() -> Int { return web::route_data() }\n",
+    )
+    .unwrap();
+    let checked = Command::new(binary())
+        .args([
+            "check",
+            directory.join("main.zyl").to_str().unwrap(),
+            "--format=json",
+        ])
+        .output()
+        .unwrap();
+    let report: serde_json::Value = serde_json::from_slice(&checked.stdout).unwrap();
+    assert_eq!(report["diagnostics"][0]["code"], "E-ARCH-004");
+    assert_eq!(report["diagnostics"][0]["file"], "domain/actions.zyl");
+    assert_eq!(report["diagnostics"][0]["span"]["start"]["line"], 1);
     fs::remove_dir_all(directory).unwrap();
 }
 

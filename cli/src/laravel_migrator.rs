@@ -576,7 +576,7 @@ pub(super) fn command(mut arguments: impl Iterator<Item = String>) -> ExitCode {
                 }
                 if !output.requested_tables.is_empty() {
                     println!(
-                        "Requested tables: {}; included with relation dependencies: {}.",
+                        "Requested tables: {}; included with relation and foreign-key dependencies: {}.",
                         output.requested_tables.join(", "),
                         output.included_tables.join(", ")
                     );
@@ -1189,14 +1189,35 @@ fn generate_scaffold(
                 "generated_native_login": false
             }),
         };
+        let included_names = included_table_names
+            .iter()
+            .map(String::as_str)
+            .collect::<BTreeSet<_>>();
+        let requested_names = requested_table_names
+            .iter()
+            .map(String::as_str)
+            .collect::<BTreeSet<_>>();
+        let referenced_table_names = |key: &str| {
+            included_tables
+                .iter()
+                .flat_map(|candidate| candidate["columns"].as_array().into_iter().flatten())
+                .filter_map(|column| column[key].as_str())
+                .filter(|table| included_names.contains(table) && !requested_names.contains(table))
+                .collect::<BTreeSet<_>>()
+                .into_iter()
+                .collect::<Vec<_>>()
+        };
+        let relation_dependencies = referenced_table_names("relation_table");
+        let foreign_key_dependencies = referenced_table_names("references_table");
         let generation_selection = json!({
-            "schema_version": "1",
-            "mode": if requested_table_names.is_empty() { "all_supported_candidates" } else { "requested_tables_with_relation_closure" },
+            "schema_version": "2",
+            "mode": if requested_table_names.is_empty() { "all_supported_candidates" } else { "requested_tables_with_dependency_closure" },
             "project_wide_views_included": !table_scoped,
             "requested_tables": requested_table_names.clone(),
             "included_tables": included_table_names.clone(),
             "excluded_framework_tables": selection.excluded_framework_names,
-            "relation_dependencies": included_table_names.iter().filter(|table| !requested_table_names.contains(table)).collect::<Vec<_>>(),
+            "relation_dependencies": relation_dependencies,
+            "foreign_key_dependencies": foreign_key_dependencies,
             "route_candidates": route_candidates.clone(),
             "route_candidates_generated": generated_route_workflow.is_some(),
             "static_asset_routes": static_asset_routes.clone(),
@@ -1481,7 +1502,7 @@ fn generate_scaffold(
         write_new_file(
             &staging.join("README.md"),
             &format!(
-                "# Zelyra migration scaffold\n\nThis is a separate, compiler-checkable starting point. It contains no copied Laravel PHP, configuration, secrets, personal records, or production data. It includes {generated_table_count} schema declaration candidate(s) from a restricted static migration subset; these declarations do not apply database changes and must be reviewed. It also contains {generated_business_count} pure model projection helper(s) translated from a narrow static PHP subset in `src/imported_business.zyl`, imported from `main.zyl` through Zelyra's normal module system. These helpers do not include model casts, call sites, authorization, or surrounding workflows; review their assumptions and wire them explicitly. It contains {generated_service_count} narrow pure service helper(s) in `src/imported_services.zyl`, imported through the normal module system. Their statically resolved callers are listed, but their controller/service workflows are not automatically rewired. It contains {generated_enum_adapter_count} typed adapters for literal Laravel enum values in `src/imported_enums.zyl`. They map stored strings to Zelyra enum variants and back, but do not add database constraints or wire application call sites; parse every value read from storage and validate writes explicitly. It contains {generated_validation_form_count} standalone form declaration candidate(s) from a strict subset of literal Laravel validation rules in `src/imported_forms.zyl`. This file is deliberately not imported by `main.zyl`, so the suggestions do not create endpoints until explicitly included and reviewed. They are not connected to Laravel routes or handlers and do not perform Laravel validation or persistence; omitted rules and fields are recorded in `GENERATION_SELECTION.json`. Laravel command and scheduler metadata is listed in `MIGRATION_TASKS.md`; PHP handlers are not imported. Every statically inventoried PHP source file and its proposed migration disposition is listed in `MIGRATION_FILES.md` and `SOURCE_FILE_PLAN.json`; entries are not claims that behavior was translated. `ROUTE_CANDIDATES.json` separates statically resolved routes from conventionally named resource controllers and routes that merely consume the selected model; neither means a route was generated. `STATIC_ASSET_ROUTES.json` lists exact, middleware-free GET routes that return a literal file from `public/` and whose byte-for-byte copy into Zelyra's `public/` passed the bounded asset checks. Zelyra's static server serves those files at the same origin-relative route path; no Laravel or PHP handler is copied. Blade URL, asset, and shared-layout references are recorded in `VIEW_LINKS.json`; `VIEW_LAYOUTS.md` maps each `@extends` consumer and its `@section` values to the layout's `@yield` slots. Zelyra already provides reusable named `view` layouts. When a shared Blade layout is found, the scaffold emits the Zelyra starter `view ImportedAppShell` in `src/imported_layouts.zyl` and imports that module; each translated page can bind it with `view: ImportedAppShell`. The shared frame is therefore reusable immediately, while original navigation/auth behavior and Blade page bodies still require review and translation. Two strict standalone notice shapes may also be emitted as presentation components in `src/imported_views.zyl`: a static confirmation and a module notice with one escaped `String` property. Inspect `VIEW_TRANSLATIONS.md` and `VIEW_TRANSLATIONS.json`. A translated static component is wired as a page only when its Laravel route is an ungrouped, middleware-free GET closure whose sole statement returns that exact literal view; the report records each generated route. Other components do not create routes. The narrowly verified public unsubscribe workflow can also reuse its translated success component. No general Laravel route or dynamic-view translation is implied. Referenced public assets are copied into the generated `public/` tree when they are regular files within the configured size limits; `ASSET_COPY.md` and `ASSET_COPY.json` list copied and skipped assets. URLs remain origin-relative, and host filesystem paths are never emitted as application URLs. The complete schema selection and added relation dependencies are listed in `GENERATION_SELECTION.json`; the migration report remains the full-project analysis.\n\nStart with `zelyra check main.zyl`, then review `MIGRATION_REPORT.md`, `MIGRATION_TODO.md`, `MIGRATION_TASKS.md`, `MIGRATION_FILES.md`, `STATIC_ASSET_ROUTES.json`, `VIEW_LINKS.json`, `VIEW_LAYOUTS.md`, `VIEW_TRANSLATIONS.md`, `VIEW_TRANSLATIONS.json`, `ASSET_COPY.md`, `ASSET_COPY.json`, `SOURCE_FILE_PLAN.json`, `ROUTE_CANDIDATES.json`, and `GENERATION_SELECTION.json` before connecting or changing a database.\n",
+                "# Zelyra migration scaffold\n\nThis is a separate, compiler-checkable starting point. It contains no copied Laravel PHP, configuration, secrets, personal records, or production data. It includes {generated_table_count} schema declaration candidate(s) from a restricted static migration subset; these declarations do not apply database changes and must be reviewed. It also contains {generated_business_count} pure model projection helper(s) translated from a narrow static PHP subset in `src/imported_business.zyl`, imported from `main.zyl` through Zelyra's normal module system. These helpers do not include model casts, call sites, authorization, or surrounding workflows; review their assumptions and wire them explicitly. It contains {generated_service_count} narrow pure service helper(s) in `src/imported_services.zyl`, imported through the normal module system. Their statically resolved callers are listed, but their controller/service workflows are not automatically rewired. It contains {generated_enum_adapter_count} typed adapters for literal Laravel enum values in `src/imported_enums.zyl`. They map stored strings to Zelyra enum variants and back, but do not add database constraints or wire application call sites; parse every value read from storage and validate writes explicitly. It contains {generated_validation_form_count} standalone form declaration candidate(s) from a strict subset of literal Laravel validation rules in `src/imported_forms.zyl`. This file is deliberately not imported by `main.zyl`, so the suggestions do not create endpoints until explicitly included and reviewed. They are not connected to Laravel routes or handlers and do not perform Laravel validation or persistence; omitted rules and fields are recorded in `GENERATION_SELECTION.json`. Laravel command and scheduler metadata is listed in `MIGRATION_TASKS.md`; PHP handlers are not imported. Every statically inventoried PHP source file and its proposed migration disposition is listed in `MIGRATION_FILES.md` and `SOURCE_FILE_PLAN.json`; entries are not claims that behavior was translated. `ROUTE_CANDIDATES.json` separates statically resolved routes from conventionally named resource controllers and routes that merely consume the selected model; neither means a route was generated. `STATIC_ASSET_ROUTES.json` lists exact, middleware-free GET routes that return a literal file from `public/` and whose byte-for-byte copy into Zelyra's `public/` passed the bounded asset checks. Zelyra's static server serves those files at the same origin-relative route path; no Laravel or PHP handler is copied. Blade URL, asset, and shared-layout references are recorded in `VIEW_LINKS.json`; `VIEW_LAYOUTS.md` maps each `@extends` consumer and its `@section` values to the layout's `@yield` slots. Zelyra already provides reusable named `view` layouts. When a shared Blade layout is found, the scaffold emits the Zelyra starter `view ImportedAppShell` in `src/imported_layouts.zyl` and imports that module; each translated page can bind it with `view: ImportedAppShell`. The shared frame is therefore reusable immediately, while original navigation/auth behavior and Blade page bodies still require review and translation. Two strict standalone notice shapes may also be emitted as presentation components in `src/imported_views.zyl`: a static confirmation and a module notice with one escaped `String` property. Inspect `VIEW_TRANSLATIONS.md` and `VIEW_TRANSLATIONS.json`. A translated static component is wired as a page only when its Laravel route is an ungrouped, middleware-free GET closure whose sole statement returns that exact literal view; the report records each generated route. Other components do not create routes. The narrowly verified public unsubscribe workflow can also reuse its translated success component. No general Laravel route or dynamic-view translation is implied. Referenced public assets are copied into the generated `public/` tree when they are regular files within the configured size limits; `ASSET_COPY.md` and `ASSET_COPY.json` list copied and skipped assets. URLs remain origin-relative, and host filesystem paths are never emitted as application URLs. The complete schema selection and added relation and foreign-key dependencies are listed in `GENERATION_SELECTION.json`; the migration report remains the full-project analysis.\n\nStart with `zelyra check main.zyl`, then review `MIGRATION_REPORT.md`, `MIGRATION_TODO.md`, `MIGRATION_TASKS.md`, `MIGRATION_FILES.md`, `STATIC_ASSET_ROUTES.json`, `VIEW_LINKS.json`, `VIEW_LAYOUTS.md`, `VIEW_TRANSLATIONS.md`, `VIEW_TRANSLATIONS.json`, `ASSET_COPY.md`, `ASSET_COPY.json`, `SOURCE_FILE_PLAN.json`, `ROUTE_CANDIDATES.json`, and `GENERATION_SELECTION.json` before connecting or changing a database.\n",
                 generated_validation_form_count = generated_validation_form_count
             ),
         )?;
@@ -1547,7 +1568,7 @@ fn generate_scaffold(
             generation_selection["enum_module"].as_str().unwrap_or("none")
         ));
         let mut todo = format!(
-            "# Migration work still required\n\n{} schema declaration candidate(s) were generated in `main.zyl` from a restricted static subset. Compare every field, nullability, default, unique constraint, and database-specific type with the original migrations before configuring or applying a schema. The exact table selection and relation dependencies are recorded in `GENERATION_SELECTION.json`; the analysis report still lists findings from the whole Laravel project. Narrowly supported pure model projections are isolated in `src/imported_business.zyl` and imported through the standard module system; their model fields must be passed explicitly. Typed Laravel enum adapters are isolated in `src/imported_enums.zyl`; they do not preserve SQL constraints or wire call sites, so explicitly decode stored values and validate before writes. Call sites, model casts, authorization, and workflows are not imported. Each mapping ID below identifies an analyzer finding, not a claim that behavior is supported. Review and implement authorization, tenant boundaries, validation, transactions, money calculations, file handling, jobs, integrations, and error paths before enabling a workflow. Laravel commands and scheduled tasks are inventory-only; translate their behavior and create reviewed Zelyra `command`/`schedule` declarations by following `MIGRATION_TASKS.md`.\n\n",
+            "# Migration work still required\n\n{} schema declaration candidate(s) were generated in `main.zyl` from a restricted static subset. Compare every field, nullability, default, unique constraint, and database-specific type with the original migrations before configuring or applying a schema. The exact table selection and relation and foreign-key dependencies are recorded in `GENERATION_SELECTION.json`; the analysis report still lists findings from the whole Laravel project. Narrowly supported pure model projections are isolated in `src/imported_business.zyl` and imported through the standard module system; their model fields must be passed explicitly. Typed Laravel enum adapters are isolated in `src/imported_enums.zyl`; they do not preserve SQL constraints or wire call sites, so explicitly decode stored values and validate before writes. Call sites, model casts, authorization, and workflows are not imported. Each mapping ID below identifies an analyzer finding, not a claim that behavior is supported. Review and implement authorization, tenant boundaries, validation, transactions, money calculations, file handling, jobs, integrations, and error paths before enabling a workflow. Laravel commands and scheduled tasks are inventory-only; translate their behavior and create reviewed Zelyra `command`/`schedule` declarations by following `MIGRATION_TASKS.md`.\n\n",
             generated_table_count
         );
         if generated_validation_form_count > 0 || !validation_forms.rejected.is_empty() {
@@ -2007,16 +2028,23 @@ fn select_schema_candidates(
                 .as_array()
                 .into_iter()
                 .flatten()
-                .filter_map(|column| column["relation_table"].as_str())
+                .flat_map(|column| {
+                    [
+                        column["relation_table"].as_str(),
+                        column["references_table"].as_str(),
+                    ]
+                    .into_iter()
+                    .flatten()
+                })
             {
                 if !candidate_tables.contains(dependency) {
                     return Err(format!(
-                        "schema relation from `{table}` targets `{dependency}`, which has no generated candidate"
+                        "schema dependency from `{table}` references `{dependency}`, which has no generated candidate"
                     ));
                 }
                 if is_framework_owned_table(dependency) {
                     return Err(format!(
-                        "schema relation from `{table}` targets Laravel framework-owned table `{dependency}`; review and model that behavior explicitly in Zelyra"
+                        "schema dependency from `{table}` references Laravel framework-owned table `{dependency}`; review and model that behavior explicitly in Zelyra"
                     ));
                 }
                 if included.insert(dependency) {
@@ -3806,6 +3834,33 @@ mod tests {
                 .collect::<Vec<_>>(),
             ["customers", "orders", "order_lines"]
         );
+    }
+
+    #[test]
+    fn targeted_schema_selection_includes_scalar_foreign_key_dependencies() {
+        let report = json!({
+            "candidates": [
+                {"table":"customers", "columns":[{"relation_table":null,"references_table":"tenants"}], "candidate_source":"table customers {}"},
+                {"table":"tenants", "columns":[{"relation_table":"users","references_table":null}], "candidate_source":"table tenants {}"},
+                {"table":"users", "columns":[], "candidate_source":"table users {}"}
+            ]
+        });
+        let selection = select_schema_candidates(&report, &["customers".into()]).unwrap();
+        assert_eq!(selection.requested_names, ["customers"]);
+        assert_eq!(selection.included_names, ["customers", "tenants", "users"]);
+    }
+
+    #[test]
+    fn targeted_schema_selection_rejects_framework_foreign_key_dependencies() {
+        let report = json!({
+            "candidates": [
+                {"table":"orders", "columns":[{"relation_table":null,"references_table":"sessions"}], "candidate_source":"table orders {}"},
+                {"table":"sessions", "columns":[], "candidate_source":"table sessions {}"}
+            ]
+        });
+        assert!(select_schema_candidates(&report, &["orders".into()])
+            .unwrap_err()
+            .contains("framework-owned"));
     }
 
     #[test]

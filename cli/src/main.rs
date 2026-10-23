@@ -1359,9 +1359,18 @@ fn validate_loaded_project(
         );
         return Err(());
     }
-    if let Err(issues) = architecture::validate_project_modules(path, &loaded.modules) {
+    if let Err(issues) = architecture::validate_project_modules(
+        path,
+        &loaded.modules,
+        &loaded.program,
+        &loaded.sources,
+    ) {
         for issue in issues {
-            diagnostic(&issue.path, "E-ARCH-001", &issue.message, 1, 1);
+            if let Some(span) = issue.span {
+                diagnostic_with_span(&issue.path, issue.code, &issue.message, span);
+            } else {
+                diagnostic(&issue.path, issue.code, &issue.message, 1, 1);
+            }
         }
         return Err(());
     }
