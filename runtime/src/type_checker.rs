@@ -13,9 +13,10 @@ mod statements;
 mod type_relations;
 pub(crate) use enum_constructors::instantiated_enum_payload_types;
 use flow::{flow_outcomes, FLOW_FALLTHROUGH};
+pub use type_relations::substitute_generic_type;
 pub(super) use type_relations::{
     compatible, expand_type_aliases, infer_generic_types, is_map_key_type, is_numeric,
-    singular_table_type, substitute_generic_type, validate_type,
+    singular_table_type, validate_type,
 };
 
 #[derive(Clone)]

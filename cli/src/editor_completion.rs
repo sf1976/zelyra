@@ -1,4 +1,5 @@
 use super::*;
+use std::collections::HashMap;
 
 pub(super) fn field_completion(
     state: &EditorState,
@@ -100,8 +101,27 @@ fn record_completion_fields(
 ) -> Vec<(String, String)> {
     use zelyra_ast::Type;
 
-    let mut name = match ty {
-        Type::Named(name) | Type::Applied { name, .. } => name.as_str(),
+    let (mut name, substitutions) = match ty {
+        Type::Named(name) => (name.as_str(), HashMap::new()),
+        Type::Applied { name, args } => {
+            let records = program
+                .records
+                .iter()
+                .filter(|record| {
+                    record.name == *name || record.name.rsplit("::").next() == Some(name)
+                })
+                .collect::<Vec<_>>();
+            if records.len() != 1 {
+                return Vec::new();
+            }
+            let substitutions = records[0]
+                .type_params
+                .iter()
+                .zip(args.iter())
+                .map(|(parameter, argument)| (parameter.clone(), argument.clone()))
+                .collect();
+            (name.as_str(), substitutions)
+        }
         _ => return Vec::new(),
     };
     let mut visited = HashSet::new();
@@ -122,7 +142,13 @@ fn record_completion_fields(
             return record
                 .fields
                 .iter()
-                .map(|field| (field.name.clone(), field.ty.to_string()))
+                .map(|field| {
+                    (
+                        field.name.clone(),
+                        zelyra_runtime::substitute_generic_type(&field.ty, &substitutions)
+                            .to_string(),
+                    )
+                })
                 .collect();
         }
         if !records.is_empty() {

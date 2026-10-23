@@ -6989,7 +6989,7 @@ fn main() {}
     #[test]
     fn studio_field_completion_uses_the_receiver_type_in_unsaved_source() {
         let state = project();
-        let source = "struct Customer { name: String, email: String }\nfn main() { customer: Customer = Customer { name: \"Ada\", email: \"ada@example.test\" } print(customer.na) }\n";
+        let source = "struct Customer<T> { name: String, email: String, external_id: T }\nfn main() { customer: Customer<Int> = Customer<Int> { name: \"Ada\", email: \"ada@example.test\", external_id: 7 } print(customer.na) }\n";
         let disk_source = "fn main() {}\n";
         fs::write(state.root.join("main.zyl"), disk_source).unwrap();
         let byte_dot_end = source.find("customer.na").unwrap() + "customer.".len();
@@ -7015,6 +7015,9 @@ fn main() {}
         assert_eq!(result["to"], cursor);
         assert!(options.iter().any(|item| item["label"] == "name"));
         assert!(options.iter().any(|item| item["label"] == "email"));
+        assert!(options
+            .iter()
+            .any(|item| item["label"] == "external_id" && item["detail"] == "Int"));
         assert_eq!(
             fs::read_to_string(state.root.join("main.zyl")).unwrap(),
             disk_source
