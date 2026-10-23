@@ -820,7 +820,11 @@ fn build_plan(entry: &Path) -> Result<MigrationPlan, String> {
             }
             files.push(FilePlan {
                 path: display,
-                rule: "LAYOUT-PLACEMENT-001",
+                rule: if mismatched {
+                    "LAYOUT-PLACEMENT-002"
+                } else {
+                    "LAYOUT-PLACEMENT-001"
+                },
                 proposed_directory: directory.into(),
                 status: if mismatched { "needs-manual-review" } else { "already-standard" },
                 reason: if mismatched {
@@ -1312,6 +1316,7 @@ mod tests {
             .find(|file| file.path == "domain/misplaced.zyl")
             .unwrap();
         assert_eq!(file.status, "needs-manual-review");
+        assert_eq!(file.rule, "LAYOUT-PLACEMENT-002");
         assert_eq!(file.declarations.len(), 2);
         assert_eq!(file.declarations[0].name, "calculate");
         assert_eq!(file.declarations[0].status, "already-standard");
