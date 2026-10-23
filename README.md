@@ -122,7 +122,7 @@ in one workflow:
 - three execution backends — AST (default), MIR, and experimental verified
   Bytecode (v30) — with aligned diagnostics, step budgets, and differential
   coverage;
-- release limits are listed in the [1.2.48 release notes](docs/release-notes/1.2.48.en.md);
+- release limits are listed in the [1.2.56 release notes](docs/release-notes/1.2.56.en.md);
 - local text-PDF rendering and checked PDF outbox attachments with byte and
   row limits. The renderer does not preserve CSS layout, images, or charts;
   use browser print for graphical documents.
@@ -203,7 +203,7 @@ other settings.
 | Use Zelyra UI | [Components, forms, themes, print, charts, and email reference](docs/ui.en.md) · [Deutsch](docs/ui.de.md) |
 | Use the interactive language console | [Language console guide](docs/language-console.en.md) · [Deutsch](docs/language-console.de.md) |
 | Review implemented capabilities and their limits | [Implemented features](docs/implemented.en.md) · [Deutsch](docs/implemented.de.md) |
-| Review current and planned work | [Roadmap](docs/ROADMAP.md) · [1.2.48 release notes](docs/release-notes/1.2.48.en.md) |
+| Review current and planned work | [Roadmap](docs/ROADMAP.md) · [1.2.56 release notes](docs/release-notes/1.2.56.en.md) |
 | Read the design direction | [Manifesto](docs/MANIFESTO.md) · [AI-native architecture](docs/architecture/ai-native-development.md) · [Readable regex text-edit design](docs/design/readable-regex-text-editing.en.md) |
 | See exact release changes | [Changelog](CHANGELOG.md) · [GitHub releases](https://github.com/sf1976/zelyra/releases) |
 
