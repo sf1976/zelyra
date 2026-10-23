@@ -21,6 +21,8 @@ mod editor_capabilities;
 mod editor_completion;
 #[path = "editor_module_settings.rs"]
 mod editor_module_settings;
+#[path = "editor_signature_help.rs"]
+mod editor_signature_help;
 pub(crate) use editor_module_settings::ProjectModuleSettingsStore;
 #[path = "editor_database_records.rs"]
 mod editor_database_records;
@@ -622,6 +624,9 @@ fn editor_response(
         ("POST", "typed-hole") => editor_typed_hole(state, &parse_json_body(&request.body)?),
         ("POST", "field-completion") => {
             editor_completion::field_completion(state, &parse_json_body(&request.body)?)
+        }
+        ("POST", "signature-help") => {
+            editor_signature_help::signature_help(state, &parse_json_body(&request.body)?)
         }
         ("POST", "runtime-profile") => runtime_profile(state, &parse_json_body(&request.body)?),
         ("POST", "run") => run_editor_program(state, &parse_json_body(&request.body)?),
@@ -7026,6 +7031,30 @@ fn main() {}
     }
 
     #[test]
+    fn studio_signature_help_resolves_unsaved_local_function_and_argument() {
+        let state = project();
+        let source = "fn format_invoice(number: String, include_tax: Bool) -> String { return number }\nfn main() { format_invoice(\"INV-1\", ) }\n";
+        fs::write(state.root.join("main.zyl"), "fn main() {}\n").unwrap();
+        let byte_offset = source.find(", )").unwrap() + 2;
+        let offset = byte_to_utf16(source, byte_offset);
+        let response = editor_signature_help::signature_help(
+            &state,
+            &json!({"path":"main.zyl","source":source,"offset":offset,"version":9,"overlays":[]}),
+        )
+        .unwrap();
+        let result: Value = serde_json::from_str(&response.2).unwrap();
+        assert_eq!(result["found"], true);
+        assert_eq!(result["name"], "format_invoice");
+        assert_eq!(result["activeParameter"], 1);
+        assert_eq!(result["parameters"][0]["name"], "number");
+        assert_eq!(result["parameters"][1]["name"], "include_tax");
+        assert_eq!(result["parameters"][1]["type"], "Bool");
+        assert_eq!(result["returnType"], "String");
+        assert_eq!(result["version"], 9);
+        fs::remove_dir_all(state.root.clone()).unwrap();
+    }
+
+    #[test]
     fn studio_field_completion_does_not_guess_for_non_record_types() {
         let state = project();
         let source = "fn main() { value: Int = 7 print(value.) }\n";
@@ -7086,6 +7115,31 @@ fn main() {}
         assert!(options
             .iter()
             .any(|item| item["label"] == "id" && item["detail"] == "Int"));
+        fs::remove_dir_all(state.root.clone()).unwrap();
+    }
+
+    #[test]
+    fn studio_signature_help_resolves_public_imported_functions() {
+        let state = project();
+        fs::create_dir_all(state.root.join("src")).unwrap();
+        let module =
+            "pub fn find_customer(id: Int, include_archived: Bool) -> String { return \"\" }\n";
+        let source = "import \"src/customer.zyl\" as customers\nfn main() { customers::find_customer(7, ) }\n";
+        fs::write(state.root.join("src/customer.zyl"), module).unwrap();
+        fs::write(state.root.join("main.zyl"), "fn main() {}\n").unwrap();
+        let byte_offset = source.find(", )").unwrap() + 2;
+        let offset = byte_to_utf16(source, byte_offset);
+        let response = editor_signature_help::signature_help(
+            &state,
+            &json!({"path":"main.zyl","source":source,"offset":offset,"version":2,"overlays":[]}),
+        )
+        .unwrap();
+        let result: Value = serde_json::from_str(&response.2).unwrap();
+        assert_eq!(result["found"], true);
+        assert_eq!(result["name"], "find_customer");
+        assert_eq!(result["activeParameter"], 1);
+        assert_eq!(result["parameters"][0]["type"], "Int");
+        assert_eq!(result["parameters"][1]["name"], "include_archived");
         assert_eq!(
             fs::read_to_string(state.root.join("main.zyl")).unwrap(),
             "fn main() {}\n"
