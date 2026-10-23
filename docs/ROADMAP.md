@@ -837,6 +837,7 @@ The AST implementation remains the reference, but it is not sufficient by itself
   promised.
 - [~] **1.2.8–1.3.0 Wasm and sidecar bridge:** Versioned HostServices and local locked source packages exist. Sandboxed/versioned Wasm computation and explicitly launched, authenticated local sidecar RPC are assigned to 1.2.8, with cross-backend and release parity in 1.3.0. No stable Rust ABI, auto-download, or implicit capability grant. A local mock integration precedes any real provider claims.
 - [ ] **Cross-backend release gate:** Query, tenant, request, and job semantics must match across AST, MIR, and bytecode or be rejected with explicit unsupported diagnostics. Add security, MariaDB integration, compatibility, offline, and adversarial tests. Do not claim 1.3.0 completion or production readiness until these gates and the detailed plan are satisfied.
+- [~] **Studio import-aware completion:** Typing `alias::` after importing a Zelyra module automatically opens completion with that module's public symbols. Completion is limited to declared imports and ignores strings/comments; member completion for an already typed prefix continues to work. Browser E2E verifies public exports and hides private members. This is one context-aware editing step, not general next-block generation; broader compiler-guided next-step suggestions remain open.
 
 ### Additional enterprise extensions through 1.3.0
 

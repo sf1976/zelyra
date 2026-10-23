@@ -3,8 +3,46 @@ export function importedModuleAlias(prefix, source) {
   if (!match) return null;
 
   const alias = match[1];
-  const importedAliases = [...source.matchAll(/^\s*import\s+"[^"]+"\s+as\s+([A-Za-z_][\w]*)\s*$/gm)];
-  return importedAliases.some((item) => item[1] === alias) ? alias : null;
+  let inBlockComment = false;
+  for (const line of source.split(/\r?\n/)) {
+    if (line.trim() === "##") {
+      inBlockComment = !inBlockComment;
+      continue;
+    }
+    if (inBlockComment || /^\s*(?:#|\/\/)/.test(line)) continue;
+    const imported = /^\s*import\s+"[^"]+"\s+as\s+([A-Za-z_][\w]*)\s*$/.exec(line);
+    if (imported?.[1] === alias) return alias;
+  }
+  return null;
+}
+
+export function importedModuleAliasAtCursor(source, cursor) {
+  const beforeCursor = source.slice(0, cursor);
+  const lines = beforeCursor.split(/\r?\n/);
+  let inBlockComment = false;
+  for (const line of lines.slice(0, -1)) {
+    if (line.trim() === "##") inBlockComment = !inBlockComment;
+  }
+  if (inBlockComment) return null;
+
+  const currentLine = lines.at(-1) || "";
+  let quote = null;
+  let escaped = false;
+  for (let index = 0; index < currentLine.length; index += 1) {
+    const character = currentLine[index];
+    if (quote) {
+      if (escaped) escaped = false;
+      else if (character === "\\") escaped = true;
+      else if (character === quote) quote = null;
+      continue;
+    }
+    if (character === "#" || currentLine.startsWith("//", index)) return null;
+    if (character === "\"" || character === "'") quote = character;
+  }
+  if (quote) return null;
+
+  const match = /(?:^|[^\w])([A-Za-z_][\w]*)::$/.exec(beforeCursor);
+  return match ? importedModuleAlias(`${match[1]}::`, source) : null;
 }
 
 export function importedModuleCompletion(alias, modules) {

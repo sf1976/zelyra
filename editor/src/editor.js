@@ -20,7 +20,7 @@ import {
 import { zelyraKeywords as keywords, zelyraLanguage } from "./zelyra-language.js";
 import { zelyraEditingExtensions, zelyraEditingKeymap } from "./zelyra-editing.js";
 import { sqlBodyPrefix, sqlCompletionOptions } from "./sql-completion.js";
-import { importPathCompletion, importSignature, importedModuleAlias, importedModuleCompletion } from "./module-completion.js";
+import { importPathCompletion, importSignature, importedModuleAlias, importedModuleAliasAtCursor, importedModuleCompletion } from "./module-completion.js";
 import {
   crosshairCursor,
   drawSelection,
@@ -884,7 +884,8 @@ function completionSource(context) {
       };
     }).catch(() => null);
   }
-  if (!word && !context.explicit) return null;
+  const nextModuleAlias = importedModuleAliasAtCursor(source, context.pos);
+  if (!word && !context.explicit && nextModuleAlias === null) return null;
   if (word?.text === "_" && activePath?.endsWith(".zyl")) {
     const path = activePath;
     let request;
@@ -913,7 +914,7 @@ function completionSource(context) {
   const from = word ? word.from : context.pos;
   const sqlQuery = activePath?.endsWith(".zyl") ? sqlBodyPrefix(source, context.pos) : null;
   const namespaceAlias = sqlQuery === null
-    ? importedModuleAlias(source.slice(0, from), source)
+    ? (nextModuleAlias || importedModuleAlias(source.slice(0, from), source))
     : null;
   const sqlKeywords = ["SELECT", "FROM", "WHERE", "JOIN", "ON", "ORDER BY", "GROUP BY", "LIMIT", "INSERT INTO", "UPDATE", "SET", "VALUES", "DELETE FROM"];
   const basicOptions = sqlQuery === null
