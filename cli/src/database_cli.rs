@@ -1766,6 +1766,7 @@ fn compact_sql_for_safety(sql: &str, postgres: bool) -> Option<String> {
         if character == '\'' {
             let quote = character;
             index += 1;
+            let mut closed = false;
             while index < characters.len() {
                 if characters[index] == '\\' {
                     let slash_start = index;
@@ -1778,6 +1779,7 @@ fn compact_sql_for_safety(sql: &str, postgres: bool) -> Option<String> {
                             return None;
                         }
                         index += 1;
+                        closed = true;
                         break;
                     }
                 } else if characters[index] == quote {
@@ -1786,9 +1788,13 @@ fn compact_sql_for_safety(sql: &str, postgres: bool) -> Option<String> {
                         continue;
                     }
                     index += 1;
+                    closed = true;
                     break;
                 }
                 index += 1;
+            }
+            if !closed {
+                return None;
             }
             compact.push(' ');
             continue;
@@ -1797,6 +1803,7 @@ fn compact_sql_for_safety(sql: &str, postgres: bool) -> Option<String> {
         if character == '`' || character == '"' {
             let quote = character;
             index += 1;
+            let mut closed = false;
             while index < characters.len() {
                 if quote == '"' && characters[index] == '\\' {
                     let slash_start = index;
@@ -1809,6 +1816,7 @@ fn compact_sql_for_safety(sql: &str, postgres: bool) -> Option<String> {
                             return None;
                         }
                         index += 1;
+                        closed = true;
                         break;
                     }
                     compact.push_str(&" ".repeat(slash_count));
@@ -1819,10 +1827,14 @@ fn compact_sql_for_safety(sql: &str, postgres: bool) -> Option<String> {
                         continue;
                     }
                     index += 1;
+                    closed = true;
                     break;
                 }
                 compact.push(characters[index]);
                 index += 1;
+            }
+            if !closed {
+                return None;
             }
             continue;
         }
@@ -2313,6 +2325,10 @@ mod tests {
         assert!(single_sql_statement(escaped));
         assert!(!read_only_statement(escaped, false));
         assert!(!read_only_statement(escaped, true));
+        assert!(!read_only_statement(
+            r#"SELECT 'a\\'b' AS x, SLEEP(30)"#,
+            false
+        ));
         assert!(!read_only_statement(
             r#"SELECT "a\"b" AS x, SLEEP(30)"#,
             false
