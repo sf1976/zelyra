@@ -20,7 +20,7 @@ import {
 import { zelyraKeywords as keywords, zelyraLanguage } from "./zelyra-language.js";
 import { zelyraEditingExtensions, zelyraEditingKeymap } from "./zelyra-editing.js";
 import { sqlBodyPrefix, sqlCompletionOptions } from "./sql-completion.js";
-import { importSignature, importedModuleAlias, importedModuleCompletion } from "./module-completion.js";
+import { importPathCompletion, importSignature, importedModuleAlias, importedModuleCompletion } from "./module-completion.js";
 import {
   crosshairCursor,
   drawSelection,
@@ -851,6 +851,10 @@ function completionSource(context) {
   const word = context.matchBefore(/[\w]+/);
   const completionPath = activePath;
   const source = context.state.doc.toString();
+  const importPaths = completionPath?.endsWith(".zyl")
+    ? importPathCompletion(source, context.pos, treeFiles, completionPath)
+    : null;
+  if (importPaths) return importPaths;
   const beforeCursor = source.slice(0, context.pos);
   const fieldAccess = completionPath?.endsWith(".zyl") && sqlBodyPrefix(source, context.pos) === null
     ? /\.([A-Za-z_]\w*)?$/.exec(beforeCursor)

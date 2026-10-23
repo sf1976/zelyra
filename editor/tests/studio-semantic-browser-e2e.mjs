@@ -121,6 +121,14 @@ try {
   await page.locator(".cm-content[contenteditable=true]").waitFor();
   await page.locator(".cm-content[contenteditable=true]").click();
   await page.keyboard.press("Control+A");
+  await page.keyboard.insertText('import "src/ma');
+  const importPathCompletion = page.locator(".cm-tooltip-autocomplete");
+  await importPathCompletion.waitFor();
+  const importPathLabels = await importPathCompletion.locator(".cm-completionLabel").allTextContents();
+  assert.ok(importPathLabels.includes("src/math.zyl"), `project import path missing: ${importPathLabels}`);
+  assert.ok(!importPathLabels.includes("main.zyl"), `entry point should not be suggested as a dependency: ${importPathLabels}`);
+  await page.keyboard.press("Escape");
+  await page.keyboard.press("Control+A");
   await page.keyboard.insertText('import "src/math.zyl" as math\nfn main() { let value = math::');
   await page.keyboard.press("Escape");
   await page.keyboard.press("Control+Space");
