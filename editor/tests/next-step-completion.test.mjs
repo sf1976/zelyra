@@ -37,6 +37,18 @@ assert.deepEqual(nextCrudCompletions({ ...map, edges: [] }, "en").map((item) => 
 assert.deepEqual(nextCrudCompletions({ ...map, nodes: [...map.nodes, { ...map.nodes[0], id: "table:duplicate.zyl:customers" }] }, "de").map((item) => item.label), [
   "crud ArchiveCustomers -> archive_customers {}",
 ]);
+const caseCollidingTables = {
+  ...map,
+  nodes: [...map.nodes, { id: "table:src/upper.zyl:Customers", kind: "table", label: "Customers" }],
+  edges: [],
+};
+assert.deepEqual(nextCrudCompletions(caseCollidingTables, "en").map((item) => item.label), [
+  "crud Orders -> orders {}",
+  "crud ArchiveCustomers -> archive_customers {}",
+]);
+assert.deepEqual(nextCrudCompletions({ ...map, nodes: [...map.nodes, { id: "form:main.zyl:Customers", kind: "form", label: "Customers" }] }, "en").map((item) => item.label), [
+  "crud ArchiveCustomers -> archive_customers {}",
+]);
 const formMap = {
   ...map,
   nodes: map.nodes.map((node) => node.kind === "table" && node.label === "customers"
@@ -57,4 +69,9 @@ assert.deepEqual(nextFormCompletions(formMap, "de"), [{
 assert.deepEqual(nextFormCompletions({ ...formMap, incomplete: true }, "de"), []);
 assert.deepEqual(nextFormCompletions({ ...formMap, nodes: formMap.nodes.map((node) => node.label === "customers" ? { ...node, editable_fields: [] } : node) }, "en"), []);
 assert.deepEqual(nextFormCompletions({ ...formMap, nodes: [...formMap.nodes, { id: "form:other.zyl:CustomersForm", kind: "form", label: "CustomersForm" }] }, "en"), []);
+assert.deepEqual(nextFormCompletions({
+  ...formMap,
+  nodes: [...formMap.nodes, { id: "table:src/upper.zyl:Customers", kind: "table", label: "Customers", editable_fields: ["title"] }],
+  edges: formMap.edges,
+}, "en"), []);
 console.log("Studio next-step completion unit tests passed");
