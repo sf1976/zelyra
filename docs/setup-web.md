@@ -65,12 +65,17 @@ and application with `docker compose` (v2 or newer), or a modern standalone
 `docker-compose` binary (v2 or newer). Python Compose v1 is unsupported because
 current Docker engines no longer provide its required `ContainerConfig` field.
 MariaDB is therefore installed as a container when it is not already running.
-Zelyra does not install Docker itself, modify operating-system packages, or
-request root privileges. If Docker is missing, the assistant reports that
-fact and the user must install Docker Desktop or Docker Engine with Compose
-before retrying. The console, `zelyra doctor`, and the browser status page show
-the platform-specific official Docker installation page and the verification
-command `docker compose version`.
+If Compose v2 is missing, the assistant shows installation guidance. An
+interactive `zelyra setup --database`, `--schema`, or `--all` asks explicitly
+whether to start installation through a supported package manager. Linux
+supports APT, DNF, YUM, Pacman, and Zypper; macOS can use Homebrew; on Windows,
+`winget` offers Docker Desktop with Compose. Linux package installation may
+request elevated privileges. No system packages are installed without
+consent, in non-interactive calls, or by the browser setup assistant. Docker
+Engine itself is not automatically installed on Linux. The console,
+`zelyra doctor`, and the browser status page show the platform-specific
+official Docker installation page and the verification command
+`docker compose version`.
 
 On Linux, install Docker Engine and the Compose plugin from the [official
 Linux instructions](https://docs.docker.com/engine/install/). On Windows use

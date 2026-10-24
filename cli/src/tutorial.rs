@@ -176,7 +176,7 @@ pub(super) fn command(mut arguments: impl Iterator<Item = String>) -> ExitCode {
     // CRUD routes need a connection string even when the user only asks for
     // the scaffold. Generate the local, protected credentials now; --no-start
     // skips Docker, not the project's database configuration.
-    if let Err(error) = setup_action(&directory, "prepare", &SetupOptions::default()) {
+    if let Err(error) = setup_action(&directory, "prepare", &SetupOptions::default(), true) {
         eprintln!(
             "error[E-TUTORIAL-005]: could not configure the invoice tutorial database: {error}"
         );
@@ -218,7 +218,7 @@ pub(super) fn command(mut arguments: impl Iterator<Item = String>) -> ExitCode {
             println!(
                 "\nStarting the local database and preparing the application automatically..."
             );
-            match setup_action(&directory, "all", &SetupOptions::default()) {
+            match setup_action(&directory, "all", &SetupOptions::default(), true) {
                 Ok(details) => println!("{details}"),
                 Err(error) => {
                     eprintln!(
@@ -271,7 +271,7 @@ pub(super) fn command(mut arguments: impl Iterator<Item = String>) -> ExitCode {
             }
         } else {
             println!("\nLokale Datenbank starten und Anwendung automatisch vorbereiten...");
-            match setup_action(&directory, "all", &SetupOptions::default()) {
+            match setup_action(&directory, "all", &SetupOptions::default(), true) {
                 Ok(details) => println!("{details}"),
                 Err(error) => {
                     eprintln!("error[E-TUTORIAL-005]: das Rechnungstutorial konnte nicht gestartet werden: {error}");

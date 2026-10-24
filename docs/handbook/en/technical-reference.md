@@ -52,7 +52,7 @@ The installer is repeatable and user-local. Control options:
 ./install.sh --uninstall
 ~~~
 
-Use `--no-rustup` to disable automatic Rust installation; `--no-path` suppresses PATH instructions. With `--root PATH` or `ZELYRA_INSTALL_ROOT`, you can choose a different user-local target. Outdated `cargo` PATH entries are detected and not executed blindly.
+Use `--no-rustup` to disable automatic Rust installation; `--no-path` disables PATH updates. With `--root PATH` or `ZELYRA_INSTALL_ROOT`, you can choose a different user-local target. Outdated `cargo` PATH entries are detected and not executed blindly. Source installs add the Cargo bin directory to the Unix login profile or Windows user PATH so later shells can find `cargo` and Rust tools; reopen the shell after installation. Release-binary installs do not need Cargo.
 
 Published releases for Linux x86_64 and Windows x86_64 can be installed without Rust or Cargo. The archive is downloaded over HTTPS and verified with SHA-256:
 

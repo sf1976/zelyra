@@ -4718,7 +4718,7 @@ fn start_editor_web_app(
         None
     };
     if let Some(compose_database_url) = compose_database_url {
-        start_mariadb_compose(&state.root, true).map_err(|error| {
+        start_mariadb_compose(&state.root, true, true).map_err(|error| {
             let secrets = editor_secret_values(state);
             (502, redact_editor_secrets(error, &secrets))
         })?;

@@ -60,9 +60,13 @@ Der Installer ist wiederholbar und benutzerlokal. Optionen zur Kontrolle:
 ~~~
 
 Mit `--no-rustup` wird die automatische Rust-Installation deaktiviert,
-`--no-path` unterdrückt PATH-Hinweise. Mit `--root PATH` oder
+`--no-path` deaktiviert PATH-Änderungen. Mit `--root PATH` oder
 `ZELYRA_INSTALL_ROOT` lässt sich ein anderes benutzerbezogenes Ziel wählen.
 Veraltete `cargo`-PATH-Einträge werden erkannt und nicht blind ausgeführt.
+Quellcode-Installationen ergänzen das `bin`-Verzeichnis von Cargo dauerhaft im
+Unix-Loginprofil beziehungsweise in der Windows-Benutzer-PATH, damit neue
+Shells `cargo` und Rust-Werkzeuge finden; danach die Shell neu öffnen.
+Release-Binary-Installationen benötigen Cargo nicht.
 
 Veröffentlichte Releases für Linux x86_64 und Windows x86_64 können ohne Rust
 oder Cargo installiert werden. Das gewählte Archiv wird über HTTPS geladen und
