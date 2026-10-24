@@ -1,0 +1,4 @@
+import "routes::web" as web
+import "schema::tables" as schema
+
+fn main() {}

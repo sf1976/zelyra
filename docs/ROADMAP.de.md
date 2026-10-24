@@ -108,6 +108,16 @@ serverseitige Rollen und Datensatzberechtigungen sowie Audit-Historie. MariaDB
 ist die primäre Datenbank. UI, Validierung, SQL, Transaktionen, Autorisierung
 und Geschäftslogik werden idiomatisch mit Zelyra umgesetzt.
 
+**Aktueller Nachweis (24.10.2026):** Zelyra 1.3.0 ist unter `/opt/` installiert.
+Das Passwortgenerator-Projekt verwendet Zelyras native `Random`-Capability,
+typisierte Standalone-Form-Handler, serverseitige Feldvalidierung und den
+Work-Modus. Der Live-HTTP-Test bestand für alle fünf Zeichensatzprofile, wies
+ungültige Längen und Profile ab und bestätigte escaped, nicht gecachte
+Ergebnisse. Die Handler-Unterstützung liegt noch auf einem Feature-Branch und
+ist weder gemergt noch veröffentlicht. Phase A des Benchmarks darf erst dann
+als abgeschlossen gelten, wenn die native Implementierung geprüft sowie
+Fähigkeitsmatrix und Testplan erfasst sind.
+
 Bei jeder Sprach-, Compiler-, Runtime-, Datenbank-, UI- oder Studio-Lücke gilt
 STOP → ANALYSE → BEHEBUNG → TEST → FORTSETZUNG. Keine fremdsprachige
 Geschäftslogik, direkte DOM-Manipulation und keine nur für den Benchmark

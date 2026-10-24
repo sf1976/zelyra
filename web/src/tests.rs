@@ -103,6 +103,7 @@ fn number_series_allocator_is_atomic_and_scoped_per_tenant() {
         confirm_page: None,
         success_page: None,
         error_page: None,
+        handler: None,
         fields: Vec::new(),
         requires_auth: false,
         permissions: Vec::new(),
@@ -1142,6 +1143,7 @@ fn form_route() -> FormRoute {
             actions: Vec::new(),
             span: zelyra_ast::Span::default(),
         },
+        handler: None,
         table: None,
         schema: None,
         tenant_column: None,
@@ -1163,6 +1165,91 @@ fn form_route() -> FormRoute {
         layout_html: None,
         child_collections: Vec::new(),
     }
+}
+
+#[test]
+fn standalone_form_handler_returns_escaped_non_cacheable_result_after_csrf_validation() {
+    let mut route = form_route();
+    route.form.actions = vec![zelyra_ast::FormAction {
+        name: "generate".into(),
+        label: Some("Generate value".into()),
+        icon: None,
+        confirm: None,
+        confirm_page: None,
+        success_page: None,
+        error_page: None,
+        fields: Vec::new(),
+        requires_auth: false,
+        permissions: Vec::new(),
+        handler: Some("generate_value".into()),
+        capabilities: Vec::new(),
+        require_match: false,
+        statements: Vec::new(),
+        execute_body: None,
+        guard: None,
+        success: None,
+        redirect: None,
+        span: zelyra_ast::Span::default(),
+    }];
+    let handler_calls = Arc::new(AtomicUsize::new(0));
+    let calls = handler_calls.clone();
+    route.handler = Some(FormHandler::new("generate_value", move |values| {
+        calls.fetch_add(1, Ordering::SeqCst);
+        Ok(values.get("name").cloned().unwrap_or_default())
+    }));
+    let app = WebApp::new(Vec::new(), vec![route]).with_database_capability(false);
+    let invalid_csrf = app.dispatch(&Request {
+        method: "POST".into(),
+        target: "/forms/CustomerCreate".into(),
+        path: "/forms/CustomerCreate".into(),
+        headers: HashMap::from([
+            ("host".into(), "localhost".into()),
+            (
+                "content-type".into(),
+                "application/x-www-form-urlencoded".into(),
+            ),
+            ("origin".into(), "http://localhost".into()),
+        ]),
+        body: "_zelyra_csrf=invalid&name=before".into(),
+        remote_addr: None,
+    });
+    assert_eq!(invalid_csrf.status, 403);
+    assert_eq!(handler_calls.load(Ordering::SeqCst), 0);
+    let response = app.dispatch(&Request {
+        method: "POST".into(),
+        target: "/forms/CustomerCreate".into(),
+        path: "/forms/CustomerCreate".into(),
+        headers: HashMap::from([
+            ("host".into(), "localhost".into()),
+            (
+                "content-type".into(),
+                "application/x-www-form-urlencoded".into(),
+            ),
+            ("origin".into(), "http://localhost".into()),
+        ]),
+        body: "_zelyra_csrf=csrf-token&name=%3Cx%3E".into(),
+        remote_addr: None,
+    });
+
+    assert_eq!(response.status, 200, "{}", response.body);
+    assert!(response.body.contains("&lt;x&gt;"));
+    assert!(!response.body.contains("<x>"));
+    assert!(response.body.contains(">Generate value</button>"));
+    assert!(response
+        .body
+        .contains("<h2 id=\"zelyra-form-result-title\">Result</h2>"));
+    assert!(response
+        .headers
+        .iter()
+        .any(|(name, value)| { name == "Cache-Control" && value == "no-store, private" }));
+    assert!(response
+        .headers
+        .iter()
+        .any(|(name, value)| name == "Referrer-Policy" && value == "no-referrer"));
+    let wire_response = response.to_http();
+    assert!(wire_response.contains("Referrer-Policy: no-referrer\r\n"));
+    assert!(!wire_response.contains("Referrer-Policy: same-origin\r\n"));
+    assert_eq!(handler_calls.load(Ordering::SeqCst), 1);
 }
 
 fn child_collection_form_route() -> FormRoute {
@@ -1574,6 +1661,7 @@ fn table_validation_rejects_invalid_form_before_action_execution() {
         confirm_page: None,
         success_page: None,
         error_page: None,
+        handler: None,
         fields: Vec::new(),
         requires_auth: false,
         permissions: Vec::new(),
@@ -4173,6 +4261,7 @@ fn multipart_upload_stages_only_after_csrf_and_cleans_up_when_database_is_unavai
         confirm_page: None,
         success_page: None,
         error_page: None,
+        handler: None,
         fields: Vec::new(),
         requires_auth: false,
         permissions: Vec::new(),
@@ -4311,6 +4400,7 @@ fn multipart_upload_commits_reference_and_removes_file_after_sql_rollback() {
         confirm_page: None,
         success_page: None,
         error_page: None,
+        handler: None,
         fields: Vec::new(),
         requires_auth: false,
         permissions: Vec::new(),
@@ -7042,6 +7132,7 @@ fn renders_action_error_without_database_details() {
             title: Some("Action failed <unsafe>".into()),
             message: Some("Please try again <later>.".into()),
         }),
+        handler: None,
         fields: Vec::new(),
         requires_auth: false,
         permissions: Vec::new(),
@@ -7245,6 +7336,7 @@ fn protects_custom_form_actions_with_action_permissions() {
         confirm_page: None,
         success_page: None,
         error_page: None,
+        handler: None,
         fields: Vec::new(),
         requires_auth: true,
         permissions: vec!["customers.save".into()],
@@ -7276,6 +7368,7 @@ fn protects_custom_form_actions_with_action_permissions() {
         confirm_page: None,
         success_page: None,
         error_page: None,
+        handler: None,
         fields: Vec::new(),
         requires_auth: true,
         permissions: vec!["customers.save".into()],
@@ -7306,6 +7399,7 @@ fn form_action_requires_database_url() {
         confirm_page: None,
         success_page: None,
         error_page: None,
+        handler: None,
         fields: Vec::new(),
         requires_auth: false,
         permissions: Vec::new(),
@@ -7599,6 +7693,7 @@ fn execute_form_action_rejects_postgres_chained_audit() {
         confirm_page: None,
         success_page: None,
         error_page: None,
+        handler: None,
         statements: vec![zelyra_ast::Stmt::Expr(zelyra_ast::Expr {
             kind: zelyra_ast::ExprKind::Sql {
                 result_type: Type::Unit,

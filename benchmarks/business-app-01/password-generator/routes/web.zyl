@@ -1,0 +1,50 @@
+import "zelyra/ui" as ui
+import "domain::passwords" as passwords
+
+fn generate_password(length: Int, character_set: String) -> String uses Random {
+    return passwords::generate_password(length, character_set)
+}
+
+page "/" {
+    html {
+        <Container>
+            <PageHeader
+                title="Passwortgenerator"
+                description="Erzeuge starke Passwörter direkt auf diesem Server."
+            />
+            <Grid columns="two">
+                <Card title="Sicher und lokal">
+                    <p>Die Zufallswerte werden mit Zelyras sicherer Random-Capability erzeugt. Passwörter werden weder gespeichert noch protokolliert.</p>
+                    <Button label="Passwort erstellen" href="/generator" appearance="success" />
+                </Card>
+                <Card title="Zelyra Work-Modus">
+                    <p>Diese Anwendung läuft mit <code>ZELYRA_LEVEL=work</code>. Sie enthält keinen Lernmodus und keine Anwendung in einer Fremdsprache.</p>
+                </Card>
+            </Grid>
+        </Container>
+    }
+}
+
+form PasswordGenerator {
+    route: "/generator"
+
+    field length: Int {
+        label: "Länge"
+        required
+        min_value: "8"
+        max_value: "64"
+        widget: number
+    }
+
+    field character_set: String {
+        label: "Zeichensatz"
+        required
+        choices: ["Nur Kleinbuchstaben", "Nur Ziffern", "Buchstaben", "Buchstaben und Ziffern", "Alle Zeichen"]
+    }
+
+    action generate {
+        label: "Passwort erzeugen"
+        handler: generate_password
+        uses Random
+    }
+}

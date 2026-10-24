@@ -248,6 +248,7 @@
   "form.edit_title": "Edit {field}",
   "form.create_submit": "Create",
   "form.save_submit": "Save",
+  "form.result_title": "Result",
   "form.saved": "Saved.",
   "form.correct_errors": "Please correct the errors.",
   "form.validated_not_enabled": "Input validated. Database action execution is not enabled yet.",

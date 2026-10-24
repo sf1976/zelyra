@@ -1033,6 +1033,41 @@ duplicate parameters, malformed segments, and collisions with other routes
 are rejected. GET still renders the form normally, and POST retains the
 standard CSRF and validation checks.
 
+A standalone form can call one typed Zelyra function after CSRF and field
+validation succeed. The function parameters must match the form fields by name,
+order, and type, and the function must return `String`. The action declares the
+function's capabilities with `uses`; normal type and effect checks still
+apply. Handler actions cannot combine this callback with SQL statements,
+redirects, confirmations, action-specific authorization/notices, or
+action-specific fields; only the label and declared capabilities are used.
+File inputs are not supported. The
+returned text is HTML-escaped and rendered in the response with `no-store`
+headers; the framework does not persist the result.
+
+~~~zelyra
+fn generate(length: Int, character_set: String) -> String uses Random {
+    return passwords::generate(length, character_set)
+}
+
+form PasswordGenerator {
+    route: "/generator"
+    field length: Int { required min_value: "8" max_value: "64" }
+    field character_set: String {
+        required
+        choices: ["Letters", "All characters"]
+    }
+    action generate {
+        label: "Generate password"
+        handler: generate
+        uses Random
+    }
+}
+~~~
+
+This feature is intended for validated form submissions that return a small
+text result. It does not add an application-specific template language or
+replace database-backed CRUD actions.
+
 For an opaque, one-time route token, a standalone form can verify it on GET and
 require a matching row again inside the POST transaction before any later
 statement is executed:

@@ -248,6 +248,7 @@
   "form.edit_title": "{field} bearbeiten",
   "form.create_submit": "Anlegen",
   "form.save_submit": "Speichern",
+  "form.result_title": "Ergebnis",
   "form.saved": "Gespeichert.",
   "form.correct_errors": "Bitte korrigieren Sie die Eingaben.",
   "form.validated_not_enabled": "Eingaben geprüft. Datenbankaktionen sind noch nicht aktiviert.",

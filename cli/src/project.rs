@@ -1043,6 +1043,33 @@ fn link_modules(
             }
             for action in &mut form.actions {
                 linker.rewrite_action_types(action)?;
+                if let Some(handler) = &mut action.handler {
+                    let mut expression = Expr {
+                        kind: ExprKind::Call {
+                            name: handler.clone(),
+                            type_args: Vec::new(),
+                            args: Vec::new(),
+                        },
+                        span: action.span,
+                    };
+                    rewrite_expr(
+                        &mut expression,
+                        path,
+                        module_name,
+                        &module.imports,
+                        function_sets
+                            .get(path)
+                            .expect("current module functions are indexed"),
+                        &function_sets,
+                        &module_names,
+                        &root_functions,
+                        &module.relative_path,
+                        false,
+                    )?;
+                    if let ExprKind::Call { name, .. } = expression.kind {
+                        *handler = name;
+                    }
+                }
                 rewrite_action_functions(
                     action,
                     path,

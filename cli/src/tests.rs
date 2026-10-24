@@ -128,6 +128,59 @@ fn typed_crud_action_bodies_are_checked_in_row_and_session_scope() {
 }
 
 #[test]
+fn standalone_form_handlers_require_matching_typed_fields_and_effects() {
+    let directory = env::temp_dir().join(format!(
+        "zelyra-standalone-form-handler-{}-{}",
+        std::process::id(),
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos()
+    ));
+    fs::create_dir_all(&directory).unwrap();
+    let entry = directory.join("main.zyl").to_string_lossy().into_owned();
+    let valid = r#"
+        fn generate_password(length: Int) -> String uses Random {
+            return "generated"
+        }
+        form PasswordGenerator {
+            field length: Int { required min_value: "8" max_value: "64" }
+            action generate {
+                handler: generate_password
+                uses Random
+            }
+        }
+        fn main() {}
+    "#;
+    let program = zelyra_parser::parse(&zelyra_lexer::lex(valid).unwrap()).unwrap();
+    assert!(validate_typed_crud_actions(&entry, &program));
+
+    let invalid_signature = valid.replace("field length: Int", "field size: Int");
+    let program = zelyra_parser::parse(&zelyra_lexer::lex(&invalid_signature).unwrap()).unwrap();
+    assert!(!validate_typed_crud_actions(&entry, &program));
+
+    let missing_effect = valid.replace("                uses Random\n", "");
+    let program = zelyra_parser::parse(&zelyra_lexer::lex(&missing_effect).unwrap()).unwrap();
+    assert!(!validate_typed_crud_actions(&entry, &program));
+
+    let table_backed = valid.replace(
+        "form PasswordGenerator {",
+        "table generated { id: Id primary auto length: Int required }\n        form PasswordGenerator -> generated {",
+    );
+    let program = zelyra_parser::parse(&zelyra_lexer::lex(&table_backed).unwrap()).unwrap();
+    assert!(!validate_typed_crud_actions(&entry, &program));
+
+    let unsupported_confirmation = valid.replace(
+        "handler: generate_password",
+        "handler: generate_password\n                confirm: \"Continue?\"",
+    );
+    let program =
+        zelyra_parser::parse(&zelyra_lexer::lex(&unsupported_confirmation).unwrap()).unwrap();
+    assert!(!validate_typed_crud_actions(&entry, &program));
+    fs::remove_dir_all(directory).unwrap();
+}
+
+#[test]
 fn typed_crud_action_database_capability_requires_project_grant() {
     let directory = env::temp_dir().join(format!(
         "zelyra-typed-crud-action-capability-{}-{}",

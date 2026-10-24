@@ -2570,6 +2570,7 @@ impl<'a> Parser<'a> {
         let mut redirect = None;
         let mut requires_auth = false;
         let mut permissions = Vec::new();
+        let mut handler = None;
         let mut capabilities = Vec::new();
         let mut execute_body = None;
         let mut guard = None;
@@ -2585,6 +2586,16 @@ impl<'a> Parser<'a> {
             } else if self.at(&TokenKind::Permits) {
                 self.advance();
                 permissions.push(self.string_value("permission")?);
+            } else if self.at(&TokenKind::Handler) {
+                let handler_span = self.advance().span;
+                self.expect(TokenKind::Colon, "`:` after form handler")?;
+                let (name, _) = self.ident("form handler function")?;
+                if handler.replace(name).is_some() {
+                    return Err(ParseError {
+                        message: "form action may declare only one `handler`".into(),
+                        span: handler_span,
+                    });
+                }
             } else if self.at(&TokenKind::Uses) {
                 self.advance();
                 loop {
@@ -2680,6 +2691,7 @@ impl<'a> Parser<'a> {
             fields,
             requires_auth,
             permissions,
+            handler,
             capabilities,
             require_match,
             statements,
@@ -6351,6 +6363,25 @@ mod tests {
         assert_eq!(program.forms[1].table.as_deref(), Some("customers"));
         assert_eq!(program.forms[1].path.as_deref(), Some("/customers/new"));
         assert_eq!(program.forms[1].fields.len(), 2);
+    }
+
+    #[test]
+    fn parses_typed_standalone_form_handler_and_capabilities() {
+        let program = parse(
+            &lex(r#"form PasswordGenerator {
+                    field length: Int { required min_value: "8" max_value: "64" }
+                    action generate {
+                        handler: generate_password
+                        uses Random
+                    }
+                }
+                fn main() {}"#)
+            .unwrap(),
+        )
+        .unwrap();
+        let action = &program.forms[0].actions[0];
+        assert_eq!(action.handler.as_deref(), Some("generate_password"));
+        assert_eq!(action.capabilities, ["Random"]);
     }
 
     #[test]

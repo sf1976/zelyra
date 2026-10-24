@@ -760,6 +760,8 @@ pub struct FormAction {
     pub fields: Vec<FormField>,
     pub requires_auth: bool,
     pub permissions: Vec<String>,
+    /// Typed Zelyra function used by a standalone form action.
+    pub handler: Option<String>,
     /// Explicit language capabilities required by the typed execution block.
     pub capabilities: Vec<String>,
     /// Require the first SQL statement to be a SELECT and to return a row in

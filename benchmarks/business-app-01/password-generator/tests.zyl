@@ -1,0 +1,22 @@
+import "domain::passwords" as passwords
+
+pub fn run() uses Random {
+    for length in [8, 12, 20, 32, 64] {
+        password = passwords::generate_password(length, "Alle Zeichen")
+        assert(len(password) == length, "generated password has the requested length")
+    }
+
+    for character_set in ["Nur Kleinbuchstaben", "Nur Ziffern", "Buchstaben", "Buchstaben und Ziffern", "Alle Zeichen"] {
+        password = passwords::generate_password(24, character_set)
+        assert(len(password) == 24, "every supported character set returns the requested length")
+    }
+
+    assert(passwords::generate_password(7, "Alle Zeichen") == "", "lengths below the supported minimum are rejected")
+    assert(passwords::generate_password(65, "Alle Zeichen") == "", "lengths above the supported maximum are rejected")
+    assert(passwords::generate_password(24, "unsupported") == "", "unknown character profiles are rejected")
+    print("PASS password generator bounds and character-set profiles")
+}
+
+fn main() uses Random {
+    run()
+}

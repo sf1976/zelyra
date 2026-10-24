@@ -98,6 +98,15 @@ manually provisioned users, server-enforced roles, row-level permissions, and
 audit history. MariaDB is the primary database. The UI, validation, SQL,
 transactions, authorization, and application logic must use idiomatic Zelyra.
 
+**Current evidence (2026-10-24):** Zelyra 1.3.0 is installed under `/opt/`.
+The password-generator project uses Zelyra's native `Random` capability,
+typed standalone form handlers, server-side field validation, and the Work
+level. The live HTTP check passed all five character profiles, rejected invalid
+lengths and profiles, and confirmed escaped non-cacheable results. Handler
+support is still on a feature branch and has not been merged or released; the
+benchmark's Phase A must not be called complete until the native implementation
+is reviewed and the capability matrix and test plan are recorded.
+
 Apply STOP → ANALYZE → FIX → TEST → RESUME whenever a requirement exposes a
 language, compiler, runtime, database, UI, or Studio gap. Do not hide gaps with
 foreign-language business logic, direct DOM manipulation, or benchmark-only

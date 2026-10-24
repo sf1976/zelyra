@@ -9,6 +9,21 @@ pub fn render_form(
     render_form_with_options(route, values, errors, notice, &HashMap::new())
 }
 
+pub(super) fn render_form_result(
+    route: &FormRoute,
+    values: &HashMap<String, String>,
+    result: &str,
+    language: UiLanguage,
+) -> String {
+    let mut html = render_form_with_language(route, values, &[], None, &HashMap::new(), language);
+    html.push_str("<section class=\"zelyra-form-result\" aria-live=\"polite\" aria-labelledby=\"zelyra-form-result-title\"><h2 id=\"zelyra-form-result-title\">");
+    html.push_str(&tr(language, "form.result_title"));
+    html.push_str("</h2><output><code>");
+    html.push_str(&html_escape(result));
+    html.push_str("</code></output></section>");
+    html
+}
+
 pub(super) fn render_form_with_options(
     route: &FormRoute,
     values: &HashMap<String, String>,
@@ -410,6 +425,14 @@ pub(super) fn render_form_with_language(
         .submit
         .as_deref()
         .map(|submit| localize_user_text(language, submit))
+        .or_else(|| {
+            route
+                .form
+                .actions
+                .first()
+                .and_then(|action| action.label.as_deref())
+                .map(|label| localize_user_text(language, label))
+        })
         .unwrap_or(default_submit);
     html.push_str(&html_escape_preserving_locale_references(&submit));
     html.push_str("</button></form>");

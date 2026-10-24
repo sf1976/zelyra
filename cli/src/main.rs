@@ -2012,23 +2012,122 @@ fn validate_program(
 
 fn validate_typed_crud_actions(path: &str, program: &zelyra_ast::Program) -> bool {
     let mut valid = true;
-    for action in program.forms.iter().flat_map(|form| form.actions.iter()) {
-        if action.execute_body.is_some()
-            || action.guard.is_some()
-            || !action.capabilities.is_empty()
-        {
-            diagnostic_with_span(
-                path,
-                "E-FORM-002",
-                "typed execution blocks, guards, and action capabilities are supported only inside CRUD actions",
-                action.span,
-            );
-            valid = false;
+    for form in &program.forms {
+        for action in &form.actions {
+            if let Some(handler_name) = &action.handler {
+                let mut report = |code: &str, message: String| {
+                    diagnostic_with_span(path, code, &message, action.span);
+                    valid = false;
+                };
+                if form.table.is_some() {
+                    report(
+                        "E-FORM-003",
+                        "form handlers are currently supported only by standalone forms".into(),
+                    );
+                }
+                if form.actions.len() != 1 {
+                    report(
+                        "E-FORM-003",
+                        "a standalone form handler requires exactly one action".into(),
+                    );
+                }
+                if action.execute_body.is_some()
+                    || action.guard.is_some()
+                    || !action.statements.is_empty()
+                    || !action.fields.is_empty()
+                    || action.redirect.is_some()
+                    || action.success.is_some()
+                    || action.confirm.is_some()
+                    || action.confirm_page.is_some()
+                    || action.success_page.is_some()
+                    || action.error_page.is_some()
+                    || action.icon.is_some()
+                    || action.requires_auth
+                    || !action.permissions.is_empty()
+                {
+                    report(
+                        "E-FORM-003",
+                        "a standalone form handler action may declare only its label and capabilities; SQL, redirects, confirmation, authorization, notices, guards, and action-specific fields are not supported".into(),
+                    );
+                }
+                let Some(function) = program
+                    .functions
+                    .iter()
+                    .find(|function| function.name == *handler_name)
+                else {
+                    report(
+                        "E-FORM-003",
+                        format!("standalone form handler function `{handler_name}` was not found"),
+                    );
+                    continue;
+                };
+                if !function.type_params.is_empty()
+                    || function.return_type.as_ref() != Some(&Type::String)
+                    || function.params.len() != form.fields.len()
+                {
+                    report(
+                        "E-FORM-004",
+                        format!("standalone form handler `{handler_name}` must be a non-generic function returning String with one parameter for each form field"),
+                    );
+                    continue;
+                }
+                let mut signature_matches = true;
+                for (parameter, field) in function.params.iter().zip(&form.fields) {
+                    if parameter.name != field.name || field.ty.as_ref() != Some(&parameter.ty) {
+                        signature_matches = false;
+                        break;
+                    }
+                    if field.file_upload.is_some() {
+                        signature_matches = false;
+                        break;
+                    }
+                }
+                if !signature_matches {
+                    report(
+                        "E-FORM-004",
+                        format!("standalone form fields must match handler `{handler_name}` parameter names, order, and types; file inputs are not supported"),
+                    );
+                }
+                for capability in &function.capabilities {
+                    if !action
+                        .capabilities
+                        .iter()
+                        .any(|declared| declared == capability)
+                    {
+                        report(
+                            "E-FORM-005",
+                            format!("form action must declare `uses {capability}` required by handler `{handler_name}`"),
+                        );
+                    }
+                }
+                continue;
+            }
+            if action.execute_body.is_some()
+                || action.guard.is_some()
+                || !action.capabilities.is_empty()
+            {
+                diagnostic_with_span(
+                    path,
+                    "E-FORM-002",
+                    "typed execution blocks, guards, and action capabilities are supported only inside CRUD actions or a standalone form handler",
+                    action.span,
+                );
+                valid = false;
+            }
         }
     }
 
     for crud in &program.cruds {
         for action in &crud.actions {
+            if action.handler.is_some() {
+                diagnostic_with_span(
+                    path,
+                    "E-CRUD-010",
+                    "form handlers are not valid on CRUD actions; use a typed CRUD action execution block",
+                    action.span,
+                );
+                valid = false;
+            }
             if action.execute_body.is_none()
                 && action.guard.is_none()
                 && !action.capabilities.is_empty()
@@ -11367,6 +11466,27 @@ fn serve_command(mut args: impl Iterator<Item = String>) -> ExitCode {
             eprintln!("error[E-WEB-003]: cannot create a secure CSRF token");
             return ExitCode::from(1);
         };
+        let form_handler = form
+            .actions
+            .iter()
+            .find_map(|action| action.handler.as_ref())
+            .map(|handler_name| {
+                let program = program.clone();
+                let handler_name = handler_name.clone();
+                let database_url = database_url.clone();
+                let capability_grants = capability_grants.clone();
+                let runtime_policy = runtime_policy.clone();
+                zelyra_web::FormHandler::new(handler_name.clone(), move |values| {
+                    execute_standalone_form_handler(
+                        &program,
+                        &handler_name,
+                        values,
+                        database_url.as_deref(),
+                        capability_grants.as_ref(),
+                        runtime_policy.as_ref(),
+                    )
+                })
+            });
         let table = form.table.as_deref().and_then(|table_name| {
             program
                 .tables
@@ -11384,6 +11504,7 @@ fn serve_command(mut args: impl Iterator<Item = String>) -> ExitCode {
                 .clone()
                 .unwrap_or_else(|| format!("/forms/{}", form.name)),
             form: form.clone(),
+            handler: form_handler,
             table,
             schema: Some(schema.clone()),
             tenant_column: None,
@@ -12203,6 +12324,7 @@ fn generated_crud_form(
                 confirm_page: None,
                 success_page: None,
                 error_page: None,
+                handler: None,
                 fields: Vec::new(),
                 requires_auth: false,
                 permissions: Vec::new(),
@@ -12223,6 +12345,7 @@ fn generated_crud_form(
             }],
             span: table.span,
         },
+        handler: None,
         table: Some(table.clone()),
         schema: Some(schema.clone()),
         tenant_column: crud
@@ -12322,6 +12445,7 @@ fn generated_crud_action(
                 actions: vec![action.clone()],
                 span: action.span,
             },
+            handler: None,
             table: Some(table.clone()),
             schema: Some(schema.clone()),
             tenant_column: crud
@@ -12795,6 +12919,49 @@ fn dispatch_api_with_capabilities(
     ) {
         Ok(value) => api_result_response(api, &value),
         Err(error) => api_error_response(500, "InternalServerError", &error.message),
+    }
+}
+
+fn execute_standalone_form_handler(
+    program: &zelyra_ast::Program,
+    handler: &str,
+    values: &HashMap<String, String>,
+    database_url: Option<&str>,
+    capability_grants: Option<&HashSet<String>>,
+    runtime_policy: Option<&RuntimePolicy>,
+) -> Result<String, String> {
+    let function = program
+        .functions
+        .iter()
+        .find(|function| function.name == handler)
+        .ok_or_else(|| format!("form handler `{handler}` disappeared after compilation"))?;
+    let mut arguments = Vec::with_capacity(function.params.len());
+    for parameter in &function.params {
+        let Some(raw) = values.get(&parameter.name) else {
+            if matches!(parameter.ty, Type::Option(_)) {
+                arguments.push(RuntimeValue::Option(None));
+                continue;
+            }
+            return Err(format!(
+                "validated form value `{}` is missing",
+                parameter.name
+            ));
+        };
+        let value = serde_json::Value::String(raw.clone());
+        arguments.push(api_value_json(&value, &parameter.ty, program)?);
+    }
+    match execute_function_with_capabilities_and_policies(
+        program,
+        handler,
+        arguments,
+        database_url,
+        capability_grants,
+        runtime_policy,
+    )
+    .map_err(|error| error.message)?
+    {
+        RuntimeValue::String(value) => Ok(value),
+        _ => Err(format!("form handler `{handler}` did not return String")),
     }
 }
 

@@ -143,6 +143,39 @@ fn valid_origin(origin: &str) -> bool {
 }
 
 type ApiHandler = dyn Fn(&Request, &HashMap<String, String>, Option<i64>) -> Response + Send + Sync;
+type StandaloneFormHandler =
+    dyn Fn(&HashMap<String, String>) -> Result<String, String> + Send + Sync;
+
+#[derive(Clone)]
+pub struct FormHandler {
+    pub name: String,
+    call: Arc<StandaloneFormHandler>,
+}
+
+impl FormHandler {
+    pub fn new(
+        name: impl Into<String>,
+        call: impl Fn(&HashMap<String, String>) -> Result<String, String> + Send + Sync + 'static,
+    ) -> Self {
+        Self {
+            name: name.into(),
+            call: Arc::new(call),
+        }
+    }
+
+    fn execute(&self, values: &HashMap<String, String>) -> Result<String, String> {
+        (self.call)(values)
+    }
+}
+
+impl fmt::Debug for FormHandler {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("FormHandler")
+            .field("name", &self.name)
+            .finish_non_exhaustive()
+    }
+}
 
 #[derive(Clone)]
 pub struct ApiRoute {
@@ -333,16 +366,23 @@ impl Response {
     }
 
     pub fn to_http(&self) -> String {
+        let referrer_policy = self
+            .headers
+            .iter()
+            .find(|(name, _)| name.eq_ignore_ascii_case("referrer-policy"))
+            .map_or("same-origin", |(_, value)| value.as_str());
         format!(
-            "HTTP/1.1 {} {}\r\nContent-Type: {}\r\nX-Content-Type-Options: nosniff\r\nX-Frame-Options: DENY\r\nReferrer-Policy: same-origin\r\n{}{}Content-Length: {}\r\nConnection: close\r\n\r\n{}",
+            "HTTP/1.1 {} {}\r\nContent-Type: {}\r\nX-Content-Type-Options: nosniff\r\nX-Frame-Options: DENY\r\nReferrer-Policy: {}\r\n{}{}Content-Length: {}\r\nConnection: close\r\n\r\n{}",
             self.status,
             self.reason,
             self.content_type,
+            referrer_policy,
             self.location
                 .as_deref()
                 .map_or(String::new(), |location| format!("Location: {location}\r\n")),
             self.headers
                 .iter()
+                .filter(|(name, _)| !name.eq_ignore_ascii_case("referrer-policy"))
                 .map(|(name, value)| format!("{name}: {value}\r\n"))
                 .collect::<String>(),
             self.body.len(),
@@ -357,17 +397,26 @@ impl Response {
             .iter()
             .find(|(name, _)| name.eq_ignore_ascii_case("content-length"))
             .map_or_else(|| body.len().to_string(), |(_, value)| value.clone());
+        let referrer_policy = self
+            .headers
+            .iter()
+            .find(|(name, _)| name.eq_ignore_ascii_case("referrer-policy"))
+            .map_or("same-origin", |(_, value)| value.as_str());
         let head = format!(
-            "HTTP/1.1 {} {}\r\nContent-Type: {}\r\nX-Content-Type-Options: nosniff\r\nX-Frame-Options: DENY\r\nReferrer-Policy: same-origin\r\n{}{}Content-Length: {}\r\nConnection: close\r\n\r\n",
+            "HTTP/1.1 {} {}\r\nContent-Type: {}\r\nX-Content-Type-Options: nosniff\r\nX-Frame-Options: DENY\r\nReferrer-Policy: {}\r\n{}{}Content-Length: {}\r\nConnection: close\r\n\r\n",
             self.status,
             self.reason,
             self.content_type,
+            referrer_policy,
             self.location
                 .as_deref()
                 .map_or(String::new(), |location| format!("Location: {location}\r\n")),
             self.headers
                 .iter()
-                .filter(|(name, _)| !name.eq_ignore_ascii_case("content-length"))
+                .filter(|(name, _)| {
+                    !name.eq_ignore_ascii_case("content-length")
+                        && !name.eq_ignore_ascii_case("referrer-policy")
+                })
                 .map(|(name, value)| format!("{name}: {value}\r\n"))
                 .collect::<String>(),
             content_length,
@@ -548,6 +597,8 @@ pub struct FormRoute {
     pub path: String,
     pub action: String,
     pub form: FormDef,
+    /// Host bridge for a compiler-checked standalone form handler.
+    pub handler: Option<FormHandler>,
     pub table: Option<TableDef>,
     pub schema: Option<Schema>,
     /// Tenant key for generated CRUD forms; resolved from the authenticated request.
@@ -2015,7 +2066,14 @@ impl WebApp {
                 if form.post_only && request.method != "POST" {
                     continue;
                 }
-                if self.database_capability_granted == Some(false) {
+                let has_handler = form
+                    .form
+                    .actions
+                    .iter()
+                    .any(|action| action.handler.is_some());
+                if self.database_capability_granted == Some(false)
+                    && (!has_handler || form_requires_database(form))
+                {
                     return database_capability_denied();
                 }
                 let (requires_auth, permissions) = form_authorization(form);
@@ -6324,6 +6382,23 @@ fn database_capability_denied() -> Response {
     )
 }
 
+fn form_requires_database(form: &FormRoute) -> bool {
+    form.form.table.is_some()
+        || form.form.verify.is_some()
+        || form.form.public_token.is_some()
+        || form.tenant_column.is_some()
+        || form.recipient_column.is_some()
+        || form.audit_table.is_some()
+        || form.form.actions.iter().any(|action| {
+            !action.statements.is_empty()
+                || action.execute_body.is_some()
+                || action.guard.is_some()
+                || action.capabilities.iter().any(|capability| {
+                    capability == "Database" || capability.starts_with("Database(")
+                })
+        })
+}
+
 impl Router {
     pub fn new(routes: Vec<Route>) -> Self {
         Self { routes }
@@ -7323,6 +7398,46 @@ fn dispatch_form_with_language(
                 return Response::html(500, "<h1>500 Internal Server Error</h1>");
             }
         }
+    }
+    if form
+        .form
+        .actions
+        .iter()
+        .any(|action| action.handler.is_some())
+    {
+        let Some(handler) = &form.handler else {
+            eprintln!("zelyra web: standalone form handler was not installed");
+            return Response::html(500, "<h1>500 Internal Server Error</h1>");
+        };
+        let result = match handler.execute(&validation.values) {
+            Ok(result) if result.len() <= 4096 => result,
+            Ok(_) => {
+                eprintln!("zelyra web: standalone form handler result exceeded 4096 bytes");
+                return Response::html(500, "<h1>500 Internal Server Error</h1>");
+            }
+            Err(error) => {
+                eprintln!(
+                    "zelyra web: standalone form handler `{}` failed: {error}",
+                    handler.name
+                );
+                return Response::html(
+                    500,
+                    "<h1>500 Internal Server Error</h1><p>The form action could not be completed.</p>",
+                );
+            }
+        };
+        let mut response = Response::html(
+            200,
+            forms::render_form_result(&rendered_form, &values, &result, language),
+        );
+        response
+            .headers
+            .push(("Cache-Control".into(), "no-store, private".into()));
+        response.headers.push(("Pragma".into(), "no-cache".into()));
+        response
+            .headers
+            .push(("Referrer-Policy".into(), "no-referrer".into()));
+        return response;
     }
     if let Some(action) = form.form.actions.first() {
         let Some(database_url) = database_url else {
