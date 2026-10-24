@@ -101,7 +101,7 @@ html:has(form[action="/login"]) form[action="/login"] input {
     width: 100%;
     min-height: 3rem;
     padding: .7rem .85rem;
-    border: 1px solid var(--z-color-border);
+    border: 1px solid var(--z-color-control-border);
     border-radius: .7rem;
     background: var(--z-color-surface);
     color: var(--z-color-text);

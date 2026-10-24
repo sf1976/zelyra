@@ -46,6 +46,13 @@
   :where(html[data-z-ui]) .z-grid--two { --z-grid-columns: 2; }
   :where(html[data-z-ui]) .z-grid--three { --z-grid-columns: 3; }
   :where(html[data-z-ui]) .z-grid--four { --z-grid-columns: 4; }
+  :where(html[data-z-ui]) .z-admin-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    align-items: start;
+    gap: var(--z-space-4);
+  }
+  :where(html[data-z-ui]) .z-admin-grid__wide { grid-column: 1 / -1; }
   :where(html[data-z-ui]) .z-divider { height: 1px; margin-block: var(--z-space-5); border: 0; background: var(--z-color-border); }
 
   :where(html[data-z-ui]) .z-app-shell {
@@ -118,6 +125,8 @@
   }
 
   @media (max-width: 900px) {
+    :where(html[data-z-ui]) .z-admin-grid { grid-template-columns: minmax(0, 1fr); }
+    :where(html[data-z-ui]) .z-admin-grid__wide { grid-column: auto; }
     :where(html[data-z-ui]) .z-grid--four,
     :where(html[data-z-ui]) .z-grid--three { --z-grid-columns: 2; }
     :where(html[data-z-ui]) .z-app-shell {

@@ -53,15 +53,21 @@ use ui::*;
 
 const ZELYRA_DESIGN_SYSTEM_CSS: &str = include_str!("../assets/zelyra-ui.v1.css");
 const ZELYRA_UI_JAVASCRIPT: &str = include_str!("../assets/zelyra-ui.v1.js");
+const ZELYRA_UI_LOGO_PNG: &[u8] = include_bytes!("../../assets/zelyra-logo.png");
 pub const ZELYRA_UI_CSS_PATH: &str = concat!(
     "/__zelyra/ui/",
     env!("CARGO_PKG_VERSION"),
-    "/v1.2.1/zelyra-ui.css"
+    "/v1.2.2/zelyra-ui.css"
 );
 pub const ZELYRA_UI_JS_PATH: &str = concat!(
     "/__zelyra/ui/",
     env!("CARGO_PKG_VERSION"),
-    "/v1.2.1/zelyra-ui.js"
+    "/v1.2.2/zelyra-ui.js"
+);
+pub const ZELYRA_UI_LOGO_PATH: &str = concat!(
+    "/__zelyra/ui/",
+    env!("CARGO_PKG_VERSION"),
+    "/zelyra-logo.png"
 );
 pub const PROJECT_UI_CSS_PATH: &str = "/__zelyra/ui/project.css";
 pub const PROJECT_THEME_CSS_PATH: &str = "/__zelyra/theme.css";
@@ -1931,6 +1937,15 @@ impl WebApp {
                     .with_header("Cache-Control", "public, max-age=31536000, immutable"),
                 "HEAD" => Response::empty(200)
                     .with_header("Content-Type", "text/css; charset=utf-8")
+                    .with_header("Cache-Control", "public, max-age=31536000, immutable"),
+                _ => Response::empty(405).with_header("Allow", "GET, HEAD"),
+            };
+        }
+        if request.path == ZELYRA_UI_LOGO_PATH {
+            return match request.method.as_str() {
+                "GET" => Response::binary(200, "image/png", ZELYRA_UI_LOGO_PNG.to_vec())
+                    .with_header("Cache-Control", "public, max-age=31536000, immutable"),
+                "HEAD" => Response::binary(200, "image/png", Vec::new())
                     .with_header("Cache-Control", "public, max-age=31536000, immutable"),
                 _ => Response::empty(405).with_header("Allow", "GET, HEAD"),
             };
@@ -4955,10 +4970,10 @@ fn account_profile_error(
         status,
         format!(
             "<main><h1>{}</h1><p>{}</p><p><a href=\"{}\">{}</a></p></main>",
-            html_escape(&tr(language, &format!("http.{status}"))),
-            html_escape(&message),
+            html_escape_preserving_locale_references(&tr(language, &format!("http.{status}"))),
+            html_escape_preserving_locale_references(&message),
             ACCOUNT_PROFILE_PATH,
-            html_escape(&tr(language, "auth.self_profile_title")),
+            html_escape_preserving_locale_references(&tr(language, "auth.self_profile_title")),
         ),
     )
     .with_header("Cache-Control", "no-store")
@@ -4972,11 +4987,11 @@ fn render_account_profile(
 ) -> String {
     let csrf = html_escape(auth.csrf.token());
     let mut html = format!(
-        "<main><header class=\"z-page-header\"><div class=\"z-page-header__copy\"><h1 class=\"z-page-header__title\">{}</h1><p class=\"z-page-header__description\">{}</p></div></header><section class=\"z-card\" aria-labelledby=\"profile-details-title\"><header class=\"z-card__header\"><h2 class=\"z-card__title\" id=\"profile-details-title\">{}</h2></header><div class=\"z-card__body\"><form class=\"z-stack\" method=\"post\" action=\"{}\"><input type=\"hidden\" name=\"_zelyra_csrf\" value=\"{csrf}\"><input type=\"hidden\" name=\"operation\" value=\"update_profile\">",
+        "<main class=\"z-account-profile\"><header class=\"z-page-header\"><div class=\"z-page-header__copy\"><h1 class=\"z-page-header__title\">{}</h1><p class=\"z-page-header__description\">{}</p></div></header><form class=\"z-stack z-account-profile__form\" method=\"post\" action=\"{}\"><input type=\"hidden\" name=\"_zelyra_csrf\" value=\"{csrf}\"><div class=\"z-grid z-grid--two\"><section class=\"z-card\" aria-labelledby=\"profile-details-title\"><header class=\"z-card__header\"><h2 class=\"z-card__title\" id=\"profile-details-title\">{}</h2></header><div class=\"z-card__body z-stack\">",
         tr(language, "auth.self_profile_title"),
         tr(language, "auth.self_profile_help"),
-        tr(language, "auth.profile_details"),
         ACCOUNT_PROFILE_PATH,
+        tr(language, "auth.profile_details"),
     );
     if let Some(display_name) = display_name {
         html.push_str(&format!(
@@ -4986,16 +5001,15 @@ fn render_account_profile(
         ));
     }
     html.push_str(&format!(
-        "<label class=\"z-field\" for=\"profile-email\"><span class=\"z-field__label\">{}</span><input class=\"z-input\" id=\"profile-email\" name=\"email\" type=\"email\" maxlength=\"254\" required value=\"{}\"></label><label class=\"z-field\" for=\"profile-current-password\"><span class=\"z-field__label\">{}</span><input class=\"z-input\" id=\"profile-current-password\" name=\"current_password\" type=\"password\" autocomplete=\"current-password\" required></label><div class=\"z-action-stack\"><button class=\"z-button z-button--primary\" type=\"submit\">{}</button></div></form></div></section><section class=\"z-card\" aria-labelledby=\"change-password-title\"><header class=\"z-card__header\"><h2 class=\"z-card__title\" id=\"change-password-title\">{}</h2></header><div class=\"z-card__body\"><form class=\"z-stack\" method=\"post\" action=\"{}\"><input type=\"hidden\" name=\"_zelyra_csrf\" value=\"{csrf}\"><input type=\"hidden\" name=\"operation\" value=\"change_password\"><label class=\"z-field\" for=\"password-current\"><span class=\"z-field__label\">{}</span><input class=\"z-input\" id=\"password-current\" name=\"current_password\" type=\"password\" autocomplete=\"current-password\" required></label><label class=\"z-field\" for=\"password-new\"><span class=\"z-field__label\">{}</span><input class=\"z-input\" id=\"password-new\" name=\"new_password\" type=\"password\" minlength=\"12\" autocomplete=\"new-password\" required></label><label class=\"z-field\" for=\"password-confirm\"><span class=\"z-field__label\">{}</span><input class=\"z-input\" id=\"password-confirm\" name=\"confirm_password\" type=\"password\" minlength=\"12\" autocomplete=\"new-password\" required></label><div class=\"z-action-stack\"><button class=\"z-button z-button--primary\" type=\"submit\">{}</button></div></form></div></section></main>",
+        "<label class=\"z-field\" for=\"profile-email\"><span class=\"z-field__label\">{}</span><input class=\"z-input\" id=\"profile-email\" name=\"email\" type=\"email\" maxlength=\"254\" required value=\"{}\"></label></div></section><section class=\"z-card\" aria-labelledby=\"change-password-title\"><header class=\"z-card__header\"><h2 class=\"z-card__title\" id=\"change-password-title\">{}</h2></header><div class=\"z-card__body z-stack\"><label class=\"z-field\" for=\"password-new\"><span class=\"z-field__label\">{}</span><input class=\"z-input\" id=\"password-new\" name=\"new_password\" type=\"password\" autocomplete=\"new-password\"></label><label class=\"z-field\" for=\"password-confirm\"><span class=\"z-field__label\">{}</span><input class=\"z-input\" id=\"password-confirm\" name=\"confirm_password\" type=\"password\" autocomplete=\"new-password\"></label></div></section></div><section class=\"z-card\" aria-labelledby=\"account-confirm-title\"><header class=\"z-card__header\"><h2 class=\"z-card__title\" id=\"account-confirm-title\">{}</h2></header><div class=\"z-card__body z-grid z-grid--two\"><label class=\"z-field\" for=\"account-current-password\"><span class=\"z-field__label\">{}</span><input class=\"z-input\" id=\"account-current-password\" name=\"current_password\" type=\"password\" autocomplete=\"current-password\" required></label><div class=\"z-action-stack\"><button class=\"z-button z-button--default\" type=\"submit\" name=\"operation\" value=\"update_profile\">{}</button><button class=\"z-button z-button--primary\" type=\"submit\" name=\"operation\" value=\"change_password\">{}</button></div></div></section></form></main>",
         tr(language, "auth.email"),
         html_escape(email),
-        tr(language, "auth.current_password"),
-        tr(language, "auth.save_profile"),
         tr(language, "auth.change_password"),
-        ACCOUNT_PROFILE_PATH,
-        tr(language, "auth.current_password"),
         tr(language, "auth.new_password"),
         tr(language, "auth.confirm_password"),
+        tr(language, "auth.profile_details"),
+        tr(language, "auth.current_password"),
+        tr(language, "auth.save_profile"),
         tr(language, "auth.change_password"),
     ));
     html
@@ -6278,7 +6292,7 @@ fn render_auth_admin(
         .find(|table| table.name == auth.table)
         .is_some_and(|table| table.columns.iter().any(|column| column.name == "active"));
     let mut html = format!(
-        "<main><header class=\"z-page-header\"><div class=\"z-page-header__copy\"><h1 class=\"z-page-header__title\">{}</h1><p class=\"z-page-header__description\">{}</p></div></header><section class=\"z-card\" aria-labelledby=\"auth-users-title\"><header class=\"z-card__header\"><h2 class=\"z-card__title\" id=\"auth-users-title\">{}</h2></header><div class=\"z-card__body\"><form class=\"z-stack\" method=\"post\" action=\"{path}\"><input type=\"hidden\" name=\"_zelyra_csrf\" value=\"{csrf}\"><input type=\"hidden\" name=\"operation\" value=\"create_user\"><label class=\"z-field\"><span class=\"z-field__label\">{}</span><input class=\"z-input\" name=\"email\" type=\"email\" autocomplete=\"email\" required></label><label class=\"z-field\"><span class=\"z-field__label\">{}</span><input class=\"z-input\" name=\"password\" type=\"password\" minlength=\"8\" autocomplete=\"new-password\" required></label><div class=\"z-action-stack\"><button class=\"z-button z-button--primary\" type=\"submit\">{}</button></div></form><div class=\"z-table-scroll\"><table class=\"z-table\"><thead><tr><th scope=\"col\">{}</th><th scope=\"col\">{}</th><th scope=\"col\">{}</th></tr></thead><tbody>",
+        "<main class=\"z-auth-admin\"><header class=\"z-page-header\"><div class=\"z-page-header__copy\"><h1 class=\"z-page-header__title\">{}</h1><p class=\"z-page-header__description\">{}</p></div></header><div class=\"z-admin-grid\"><section class=\"z-card z-admin-grid__wide\" aria-labelledby=\"auth-users-title\"><header class=\"z-card__header\"><h2 class=\"z-card__title\" id=\"auth-users-title\">{}</h2></header><div class=\"z-card__body\"><form class=\"z-grid z-grid--three z-admin-create-user\" method=\"post\" action=\"{path}\"><input type=\"hidden\" name=\"_zelyra_csrf\" value=\"{csrf}\"><input type=\"hidden\" name=\"operation\" value=\"create_user\"><label class=\"z-field\"><span class=\"z-field__label\">{}</span><input class=\"z-input\" name=\"email\" type=\"email\" autocomplete=\"email\" required></label><label class=\"z-field\"><span class=\"z-field__label\">{}</span><input class=\"z-input\" name=\"password\" type=\"password\" minlength=\"8\" autocomplete=\"new-password\" required></label><div class=\"z-action-stack z-admin-form__action\"><button class=\"z-button z-button--primary\" type=\"submit\">{}</button></div></form><div class=\"z-table-scroll\"><table class=\"z-table\"><thead><tr><th scope=\"col\">{}</th><th scope=\"col\">{}</th><th scope=\"col\">{}</th></tr></thead><tbody>",
         tr(language, "auth.admin_title"),
         tr(language, "auth.admin_description"),
         tr(language, "auth.users_title"),
@@ -6323,7 +6337,7 @@ fn render_auth_admin(
         html.push_str(&render_auth_sessions(auth, sessions, language));
     }
     html.push_str(&format!(
-        "<section class=\"z-card\" aria-labelledby=\"auth-assign-role-title\"><header class=\"z-card__header\"><h2 class=\"z-card__title\" id=\"auth-assign-role-title\">{}</h2></header><div class=\"z-card__body\"><form class=\"z-stack\" method=\"post\" action=\"{path}\"><input type=\"hidden\" name=\"_zelyra_csrf\" value=\"{csrf}\"><input type=\"hidden\" name=\"operation\" value=\"grant_role\"><label class=\"z-field\"><span class=\"z-field__label\">{}</span><input class=\"z-input\" name=\"user_id\" type=\"number\" min=\"1\" required></label><label class=\"z-field\"><span class=\"z-field__label\">{}</span><input class=\"z-input\" name=\"role\" required></label><div class=\"z-action-stack\"><button class=\"z-button z-button--primary\" type=\"submit\">{}</button></div></form></div></section><section class=\"z-card\" aria-labelledby=\"auth-role-assignments-title\"><header class=\"z-card__header\"><h2 class=\"z-card__title\" id=\"auth-role-assignments-title\">{}</h2></header><div class=\"z-card__body\"><div class=\"z-table-scroll\"><table class=\"z-table\"><thead><tr><th scope=\"col\">{}</th><th scope=\"col\">{}</th><th scope=\"col\">{}</th></tr></thead><tbody>",
+        "<section class=\"z-card\" aria-labelledby=\"auth-assign-role-title\"><header class=\"z-card__header\"><h2 class=\"z-card__title\" id=\"auth-assign-role-title\">{}</h2></header><div class=\"z-card__body\"><form class=\"z-stack\" method=\"post\" action=\"{path}\"><input type=\"hidden\" name=\"_zelyra_csrf\" value=\"{csrf}\"><input type=\"hidden\" name=\"operation\" value=\"grant_role\"><label class=\"z-field\"><span class=\"z-field__label\">{}</span><input class=\"z-input\" name=\"user_id\" type=\"number\" min=\"1\" required></label><label class=\"z-field\"><span class=\"z-field__label\">{}</span><input class=\"z-input\" name=\"role\" required></label><div class=\"z-action-stack\"><button class=\"z-button z-button--primary\" type=\"submit\">{}</button></div></form></div></section><section class=\"z-card z-admin-grid__wide\" aria-labelledby=\"auth-role-assignments-title\"><header class=\"z-card__header\"><h2 class=\"z-card__title\" id=\"auth-role-assignments-title\">{}</h2></header><div class=\"z-card__body\"><div class=\"z-table-scroll\"><table class=\"z-table\"><thead><tr><th scope=\"col\">{}</th><th scope=\"col\">{}</th><th scope=\"col\">{}</th></tr></thead><tbody>",
         tr(language, "auth.assign_role"),
         tr(language, "auth.user_id"),
         tr(language, "auth.role"),
@@ -6374,7 +6388,7 @@ fn render_auth_admin(
     }
     html.push_str("</tbody></table></div></div></section>");
     if auth.audit_table.is_some() {
-        html.push_str("<section class=\"z-card\" aria-labelledby=\"auth-audit-title\"><header class=\"z-card__header\"><h2 class=\"z-card__title\" id=\"auth-audit-title\">");
+        html.push_str("<section class=\"z-card z-admin-grid__wide\" aria-labelledby=\"auth-audit-title\"><header class=\"z-card__header\"><h2 class=\"z-card__title\" id=\"auth-audit-title\">");
         html.push_str(&tr(language, "auth.audit_log"));
         html.push_str("</h2></header><div class=\"z-card__body\"><p>");
         html.push_str(&tr(language, "auth.audit_latest"));
@@ -6398,7 +6412,7 @@ fn render_auth_admin(
         }
         html.push_str("</tbody></table></div></div></section>");
     }
-    html.push_str("</main>");
+    html.push_str("</div></main>");
     html
 }
 
@@ -6510,7 +6524,7 @@ fn render_auth_sessions(
     let path = html_escape(auth.admin_path.as_deref().unwrap_or("/"));
     let csrf = html_escape(auth.csrf.token());
     let mut html = format!(
-        "<section class=\"z-card\" aria-labelledby=\"auth-sessions-title\"><header class=\"z-card__header\"><h2 class=\"z-card__title\" id=\"auth-sessions-title\">{}</h2></header><div class=\"z-card__body\"><p>{}</p><div class=\"z-table-scroll\"><table class=\"z-table\"><thead><tr><th scope=\"col\">ID</th><th scope=\"col\">{}</th><th scope=\"col\">{}</th><th scope=\"col\">{}</th><th scope=\"col\">{}</th></tr></thead><tbody>",
+        "<section class=\"z-card z-admin-grid__wide\" aria-labelledby=\"auth-sessions-title\"><header class=\"z-card__header\"><h2 class=\"z-card__title\" id=\"auth-sessions-title\">{}</h2></header><div class=\"z-card__body\"><p>{}</p><div class=\"z-table-scroll\"><table class=\"z-table\"><thead><tr><th scope=\"col\">ID</th><th scope=\"col\">{}</th><th scope=\"col\">{}</th><th scope=\"col\">{}</th><th scope=\"col\">{}</th></tr></thead><tbody>",
         tr(language, "auth.sessions"),
         tr(language, "auth.sessions_help"),
         tr(language, "auth.email"),
@@ -6584,8 +6598,9 @@ fn account_profile_escapes_account_values_and_exposes_secure_password_forms() {
     assert!(!html.contains("<script>alert(1)</script>"));
     assert!(html.contains("&lt;img src=x onerror=alert(1)&gt;"));
     assert!(html.contains("class=\"z-page-header__title\""));
-    assert_eq!(html.matches("class=\"z-card\"").count(), 2);
-    assert_eq!(html.matches("class=\"z-action-stack\"").count(), 2);
+    assert_eq!(html.matches("class=\"z-card\"").count(), 3);
+    assert_eq!(html.matches("name=\"current_password\"").count(), 1);
+    assert_eq!(html.matches("class=\"z-action-stack").count(), 1);
 }
 
 #[test]

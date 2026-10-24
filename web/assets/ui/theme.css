@@ -24,6 +24,7 @@
     --z-color-text: #edf3fc;
     --z-color-text-muted: #b5c2d3;
     --z-color-border: #344356;
+    --z-color-control-border: #71839a;
     --z-color-focus: #a9c5ff;
     --z-color-link: #b7ceff;
     --z-color-sidebar: #101a27;
@@ -60,6 +61,7 @@
       --z-color-text: #edf3fc;
       --z-color-text-muted: #b5c2d3;
       --z-color-border: #344356;
+      --z-color-control-border: #71839a;
       --z-color-focus: #a9c5ff;
       --z-color-link: #b7ceff;
       --z-color-sidebar: #101a27;

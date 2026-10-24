@@ -2021,6 +2021,10 @@ fn default_application_shell_escapes_project_navigation_labels_and_paths() {
 
     assert!(html.contains("Machines &lt;script&gt;"));
     assert!(html.contains("href=\"/machines&quot; onmouseover=&quot;alert(1)\""));
+    assert!(html.contains(&format!("src=\"{ZELYRA_UI_LOGO_PATH}\"")));
+    assert!(html.contains("alt=\"Zelyra\""));
+    assert!(!html.contains("zelyra-mark"));
+    assert!(!html.contains("BUSINESS APPLICATION PLATFORM"));
     assert!(!html.contains("<script>"));
 }
 
@@ -2419,6 +2423,31 @@ fn project_theme_css_is_linked_after_the_default_design_and_served_as_css() {
     assert_eq!(script.content_type, "text/javascript; charset=utf-8");
     assert!(script.body.contains("window.ZelyraUI"));
 
+    let logo_request = parse_request(&format!(
+        "GET {ZELYRA_UI_LOGO_PATH} HTTP/1.1\r\nHost: localhost\r\n\r\n"
+    ))
+    .unwrap();
+    let logo = app.dispatch(&logo_request);
+    assert_eq!(logo.status, 200);
+    assert_eq!(logo.content_type, "image/png");
+    assert!(logo
+        .body_bytes
+        .as_ref()
+        .is_some_and(|bytes| !bytes.is_empty()));
+    let logo_response = logo.to_http_bytes();
+    assert!(logo_response.starts_with(b"HTTP/1.1 200 OK\r\nContent-Type: image/png"));
+    assert!(logo_response.ends_with(ZELYRA_UI_LOGO_PNG));
+    assert!(String::from_utf8_lossy(&logo_response)
+        .contains("Cache-Control: public, max-age=31536000, immutable\r\n"));
+    let logo_head_request = parse_request(&format!(
+        "HEAD {ZELYRA_UI_LOGO_PATH} HTTP/1.1\r\nHost: localhost\r\n\r\n"
+    ))
+    .unwrap();
+    let logo_head = app.dispatch(&logo_head_request);
+    assert_eq!(logo_head.status, 200);
+    assert_eq!(logo_head.content_type, "image/png");
+    assert!(logo_head.body_bytes.as_ref().is_some_and(Vec::is_empty));
+
     let css_request =
         parse_request("GET /__zelyra/theme.css HTTP/1.1\r\nHost: localhost\r\n\r\n").unwrap();
     let css = app.dispatch(&css_request);
@@ -2513,6 +2542,7 @@ fn default_design_system_exposes_the_complete_public_theme_token_set() {
         "--z-color-text",
         "--z-color-text-muted",
         "--z-color-border",
+        "--z-color-control-border",
         "--z-color-focus",
         "--z-font-sans",
         "--z-font-mono",
@@ -2526,6 +2556,7 @@ fn default_design_system_exposes_the_complete_public_theme_token_set() {
         );
     }
     assert!(ZELYRA_DESIGN_SYSTEM_CSS.contains("--z-color-primary: #3157a4"));
+    assert!(ZELYRA_DESIGN_SYSTEM_CSS.contains("--z-color-control-border: #8294ad"));
     assert!(ZELYRA_DESIGN_SYSTEM_CSS.contains("[data-z-theme=\"dark\"]"));
     assert!(ZELYRA_DESIGN_SYSTEM_CSS.contains(".z-output"));
     assert!(ZELYRA_DESIGN_SYSTEM_CSS.contains(".z-action-stack"));
@@ -2537,9 +2568,11 @@ fn default_design_system_exposes_the_complete_public_theme_token_set() {
     ));
     assert!(!ZELYRA_DESIGN_SYSTEM_CSS
         .contains(".zelyra-sidebar .z-app-shell__navigation a:hover) { background: color-mix"));
-    assert!(ZELYRA_DESIGN_SYSTEM_CSS.starts_with("/* Zelyra UI CSS bundle v1.2.1"));
-    assert!(ZELYRA_UI_CSS_PATH.contains("/v1.2.1/zelyra-ui.css"));
-    assert!(ZELYRA_UI_JS_PATH.contains("/v1.2.1/zelyra-ui.js"));
+    assert!(ZELYRA_DESIGN_SYSTEM_CSS.contains(".z-input,\n  :where(html[data-z-ui]) .z-select"));
+    assert!(ZELYRA_DESIGN_SYSTEM_CSS.contains("border: 1px solid var(--z-color-control-border)"));
+    assert!(ZELYRA_DESIGN_SYSTEM_CSS.starts_with("/* Zelyra UI CSS bundle v1.2.2"));
+    assert!(ZELYRA_UI_CSS_PATH.contains("/v1.2.2/zelyra-ui.css"));
+    assert!(ZELYRA_UI_JS_PATH.contains("/v1.2.2/zelyra-ui.js"));
     assert!(include_str!("../assets/zelyra-ui.v1.js").contains("theme || \"light\""));
 }
 
@@ -2872,7 +2905,7 @@ fn project_catalogs_override_generated_ui_and_parameterized_labels() {
     catalogs
             .set_json(
                 UiLanguage::German,
-                r#"{"shell.brand_descriptor":"Eigene Oberfläche","auth.login_title":"Projektanmeldung","auth.email":"E-Mail-Adresse","learning.button":"Projekt-Hilfe öffnen","query.filter_value":"Wert für {field}","identifier.department":"Kostenstelle"}"#,
+                r#"{"shell.workspace_label":"Eigene Oberfläche","auth.login_title":"Projektanmeldung","auth.email":"E-Mail-Adresse","learning.button":"Projekt-Hilfe öffnen","query.filter_value":"Wert für {field}","identifier.department":"Kostenstelle"}"#,
             )
             .unwrap();
     let app = WebApp::new(Vec::new(), Vec::new())
@@ -5506,7 +5539,7 @@ fn session_administration_preserves_legacy_tables_and_escapes_rows() {
     assert!(html.contains("&lt;script&gt;@example.test"));
     assert!(!html.contains("<script>"));
     assert!(html.contains("name=\"session_id\" value=\"1\""));
-    assert!(html.contains("class=\"z-card\""));
+    assert!(html.contains("class=\"z-card z-admin-grid__wide\""));
     assert!(html.contains("class=\"z-table-scroll\""));
     assert!(html.contains("class=\"z-action-stack\""));
     assert!(localize_html(
@@ -5595,6 +5628,11 @@ fn access_management_uses_separate_cards_and_uniform_vertical_actions() {
         assert!(html.contains(&format!("aria-labelledby=\"{section_id}\"")));
     }
     assert!(html.contains("class=\"z-page-header__title\">Access management"));
+    assert!(html.contains("class=\"z-auth-admin\""));
+    assert!(html.contains("class=\"z-admin-grid\">"));
+    assert!(html.contains("class=\"z-card z-admin-grid__wide\""));
+    assert!(html.contains("class=\"z-grid z-grid--three z-admin-create-user\""));
+    assert!(html.ends_with("</div></main>"));
     assert!(html.contains("class=\"z-table-scroll\""));
     assert!(!html.contains("<td><form"));
     assert!(html.matches("<button class=\"z-button").count() >= 7);
@@ -5603,7 +5641,40 @@ fn access_management_uses_separate_cards_and_uniform_vertical_actions() {
         html.matches("<button class=\"z-button").count(),
         "every page action uses the shared button component"
     );
-    assert!(html.matches("class=\"z-action-stack\"").count() >= 7);
+    assert!(html.matches("class=\"z-action-stack").count() >= 7);
+}
+
+#[test]
+fn account_password_errors_keep_locale_references_until_the_response_is_localized() {
+    let response = account_profile_error(
+        UiLanguage::German,
+        403,
+        tr(UiLanguage::German, "error.current_password_invalid"),
+    );
+    let html = localize_html(&response.body, UiLanguage::German);
+
+    assert_eq!(response.status, 403);
+    assert!(html.contains("403 Zugriff verweigert"));
+    assert!(html.contains("Das aktuelle Passwort ist nicht korrekt."));
+    assert!(html.contains("Profil"));
+    assert!(!html.contains("zelyra-locale:"));
+    assert!(!html.contains("&#xe000;"));
+}
+
+#[test]
+fn account_profile_uses_one_current_password_field_for_both_account_actions() {
+    let auth = account_sessions_test_auth();
+    let html = localize_html(
+        &render_account_profile(&auth, "ada@example.test", Some("Ada"), UiLanguage::German),
+        UiLanguage::German,
+    );
+
+    assert_eq!(html.matches("name=\"current_password\"").count(), 1);
+    assert_eq!(html.matches("<form ").count(), 1);
+    assert!(html.contains("name=\"operation\" value=\"update_profile\""));
+    assert!(html.contains("name=\"operation\" value=\"change_password\""));
+    assert!(html.contains("Profildaten"));
+    assert!(html.contains("Passwort ändern"));
 }
 
 #[test]

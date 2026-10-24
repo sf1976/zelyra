@@ -140,7 +140,7 @@
     min-width: 0;
     min-height: var(--z-control-height);
     padding: .55rem .7rem;
-    border: 1px solid var(--z-color-border);
+    border: 1px solid var(--z-color-control-border);
     border-radius: var(--z-radius-sm);
     background: var(--z-color-surface);
     color: var(--z-color-text);
@@ -153,7 +153,7 @@
   :where(html[data-z-ui]) .z-textarea[readonly] { background: var(--z-color-surface-raised); }
   :where(html[data-z-ui]) .z-input--default,
   :where(html[data-z-ui]) .z-select--default,
-  :where(html[data-z-ui]) .z-textarea--default { border-color: var(--z-color-border); }
+  :where(html[data-z-ui]) .z-textarea--default { border-color: var(--z-color-control-border); }
   :where(html[data-z-ui]) .z-input--success,
   :where(html[data-z-ui]) .z-select--success,
   :where(html[data-z-ui]) .z-textarea--success { border-color: var(--z-color-success); }
@@ -215,6 +215,8 @@
   :where(html[data-z-ui]) .z-action-stack form { display: grid; min-width: 0; gap: .5rem; margin: 0; }
   :where(html[data-z-ui]) .z-action-stack .z-field { min-width: 0; margin: 0; }
   :where(html[data-z-ui]) .z-action-stack .z-button { width: 100%; min-height: 2.75rem; white-space: normal; }
+  :where(html[data-z-ui]) .z-admin-create-user { align-items: end; margin-block-end: var(--z-space-5); }
+  :where(html[data-z-ui]) .z-admin-form__action { align-self: end; }
   :where(html[data-z-ui]) .z-progress-field { display: grid; gap: .35rem; max-width: 36rem; }
   :where(html[data-z-ui]) .z-progress { display: block; width: 100%; height: .7rem; accent-color: var(--z-color-primary); }
 
