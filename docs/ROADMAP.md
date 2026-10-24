@@ -98,6 +98,21 @@ manually provisioned users, server-enforced roles, row-level permissions, and
 audit history. MariaDB is the primary database. The UI, validation, SQL,
 transactions, authorization, and application logic must use idiomatic Zelyra.
 
+**Current evidence (2026-10-24):** Zelyra 1.3.0 is installed under `/opt/`.
+The password-generator project uses Zelyra's native `Random` capability,
+typed standalone form handlers, server-side field validation, and the Work
+level. Its local `zelyra_identity` package composes Zelyra's native
+authentication, persistent MariaDB sessions, roles, and protected account
+administration. `/login` is a styled Zelyra web form; public self-registration
+is disabled, and administrators manage accounts at `/admin/users`. The
+project's `zelyra.theme.css` styles login, navigation, and generator screens;
+the `ZELYRA-ANWENDUNG` chip is hidden. End-to-end checks passed all five
+profiles, login, session cookies, the admin page, invalid input, and non-cacheable
+results, including at `https://zelyra.eu:8176`. The form-handler and
+authorization extensions remain on a feature branch and are not merged or
+released. Mini-ERP Phase A has begun; it is not complete until the capability
+matrix, data/domain model, and test strategy are reviewed.
+
 Apply STOP → ANALYZE → FIX → TEST → RESUME whenever a requirement exposes a
 language, compiler, runtime, database, UI, or Studio gap. Do not hide gaps with
 foreign-language business logic, direct DOM manipulation, or benchmark-only

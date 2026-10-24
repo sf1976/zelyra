@@ -149,7 +149,7 @@ fn build(program: &zelyra_ast::Program, sources: &[project::ProjectSource]) -> V
             },
             "source": source_location(item.span, sources),
         })).collect::<Vec<_>>(),
-        "actions": form.actions.iter().map(|action| json!({ "name": action.name, "requires_auth": action.requires_auth, "permissions": sorted_strings(&action.permissions), "source": source_location(action.span, sources) })).collect::<Vec<_>>(),
+        "actions": form.actions.iter().map(|action| json!({ "name": action.name, "handler": action.handler, "requires_auth": action.requires_auth, "permissions": sorted_strings(&action.permissions), "source": source_location(action.span, sources) })).collect::<Vec<_>>(),
         "source": source_location(form.span, sources),
     })).collect::<Vec<_>>();
     forms.sort_by(|a, b| a["name"].as_str().cmp(&b["name"].as_str()));

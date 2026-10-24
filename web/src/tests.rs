@@ -103,6 +103,7 @@ fn number_series_allocator_is_atomic_and_scoped_per_tenant() {
         confirm_page: None,
         success_page: None,
         error_page: None,
+        handler: None,
         fields: Vec::new(),
         requires_auth: false,
         permissions: Vec::new(),
@@ -447,6 +448,8 @@ fn computed_field_evaluation_preserves_decimal_input_for_storage_validation() {
     let mut input_form = zelyra_ast::FormDef {
         name: "InvoiceItemCreate".into(),
         table: Some("invoice_items".into()),
+        title: None,
+        description: None,
         path: None,
         post_only: false,
         verify: None,
@@ -1118,6 +1121,8 @@ fn form_route() -> FormRoute {
         form: FormDef {
             name: "CustomerCreate".into(),
             table: None,
+            title: None,
+            description: None,
             path: None,
             post_only: false,
             verify: None,
@@ -1142,6 +1147,7 @@ fn form_route() -> FormRoute {
             actions: Vec::new(),
             span: zelyra_ast::Span::default(),
         },
+        handler: None,
         table: None,
         schema: None,
         tenant_column: None,
@@ -1163,6 +1169,188 @@ fn form_route() -> FormRoute {
         layout_html: None,
         child_collections: Vec::new(),
     }
+}
+
+#[test]
+fn titled_standalone_form_uses_the_shared_generated_page_and_escapes_copy() {
+    let mut route = form_route();
+    route.form.name = "PasswordGenerator".into();
+    route.form.title = Some("Passwortgenerator".into());
+    route.form.description = Some("Sicher & einfach <lokal>".into());
+
+    let html = forms::render_form(&route, &HashMap::new(), &[], None);
+
+    assert!(html.starts_with("<section class=\"z-generated-page\">"));
+    assert!(html.contains("<header class=\"z-page-header\">"));
+    assert!(html.contains("<h1 class=\"z-page-header__title\">Passwortgenerator</h1>"));
+    assert!(html.contains("Sicher &amp; einfach &lt;lokal&gt;"));
+    assert!(html.contains("<section class=\"zelyra-crud-form-card\">"));
+    assert!(html.ends_with("</section></section>"));
+}
+
+#[test]
+fn standalone_form_handler_returns_escaped_non_cacheable_result_after_csrf_validation() {
+    let mut route = form_route();
+    route.form.actions = vec![zelyra_ast::FormAction {
+        name: "generate".into(),
+        label: Some("Generate value".into()),
+        icon: None,
+        confirm: None,
+        confirm_page: None,
+        success_page: None,
+        error_page: None,
+        fields: Vec::new(),
+        requires_auth: false,
+        permissions: Vec::new(),
+        handler: Some("generate_value".into()),
+        capabilities: Vec::new(),
+        require_match: false,
+        statements: Vec::new(),
+        execute_body: None,
+        guard: None,
+        success: None,
+        redirect: None,
+        span: zelyra_ast::Span::default(),
+    }];
+    let handler_calls = Arc::new(AtomicUsize::new(0));
+    let calls = handler_calls.clone();
+    route.handler = Some(FormHandler::new("generate_value", move |values| {
+        calls.fetch_add(1, Ordering::SeqCst);
+        Ok(values.get("name").cloned().unwrap_or_default())
+    }));
+    let app = WebApp::new(Vec::new(), vec![route]).with_database_capability(false);
+    let invalid_csrf = app.dispatch(&Request {
+        method: "POST".into(),
+        target: "/forms/CustomerCreate".into(),
+        path: "/forms/CustomerCreate".into(),
+        headers: HashMap::from([
+            ("host".into(), "localhost".into()),
+            (
+                "content-type".into(),
+                "application/x-www-form-urlencoded".into(),
+            ),
+            ("origin".into(), "http://localhost".into()),
+        ]),
+        body: "_zelyra_csrf=invalid&name=before".into(),
+        remote_addr: None,
+    });
+    assert_eq!(invalid_csrf.status, 403);
+    assert_eq!(handler_calls.load(Ordering::SeqCst), 0);
+    let response = app.dispatch(&Request {
+        method: "POST".into(),
+        target: "/forms/CustomerCreate".into(),
+        path: "/forms/CustomerCreate".into(),
+        headers: HashMap::from([
+            ("host".into(), "localhost".into()),
+            (
+                "content-type".into(),
+                "application/x-www-form-urlencoded".into(),
+            ),
+            ("origin".into(), "http://localhost".into()),
+        ]),
+        body: "_zelyra_csrf=csrf-token&name=%3Cx%3E".into(),
+        remote_addr: None,
+    });
+
+    assert_eq!(response.status, 200, "{}", response.body);
+    assert!(response.body.contains("&lt;x&gt;"));
+    assert!(!response.body.contains("<x>"));
+    assert!(response.body.contains(">Generate value</button>"));
+    assert!(response
+        .body
+        .contains("<h2 class=\"z-card__title\" id=\"zelyra-form-result-title\">Result</h2>"));
+    assert!(response
+        .headers
+        .iter()
+        .any(|(name, value)| { name == "Cache-Control" && value == "no-store, private" }));
+    assert!(response
+        .headers
+        .iter()
+        .any(|(name, value)| name == "Referrer-Policy" && value == "no-referrer"));
+    let wire_response = response.to_http();
+    assert!(wire_response.contains("Referrer-Policy: no-referrer\r\n"));
+    assert!(!wire_response.contains("Referrer-Policy: same-origin\r\n"));
+    assert_eq!(handler_calls.load(Ordering::SeqCst), 1);
+}
+
+#[test]
+fn standalone_form_handler_enforces_action_authentication_and_permissions() {
+    let mut route = form_route();
+    route.form.actions = vec![zelyra_ast::FormAction {
+        name: "generate".into(),
+        label: Some("Generate value".into()),
+        icon: None,
+        confirm: None,
+        confirm_page: None,
+        success_page: None,
+        error_page: None,
+        fields: Vec::new(),
+        requires_auth: true,
+        permissions: vec!["password_generator.use".into()],
+        handler: Some("generate_value".into()),
+        capabilities: Vec::new(),
+        require_match: false,
+        statements: Vec::new(),
+        execute_body: None,
+        guard: None,
+        success: None,
+        redirect: None,
+        span: zelyra_ast::Span::default(),
+    }];
+    let calls = Arc::new(AtomicUsize::new(0));
+    let handler_calls = calls.clone();
+    route.handler = Some(FormHandler::new("generate_value", move |_| {
+        handler_calls.fetch_add(1, Ordering::SeqCst);
+        Ok("generated".into())
+    }));
+    let denied = WebApp::new(Vec::new(), vec![route.clone()])
+        .with_database_capability(false)
+        .with_auth(Some("shared-token".into()), Vec::new());
+    let app = WebApp::new(Vec::new(), vec![route]).with_database_capability(false);
+    let request = |authorization: Option<&str>| {
+        let mut headers = HashMap::from([
+            ("host".into(), "localhost".into()),
+            (
+                "content-type".into(),
+                "application/x-www-form-urlencoded".into(),
+            ),
+            ("origin".into(), "http://localhost".into()),
+        ]);
+        if let Some(authorization) = authorization {
+            headers.insert("authorization".into(), authorization.into());
+        }
+        Request {
+            method: "POST".into(),
+            target: "/forms/CustomerCreate".into(),
+            path: "/forms/CustomerCreate".into(),
+            headers,
+            body: "_zelyra_csrf=csrf-token&name=before".into(),
+            remote_addr: None,
+        }
+    };
+
+    assert_eq!(app.dispatch(&request(None)).status, 401);
+    assert_eq!(calls.load(Ordering::SeqCst), 0);
+
+    assert_eq!(
+        denied
+            .dispatch(&request(Some("Bearer shared-token")))
+            .status,
+        403
+    );
+    assert_eq!(calls.load(Ordering::SeqCst), 0);
+
+    let allowed = app.with_auth(
+        Some("shared-token".into()),
+        vec!["password_generator.use".into()],
+    );
+    assert_eq!(
+        allowed
+            .dispatch(&request(Some("Bearer shared-token")))
+            .status,
+        200
+    );
+    assert_eq!(calls.load(Ordering::SeqCst), 1);
 }
 
 fn child_collection_form_route() -> FormRoute {
@@ -1574,6 +1762,7 @@ fn table_validation_rejects_invalid_form_before_action_execution() {
         confirm_page: None,
         success_page: None,
         error_page: None,
+        handler: None,
         fields: Vec::new(),
         requires_auth: false,
         permissions: Vec::new(),
@@ -1832,6 +2021,10 @@ fn default_application_shell_escapes_project_navigation_labels_and_paths() {
 
     assert!(html.contains("Machines &lt;script&gt;"));
     assert!(html.contains("href=\"/machines&quot; onmouseover=&quot;alert(1)\""));
+    assert!(html.contains(&format!("src=\"{ZELYRA_UI_LOGO_PATH}\"")));
+    assert!(html.contains("alt=\"Zelyra\""));
+    assert!(!html.contains("zelyra-mark"));
+    assert!(!html.contains("BUSINESS APPLICATION PLATFORM"));
     assert!(!html.contains("<script>"));
 }
 
@@ -2230,6 +2423,31 @@ fn project_theme_css_is_linked_after_the_default_design_and_served_as_css() {
     assert_eq!(script.content_type, "text/javascript; charset=utf-8");
     assert!(script.body.contains("window.ZelyraUI"));
 
+    let logo_request = parse_request(&format!(
+        "GET {ZELYRA_UI_LOGO_PATH} HTTP/1.1\r\nHost: localhost\r\n\r\n"
+    ))
+    .unwrap();
+    let logo = app.dispatch(&logo_request);
+    assert_eq!(logo.status, 200);
+    assert_eq!(logo.content_type, "image/png");
+    assert!(logo
+        .body_bytes
+        .as_ref()
+        .is_some_and(|bytes| !bytes.is_empty()));
+    let logo_response = logo.to_http_bytes();
+    assert!(logo_response.starts_with(b"HTTP/1.1 200 OK\r\nContent-Type: image/png"));
+    assert!(logo_response.ends_with(ZELYRA_UI_LOGO_PNG));
+    assert!(String::from_utf8_lossy(&logo_response)
+        .contains("Cache-Control: public, max-age=31536000, immutable\r\n"));
+    let logo_head_request = parse_request(&format!(
+        "HEAD {ZELYRA_UI_LOGO_PATH} HTTP/1.1\r\nHost: localhost\r\n\r\n"
+    ))
+    .unwrap();
+    let logo_head = app.dispatch(&logo_head_request);
+    assert_eq!(logo_head.status, 200);
+    assert_eq!(logo_head.content_type, "image/png");
+    assert!(logo_head.body_bytes.as_ref().is_some_and(Vec::is_empty));
+
     let css_request =
         parse_request("GET /__zelyra/theme.css HTTP/1.1\r\nHost: localhost\r\n\r\n").unwrap();
     let css = app.dispatch(&css_request);
@@ -2324,6 +2542,7 @@ fn default_design_system_exposes_the_complete_public_theme_token_set() {
         "--z-color-text",
         "--z-color-text-muted",
         "--z-color-border",
+        "--z-color-control-border",
         "--z-color-focus",
         "--z-font-sans",
         "--z-font-mono",
@@ -2336,6 +2555,25 @@ fn default_design_system_exposes_the_complete_public_theme_token_set() {
             "default design system misses {token}"
         );
     }
+    assert!(ZELYRA_DESIGN_SYSTEM_CSS.contains("--z-color-primary: #3157a4"));
+    assert!(ZELYRA_DESIGN_SYSTEM_CSS.contains("--z-color-control-border: #8294ad"));
+    assert!(ZELYRA_DESIGN_SYSTEM_CSS.contains("[data-z-theme=\"dark\"]"));
+    assert!(ZELYRA_DESIGN_SYSTEM_CSS.contains(".z-output"));
+    assert!(ZELYRA_DESIGN_SYSTEM_CSS.contains(".z-action-stack"));
+    assert!(ZELYRA_DESIGN_SYSTEM_CSS.contains(
+        ".z-app-shell__navigation a:hover,\n  :where(html[data-z-ui]) .z-app-shell__navigation a[aria-current=\"page\"]"
+    ));
+    assert!(ZELYRA_DESIGN_SYSTEM_CSS.contains(
+        "border-radius: var(--z-radius-sm);\n    color: inherit;\n    text-decoration: none;"
+    ));
+    assert!(!ZELYRA_DESIGN_SYSTEM_CSS
+        .contains(".zelyra-sidebar .z-app-shell__navigation a:hover) { background: color-mix"));
+    assert!(ZELYRA_DESIGN_SYSTEM_CSS.contains(".z-input,\n  :where(html[data-z-ui]) .z-select"));
+    assert!(ZELYRA_DESIGN_SYSTEM_CSS.contains("border: 1px solid var(--z-color-control-border)"));
+    assert!(ZELYRA_DESIGN_SYSTEM_CSS.starts_with("/* Zelyra UI CSS bundle v1.2.5"));
+    assert!(ZELYRA_UI_CSS_PATH.contains("/v1.2.5/zelyra-ui.css"));
+    assert!(ZELYRA_UI_JS_PATH.contains("/v1.2.5/zelyra-ui.js"));
+    assert!(include_str!("../assets/zelyra-ui.v1.js").contains("theme || \"light\""));
 }
 
 #[test]
@@ -2667,7 +2905,7 @@ fn project_catalogs_override_generated_ui_and_parameterized_labels() {
     catalogs
             .set_json(
                 UiLanguage::German,
-                r#"{"shell.brand_descriptor":"Eigene Oberfläche","auth.login_title":"Projektanmeldung","auth.email":"E-Mail-Adresse","learning.button":"Projekt-Hilfe öffnen","query.filter_value":"Wert für {field}","identifier.department":"Kostenstelle"}"#,
+                r#"{"shell.workspace_label":"Eigene Oberfläche","auth.login_title":"Projektanmeldung","auth.email":"E-Mail-Adresse","learning.button":"Projekt-Hilfe öffnen","query.filter_value":"Wert für {field}","identifier.department":"Kostenstelle"}"#,
             )
             .unwrap();
     let app = WebApp::new(Vec::new(), Vec::new())
@@ -4173,6 +4411,7 @@ fn multipart_upload_stages_only_after_csrf_and_cleans_up_when_database_is_unavai
         confirm_page: None,
         success_page: None,
         error_page: None,
+        handler: None,
         fields: Vec::new(),
         requires_auth: false,
         permissions: Vec::new(),
@@ -4311,6 +4550,7 @@ fn multipart_upload_commits_reference_and_removes_file_after_sql_rollback() {
         confirm_page: None,
         success_page: None,
         error_page: None,
+        handler: None,
         fields: Vec::new(),
         requires_auth: false,
         permissions: Vec::new(),
@@ -5228,7 +5468,12 @@ fn session_device_metadata_is_bounded_and_escaped_in_self_service_view() {
         device: Some("<script>".into()),
     }];
     let html = localize_html(
-        &render_account_sessions(&account_sessions_test_auth(), &rows, UiLanguage::English),
+        &render_account_sessions(
+            &account_sessions_test_auth(),
+            &rows,
+            None,
+            UiLanguage::English,
+        ),
         UiLanguage::English,
     );
     assert!(html.contains("&lt;script&gt;"));
@@ -5276,8 +5521,7 @@ fn session_administration_preserves_legacy_tables_and_escapes_rows() {
     };
     assert!(administrable_session_table(&auth).is_none());
     assert!(
-        !render_auth_admin(&auth, &[], &[], &[], &[], &[], UiLanguage::English)
-            .contains("revoke_session")
+        !render_auth_admin(&auth, &[], &[], &[], UiLanguage::English).contains("revoke_session")
     );
     auth.schema.tables[0].columns.push(zelyra_database::Column {
         name: "id".into(),
@@ -5299,11 +5543,156 @@ fn session_administration_preserves_legacy_tables_and_escapes_rows() {
     assert!(html.contains("&lt;script&gt;@example.test"));
     assert!(!html.contains("<script>"));
     assert!(html.contains("name=\"session_id\" value=\"1\""));
+    assert!(html.contains("class=\"z-card z-admin-grid__wide\""));
+    assert!(html.contains("class=\"z-table-scroll\""));
+    assert!(html.contains("class=\"z-action-stack\""));
     assert!(localize_html(
         &render_auth_sessions(&auth, &rows, UiLanguage::German),
         UiLanguage::German
     )
     .contains("Sitzung sperren"));
+}
+
+#[test]
+fn access_management_groups_assignments_in_full_width_cards() {
+    let mut auth = account_sessions_test_auth();
+    auth.admin_path = Some("/admin/users".into());
+    auth.roles_table = Some("user_roles".into());
+    auth.role_permissions_table = Some("role_permissions".into());
+    auth.audit_table = Some("auth_audit".into());
+    auth.session_table = Some("sessions".into());
+    auth.schema.tables = vec![
+        zelyra_database::Table {
+            name: "users".into(),
+            tenant_scope_column: None,
+            columns: vec![zelyra_database::Column {
+                name: "active".into(),
+                sql_type: "BOOLEAN".into(),
+                nullable: false,
+                primary_key: false,
+                auto: false,
+                unique: false,
+                default: None,
+            }],
+            foreign_keys: vec![],
+            indexes: vec![],
+            uniques: vec![],
+        },
+        zelyra_database::Table {
+            name: "sessions".into(),
+            tenant_scope_column: None,
+            columns: vec![zelyra_database::Column {
+                name: "id".into(),
+                sql_type: "BIGINT".into(),
+                nullable: false,
+                primary_key: true,
+                auto: true,
+                unique: false,
+                default: None,
+            }],
+            foreign_keys: vec![],
+            indexes: vec![],
+            uniques: vec![],
+        },
+    ];
+
+    let html = localize_html(
+        &render_auth_admin(
+            &auth,
+            &[
+                vec!["7".into(), "ada@example.test".into(), "true".into()],
+                vec!["8".into(), "linus@example.test".into(), "false".into()],
+            ],
+            &[vec!["7".into(), "ada@example.test".into(), "admin".into()]],
+            &[vec!["admin".into(), "auth.manage".into()]],
+            UiLanguage::English,
+        ),
+        UiLanguage::English,
+    );
+
+    for section_id in [
+        "auth-users-title",
+        "auth-assign-role-title",
+        "auth-role-assignments-title",
+        "auth-grant-permission-title",
+        "auth-role-permissions-title",
+    ] {
+        assert!(html.contains(&format!("aria-labelledby=\"{section_id}\"")));
+    }
+    assert!(html.contains("class=\"z-page-header__title\">Access management"));
+    assert!(html.contains("class=\"z-auth-admin\""));
+    assert!(!html.contains("auth-sessions-title"));
+    assert!(!html.contains("auth-audit-title"));
+    assert!(!html.contains("auth.sessions_help"));
+    assert!(html.contains("class=\"z-admin-grid\">"));
+    assert!(html.contains("class=\"z-card z-admin-grid__wide\""));
+    assert!(html.contains("class=\"z-grid z-grid--three z-admin-create-user\""));
+    assert_eq!(html.matches("class=\"z-admin-user-row\"").count(), 2);
+    assert!(html.contains("class=\"z-table z-admin-users-table\""));
+    assert!(html.contains("class=\"z-table-scroll z-admin-users-scroll\""));
+    assert!(html.contains("class=\"z-admin-user-rows\""));
+    assert_eq!(html.matches("class=\"z-admin-assign-role\"").count(), 2);
+    assert!(html.contains("class=\"z-admin-role-scroll\""));
+    assert!(html.contains(
+        "class=\"z-card z-admin-grid__wide\" aria-labelledby=\"auth-assign-role-title\""
+    ));
+    assert!(html.contains(
+        "class=\"z-card z-admin-grid__wide\" aria-labelledby=\"auth-grant-permission-title\""
+    ));
+    assert!(html.contains(
+        "class=\"z-card z-admin-grid__wide\" aria-labelledby=\"auth-role-permissions-title\""
+    ));
+    assert_eq!(
+        html.matches("class=\"z-button z-button--primary z-button--icon\"")
+            .count(),
+        2
+    );
+    assert!(html.contains("aria-label=\"Reset password\""));
+    assert!(html.contains("aria-label=\"Deactivate\""));
+    assert!(html.contains("aria-label=\"Activate\""));
+    assert!(html.ends_with("</div></main>"));
+    assert!(html.contains("class=\"z-table-scroll\""));
+    assert!(!html.contains("<td><form"));
+    assert!(html.matches("<button class=\"z-button").count() >= 7);
+    assert_eq!(
+        html.matches("<button").count(),
+        html.matches("<button class=\"z-button").count(),
+        "every page action uses the shared button component"
+    );
+    assert!(html.matches("class=\"z-action-stack").count() >= 7);
+}
+
+#[test]
+fn account_password_errors_keep_locale_references_until_the_response_is_localized() {
+    let response = account_profile_error(
+        UiLanguage::German,
+        403,
+        tr(UiLanguage::German, "error.current_password_invalid"),
+    );
+    let html = localize_html(&response.body, UiLanguage::German);
+
+    assert_eq!(response.status, 403);
+    assert!(html.contains("403 Zugriff verweigert"));
+    assert!(html.contains("Das aktuelle Passwort ist nicht korrekt."));
+    assert!(html.contains("Profil"));
+    assert!(!html.contains("zelyra-locale:"));
+    assert!(!html.contains("&#xe000;"));
+}
+
+#[test]
+fn account_profile_uses_one_current_password_field_for_both_account_actions() {
+    let auth = account_sessions_test_auth();
+    let html = localize_html(
+        &render_account_profile(&auth, "ada@example.test", Some("Ada"), UiLanguage::German),
+        UiLanguage::German,
+    );
+
+    assert_eq!(html.matches("name=\"current_password\"").count(), 1);
+    assert_eq!(html.matches("<form ").count(), 1);
+    assert!(html.contains("name=\"operation\" value=\"update_profile\""));
+    assert!(html.contains("name=\"operation\" value=\"change_password\""));
+    assert!(html.contains("Profildaten"));
+    assert!(html.contains("Passwort ändern"));
 }
 
 #[test]
@@ -5385,7 +5774,8 @@ fn renders_form_with_csrf_and_field_attributes() {
     cards_route.form_view.title = Some("Customer form".into());
     cards_route.form_view.submit = Some("Save customer <now>".into());
     let cards_html = render_form(&cards_route, &HashMap::new(), &[], None);
-    assert!(cards_html.starts_with("<section class=\"z-generated-page\"><h1"));
+    assert!(cards_html
+        .starts_with("<section class=\"z-generated-page\"><header class=\"z-page-header\"><h1"));
     assert!(cards_html.ends_with("</section></section>"));
     assert!(cards_html.contains(">Customer form</h1>"));
     assert!(cards_html.contains("zelyra-crud-form-card"));
@@ -7042,6 +7432,7 @@ fn renders_action_error_without_database_details() {
             title: Some("Action failed <unsafe>".into()),
             message: Some("Please try again <later>.".into()),
         }),
+        handler: None,
         fields: Vec::new(),
         requires_auth: false,
         permissions: Vec::new(),
@@ -7245,6 +7636,7 @@ fn protects_custom_form_actions_with_action_permissions() {
         confirm_page: None,
         success_page: None,
         error_page: None,
+        handler: None,
         fields: Vec::new(),
         requires_auth: true,
         permissions: vec!["customers.save".into()],
@@ -7276,6 +7668,7 @@ fn protects_custom_form_actions_with_action_permissions() {
         confirm_page: None,
         success_page: None,
         error_page: None,
+        handler: None,
         fields: Vec::new(),
         requires_auth: true,
         permissions: vec!["customers.save".into()],
@@ -7306,6 +7699,7 @@ fn form_action_requires_database_url() {
         confirm_page: None,
         success_page: None,
         error_page: None,
+        handler: None,
         fields: Vec::new(),
         requires_auth: false,
         permissions: Vec::new(),
@@ -7599,6 +7993,7 @@ fn execute_form_action_rejects_postgres_chained_audit() {
         confirm_page: None,
         success_page: None,
         error_page: None,
+        handler: None,
         statements: vec![zelyra_ast::Stmt::Expr(zelyra_ast::Expr {
             kind: zelyra_ast::ExprKind::Sql {
                 result_type: Type::Unit,

@@ -1105,6 +1105,45 @@ Parameter, ungültige Segmente und Kollisionen mit anderen Routen werden
 abgewiesen. GET rendert das Formular weiterhin regulär; POST behält CSRF- und
 Validierungsprüfungen.
 
+Ein Standalone-Formular kann nach erfolgreicher CSRF-Prüfung und Validierung
+eine typisierte Zelyra-Funktion aufrufen. Die Funktionsparameter müssen Namen,
+Reihenfolge und Typen der Formularfelder übernehmen; die Funktion gibt
+`String` zurück. Die Action deklariert die benötigten Capabilities mit `uses`;
+die reguläre Typ- und Effect-Prüfung bleibt aktiv. Handler-Actions können
+nicht gleichzeitig SQL-Anweisungen, Redirects, Bestätigungen, Action-spezifische
+Berechtigungen/Hinweise oder Felder enthalten; verwendet werden nur Label und
+Capabilities. Datei-Uploads werden nicht unterstützt. Der Rückgabewert wird
+HTML-escaped und mit `no-store`-Headern in der Antwort angezeigt; das Framework
+speichert das Ergebnis nicht.
+
+~~~zelyra
+fn generate(length: Int, character_set: String) -> String uses Random {
+    return passwords::generate(length, character_set)
+}
+
+form PasswordGenerator {
+    route: "/generator"
+    field length: Int {
+        required
+        min_value: "8"
+        max_value: "64"
+    }
+    field character_set: String {
+        required
+        choices: ["Buchstaben", "Alle Zeichen"]
+    }
+    action generate {
+        label: "Passwort erzeugen"
+        handler: generate
+        uses Random
+    }
+}
+~~~
+
+Die Funktion eignet sich für validierte Formulare, die einen kleinen Textwert
+zurückgeben. Sie führt keine anwendungsspezifische Vorlagensprache ein und
+ersetzt keine datenbankgebundenen CRUD-Aktionen.
+
 Für opake Routentokens kann ein Standalone-Formular den Token beim GET prüfen
 und im POST innerhalb derselben Transaktion nochmals einen Treffer verlangen,
 bevor spätere Anweisungen ausgeführt werden:

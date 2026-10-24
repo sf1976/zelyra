@@ -109,7 +109,7 @@ schließendem Komponenten-Tag.
 
 | Komponente | Eigenschaften | Slots / Verhalten |
 |---|---|---|
-| `AppShell` | `id: String`, `navigation_label: String` | `header`, `navigation`, Standardinhalt, `footer`; responsives Kopf-/Navigations-/Inhalts-/Fußlayout |
+| `AppShell` | `id: String`, `navigation_label: String` | `header`, `navigation`, Standardinhalt, `footer`; responsives Layout und integrierter Hell-/Dunkel-Umschalter |
 | `Container` | — | Standardinhalt; zentrierte `--z-content-width` |
 | `PageHeader` | `title: String`, `description: String?` | `actions`; Seitentitel, Beschreibung und Aktionen |
 | `Grid` | `columns: UiGridColumns?` (`one`, `two`, `three`, `four`; Standard `one`) | Standardinhalt; 3/4 Spalten werden unter 900 px zweispaltig, unter 600 px einspaltig |
@@ -244,12 +244,25 @@ Designsystemversion. Patch-Releases verbessern das Aussehen oder korrigieren
 Stile ohne Änderung am Token-/Klassenvertrag; Minor-Releases dürfen kompatible
 Tokens oder Komponenten ergänzen. Eine inkompatible Änderung an öffentlichen
 Tokens oder Klassen erfordert eine neue Major-Version. Das aktuelle CSS-Bundle
-hat Version 1.1.0.
+hat Version 1.2.5. Die Navigation verwendet in allen AppShell-Ansichten dieselben
+blauen Hover- und Aktivzustände. Sie lassen sich wie andere Standardfarben über
+die Theme-Tokens `--z-color-primary-soft` und `--z-color-primary` oder reguläre
+CSS-Overrides anpassen; Eingabefelder verwenden den anpassbaren Token
+`--z-color-control-border`. Der Standardshell zeigt das ausgelieferte Zelyra-Logo
+statt eines Textslogans oder eines Platzhalterzeichens. Verwaltungsbereiche
+werden im Standard in responsiven Karten mit klaren Gruppen dargestellt. Die
+Benutzerliste erhält eine klar abgegrenzte Zeile pro Benutzer und kompakte,
+barrierefrei beschriftete Aktionssymbole. Rollen- und Berechtigungsverwaltung
+stehen jeweils in einer eigenen Karte über die gesamte Breite; Zuweisungsformulare
+und zugehörige Listen sind darin übersichtlich zusammengefasst.
 
-Helles und dunkles Theme, Systempräferenz, gespeicherte manuelle Auswahl,
-komfortable/kompakte Dichte, `prefers-reduced-motion` und Druckregeln sind
-enthalten. JavaScript verbessert Dialoge, Tabs, Mobile Navigation, Theme-
-und Dichtewechsel sowie Toasts. Navigation, Links, GET-/POST-Formulare,
+Das Zelyra-Standardtheme verwendet die klare blaue Dashboard-Palette und startet
+hell. `AppShell` enthält den barrierefrei beschrifteten Hell-/Dunkel-Umschalter;
+die Auswahl bleibt im Browser gespeichert und gilt für alle Anwendungsseiten.
+Ein dunkles Theme, optionale Systempräferenz, komfortable/kompakte Dichte,
+`prefers-reduced-motion` und Druckregeln sind enthalten. JavaScript verbessert
+Dialoge, Tabs, Mobile Navigation, Theme- und Dichtewechsel sowie Toasts.
+Navigation, Links, GET-/POST-Formulare,
 Disclosure, Auswahlfelder und Druckinhalte haben native HTML-Grundbedienung.
 
 `ZELYRA_UI_STYLESHEET` wählt `zelyra` (Standard), `tabler` (lokal gebündelte

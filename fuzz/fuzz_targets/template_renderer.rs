@@ -24,7 +24,7 @@ fuzz_target!(|input: &[u8]| {
         choices: Vec::new(),
         widget: None,
         appearance: None,
-                file_upload: None,
+        file_upload: None,
         readonly: false,
         span: Span::default(),
     };
@@ -34,6 +34,8 @@ fuzz_target!(|input: &[u8]| {
         form: FormDef {
             name: "FuzzForm".into(),
             table: None,
+            title: None,
+            description: None,
             path: None,
             post_only: false,
             verify: None,
@@ -42,6 +44,7 @@ fuzz_target!(|input: &[u8]| {
             actions: Vec::new(),
             span: Span::default(),
         },
+        handler: None,
         table: None,
         schema: None,
         requires_auth: false,

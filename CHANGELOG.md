@@ -1,5 +1,15 @@
 ## Unreleased
 
+- Add typed handlers to standalone forms. Checked Zelyra functions receive
+  validated field values and return escaped, non-cacheable text; their
+  capabilities are explicit and unsupported action metadata is rejected.
+  Add the Zelyra-only password-generator benchmark and an HTTP end-to-end test.
+  / Typisierte Handler für Standalone-Formulare ergänzen. Compilergeprüfte
+  Zelyra-Funktionen erhalten validierte Feldwerte und liefern escaped, nicht
+  gecachte Texte zurück; Capabilities sind explizit und nicht unterstützte
+  Action-Metadaten werden abgewiesen. Das reine Zelyra-Passwortgenerator-
+  Benchmarkprojekt und einen HTTP-End-to-End-Test ergänzen.
+
 ## 1.3.0 — Compiler and Studio foundations
 
 - Add the opt-in standard project layout with compiler-checked MariaDB

@@ -1,0 +1,82 @@
+import "zelyra/ui" as ui
+import "pkg:password_engine" as passwords
+import "pkg:zelyra_identity" as identity
+
+pub fn generate_password(length: Int, character_set: String) -> String uses Random {
+    return passwords::generate_password(length, character_set)
+}
+
+view AppDashboardShell {
+    html {
+        <!doctype html>
+        <html data-z-ui data-zelyra-language>
+            <head>
+                <meta charset="utf-8" />
+                <meta name="viewport" content="width=device-width, initial-scale=1" />
+                <title>Dashboard · Zelyra</title>
+            </head>
+            <body>
+                <AppShell id="zelyra-dashboard" navigation_label="Anwendungsnavigation">
+                    <slot name="header"><img src="/zelyra-logo.png" alt="Zelyra" /></slot>
+                    <slot name="navigation">
+                        <a href="/">Übersicht</a>
+                        <a href="/account/profile">Benutzerkonto</a>
+                    </slot>
+                    <slot name="footer"><span>Zelyra</span></slot>
+                    <slot />
+                </AppShell>
+            </body>
+        </html>
+    }
+}
+
+page "/" {
+    view: AppDashboardShell
+
+    html {
+        <Container>
+            <PageHeader
+                title="Dashboard"
+                description="Deine Zelyra-Anwendungen an einem Ort."
+            />
+            <Grid columns="three">
+                <Card title="Passwortgenerator">
+                    <p>Erzeuge sichere Passwörter direkt auf diesem Server. Die Werte werden nicht gespeichert.</p>
+                    <Button label="Anwendung öffnen" href="/generator" appearance="success" />
+                </Card>
+                <Card title="Warenwirtschaft">
+                    <p>Das Mini-ERP wird als nächste Anwendung in dieses Dashboard aufgenommen.</p>
+                    <Badge text="In Entwicklung" appearance="warning" />
+                </Card>
+            </Grid>
+        </Container>
+    }
+}
+
+form PasswordGenerator {
+    route: "/generator"
+    title: "Passwortgenerator"
+    description: "Erzeuge sichere Passwörter direkt auf diesem Server. Die Werte werden nicht gespeichert."
+
+    field length: Int {
+        label: "Länge"
+        required
+        min_value: "8"
+        max_value: "64"
+        widget: number
+    }
+
+    field character_set: String {
+        label: "Zeichensatz"
+        required
+        choices: ["Nur Kleinbuchstaben", "Nur Ziffern", "Buchstaben", "Buchstaben und Ziffern", "Alle Zeichen"]
+    }
+
+    action generate {
+        label: "Passwort erzeugen"
+        requires auth
+        permits "password_generator.use"
+        handler: generate_password
+        uses Random
+    }
+}

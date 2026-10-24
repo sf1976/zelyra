@@ -108,6 +108,22 @@ serverseitige Rollen und Datensatzberechtigungen sowie Audit-Historie. MariaDB
 ist die primäre Datenbank. UI, Validierung, SQL, Transaktionen, Autorisierung
 und Geschäftslogik werden idiomatisch mit Zelyra umgesetzt.
 
+**Aktueller Nachweis (24.10.2026):** Zelyra 1.3.0 ist unter `/opt/` installiert.
+Das Passwortgenerator-Projekt verwendet Zelyras native `Random`-Capability,
+typisierte Standalone-Form-Handler, serverseitige Feldvalidierung und den
+Work-Modus. Das lokale Paket `zelyra_identity` verwendet Zelyras native
+Authentifizierung, MariaDB-Sitzungen, Rollen und geschützte Benutzerverwaltung.
+`/login` zeigt ein gestaltetes Zelyra-Webformular; öffentliche Registrierung
+ist deaktiviert, Administratoren verwalten Konten unter `/admin/users`. Die
+Projektdatei `zelyra.theme.css` gestaltet Login, Navigation und Generator; der
+Hinweis `ZELYRA-ANWENDUNG` wird ausgeblendet. Das E2E bestand alle fünf Profile,
+Login, Session-Cookie, Adminseite, ungültige Werte und nicht gecachte
+Ergebnisse – auch über `https://zelyra.eu:8176`. Die Formular-Handler- und
+Autorisierungserweiterung liegt noch auf einem Feature-Branch und ist weder
+gemergt noch veröffentlicht. Phase A des Benchmarks hat begonnen; als
+abgeschlossen gilt sie erst nach geprüfter Fähigkeitsmatrix, Daten-/Domänenmodell
+und Teststrategie.
+
 Bei jeder Sprach-, Compiler-, Runtime-, Datenbank-, UI- oder Studio-Lücke gilt
 STOP → ANALYSE → BEHEBUNG → TEST → FORTSETZUNG. Keine fremdsprachige
 Geschäftslogik, direkte DOM-Manipulation und keine nur für den Benchmark

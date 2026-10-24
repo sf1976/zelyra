@@ -53,16 +53,29 @@ use ui::*;
 
 const ZELYRA_DESIGN_SYSTEM_CSS: &str = include_str!("../assets/zelyra-ui.v1.css");
 const ZELYRA_UI_JAVASCRIPT: &str = include_str!("../assets/zelyra-ui.v1.js");
-pub const ZELYRA_UI_CSS_PATH: &str =
-    concat!("/__zelyra/ui/", env!("CARGO_PKG_VERSION"), "/zelyra-ui.css");
-pub const ZELYRA_UI_JS_PATH: &str =
-    concat!("/__zelyra/ui/", env!("CARGO_PKG_VERSION"), "/zelyra-ui.js");
+const ZELYRA_UI_LOGO_PNG: &[u8] = include_bytes!("../../assets/zelyra-logo.png");
+pub const ZELYRA_UI_CSS_PATH: &str = concat!(
+    "/__zelyra/ui/",
+    env!("CARGO_PKG_VERSION"),
+    "/v1.2.5/zelyra-ui.css"
+);
+pub const ZELYRA_UI_JS_PATH: &str = concat!(
+    "/__zelyra/ui/",
+    env!("CARGO_PKG_VERSION"),
+    "/v1.2.5/zelyra-ui.js"
+);
+pub const ZELYRA_UI_LOGO_PATH: &str = concat!(
+    "/__zelyra/ui/",
+    env!("CARGO_PKG_VERSION"),
+    "/zelyra-logo.png"
+);
 pub const PROJECT_UI_CSS_PATH: &str = "/__zelyra/ui/project.css";
 pub const PROJECT_THEME_CSS_PATH: &str = "/__zelyra/theme.css";
 pub const HEALTH_LIVENESS_PATH: &str = "/__zelyra/health/live";
 pub const SCHEDULE_PROBE_PATH: &str = "/__zelyra/schedule/probe";
 const MAX_PUBLIC_FILE_BYTES: u64 = 32 * 1024 * 1024;
 pub const ACCOUNT_SESSIONS_PATH: &str = "/account/sessions";
+pub const ACCOUNT_PROFILE_PATH: &str = "/account/profile";
 pub const ACCOUNT_SECURITY_PATH: &str = "/account/security";
 pub const LOGIN_MFA_PATH: &str = "/login/mfa";
 pub use i18n::{ProjectUiCatalogs, UiLanguage, UiLevel};
@@ -143,6 +156,39 @@ fn valid_origin(origin: &str) -> bool {
 }
 
 type ApiHandler = dyn Fn(&Request, &HashMap<String, String>, Option<i64>) -> Response + Send + Sync;
+type StandaloneFormHandler =
+    dyn Fn(&HashMap<String, String>) -> Result<String, String> + Send + Sync;
+
+#[derive(Clone)]
+pub struct FormHandler {
+    pub name: String,
+    call: Arc<StandaloneFormHandler>,
+}
+
+impl FormHandler {
+    pub fn new(
+        name: impl Into<String>,
+        call: impl Fn(&HashMap<String, String>) -> Result<String, String> + Send + Sync + 'static,
+    ) -> Self {
+        Self {
+            name: name.into(),
+            call: Arc::new(call),
+        }
+    }
+
+    fn execute(&self, values: &HashMap<String, String>) -> Result<String, String> {
+        (self.call)(values)
+    }
+}
+
+impl fmt::Debug for FormHandler {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("FormHandler")
+            .field("name", &self.name)
+            .finish_non_exhaustive()
+    }
+}
 
 #[derive(Clone)]
 pub struct ApiRoute {
@@ -333,16 +379,23 @@ impl Response {
     }
 
     pub fn to_http(&self) -> String {
+        let referrer_policy = self
+            .headers
+            .iter()
+            .find(|(name, _)| name.eq_ignore_ascii_case("referrer-policy"))
+            .map_or("same-origin", |(_, value)| value.as_str());
         format!(
-            "HTTP/1.1 {} {}\r\nContent-Type: {}\r\nX-Content-Type-Options: nosniff\r\nX-Frame-Options: DENY\r\nReferrer-Policy: same-origin\r\n{}{}Content-Length: {}\r\nConnection: close\r\n\r\n{}",
+            "HTTP/1.1 {} {}\r\nContent-Type: {}\r\nX-Content-Type-Options: nosniff\r\nX-Frame-Options: DENY\r\nReferrer-Policy: {}\r\n{}{}Content-Length: {}\r\nConnection: close\r\n\r\n{}",
             self.status,
             self.reason,
             self.content_type,
+            referrer_policy,
             self.location
                 .as_deref()
                 .map_or(String::new(), |location| format!("Location: {location}\r\n")),
             self.headers
                 .iter()
+                .filter(|(name, _)| !name.eq_ignore_ascii_case("referrer-policy"))
                 .map(|(name, value)| format!("{name}: {value}\r\n"))
                 .collect::<String>(),
             self.body.len(),
@@ -357,17 +410,26 @@ impl Response {
             .iter()
             .find(|(name, _)| name.eq_ignore_ascii_case("content-length"))
             .map_or_else(|| body.len().to_string(), |(_, value)| value.clone());
+        let referrer_policy = self
+            .headers
+            .iter()
+            .find(|(name, _)| name.eq_ignore_ascii_case("referrer-policy"))
+            .map_or("same-origin", |(_, value)| value.as_str());
         let head = format!(
-            "HTTP/1.1 {} {}\r\nContent-Type: {}\r\nX-Content-Type-Options: nosniff\r\nX-Frame-Options: DENY\r\nReferrer-Policy: same-origin\r\n{}{}Content-Length: {}\r\nConnection: close\r\n\r\n",
+            "HTTP/1.1 {} {}\r\nContent-Type: {}\r\nX-Content-Type-Options: nosniff\r\nX-Frame-Options: DENY\r\nReferrer-Policy: {}\r\n{}{}Content-Length: {}\r\nConnection: close\r\n\r\n",
             self.status,
             self.reason,
             self.content_type,
+            referrer_policy,
             self.location
                 .as_deref()
                 .map_or(String::new(), |location| format!("Location: {location}\r\n")),
             self.headers
                 .iter()
-                .filter(|(name, _)| !name.eq_ignore_ascii_case("content-length"))
+                .filter(|(name, _)| {
+                    !name.eq_ignore_ascii_case("content-length")
+                        && !name.eq_ignore_ascii_case("referrer-policy")
+                })
                 .map(|(name, value)| format!("{name}: {value}\r\n"))
                 .collect::<String>(),
             content_length,
@@ -548,6 +610,8 @@ pub struct FormRoute {
     pub path: String,
     pub action: String,
     pub form: FormDef,
+    /// Host bridge for a compiler-checked standalone form handler.
+    pub handler: Option<FormHandler>,
     pub table: Option<TableDef>,
     pub schema: Option<Schema>,
     /// Tenant key for generated CRUD forms; resolved from the authenticated request.
@@ -1639,6 +1703,12 @@ impl WebApp {
                 current_label: "@i18n:auth.self_sessions_title".into(),
                 navigation: Vec::new(),
             }
+        } else if request.path == ACCOUNT_PROFILE_PATH && self.auth_route.is_some() {
+            DefaultUiContext {
+                current_path: request.path.clone(),
+                current_label: "@i18n:auth.self_profile_title".into(),
+                navigation: Vec::new(),
+            }
         } else {
             let admin_path = self
                 .auth_route
@@ -1688,6 +1758,11 @@ impl WebApp {
                 add_navigation_link(&mut context.navigation, form.path.clone(), label);
             }
             if let Some(auth) = &self.auth_route {
+                add_navigation_link(
+                    &mut context.navigation,
+                    ACCOUNT_PROFILE_PATH,
+                    "@i18n:auth.account_menu_label",
+                );
                 add_navigation_link(
                     &mut context.navigation,
                     ACCOUNT_SESSIONS_PATH,
@@ -1866,6 +1941,15 @@ impl WebApp {
                 _ => Response::empty(405).with_header("Allow", "GET, HEAD"),
             };
         }
+        if request.path == ZELYRA_UI_LOGO_PATH {
+            return match request.method.as_str() {
+                "GET" => Response::binary(200, "image/png", ZELYRA_UI_LOGO_PNG.to_vec())
+                    .with_header("Cache-Control", "public, max-age=31536000, immutable"),
+                "HEAD" => Response::binary(200, "image/png", Vec::new())
+                    .with_header("Cache-Control", "public, max-age=31536000, immutable"),
+                _ => Response::empty(405).with_header("Allow", "GET, HEAD"),
+            };
+        }
         if request.path == ZELYRA_UI_JS_PATH {
             return match request.method.as_str() {
                 "GET" => Response::javascript(200, ZELYRA_UI_JAVASCRIPT)
@@ -1906,6 +1990,9 @@ impl WebApp {
             }
             if request.path == ACCOUNT_SESSIONS_PATH {
                 return dispatch_account_sessions(self, request, self.database_url.as_deref());
+            }
+            if request.path == ACCOUNT_PROFILE_PATH {
+                return dispatch_account_profile(self, request, self.database_url.as_deref());
             }
             if request.path == ACCOUNT_SECURITY_PATH && auth_route.mfa_table.is_some() {
                 return dispatch_account_security(
@@ -2015,7 +2102,14 @@ impl WebApp {
                 if form.post_only && request.method != "POST" {
                     continue;
                 }
-                if self.database_capability_granted == Some(false) {
+                let has_handler = form
+                    .form
+                    .actions
+                    .iter()
+                    .any(|action| action.handler.is_some());
+                if self.database_capability_granted == Some(false)
+                    && (!has_handler || form_requires_database(form))
+                {
                     return database_capability_denied();
                 }
                 let (requires_auth, permissions) = form_authorization(form);
@@ -4510,6 +4604,417 @@ fn dispatch_logout(app: &WebApp, request: &Request, database_url: Option<&str>) 
     )
 }
 
+fn auth_user_has_column(auth: &AuthRoute, name: &str) -> bool {
+    auth.schema
+        .tables
+        .iter()
+        .find(|table| table.name == auth.table)
+        .is_some_and(|table| table.columns.iter().any(|column| column.name == name))
+}
+
+fn dispatch_account_profile(
+    app: &WebApp,
+    request: &Request,
+    database_url: Option<&str>,
+) -> Response {
+    let Some(auth) = app.auth_route.as_ref() else {
+        return Response::empty(404);
+    };
+    if app.database_capability_granted == Some(false) {
+        return database_capability_denied();
+    }
+    let Some(session) = session_from_request(app, request, database_url) else {
+        return Response::redirect("/login");
+    };
+    let Some(user_id) = session.user_id.filter(|id| *id > 0) else {
+        return Response::redirect("/login");
+    };
+    let Some(database_url) = database_url else {
+        return Response::html(503, "<h1>503 Service Unavailable</h1>")
+            .with_header("Cache-Control", "no-store");
+    };
+    let display_name_supported = auth_user_has_column(auth, "display_name");
+
+    match request.method.as_str() {
+        "GET" => {
+            let projection = if display_name_supported {
+                "email, display_name"
+            } else {
+                "email"
+            };
+            let query = zelyra_database::Query {
+                sql: format!(
+                    "SELECT {projection} FROM {} WHERE id = :user_id LIMIT 1",
+                    quote_identifier(&auth.table)
+                ),
+                params: vec![("user_id".into(), QueryValue::Int(user_id))],
+            };
+            let row = match zelyra_database::execute_mariadb_query(
+                database_url,
+                &query.sql,
+                query.params,
+            ) {
+                Ok(result) => result.rows.into_iter().next(),
+                Err(error) => {
+                    eprintln!("zelyra web: account profile lookup failed: {error}");
+                    return Response::html(503, "<h1>503 Service Unavailable</h1>")
+                        .with_header("Cache-Control", "no-store");
+                }
+            };
+            let Some(row) = row else {
+                return Response::redirect("/login");
+            };
+            let email = row.first().map(String::as_str).unwrap_or_default();
+            let display_name =
+                display_name_supported.then(|| row.get(1).map(String::as_str).unwrap_or_default());
+            Response::html(
+                200,
+                render_account_profile(auth, email, display_name, app.ui_language),
+            )
+            .with_header("Cache-Control", "no-store")
+        }
+        "POST" => {
+            let input = match parse_urlencoded(&request.body) {
+                Ok(input) => input,
+                Err(_) => {
+                    return Response::html(400, "<h1>400 Bad Request</h1>")
+                        .with_header("Cache-Control", "no-store")
+                }
+            };
+            if !verify_csrf_request(
+                request,
+                &auth.csrf,
+                input.get("_zelyra_csrf").map(String::as_str),
+            ) {
+                return Response::html(403, "<h1>403 Forbidden</h1>")
+                    .with_header("Cache-Control", "no-store");
+            }
+            match input
+                .get("operation")
+                .map(String::as_str)
+                .unwrap_or_default()
+            {
+                "update_profile" => {
+                    let email = input
+                        .get("email")
+                        .map(|value| value.trim())
+                        .unwrap_or_default();
+                    if email.len() > 254
+                        || !email.contains('@')
+                        || email.starts_with('@')
+                        || email.ends_with('@')
+                    {
+                        return account_profile_error(
+                            app.ui_language,
+                            422,
+                            tr(app.ui_language, "error.valid_email_required"),
+                        );
+                    }
+                    let display_name = input
+                        .get("display_name")
+                        .map(|value| value.trim())
+                        .unwrap_or_default();
+                    if display_name_supported && display_name.chars().count() > 150 {
+                        return account_profile_error(
+                            app.ui_language,
+                            422,
+                            tr(app.ui_language, "error.profile_name_too_long"),
+                        );
+                    }
+                    let current_password = input
+                        .get("current_password")
+                        .map(String::as_str)
+                        .unwrap_or_default();
+                    match verify_account_password(auth, database_url, user_id, current_password) {
+                        Ok(true) => {}
+                        Ok(false) => {
+                            return account_profile_error(
+                                app.ui_language,
+                                403,
+                                tr(app.ui_language, "error.current_password_invalid"),
+                            );
+                        }
+                        Err(error) => {
+                            eprintln!("zelyra web: account profile password check failed: {error}");
+                            return Response::html(503, "<h1>503 Service Unavailable</h1>")
+                                .with_header("Cache-Control", "no-store");
+                        }
+                    }
+                    let duplicate = zelyra_database::execute_mariadb_query(
+                        database_url,
+                        &format!(
+                            "SELECT COUNT(*) FROM {} WHERE email = :email AND id <> :user_id",
+                            quote_identifier(&auth.table)
+                        ),
+                        vec![
+                            ("email".into(), QueryValue::String(email.into())),
+                            ("user_id".into(), QueryValue::Int(user_id)),
+                        ],
+                    );
+                    match duplicate {
+                        Ok(result)
+                            if result
+                                .rows
+                                .first()
+                                .and_then(|row| row.first())
+                                .and_then(|count| count.parse::<u64>().ok())
+                                .unwrap_or_default()
+                                > 0 =>
+                        {
+                            return account_profile_error(
+                                app.ui_language,
+                                409,
+                                tr(app.ui_language, "error.profile_email_in_use"),
+                            );
+                        }
+                        Ok(_) => {}
+                        Err(error) => {
+                            eprintln!("zelyra web: account profile email check failed: {error}");
+                            return Response::html(503, "<h1>503 Service Unavailable</h1>")
+                                .with_header("Cache-Control", "no-store");
+                        }
+                    }
+                    let mut assignments = vec!["email = :email"];
+                    let mut params = vec![
+                        ("email".into(), QueryValue::String(email.into())),
+                        ("user_id".into(), QueryValue::Int(user_id)),
+                    ];
+                    if display_name_supported {
+                        assignments.push("display_name = :display_name");
+                        params.push((
+                            "display_name".into(),
+                            if display_name.is_empty() {
+                                QueryValue::Null
+                            } else {
+                                QueryValue::String(display_name.into())
+                            },
+                        ));
+                    }
+                    let update = zelyra_database::Query {
+                        sql: format!(
+                            "UPDATE {} SET {} WHERE id = :user_id",
+                            quote_identifier(&auth.table),
+                            assignments.join(", ")
+                        ),
+                        params,
+                    };
+                    match execute_auth_admin_mutation(
+                        auth,
+                        database_url,
+                        vec![update],
+                        Some(user_id),
+                        "auth.profile.update",
+                        Some(user_id),
+                        "self profile updated",
+                    ) {
+                        Ok(_) => Response::redirect(ACCOUNT_PROFILE_PATH)
+                            .with_header("Cache-Control", "no-store"),
+                        Err(error) => {
+                            eprintln!("zelyra web: account profile update failed: {error}");
+                            Response::html(503, "<h1>503 Service Unavailable</h1>")
+                                .with_header("Cache-Control", "no-store")
+                        }
+                    }
+                }
+                "change_password" => {
+                    let current_password = input
+                        .get("current_password")
+                        .map(String::as_str)
+                        .unwrap_or_default();
+                    let new_password = input
+                        .get("new_password")
+                        .map(String::as_str)
+                        .unwrap_or_default();
+                    let confirm_password = input
+                        .get("confirm_password")
+                        .map(String::as_str)
+                        .unwrap_or_default();
+                    match verify_account_password(auth, database_url, user_id, current_password) {
+                        Ok(true) => {}
+                        Ok(false) => {
+                            return account_profile_error(
+                                app.ui_language,
+                                403,
+                                tr(app.ui_language, "error.current_password_invalid"),
+                            );
+                        }
+                        Err(error) => {
+                            eprintln!("zelyra web: account password check failed: {error}");
+                            return Response::html(503, "<h1>503 Service Unavailable</h1>")
+                                .with_header("Cache-Control", "no-store");
+                        }
+                    }
+                    if new_password.chars().count() < 12 {
+                        return account_profile_error(
+                            app.ui_language,
+                            422,
+                            tr(app.ui_language, "error.profile_password_too_short"),
+                        );
+                    }
+                    if new_password != confirm_password {
+                        return account_profile_error(
+                            app.ui_language,
+                            422,
+                            tr(app.ui_language, "error.profile_password_mismatch"),
+                        );
+                    }
+                    let password_hash = match hash_password(new_password) {
+                        Ok(hash) => hash,
+                        Err(error) => {
+                            eprintln!("zelyra web: account password hashing failed: {error}");
+                            return Response::html(500, "<h1>500 Internal Server Error</h1>")
+                                .with_header("Cache-Control", "no-store");
+                        }
+                    };
+                    let update = zelyra_database::Query {
+                        sql: format!(
+                            "UPDATE {} SET password_hash = :password_hash WHERE id = :user_id",
+                            quote_identifier(&auth.table)
+                        ),
+                        params: vec![
+                            ("password_hash".into(), QueryValue::String(password_hash)),
+                            ("user_id".into(), QueryValue::Int(user_id)),
+                        ],
+                    };
+                    let mut queries = vec![update];
+                    if let Some(session_table) = auth.session_table.as_deref() {
+                        if let Some(token) = cookie_value(request, "zelyra_session") {
+                            queries.push(zelyra_database::Query {
+                                sql: format!(
+                                    "DELETE FROM {} WHERE user_id = :user_id AND token_hash <> :current_token_hash",
+                                    quote_identifier(session_table)
+                                ),
+                                params: vec![
+                                    ("user_id".into(), QueryValue::Int(user_id)),
+                                    (
+                                        "current_token_hash".into(),
+                                        QueryValue::String(session_token_hash(&token)),
+                                    ),
+                                ],
+                            });
+                        }
+                    }
+                    match execute_auth_admin_mutation(
+                        auth,
+                        database_url,
+                        queries,
+                        Some(user_id),
+                        "auth.password.change",
+                        Some(user_id),
+                        "self password changed; other sessions revoked",
+                    ) {
+                        Ok(_) => {
+                            revoke_other_memory_sessions(app, request, user_id);
+                            Response::redirect(ACCOUNT_PROFILE_PATH)
+                                .with_header("Cache-Control", "no-store")
+                        }
+                        Err(error) => {
+                            eprintln!("zelyra web: account password update failed: {error}");
+                            Response::html(503, "<h1>503 Service Unavailable</h1>")
+                                .with_header("Cache-Control", "no-store")
+                        }
+                    }
+                }
+                _ => account_profile_error(
+                    app.ui_language,
+                    422,
+                    tr(app.ui_language, "error.unknown_profile_operation"),
+                ),
+            }
+        }
+        _ => Response::empty(405).with_header("Allow", "GET, POST"),
+    }
+}
+
+fn verify_account_password(
+    auth: &AuthRoute,
+    database_url: &str,
+    user_id: i64,
+    password: &str,
+) -> Result<bool, zelyra_database::DatabaseError> {
+    let query = zelyra_database::Query {
+        sql: format!(
+            "SELECT password_hash FROM {} WHERE id = :user_id LIMIT 1",
+            quote_identifier(&auth.table)
+        ),
+        params: vec![("user_id".into(), QueryValue::Int(user_id))],
+    };
+    let result = zelyra_database::execute_mariadb_query(database_url, &query.sql, query.params)?;
+    let Some(hash) = result.rows.first().and_then(|row| row.first()) else {
+        return Ok(false);
+    };
+    Ok(PasswordHash::new(hash).is_ok_and(|parsed| {
+        Argon2::default()
+            .verify_password(password.as_bytes(), &parsed)
+            .is_ok()
+    }))
+}
+
+fn revoke_other_memory_sessions(app: &WebApp, request: &Request, user_id: i64) {
+    let Some(current_token) = cookie_value(request, "zelyra_session") else {
+        return;
+    };
+    if let Ok(mut sessions) = app.sessions.lock() {
+        sessions
+            .retain(|token, session| session.user_id != Some(user_id) || token == &current_token);
+    }
+}
+
+fn account_profile_error(
+    language: UiLanguage,
+    status: u16,
+    message: impl Into<String>,
+) -> Response {
+    let message = message.into();
+    Response::html(
+        status,
+        format!(
+            "<main><h1>{}</h1><p>{}</p><p><a href=\"{}\">{}</a></p></main>",
+            html_escape_preserving_locale_references(&tr(language, &format!("http.{status}"))),
+            html_escape_preserving_locale_references(&message),
+            ACCOUNT_PROFILE_PATH,
+            html_escape_preserving_locale_references(&tr(language, "auth.self_profile_title")),
+        ),
+    )
+    .with_header("Cache-Control", "no-store")
+}
+
+fn render_account_profile(
+    auth: &AuthRoute,
+    email: &str,
+    display_name: Option<&str>,
+    language: UiLanguage,
+) -> String {
+    let csrf = html_escape(auth.csrf.token());
+    let mut html = format!(
+        "<main class=\"z-account-profile\"><header class=\"z-page-header\"><div class=\"z-page-header__copy\"><h1 class=\"z-page-header__title\">{}</h1><p class=\"z-page-header__description\">{}</p></div></header><form class=\"z-stack z-account-profile__form\" method=\"post\" action=\"{}\"><input type=\"hidden\" name=\"_zelyra_csrf\" value=\"{csrf}\"><div class=\"z-grid z-grid--two\"><section class=\"z-card\" aria-labelledby=\"profile-details-title\"><header class=\"z-card__header\"><h2 class=\"z-card__title\" id=\"profile-details-title\">{}</h2></header><div class=\"z-card__body z-stack\">",
+        tr(language, "auth.self_profile_title"),
+        tr(language, "auth.self_profile_help"),
+        ACCOUNT_PROFILE_PATH,
+        tr(language, "auth.profile_details"),
+    );
+    if let Some(display_name) = display_name {
+        html.push_str(&format!(
+            "<label class=\"z-field\" for=\"display-name\"><span class=\"z-field__label\">{}</span><input class=\"z-input\" id=\"display-name\" name=\"display_name\" maxlength=\"150\" value=\"{}\"></label>",
+            tr(language, "auth.display_name"),
+            html_escape(display_name),
+        ));
+    }
+    html.push_str(&format!(
+        "<label class=\"z-field\" for=\"profile-email\"><span class=\"z-field__label\">{}</span><input class=\"z-input\" id=\"profile-email\" name=\"email\" type=\"email\" maxlength=\"254\" required value=\"{}\"></label></div></section><section class=\"z-card\" aria-labelledby=\"change-password-title\"><header class=\"z-card__header\"><h2 class=\"z-card__title\" id=\"change-password-title\">{}</h2></header><div class=\"z-card__body z-stack\"><label class=\"z-field\" for=\"password-new\"><span class=\"z-field__label\">{}</span><input class=\"z-input\" id=\"password-new\" name=\"new_password\" type=\"password\" autocomplete=\"new-password\"></label><label class=\"z-field\" for=\"password-confirm\"><span class=\"z-field__label\">{}</span><input class=\"z-input\" id=\"password-confirm\" name=\"confirm_password\" type=\"password\" autocomplete=\"new-password\"></label></div></section></div><section class=\"z-card\" aria-labelledby=\"account-confirm-title\"><header class=\"z-card__header\"><h2 class=\"z-card__title\" id=\"account-confirm-title\">{}</h2></header><div class=\"z-card__body z-grid z-grid--two\"><label class=\"z-field\" for=\"account-current-password\"><span class=\"z-field__label\">{}</span><input class=\"z-input\" id=\"account-current-password\" name=\"current_password\" type=\"password\" autocomplete=\"current-password\" required></label><div class=\"z-action-stack\"><button class=\"z-button z-button--default\" type=\"submit\" name=\"operation\" value=\"update_profile\">{}</button><button class=\"z-button z-button--primary\" type=\"submit\" name=\"operation\" value=\"change_password\">{}</button></div></div></section></form></main>",
+        tr(language, "auth.email"),
+        html_escape(email),
+        tr(language, "auth.change_password"),
+        tr(language, "auth.new_password"),
+        tr(language, "auth.confirm_password"),
+        tr(language, "auth.profile_details"),
+        tr(language, "auth.current_password"),
+        tr(language, "auth.save_profile"),
+        tr(language, "auth.change_password"),
+    ));
+    html
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 struct AccountSessionRow {
     key: String,
@@ -4552,7 +5057,35 @@ fn dispatch_account_sessions(
                     return Response::html(500, "<h1>500 Internal Server Error</h1>");
                 }
             };
-            Response::html(200, render_account_sessions(auth, &rows, app.ui_language))
+            let admin_activity = match (
+                auth.admin_permission.as_deref(),
+                auth.admin_path.as_deref(),
+                database_url,
+            ) {
+                (Some(permission), Some(_), Some(database_url))
+                    if authorize(
+                        true,
+                        &[permission.to_owned()],
+                        request,
+                        app,
+                        Some(database_url),
+                    )
+                    .is_none() =>
+                {
+                    match load_auth_admin_activity_data(auth, database_url) {
+                        Ok(data) => Some(data),
+                        Err(error) => {
+                            eprintln!("zelyra web: admin session and audit lookup failed: {error}");
+                            return Response::html(500, "<h1>500 Internal Server Error</h1>");
+                        }
+                    }
+                }
+                _ => None,
+            };
+            Response::html(
+                200,
+                render_account_sessions(auth, &rows, admin_activity.as_ref(), app.ui_language),
+            )
         }
         "POST" => {
             let input = match parse_urlencoded(&request.body) {
@@ -4835,13 +5368,15 @@ fn account_sessions_for_user(
 fn render_account_sessions(
     auth: &AuthRoute,
     sessions: &[AccountSessionRow],
+    admin_activity: Option<&AuthAdminActivityData>,
     language: UiLanguage,
 ) -> String {
     let csrf = html_escape(auth.csrf.token());
     let mut html = format!(
-        "<main><h1>{}</h1><p>{}</p><table><thead><tr><th>{}</th><th>{}</th><th>{}</th><th>{}</th></tr></thead><tbody>",
+        "<main><header class=\"z-page-header\"><div class=\"z-page-header__copy\"><h1 class=\"z-page-header__title\">{}</h1><p class=\"z-page-header__description\">{}</p></div></header><section class=\"z-card\" aria-labelledby=\"account-sessions-title\"><header class=\"z-card__header\"><h2 class=\"z-card__title\" id=\"account-sessions-title\">{}</h2></header><div class=\"z-card__body\"><div class=\"z-table-scroll\"><table class=\"z-table\"><thead><tr><th scope=\"col\">{}</th><th scope=\"col\">{}</th><th scope=\"col\">{}</th><th scope=\"col\">{}</th></tr></thead><tbody>",
         tr(language, "auth.self_sessions_title"),
         tr(language, "auth.self_sessions_help"),
+        tr(language, "auth.self_sessions_title"),
         tr(language, "auth.session_label"),
         tr(language, "auth.session_expiry"),
         tr(language, "auth.session_device"),
@@ -4879,7 +5414,7 @@ fn render_account_sessions(
             .map(html_escape)
             .unwrap_or_else(|| tr(language, "auth.session_device_unknown"));
         html.push_str(&format!(
-            "<tr><td>{}</td><td>{}</td><td>{}</td><td><form method=\"post\" action=\"{}\"><input type=\"hidden\" name=\"_zelyra_csrf\" value=\"{}\"><input type=\"hidden\" name=\"session_key\" value=\"{}\"><button type=\"submit\">{}</button></form></td></tr>",
+            "<tr><td>{}</td><td>{}</td><td>{}</td><td><div class=\"z-action-stack\"><form method=\"post\" action=\"{}\"><input type=\"hidden\" name=\"_zelyra_csrf\" value=\"{}\"><input type=\"hidden\" name=\"session_key\" value=\"{}\"><button class=\"z-button z-button--danger\" type=\"submit\">{}</button></form></div></td></tr>",
             label,
             expires,
             device,
@@ -4889,7 +5424,20 @@ fn render_account_sessions(
             tr(language, "auth.revoke_session"),
         ));
     }
-    html.push_str("</tbody></table></main>");
+    html.push_str("</tbody></table></div></div></section>");
+    if let Some(admin_activity) = admin_activity {
+        if administrable_session_table(auth).is_some() {
+            html.push_str(&render_auth_sessions(
+                auth,
+                &admin_activity.sessions,
+                language,
+            ));
+        }
+        if auth.audit_table.is_some() {
+            html.push_str(&render_auth_audit(&admin_activity.audit, language));
+        }
+    }
+    html.push_str("</main>");
     html
 }
 
@@ -4954,8 +5502,6 @@ fn dispatch_auth_admin(
                     &data.users,
                     &data.assignments,
                     &data.permissions,
-                    &data.audit,
-                    &data.sessions,
                     app.ui_language,
                 ),
             ),
@@ -4979,6 +5525,9 @@ struct AuthAdminData {
     users: Vec<Vec<String>>,
     assignments: Vec<Vec<String>>,
     permissions: Vec<Vec<String>>,
+}
+
+struct AuthAdminActivityData {
     audit: Vec<Vec<String>>,
     sessions: Vec<Vec<String>>,
 }
@@ -5223,6 +5772,17 @@ fn load_auth_admin_data(auth: &AuthRoute, database_url: &str) -> Result<AuthAdmi
     )
     .map_err(|error| error.to_string())?
     .rows;
+    Ok(AuthAdminData {
+        users,
+        assignments,
+        permissions,
+    })
+}
+
+fn load_auth_admin_activity_data(
+    auth: &AuthRoute,
+    database_url: &str,
+) -> Result<AuthAdminActivityData, String> {
     let audit = if let Some(audit_table) = auth.audit_table.as_deref() {
         zelyra_database::execute_mariadb_query(
             database_url,
@@ -5253,13 +5813,7 @@ fn load_auth_admin_data(auth: &AuthRoute, database_url: &str) -> Result<AuthAdmi
     } else {
         Vec::new()
     };
-    Ok(AuthAdminData {
-        users,
-        assignments,
-        permissions,
-        audit,
-        sessions,
-    })
+    Ok(AuthAdminActivityData { audit, sessions })
 }
 
 fn dispatch_auth_admin_post(
@@ -5765,7 +6319,11 @@ fn dispatch_auth_admin_post(
         eprintln!("zelyra web: auth administration write failed: {error}");
         return Response::html(500, "<h1>500 Internal Server Error</h1>");
     }
-    Response::redirect(auth.admin_path.as_deref().unwrap_or("/"))
+    Response::redirect(if operation == "revoke_session" {
+        ACCOUNT_SESSIONS_PATH
+    } else {
+        auth.admin_path.as_deref().unwrap_or("/")
+    })
 }
 
 fn render_auth_admin(
@@ -5773,8 +6331,6 @@ fn render_auth_admin(
     users: &[Vec<String>],
     assignments: &[Vec<String>],
     permissions: &[Vec<String>],
-    audit: &[Vec<String>],
-    sessions: &[Vec<String>],
     language: UiLanguage,
 ) -> String {
     let path = html_escape(auth.admin_path.as_deref().unwrap_or("/"));
@@ -5786,8 +6342,9 @@ fn render_auth_admin(
         .find(|table| table.name == auth.table)
         .is_some_and(|table| table.columns.iter().any(|column| column.name == "active"));
     let mut html = format!(
-        "<main><h1>{}</h1><h2>{}</h2><form method=\"post\" action=\"{path}\"><input type=\"hidden\" name=\"_zelyra_csrf\" value=\"{csrf}\"><input type=\"hidden\" name=\"operation\" value=\"create_user\"><label>{}</label><input name=\"email\" type=\"email\" required><label>{}</label><input name=\"password\" type=\"password\" minlength=\"8\" required><button type=\"submit\">{}</button></form><table><tr><th>{}</th><th>{}</th><th>{}</th></tr>",
+        "<main class=\"z-auth-admin\"><header class=\"z-page-header\"><div class=\"z-page-header__copy\"><h1 class=\"z-page-header__title\">{}</h1><p class=\"z-page-header__description\">{}</p></div></header><div class=\"z-admin-grid\"><section class=\"z-card z-admin-grid__wide\" aria-labelledby=\"auth-users-title\"><header class=\"z-card__header\"><h2 class=\"z-card__title\" id=\"auth-users-title\">{}</h2></header><div class=\"z-card__body\"><form class=\"z-grid z-grid--three z-admin-create-user\" method=\"post\" action=\"{path}\"><input type=\"hidden\" name=\"_zelyra_csrf\" value=\"{csrf}\"><input type=\"hidden\" name=\"operation\" value=\"create_user\"><label class=\"z-field\"><span class=\"z-field__label\">{}</span><input class=\"z-input\" name=\"email\" type=\"email\" autocomplete=\"email\" required></label><label class=\"z-field\"><span class=\"z-field__label\">{}</span><input class=\"z-input\" name=\"password\" type=\"password\" minlength=\"8\" autocomplete=\"new-password\" required></label><div class=\"z-action-stack z-admin-form__action\"><button class=\"z-button z-button--primary\" type=\"submit\">{}</button></div></form><div class=\"z-table-scroll z-admin-users-scroll\"><table class=\"z-table z-admin-users-table\"><thead><tr><th scope=\"col\">{}</th><th scope=\"col\">{}</th><th scope=\"col\">{}</th></tr></thead><tbody class=\"z-admin-user-rows\">",
         tr(language, "auth.admin_title"),
+        tr(language, "auth.admin_description"),
         tr(language, "auth.users_title"),
         tr(language, "auth.email"),
         tr(language, "auth.initial_password"),
@@ -5799,59 +6356,66 @@ fn render_auth_admin(
     for row in users {
         if let (Some(user_id), Some(email), Some(active)) = (row.first(), row.get(1), row.get(2)) {
             let is_active = matches!(active.as_str(), "1" | "true" | "TRUE");
+            let reset_password_label = tr(language, "auth.reset_password");
+            let status_label = tr(
+                language,
+                if is_active {
+                    "auth.deactivate"
+                } else {
+                    "auth.activate"
+                },
+            );
+            let status_icon = if is_active {
+                "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><circle cx=\"12\" cy=\"12\" r=\"9\"/><path d=\"M8 12h8\"/></svg>"
+            } else {
+                "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><circle cx=\"12\" cy=\"12\" r=\"9\"/><path d=\"m8 12 2.5 2.5L16 9\"/></svg>"
+            };
+            let status_button = if active_supported {
+                format!(
+                    "<form method=\"post\" action=\"{}\"><input type=\"hidden\" name=\"_zelyra_csrf\" value=\"{}\"><input type=\"hidden\" name=\"operation\" value=\"{}\"><input type=\"hidden\" name=\"user_id\" value=\"{}\"><button class=\"z-button z-button--{} z-button--icon\" type=\"submit\" aria-label=\"{}\" title=\"{}\">{}</button></form>",
+                    path,
+                    csrf,
+                    if is_active { "deactivate_user" } else { "activate_user" },
+                    html_escape(user_id),
+                    if is_active { "warning" } else { "success" },
+                    html_escape_preserving_locale_references(&status_label),
+                    html_escape_preserving_locale_references(&status_label),
+                    status_icon,
+                )
+            } else {
+                String::new()
+            };
             html.push_str(&format!(
-                "<tr><td>{}</td><td>{}</td><td><form method=\"post\" action=\"{}\"><input type=\"hidden\" name=\"_zelyra_csrf\" value=\"{}\"><input type=\"hidden\" name=\"operation\" value=\"reset_password\"><input type=\"hidden\" name=\"user_id\" value=\"{}\"><input name=\"password\" type=\"password\" minlength=\"8\" required placeholder=\"{}\"><button type=\"submit\">{}</button></form>{}</td></tr>",
+                "<tr class=\"z-admin-user-row\"><td>{}</td><td><span class=\"z-badge z-badge--{}\">{}</span></td><td><div class=\"z-action-stack\"><form method=\"post\" action=\"{}\"><input type=\"hidden\" name=\"_zelyra_csrf\" value=\"{}\"><input type=\"hidden\" name=\"operation\" value=\"reset_password\"><input type=\"hidden\" name=\"user_id\" value=\"{}\"><label class=\"z-field\"><span class=\"z-field__label\">{}</span><input class=\"z-input\" name=\"password\" type=\"password\" minlength=\"8\" autocomplete=\"new-password\" required></label><button class=\"z-button z-button--primary z-button--icon\" type=\"submit\" aria-label=\"{}\" title=\"{}\"><svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><circle cx=\"8\" cy=\"15\" r=\"4\"/><path d=\"m10.8 12.2 8.7-8.7m-3 3 2 2m-5-1 2 2\"/></svg></button></form>{}</div></td></tr>",
                 html_escape(email),
+                if is_active { "success" } else { "warning" },
                 tr(language, if is_active { "auth.active" } else { "auth.inactive" }),
                 path,
                 csrf,
                 html_escape(user_id),
                 tr(language, "auth.new_password_placeholder"),
-                tr(language, "auth.reset_password"),
-                if active_supported {
-                    format!(
-                        "<form method=\"post\" action=\"{}\"><input type=\"hidden\" name=\"_zelyra_csrf\" value=\"{}\"><input type=\"hidden\" name=\"operation\" value=\"{}\"><input type=\"hidden\" name=\"user_id\" value=\"{}\"><button type=\"submit\">{}</button></form>",
-                        path,
-                        csrf,
-                        if is_active { "deactivate_user" } else { "activate_user" },
-                        html_escape(user_id),
-                        tr(language, if is_active { "auth.deactivate" } else { "auth.activate" }),
-                    )
-                } else {
-                    String::new()
-                },
+                html_escape_preserving_locale_references(&reset_password_label),
+                html_escape_preserving_locale_references(&reset_password_label),
+                status_button,
             ));
         }
     }
-    html.push_str("</table>");
-    if administrable_session_table(auth).is_some() {
-        html.push_str(&render_auth_sessions(auth, sessions, language));
-    }
-    html.push_str("<h2>");
-    html.push_str(&tr(language, "auth.assign_role"));
-    html.push_str("</h2><form method=\"post\" action=\"");
-    html.push_str(&path);
-    html.push_str("\"><input type=\"hidden\" name=\"_zelyra_csrf\" value=\"");
-    html.push_str(&csrf);
-    html.push_str("\"><input type=\"hidden\" name=\"operation\" value=\"grant_role\"><label>");
-    html.push_str(&tr(language, "auth.user_id"));
-    html.push_str("</label><input name=\"user_id\" type=\"number\" required><label>");
-    html.push_str(&tr(language, "auth.role"));
-    html.push_str("</label><input name=\"role\" required><button type=\"submit\">");
-    html.push_str(&tr(language, "auth.grant_role"));
-    html.push_str("</button></form><h2>");
-    html.push_str(&tr(language, "auth.role_assignments"));
-    html.push_str("</h2><table><tr><th>");
-    html.push_str(&tr(language, "auth.user"));
-    html.push_str("</th><th>");
-    html.push_str(&tr(language, "auth.role"));
-    html.push_str("</th><th>");
-    html.push_str(&tr(language, "auth.action"));
-    html.push_str("</th></tr>");
+    html.push_str("</tbody></table></div></div></section>");
+    html.push_str(&format!(
+        "<section class=\"z-card z-admin-grid__wide\" aria-labelledby=\"auth-assign-role-title\"><header class=\"z-card__header\"><h2 class=\"z-card__title\" id=\"auth-assign-role-title\">{}</h2></header><div class=\"z-card__body\"><div class=\"z-admin-role-scroll\"><form class=\"z-admin-assign-role\" method=\"post\" action=\"{path}\"><input type=\"hidden\" name=\"_zelyra_csrf\" value=\"{csrf}\"><input type=\"hidden\" name=\"operation\" value=\"grant_role\"><label class=\"z-field\"><span class=\"z-field__label\">{}</span><input class=\"z-input\" name=\"user_id\" type=\"number\" min=\"1\" required></label><label class=\"z-field\"><span class=\"z-field__label\">{}</span><input class=\"z-input\" name=\"role\" required></label><div class=\"z-action-stack\"><button class=\"z-button z-button--primary\" type=\"submit\">{}</button></div></form></div><section class=\"z-admin-subsection\" aria-labelledby=\"auth-role-assignments-title\"><h3 class=\"z-admin-subsection__title\" id=\"auth-role-assignments-title\">{}</h3><div class=\"z-table-scroll\"><table class=\"z-table\"><thead><tr><th scope=\"col\">{}</th><th scope=\"col\">{}</th><th scope=\"col\">{}</th></tr></thead><tbody>",
+        tr(language, "auth.assign_role"),
+        tr(language, "auth.user_id"),
+        tr(language, "auth.role"),
+        tr(language, "auth.grant_role"),
+        tr(language, "auth.role_assignments"),
+        tr(language, "auth.user"),
+        tr(language, "auth.role"),
+        tr(language, "auth.action"),
+    ));
     for row in assignments {
         if let (Some(user_id), Some(email), Some(role)) = (row.first(), row.get(1), row.get(2)) {
             html.push_str(&format!(
-                "<tr><td>{}</td><td>{}</td><td><form method=\"post\" action=\"{}\"><input type=\"hidden\" name=\"_zelyra_csrf\" value=\"{}\"><input type=\"hidden\" name=\"operation\" value=\"revoke_role\"><input type=\"hidden\" name=\"user_id\" value=\"{}\"><input type=\"hidden\" name=\"role\" value=\"{}\"><button type=\"submit\">{}</button></form></td></tr>",
+                "<tr><td>{}</td><td>{}</td><td><div class=\"z-action-stack\"><form method=\"post\" action=\"{}\"><input type=\"hidden\" name=\"_zelyra_csrf\" value=\"{}\"><input type=\"hidden\" name=\"operation\" value=\"revoke_role\"><input type=\"hidden\" name=\"user_id\" value=\"{}\"><input type=\"hidden\" name=\"role\" value=\"{}\"><button class=\"z-button z-button--danger\" type=\"submit\">{}</button></form></div></td></tr>",
                 html_escape(email),
                 html_escape(role),
                 path,
@@ -5862,31 +6426,21 @@ fn render_auth_admin(
             ));
         }
     }
-    html.push_str("</table><h2>");
-    html.push_str(&tr(language, "auth.role_permissions"));
-    html.push_str("</h2><form method=\"post\" action=\"");
-    html.push_str(&path);
-    html.push_str("\"><input type=\"hidden\" name=\"_zelyra_csrf\" value=\"");
-    html.push_str(&csrf);
-    html.push_str(
-        "\"><input type=\"hidden\" name=\"operation\" value=\"grant_permission\"><label>",
-    );
-    html.push_str(&tr(language, "auth.role"));
-    html.push_str("</label><input name=\"role\" required><label>");
-    html.push_str(&tr(language, "auth.permission"));
-    html.push_str("</label><input name=\"permission\" required><button type=\"submit\">");
-    html.push_str(&tr(language, "auth.grant_permission"));
-    html.push_str("</button></form><table><tr><th>");
-    html.push_str(&tr(language, "auth.role"));
-    html.push_str("</th><th>");
-    html.push_str(&tr(language, "auth.permission"));
-    html.push_str("</th><th>");
-    html.push_str(&tr(language, "auth.action"));
-    html.push_str("</th></tr>");
+    html.push_str(&format!(
+        "</tbody></table></div></section></div></section><section class=\"z-card z-admin-grid__wide\" aria-labelledby=\"auth-grant-permission-title\"><header class=\"z-card__header\"><h2 class=\"z-card__title\" id=\"auth-grant-permission-title\">{}</h2></header><div class=\"z-card__body\"><div class=\"z-admin-role-scroll\"><form class=\"z-admin-assign-role\" method=\"post\" action=\"{path}\"><input type=\"hidden\" name=\"_zelyra_csrf\" value=\"{csrf}\"><input type=\"hidden\" name=\"operation\" value=\"grant_permission\"><label class=\"z-field\"><span class=\"z-field__label\">{}</span><input class=\"z-input\" name=\"role\" required></label><label class=\"z-field\"><span class=\"z-field__label\">{}</span><input class=\"z-input\" name=\"permission\" required></label><div class=\"z-action-stack\"><button class=\"z-button z-button--primary\" type=\"submit\">{}</button></div></form></div><section class=\"z-admin-subsection\" aria-labelledby=\"auth-role-permissions-title\"><h3 class=\"z-admin-subsection__title\" id=\"auth-role-permissions-title\">{}</h3><div class=\"z-table-scroll\"><table class=\"z-table\"><thead><tr><th scope=\"col\">{}</th><th scope=\"col\">{}</th><th scope=\"col\">{}</th></tr></thead><tbody>",
+        tr(language, "auth.grant_permission"),
+        tr(language, "auth.role"),
+        tr(language, "auth.permission"),
+        tr(language, "auth.grant_permission"),
+        tr(language, "auth.role_permissions"),
+        tr(language, "auth.role"),
+        tr(language, "auth.permission"),
+        tr(language, "auth.action"),
+    ));
     for row in permissions {
         if let (Some(role), Some(permission)) = (row.first(), row.get(1)) {
             html.push_str(&format!(
-                "<tr><td>{}</td><td>{}</td><td><form method=\"post\" action=\"{}\"><input type=\"hidden\" name=\"_zelyra_csrf\" value=\"{}\"><input type=\"hidden\" name=\"operation\" value=\"revoke_permission\"><input type=\"hidden\" name=\"role\" value=\"{}\"><input type=\"hidden\" name=\"permission\" value=\"{}\"><button type=\"submit\">{}</button></form></td></tr>",
+                "<tr><td>{}</td><td>{}</td><td><div class=\"z-action-stack\"><form method=\"post\" action=\"{}\"><input type=\"hidden\" name=\"_zelyra_csrf\" value=\"{}\"><input type=\"hidden\" name=\"operation\" value=\"revoke_permission\"><input type=\"hidden\" name=\"role\" value=\"{}\"><input type=\"hidden\" name=\"permission\" value=\"{}\"><button class=\"z-button z-button--danger\" type=\"submit\">{}</button></form></div></td></tr>",
                 html_escape(role),
                 html_escape(permission),
                 path,
@@ -5897,34 +6451,8 @@ fn render_auth_admin(
             ));
         }
     }
-    if auth.audit_table.is_some() {
-        html.push_str("</table><h2>");
-        html.push_str(&tr(language, "auth.audit_log"));
-        html.push_str("</h2><p>");
-        html.push_str(&tr(language, "auth.audit_latest"));
-        html.push_str("</p><table><tr><th>");
-        html.push_str(&tr(language, "auth.actor"));
-        html.push_str("</th><th>");
-        html.push_str(&tr(language, "auth.action"));
-        html.push_str("</th><th>");
-        html.push_str(&tr(language, "auth.target"));
-        html.push_str("</th><th>");
-        html.push_str(&tr(language, "auth.details"));
-        html.push_str("</th><th>");
-        html.push_str(&tr(language, "auth.created"));
-        html.push_str("</th></tr>");
-        for row in audit {
-            let cells = row
-                .iter()
-                .map(|value| format!("<td>{}</td>", html_escape(value)))
-                .collect::<String>();
-            html.push_str(&format!("<tr>{cells}</tr>"));
-        }
-        html.push_str("</table>");
-    } else {
-        html.push_str("</table>");
-    }
-    html.push_str("</main>");
+    html.push_str("</tbody></table></div></section></div></section>");
+    html.push_str("</div></main>");
     html
 }
 
@@ -6036,7 +6564,7 @@ fn render_auth_sessions(
     let path = html_escape(auth.admin_path.as_deref().unwrap_or("/"));
     let csrf = html_escape(auth.csrf.token());
     let mut html = format!(
-        "<h2>{}</h2><p>{}</p><table><tr><th>ID</th><th>{}</th><th>{}</th><th>{}</th><th>{}</th></tr>",
+        "<section class=\"z-card z-admin-grid__wide\" aria-labelledby=\"auth-sessions-title\"><header class=\"z-card__header\"><h2 class=\"z-card__title\" id=\"auth-sessions-title\">{}</h2></header><div class=\"z-card__body\"><p>{}</p><div class=\"z-table-scroll\"><table class=\"z-table\"><thead><tr><th scope=\"col\">ID</th><th scope=\"col\">{}</th><th scope=\"col\">{}</th><th scope=\"col\">{}</th><th scope=\"col\">{}</th></tr></thead><tbody>",
         tr(language, "auth.sessions"),
         tr(language, "auth.sessions_help"),
         tr(language, "auth.email"),
@@ -6052,11 +6580,42 @@ fn render_auth_sessions(
                 .filter(|device| !device.is_empty() && *device != "NULL")
                 .map(html_escape)
                 .unwrap_or_else(|| tr(language, "auth.session_device_unknown"));
-            html.push_str(&format!("<tr><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td><form method=\"post\" action=\"{path}\"><input type=\"hidden\" name=\"_zelyra_csrf\" value=\"{csrf}\"><input type=\"hidden\" name=\"operation\" value=\"revoke_session\"><input type=\"hidden\" name=\"session_id\" value=\"{}\"><input type=\"hidden\" name=\"user_id\" value=\"{}\"><button type=\"submit\">{}</button></form></td></tr>",
+            html.push_str(&format!("<tr><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td><div class=\"z-action-stack\"><form method=\"post\" action=\"{path}\"><input type=\"hidden\" name=\"_zelyra_csrf\" value=\"{csrf}\"><input type=\"hidden\" name=\"operation\" value=\"revoke_session\"><input type=\"hidden\" name=\"session_id\" value=\"{}\"><input type=\"hidden\" name=\"user_id\" value=\"{}\"><button class=\"z-button z-button--danger\" type=\"submit\">{}</button></form></div></td></tr>",
                 html_escape(id), html_escape(email), html_escape(expires), device, html_escape(id), html_escape(user_id), tr(language, "auth.revoke_session")));
         }
     }
-    html.push_str("</table>");
+    html.push_str("</tbody></table></div></div></section>");
+    html
+}
+
+fn render_auth_audit(audit: &[Vec<String>], language: UiLanguage) -> String {
+    let mut html = String::from(
+        "<section class=\"z-card z-admin-grid__wide\" aria-labelledby=\"auth-audit-title\"><header class=\"z-card__header\"><h2 class=\"z-card__title\" id=\"auth-audit-title\">",
+    );
+    html.push_str(&tr(language, "auth.audit_log"));
+    html.push_str("</h2></header><div class=\"z-card__body\"><p>");
+    html.push_str(&tr(language, "auth.audit_latest"));
+    html.push_str(
+        "</p><div class=\"z-table-scroll\"><table class=\"z-table\"><thead><tr><th scope=\"col\">",
+    );
+    html.push_str(&tr(language, "auth.actor"));
+    html.push_str("</th><th>");
+    html.push_str(&tr(language, "auth.action"));
+    html.push_str("</th><th>");
+    html.push_str(&tr(language, "auth.target"));
+    html.push_str("</th><th>");
+    html.push_str(&tr(language, "auth.details"));
+    html.push_str("</th><th>");
+    html.push_str(&tr(language, "auth.created"));
+    html.push_str("</th></tr></thead><tbody>");
+    for row in audit {
+        let cells = row
+            .iter()
+            .map(|value| format!("<td>{}</td>", html_escape(value)))
+            .collect::<String>();
+        html.push_str(&format!("<tr>{cells}</tr>"));
+    }
+    html.push_str("</tbody></table></div></div></section>");
     html
 }
 
@@ -6091,6 +6650,28 @@ fn account_sessions_test_auth() -> AuthRoute {
         },
         csrf: CsrfProtection::new("sessions-csrf"),
     }
+}
+
+#[test]
+fn account_profile_escapes_account_values_and_exposes_secure_password_forms() {
+    let auth = account_sessions_test_auth();
+    let html = render_account_profile(
+        &auth,
+        "<script>alert(1)</script>@example.test",
+        Some("<img src=x onerror=alert(1)>"),
+        UiLanguage::German,
+    );
+    assert!(html.contains("auth.save_profile"));
+    assert!(html.contains("auth.change_password"));
+    assert!(html.contains("name=\"current_password\""));
+    assert!(html.contains("name=\"confirm_password\""));
+    assert!(html.contains("&lt;script&gt;alert(1)&lt;/script&gt;@example.test"));
+    assert!(!html.contains("<script>alert(1)</script>"));
+    assert!(html.contains("&lt;img src=x onerror=alert(1)&gt;"));
+    assert!(html.contains("class=\"z-page-header__title\""));
+    assert_eq!(html.matches("class=\"z-card\"").count(), 3);
+    assert_eq!(html.matches("name=\"current_password\"").count(), 1);
+    assert_eq!(html.matches("class=\"z-action-stack").count(), 1);
 }
 
 #[test]
@@ -6322,6 +6903,23 @@ fn database_capability_denied() -> Response {
         403,
         "<h1>403 Forbidden</h1><p>The Database capability is not granted.</p>",
     )
+}
+
+fn form_requires_database(form: &FormRoute) -> bool {
+    form.form.table.is_some()
+        || form.form.verify.is_some()
+        || form.form.public_token.is_some()
+        || form.tenant_column.is_some()
+        || form.recipient_column.is_some()
+        || form.audit_table.is_some()
+        || form.form.actions.iter().any(|action| {
+            !action.statements.is_empty()
+                || action.execute_body.is_some()
+                || action.guard.is_some()
+                || action.capabilities.iter().any(|capability| {
+                    capability == "Database" || capability.starts_with("Database(")
+                })
+        })
 }
 
 impl Router {
@@ -7324,6 +7922,46 @@ fn dispatch_form_with_language(
             }
         }
     }
+    if form
+        .form
+        .actions
+        .iter()
+        .any(|action| action.handler.is_some())
+    {
+        let Some(handler) = &form.handler else {
+            eprintln!("zelyra web: standalone form handler was not installed");
+            return Response::html(500, "<h1>500 Internal Server Error</h1>");
+        };
+        let result = match handler.execute(&validation.values) {
+            Ok(result) if result.len() <= 4096 => result,
+            Ok(_) => {
+                eprintln!("zelyra web: standalone form handler result exceeded 4096 bytes");
+                return Response::html(500, "<h1>500 Internal Server Error</h1>");
+            }
+            Err(error) => {
+                eprintln!(
+                    "zelyra web: standalone form handler `{}` failed: {error}",
+                    handler.name
+                );
+                return Response::html(
+                    500,
+                    "<h1>500 Internal Server Error</h1><p>The form action could not be completed.</p>",
+                );
+            }
+        };
+        let mut response = Response::html(
+            200,
+            forms::render_form_result(&rendered_form, &values, &result, language),
+        );
+        response
+            .headers
+            .push(("Cache-Control".into(), "no-store, private".into()));
+        response.headers.push(("Pragma".into(), "no-cache".into()));
+        response
+            .headers
+            .push(("Referrer-Policy".into(), "no-referrer".into()));
+        return response;
+    }
     if let Some(action) = form.form.actions.first() {
         let Some(database_url) = database_url else {
             if let Some(storage) = &storage {
@@ -7752,6 +8390,8 @@ fn crud_child_route(parent: &FormRoute, child: &CrudChildFormRoute) -> FormRoute
     route.form = zelyra_ast::FormDef {
         name: format!("{}Child", child.definition.name),
         table: Some(child.table.name.clone()),
+        title: None,
+        description: None,
         path: None,
         post_only: false,
         verify: None,

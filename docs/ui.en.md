@@ -105,7 +105,7 @@ tags.
 
 | Component | Properties | Slots / behavior |
 |---|---|---|
-| `AppShell` | `id: String`, `navigation_label: String` | `header`, `navigation`, default content, `footer`; responsive header/navigation/content/footer layout |
+| `AppShell` | `id: String`, `navigation_label: String` | `header`, `navigation`, default content, `footer`; responsive layout and built-in light/dark toggle |
 | `Container` | — | Default content; centered `--z-content-width` |
 | `PageHeader` | `title: String`, `description: String?` | `actions`; title, description, and actions |
 | `Grid` | `columns: UiGridColumns?` (`one`, `two`, `three`, `four`; defaults to `one`) | Default content; 3/4 columns become two below 900 px and one below 600 px |
@@ -232,12 +232,24 @@ into new projects. The generated bundle header also tracks an independent
 design-system version. Patch releases refine visuals or fix styles without
 changing the token/class contract; minor releases may add compatible tokens or
 components; a breaking token or public-class change requires a major version.
-The current CSS bundle is v1.1.0.
+The current CSS bundle is v1.2.5. Navigation uses the same blue hover and
+active states across all AppShell views. Like other defaults, these can be
+customized through the `--z-color-primary-soft` and `--z-color-primary` theme
+tokens or regular CSS overrides; there is no page-specific exception. Inputs
+use the customizable `--z-color-control-border` token. The default shell shows
+the bundled Zelyra logo instead of a text slogan or placeholder mark. Admin
+areas use responsive cards with clear grouping by default; each user gets a
+separate row with compact, accessibly labelled action icons. Role management and
+permission management each use a full-width card that groups the assignment form
+with its related list.
 
-Light and dark themes, system preference, a persisted user choice,
-comfortable/compact density, `prefers-reduced-motion`, and print styles are
-included. JavaScript enhances dialogs, tabs, mobile navigation, theme and
-density controls, and toasts. Navigation, links, GET/POST forms, disclosure,
+The Zelyra default theme uses the clear blue Dashboard palette and starts in
+light mode. `AppShell` includes an accessible light/dark toggle; its choice is
+saved in the browser and shared across the application's pages. A dark theme,
+optional system preference, comfortable/compact density,
+`prefers-reduced-motion`, and print styles are included. JavaScript enhances
+dialogs, tabs, mobile navigation, theme and density controls, and toasts.
+Navigation, links, GET/POST forms, disclosure,
 selection controls, and printable content use native HTML behavior.
 
 `ZELYRA_UI_STYLESHEET` selects `zelyra` (default), `tabler` (locally bundled
