@@ -50,7 +50,7 @@ abgeschlossen.
 | --- | --- | --- |
 | 1.2.56 | Studio-Menüs Datei/Bearbeiten, lesbare UI und SQL-Arbeitsplatz | Als [v1.2.56](https://github.com/sf1976/zelyra/releases/tag/v1.2.56) veröffentlicht; vollständige PR-CI, reproduzierbare Linux-/Windows-Pakete, Prüfsummen und SPDX-SBOMs bestanden. |
 | 1.3.0 | Compiler- und Studio-Grundlage | Kanonisches Projektlayout, Architekturprüfung/Migrationsvorschau und compilerbewusster Studio-Arbeitsfluss sind nachvollziehbar geprüft. AST bleibt Standard; MIR/Bytecode bleiben optional und nicht unterstützte Pfade scheitern sicher. |
-| 1.3.1–1.3.50 | Härtung an einem praktischen Zelyra-Kundenbereich | Nach Veröffentlichung von 1.3.0 werden breite neue Features eingefroren. Im Mittelpunkt stehen Fehlerkorrekturen sowie Sicherheits-, Zuverlässigkeits-, Kompatibilitäts- und Performancebelege aus dem Kundenbereich. Erste Anwendung ist ein vollständig und idiomatisch in Zelyra geschriebener Passwortgenerator. Nur die dafür zwingend fehlende native Sprach-/Laufzeitunterstützung wird gezielt ergänzt und im Projekt geprüft. |
+| 1.3.1–1.3.50 | Härtung anhand zweier nativer Zelyra-Projekte | Nach Veröffentlichung von 1.3.0 werden breite neue Features eingefroren. Zuerst werden der Passwortgenerator im Work-Modus und der manuell verwaltete Kundenbereich ausschließlich mit Zelyra umgesetzt und geprüft. Erst wenn der Passwortgenerator funktioniert, beginnt Mini-ERP Benchmark 01 als erste integrierte Geschäftsanwendung; dabei entdeckte Sprachlücken werden in Zelyra selbst behoben. 1.3.50 wird an den Abnahmekriterien des Benchmarks gemessen; Unvollständiges wird klar ausgewiesen. |
 | 1.4.0 | Zelyra Visual Design Platform | Ein produktiver erster Schnitt mit gemeinsamem Komponentenregister und Vorschau, Zelyra-Quellcode als einziger maßgeblicher Beschreibung, Theme-/Style-Core, visueller Formularbearbeitung und sicherer Quellsynchronisierung. Phase 0 beginnt nach 1.3.0 mit Bestandsanalyse und Spezifikation. |
 | 1.5.0 | Bytecode-Reife und Standard-Gate | Bytecode wird nur bei belegter Parität, sicherem fail-closed Verhalten, geprüften Artefakt-Upgrades und messbarem Nutzen Standard. Andernfalls bleibt AST Standard und Bytecode optional. |
 | 1.6.0 | Pakete, Module und Deployment | Wiederverwendbare, vertrauensgeprüfte Module und reproduzierbare Offline-/Deployment-Bundles werden an realen Verbraucherprojekten abgenommen; keine stabile native ABI wird vorausgesetzt. |
@@ -83,7 +83,7 @@ nicht geprüfte Geschäftsabläufe sind keine bestätigte Sprachlücke; sie blei
 als „nicht bewertet“ markiert, bis ein reproduzierbarer Zelyra-Versuch das
 Ergebnis belegt.
 
-### Härtungsprojekt 1.3.1–1.3.50: Kundenbereich und Passwortgenerator
+### Härtung 1.3.1–1.3.50: Passwortgenerator, danach Mini-ERP Benchmark 01
 
 Diese Phase beginnt nach Abschluss von 1.3.0. Zelyra selbst wird unter
 `/opt/` installiert und betreibt einen Kundenbereich ohne öffentliche
@@ -94,9 +94,34 @@ Compiler-, Laufzeit- und UI-Funktionalität umgesetzt wird. Er läuft mit
 `ZELYRA_LEVEL=work` und zunächst deutscher Oberfläche. Keine andere Sprache
 und keinen untypischen Umweg verwenden. Fehlt eine benötigte Fähigkeit, wird
 zuerst die kleinstmögliche native Zelyra-Unterstützung ergänzt und im Projekt
-geprüft. Weitere Anwendungen folgen erst nach dem funktionierenden ersten
-Ablauf und dessen Regressionstests.
+geprüft.
 
+**Mini-ERP Benchmark 01 beginnt erst, wenn der Passwortgenerator funktioniert.
+Phase A des Benchmarks startet nicht vorher.** Danach prüft eine vollständige,
+in Zelyra entwickelte Geschäftsanwendung die Sprache über eine CRUD-Demo
+hinaus. Der Umfang enthält Kunden-, Lieferanten- und Artikelstammdaten;
+Mehrlagerbestände mit Bewegungen, Reservierungen, Inventur und atomaren
+parallelen Buchungen; Einkaufs- und Verkaufsabläufe; Angebote, Aufträge,
+Teillieferungen, Rechnungen, Gutschriften, exakte Dezimalbeträge und
+PDF-Ausgabe; Dashboard und Berichte; manuell angelegte Benutzer,
+serverseitige Rollen und Datensatzberechtigungen sowie Audit-Historie. MariaDB
+ist die primäre Datenbank. UI, Validierung, SQL, Transaktionen, Autorisierung
+und Geschäftslogik werden idiomatisch mit Zelyra umgesetzt.
+
+Bei jeder Sprach-, Compiler-, Runtime-, Datenbank-, UI- oder Studio-Lücke gilt
+STOP → ANALYSE → BEHEBUNG → TEST → FORTSETZUNG. Keine fremdsprachige
+Geschäftslogik, direkte DOM-Manipulation und keine nur für den Benchmark
+gebauten Compiler-Ausnahmen. Positive und negative Tests,
+Nebenläufigkeits- und Sicherheitsprüfungen, Interpreter-/VM-Vergleiche wo
+relevant, realistische Daten und Performance-Messungen, zweisprachige
+Dokumentation und Benchmark-Metriken sind verpflichtend. Jede Sprachlücke wird
+beim Start von Phase A unter
+`benchmarks/business-app-01/reports/LANGUAGE_GAPS.md` erfasst. Das detaillierte
+Briefing des Nutzers ist die Abnahmegrundlage; Phase A erstellt zuerst
+Fähigkeitsmatrix, Daten-/Domänenmodell, Prozessübersicht, Rollenmodell, UI-Plan
+und Teststrategie. 1.3.50 ist das Ziel für den abgeschlossenen Benchmark.
+Bleibt ein Pflichtkriterium offen, wird das Projekt als unvollständig
+ausgewiesen.
 ### Laufender Funktionstest mit einer realen Geschäftsanwendung
 
 Die Geschäftsfunktionen der Anwendung unter
@@ -726,7 +751,7 @@ Der erste dokumentierte Abgleich und seine Testbelege stehen im
 
 - [🧪] **1.3.0 — HTTP-unabhängige Domain-Module:** `strict_architecture` meldet direkte Importe von Modulen aus `routes/` in `domain/` mit `E-ARCH-004` an der Importstelle. Domain-Funktionen werden dadurch über ihre fachlichen Eingaben aufgerufen statt an die Route gekoppelt. Typen für eingehende Requests, Responses, Sessions oder Cookies existieren aktuell nicht als benutzbare Zelyra-API; eine weitergehende Typprüfung dieser Werte ist daher noch nicht möglich.
 
-- [🧪] **1.3.0 — Laravel-Anwendungsabgleich:** Ein read-only Lauf gegen `/opt/siedelmann-laravel/app` hat einen konkreten Generatorfehler offengelegt: ausgewählte Kunden-/Rechnungstabellen ließen skalare Fremdschlüsselziele wie `tenants` aus, wodurch das generierte Zelyra-Schema nicht kompilierte. Die Auswahl verfolgt jetzt sowohl typisierte Beziehungen als auch `references_table`-Fremdschlüssel. Der ausgewählte Ausschnitt für `customers`, `invoices` und `invoice_items` enthält nun `customer_groups`, `document_templates`, `suppliers`, `tenants` und `users` und besteht `zelyra check`. Eine neue statische Analyse vom 24.10.2026 zählt 2.279 Befunde (1.326 manuell zu prüfen, 70 ungelöst, 883 teilweise unterstützt); der angeforderte Schemaschnitt wurde mit acht abhängigen Tabellen erneut erzeugt und besteht weiterhin `zelyra check`. Das belegt weder vollständige Geschäftsabläufe noch Autorisierung, Mandantensicherheit oder Funktionsparität. PHP, Umgebungsdateien, Datenbank und Anwendungsdaten wurden bei diesem Lauf nicht gelesen.
+- [🧪] **1.3.0 — schreibgeschützter Laravel-Schema-/Compilercheck:** Ein read-only Lauf gegen `/opt/siedelmann-laravel/app` hat einen konkreten Generatorfehler offengelegt: ausgewählte Kunden-/Rechnungstabellen ließen skalare Fremdschlüsselziele wie `tenants` aus, wodurch das generierte Zelyra-Schema nicht kompilierte. Die Auswahl verfolgt jetzt sowohl typisierte Beziehungen als auch `references_table`-Fremdschlüssel. Der ausgewählte Ausschnitt für `customers`, `invoices` und `invoice_items` enthält nun `customer_groups`, `document_templates`, `suppliers`, `tenants` und `users` und besteht `zelyra check`. Eine neue statische Analyse vom 24.10.2026 zählt 2.279 Befunde (1.326 manuell zu prüfen, 70 ungelöst, 883 teilweise unterstützt); der angeforderte Schemaschnitt wurde mit acht abhängigen Tabellen erneut erzeugt und besteht weiterhin `zelyra check`. Das belegt weder vollständige Geschäftsabläufe noch Autorisierung, Mandantensicherheit oder Funktionsparität. PHP, Umgebungsdateien, Datenbank und Anwendungsdaten wurden bei diesem Lauf nicht gelesen. Dieser 1.3.0-Punkt ist nur ein schreibgeschützter Generator-/Schema-Regressionstest; die Nachbildung realer Geschäftsabläufe beginnt ausdrücklich erst nach dem Passwortgenerator im Work-Modus in der Benchmarkphase 1.3.1–1.3.50.
 
 - [🗺️] **1.5.0 — Bytecode als mögliches Standard-Backend:** AST bleibt bis dahin
   Standard; MIR und Bytecode bleiben ausdrücklich auswählbar und experimentell.
