@@ -293,7 +293,7 @@ pub(super) fn run() -> ExitCode {
                     "Lokaler Stack wird gestartet und das Projektschema wird eingerichtet...",
             }
         );
-        return match setup_action(&path, action, &setup_options) {
+        return match setup_action(&path, action, &setup_options, true) {
             Ok(message) => {
                 println!("{message}");
                 ExitCode::SUCCESS

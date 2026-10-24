@@ -5515,9 +5515,21 @@ fn setup_action_prepare_is_idempotent_and_does_not_replace_credentials() {
     )
     .unwrap();
 
-    let first = setup_action(path.to_str().unwrap(), "prepare", &SetupOptions::default()).unwrap();
+    let first = setup_action(
+        path.to_str().unwrap(),
+        "prepare",
+        &SetupOptions::default(),
+        false,
+    )
+    .unwrap();
     let contents = fs::read_to_string(path.join(".env")).unwrap();
-    let second = setup_action(path.to_str().unwrap(), "prepare", &SetupOptions::default()).unwrap();
+    let second = setup_action(
+        path.to_str().unwrap(),
+        "prepare",
+        &SetupOptions::default(),
+        false,
+    )
+    .unwrap();
     assert!(first.contains("created protected .env"));
     assert!(second.contains("kept existing .env"));
     assert_eq!(contents, fs::read_to_string(path.join(".env")).unwrap());
@@ -5622,6 +5634,34 @@ fn docker_compose_hint_is_actionable_and_platform_specific() {
     assert!(hint.contains("Docker Compose v2 or newer is required"));
     assert!(hint.contains("https://docs.docker.com/"));
     assert!(hint.contains("docker compose version"));
+    assert!(hint.contains("asks whether to install"));
+}
+
+#[test]
+fn compose_install_prompt_uses_only_supported_platform_package_managers() {
+    let apt = compose_package_install_command_for("linux", &HashSet::from(["apt-get"]))
+        .expect("apt-get should have a supported Linux Compose package");
+    assert_eq!(apt.0, "apt-get");
+    assert_eq!(apt.1, ["install", "-y", "docker-compose-plugin"]);
+    assert!(apt.2);
+
+    let brew = compose_package_install_command_for("macos", &HashSet::from(["brew"]))
+        .expect("Homebrew should have a supported Compose package");
+    assert_eq!(brew.0, "brew");
+    assert_eq!(brew.1, ["install", "docker-compose"]);
+    assert!(!brew.2);
+
+    let winget = compose_package_install_command_for("windows", &HashSet::from(["winget"]))
+        .expect("winget should offer Docker Desktop, including Compose v2");
+    assert_eq!(winget.0, "winget");
+    assert_eq!(
+        winget.1,
+        ["install", "--id", "Docker.DockerDesktop", "--exact"]
+    );
+    assert!(!winget.2);
+
+    assert!(compose_package_install_command_for("linux", &HashSet::new()).is_none());
+    assert!(compose_package_install_command_for("unknown", &HashSet::from(["apt-get"])).is_none());
 }
 
 #[test]

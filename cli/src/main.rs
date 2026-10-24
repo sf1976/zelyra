@@ -9,7 +9,7 @@ use std::{
     env,
     fmt::Write as _,
     fs,
-    io::{Read, Write as _},
+    io::{IsTerminal, Read, Write as _},
     net::{SocketAddr, TcpListener, ToSocketAddrs},
     path::{Path, PathBuf},
     process::ExitCode,
@@ -5772,6 +5772,173 @@ fn detect_docker_compose() -> Option<DockerComposeCommand> {
     standalone.then_some(DockerComposeCommand::Standalone)
 }
 
+fn ensure_docker_compose(
+    allow_install_prompt: bool,
+) -> Result<Option<DockerComposeCommand>, String> {
+    if let Some(command) = detect_docker_compose() {
+        return Ok(Some(command));
+    }
+    if !allow_install_prompt || !std::io::stdin().is_terminal() {
+        return Ok(None);
+    }
+
+    println!("Docker Compose v2 is required. No system package will be changed without your confirmation.");
+    print!(
+        "Docker Compose v2 is missing. Install it now using the detected package manager? [y/N] "
+    );
+    let _ = std::io::stdout().flush();
+    let mut answer = String::new();
+    std::io::stdin()
+        .read_line(&mut answer)
+        .map_err(|error| format!("could not read the installation choice: {error}"))?;
+    if !matches!(
+        answer.trim().to_ascii_lowercase().as_str(),
+        "y" | "yes" | "j" | "ja"
+    ) {
+        return Ok(None);
+    }
+
+    let Some((program, args, requires_sudo)) = compose_package_install_command() else {
+        return Err(format!(
+            "automatic Compose installation is not supported by the detected package manager; follow the official instructions, then retry\n{}",
+            docker_compose_install_hint()
+        ));
+    };
+    let (program, args) = if requires_sudo && !is_effective_root() {
+        let Some(sudo) = find_executable("sudo") else {
+            return Err(format!(
+                "`sudo` is required to install Docker Compose; install it manually, then retry\n{}",
+                docker_compose_install_hint()
+            ));
+        };
+        let mut sudo_args = vec![program];
+        sudo_args.extend(args);
+        (sudo, sudo_args)
+    } else {
+        (program, args)
+    };
+    println!("Installing Docker Compose v2. The package manager may request administrator authentication.");
+    if program.ends_with("apt-get") || args.first().is_some_and(|arg| arg == "apt-get") {
+        let update = if program.ends_with("apt-get") {
+            Command::new(&program).arg("update").status()
+        } else {
+            Command::new(&program).arg("apt-get").arg("update").status()
+        };
+        let update_status = update.map_err(|error| {
+            format!(
+                "could not refresh package indexes: {error}\n{}",
+                docker_compose_install_hint()
+            )
+        })?;
+        if !update_status.success() {
+            return Err(format!(
+                "could not refresh package indexes ({update_status}); review the package-manager output\n{}",
+                docker_compose_install_hint()
+            ));
+        }
+    }
+    let status = Command::new(&program)
+        .args(&args)
+        .status()
+        .map_err(|error| {
+            format!(
+                "could not start the Compose installation command: {error}\n{}",
+                docker_compose_install_hint()
+            )
+        })?;
+    if !status.success() {
+        return Err(format!(
+            "Docker Compose installation failed with {status}; review the package-manager output and retry\n{}",
+            docker_compose_install_hint()
+        ));
+    }
+    detect_docker_compose().map(Some).ok_or_else(|| {
+        format!(
+            "the package installation completed, but Docker Compose v2 is still not available; verify with `docker compose version`\n{}",
+            docker_compose_install_hint()
+        )
+    })
+}
+
+fn compose_package_install_command() -> Option<(String, Vec<String>, bool)> {
+    let available = [
+        "apt-get", "dnf", "yum", "pacman", "zypper", "brew", "winget",
+    ]
+    .into_iter()
+    .filter(|name| find_executable(name).is_some())
+    .collect::<HashSet<_>>();
+    compose_package_install_command_for(
+        if cfg!(target_os = "linux") {
+            "linux"
+        } else if cfg!(target_os = "macos") {
+            "macos"
+        } else if cfg!(target_os = "windows") {
+            "windows"
+        } else {
+            "unknown"
+        },
+        &available,
+    )
+}
+
+fn compose_package_install_command_for(
+    operating_system: &str,
+    available: &HashSet<&str>,
+) -> Option<(String, Vec<String>, bool)> {
+    let (program, args, requires_sudo) = match operating_system {
+        "linux" if available.contains("apt-get") => (
+            "apt-get",
+            vec!["install", "-y", "docker-compose-plugin"],
+            true,
+        ),
+        "linux" if available.contains("dnf") => {
+            ("dnf", vec!["install", "-y", "docker-compose-plugin"], true)
+        }
+        "linux" if available.contains("yum") => {
+            ("yum", vec!["install", "-y", "docker-compose-plugin"], true)
+        }
+        "linux" if available.contains("pacman") => {
+            ("pacman", vec!["-S", "--needed", "docker-compose"], true)
+        }
+        "linux" if available.contains("zypper") => (
+            "zypper",
+            vec!["--non-interactive", "install", "docker-compose"],
+            true,
+        ),
+        "macos" if available.contains("brew") => ("brew", vec!["install", "docker-compose"], false),
+        "windows" if available.contains("winget") => (
+            "winget",
+            vec!["install", "--id", "Docker.DockerDesktop", "--exact"],
+            false,
+        ),
+        _ => return None,
+    };
+    Some((
+        program.into(),
+        args.into_iter().map(String::from).collect(),
+        requires_sudo,
+    ))
+}
+
+fn find_executable(name: &str) -> Option<String> {
+    let path = env::var_os("PATH")?;
+    env::split_paths(&path)
+        .map(|directory| directory.join(name))
+        .find(|candidate| candidate.is_file())
+        .map(|candidate| candidate.to_string_lossy().into_owned())
+}
+
+fn is_effective_root() -> bool {
+    cfg!(unix)
+        && Command::new("id")
+            .arg("-u")
+            .output()
+            .ok()
+            .is_some_and(|output| {
+                output.status.success() && String::from_utf8_lossy(&output.stdout).trim() == "0"
+            })
+}
+
 fn compose_version_output(output: &Output) -> String {
     format!(
         "{}\n{}",
@@ -5821,17 +5988,18 @@ fn docker_compose_install_hint() -> String {
         )
     };
     format!(
-        "Docker Compose v2 or newer is required. Python docker-compose v1 is unsupported and can fail with ContainerConfig on current Docker engines. Install or update the Docker Compose plugin for {platform} from:\n{url}\nAfter installation, verify with `docker compose version`, then run this step again."
+        "Docker Compose v2 or newer is required. Python docker-compose v1 is unsupported and can fail with ContainerConfig on current Docker engines. Install or update the Docker Compose plugin for {platform} from:\n{url}\nInteractive MariaDB setup (`zelyra setup --database`, `--schema`, or `--all`) asks whether to install it through a supported package manager. The browser setup shows these instructions without running system package commands. After installation, verify with `docker compose version`, then run this step again."
     )
 }
 
 fn print_compose_start_hint() {
-    match detect_docker_compose() {
-        Some(command) => println!(
+    match ensure_docker_compose(true) {
+        Ok(Some(command)) => println!(
             "  {} --env-file .env -f docker-compose.mariadb.yml up -d --build",
             command.label()
         ),
-        None => println!("{}", docker_compose_install_hint()),
+        Ok(None) => println!("{}", docker_compose_install_hint()),
+        Err(error) => println!("{error}\n{}", docker_compose_install_hint()),
     }
 }
 
@@ -6111,13 +6279,14 @@ fn compose_up_with_port_fallback(
 fn start_mariadb_compose(
     directory: &std::path::Path,
     database_only: bool,
+    allow_install_prompt: bool,
 ) -> Result<String, String> {
     if !directory.join("docker-compose.mariadb.yml").is_file() {
         return Err(
             "docker-compose.mariadb.yml is missing; use `zelyra init --mariadb` first".into(),
         );
     }
-    let Some(command) = detect_docker_compose() else {
+    let Some(command) = ensure_docker_compose(allow_install_prompt)? else {
         return Err(docker_compose_install_hint());
     };
     let args = if database_only {
@@ -6426,8 +6595,11 @@ fn container_schema_setup_args() -> Vec<&'static str> {
     ]
 }
 
-fn run_container_schema_setup(directory: &std::path::Path) -> Result<(), String> {
-    let Some(command) = detect_docker_compose() else {
+fn run_container_schema_setup(
+    directory: &std::path::Path,
+    allow_install_prompt: bool,
+) -> Result<(), String> {
+    let Some(command) = ensure_docker_compose(allow_install_prompt)? else {
         return Err(docker_compose_install_hint());
     };
     let build = compose_command(directory, command)
@@ -6488,7 +6660,12 @@ fn run_container_schema_setup(directory: &std::path::Path) -> Result<(), String>
     unreachable!("the schema setup retry loop returns on its final attempt")
 }
 
-fn setup_action(path: &str, action: &str, options: &SetupOptions) -> Result<String, String> {
+fn setup_action(
+    path: &str,
+    action: &str,
+    options: &SetupOptions,
+    allow_install_prompt: bool,
+) -> Result<String, String> {
     let directory = setup_directory(path)?;
     let setup = ensure_local_env_file(&directory, options)?;
     let mut messages = setup
@@ -6502,11 +6679,15 @@ fn setup_action(path: &str, action: &str, options: &SetupOptions) -> Result<Stri
         "kept existing .env; credentials were not changed".to_owned()
     });
     if matches!(action, "database" | "schema" | "all") {
-        messages.push(start_mariadb_compose(&directory, true)?);
+        messages.push(start_mariadb_compose(
+            &directory,
+            true,
+            allow_install_prompt,
+        )?);
     }
     if matches!(action, "schema" | "all") {
         let schema_result = if directory.join("docker-compose.mariadb.yml").is_file() {
-            run_container_schema_setup(&directory)
+            run_container_schema_setup(&directory, allow_install_prompt)
         } else {
             let database_url = expanded_database_url(&directory)?;
             run_local_schema_setup(&directory, &database_url)
@@ -6515,7 +6696,7 @@ fn setup_action(path: &str, action: &str, options: &SetupOptions) -> Result<Stri
             Ok(()) => {}
             Err(error) if invoice_tutorial_database_recovery_required(&directory, &error) => {
                 isolate_invoice_tutorial_compose_project(&directory)?;
-                let restarted = start_mariadb_compose(&directory, true).map_err(|retry_error| {
+                let restarted = start_mariadb_compose(&directory, true, allow_install_prompt).map_err(|retry_error| {
                     let web_url = project_web_url(&directory).unwrap_or_else(|_| "unknown".into());
                     format!(
                         "the existing invoice tutorial database rejected its credentials; its volume was preserved, but an isolated tutorial database could not be started: {retry_error}\napplication URL: {web_url}"
@@ -6524,7 +6705,7 @@ fn setup_action(path: &str, action: &str, options: &SetupOptions) -> Result<Stri
                 messages.push(format!(
                     "note: the previous invoice tutorial database volume was preserved; an isolated database was started ({restarted})"
                 ));
-                run_container_schema_setup(&directory).map_err(|retry_error| {
+                run_container_schema_setup(&directory, allow_install_prompt).map_err(|retry_error| {
                     let web_url = project_web_url(&directory).unwrap_or_else(|_| "unknown".into());
                     format!(
                         "schema setup also failed with a fresh isolated invoice tutorial database: {retry_error}\napplication URL: {web_url}"
@@ -6551,10 +6732,11 @@ fn setup_action(path: &str, action: &str, options: &SetupOptions) -> Result<Stri
         }
     }
     if action == "all" {
-        let started = start_mariadb_compose(&directory, false).map_err(|error| {
-            let web_url = project_web_url(&directory).unwrap_or_else(|_| "unknown".into());
-            format!("{error}\napplication URL after startup: {web_url}")
-        })?;
+        let started =
+            start_mariadb_compose(&directory, false, allow_install_prompt).map_err(|error| {
+                let web_url = project_web_url(&directory).unwrap_or_else(|_| "unknown".into());
+                format!("{error}\napplication URL after startup: {web_url}")
+            })?;
         let web_url = project_web_url(&directory)?;
         messages.push(started);
         messages.push(format!("open: {web_url}"));
@@ -6611,7 +6793,7 @@ fn setup_web_html(state: &SetupWebState) -> String {
         )
     };
     format!(
-        "<!doctype html><html lang=\"de\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><title>Zelyra Setup</title><style>body{{font-family:system-ui,sans-serif;max-width:800px;margin:3rem auto;padding:0 1rem;color:#17202a;background:#f6f8fa}}main{{background:white;padding:2rem;border-radius:12px;box-shadow:0 4px 24px #0001}}button{{margin:.4rem .4rem .4rem 0;padding:.7rem 1rem;border:0;border-radius:7px;background:#1769aa;color:white;cursor:pointer}}section{{margin:1rem 0;padding:1rem;background:#eef6ff;border-left:4px solid #2675d8}}pre{{white-space:pre-wrap}}</style></head><body><main><h1>Zelyra Setup</h1><p>Lokaler Installationsassistent für <code>{directory}</code>.</p><p><small>Der Server bindet nur an 127.0.0.1. Docker selbst wird nicht mit Root-Rechten installiert.</small></p>{message}<h2>Prüfung</h2><ul><li>{project_status}</li><li>.env: {env_status}</li><li>Compose: {compose_status}</li></ul><h2>Aktionen</h2><form method=\"post\" action=\"/\"><input type=\"hidden\" name=\"token\" value=\"{token}\"><button name=\"action\" value=\"prepare\">Konfiguration vorbereiten</button><button name=\"action\" value=\"database\">MariaDB und Anwendung starten</button><button name=\"action\" value=\"schema\">Datenbankschema einrichten</button><button name=\"action\" value=\"all\">Alles ausführen</button></form><p><small>Fehlendes Docker wird mit einem Installationshinweis gemeldet. Zugangsdaten werden niemals angezeigt.</small></p></main></body></html>",
+        "<!doctype html><html lang=\"de\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><title>Zelyra Setup</title><style>body{{font-family:system-ui,sans-serif;max-width:800px;margin:3rem auto;padding:0 1rem;color:#17202a;background:#f6f8fa}}main{{background:white;padding:2rem;border-radius:12px;box-shadow:0 4px 24px #0001}}button{{margin:.4rem .4rem .4rem 0;padding:.7rem 1rem;border:0;border-radius:7px;background:#1769aa;color:white;cursor:pointer}}section{{margin:1rem 0;padding:1rem;background:#eef6ff;border-left:4px solid #2675d8}}pre{{white-space:pre-wrap}}</style></head><body><main><h1>Zelyra Setup</h1><p>Lokaler Installationsassistent für <code>{directory}</code>.</p><p><small>Der Server bindet nur an 127.0.0.1. Docker selbst wird nicht mit Root-Rechten installiert.</small></p>{message}<h2>Prüfung</h2><ul><li>{project_status}</li><li>.env: {env_status}</li><li>Compose: {compose_status}</li></ul><h2>Aktionen</h2><form method=\"post\" action=\"/\"><input type=\"hidden\" name=\"token\" value=\"{token}\"><button name=\"action\" value=\"prepare\">Konfiguration vorbereiten</button><button name=\"action\" value=\"database\">MariaDB und Anwendung starten</button><button name=\"action\" value=\"schema\">Datenbankschema einrichten</button><button name=\"action\" value=\"all\">Alles ausführen</button></form><p><small>Fehlt Compose, zeigt dieser Assistent die Installationsanleitung. Im Konsolenbefehl zelyra setup --all kann die Installation nach ausdrücklicher Bestätigung über einen unterstützten Paketmanager gestartet werden. Zugangsdaten werden niemals angezeigt.</small></p></main></body></html>",
         directory = html_escape(&directory.display().to_string()),
         project_status = html_escape(project_status),
         env_status = html_escape(env_status),
@@ -6658,6 +6840,7 @@ fn setup_web_response(
                 state.directory.to_str().unwrap_or("."),
                 action,
                 &SetupOptions::default(),
+                false,
             )
             .unwrap_or_else(|error| format!("Fehler: {error}")),
             _ => "Fehler: unbekannte Setup-Aktion".into(),

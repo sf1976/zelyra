@@ -247,20 +247,41 @@ if (-not $NoPath) {
     if (-not [string]::IsNullOrWhiteSpace($userPath)) {
         $pathEntries = @($userPath -split ";" | Where-Object { $_ })
     }
-    $alreadyPresent = $pathEntries | Where-Object {
-        [StringComparer]::OrdinalIgnoreCase.Equals($_, $BinaryDirectory)
-    }
-    if ($null -eq $alreadyPresent) {
-        if ($DryRun) {
-            Write-Host "+ add $BinaryDirectory to the user PATH"
+    $pathsToAdd = @($BinaryDirectory)
+    if ([string]::IsNullOrWhiteSpace($Release)) {
+        $cargoRoot = if (-not [string]::IsNullOrWhiteSpace($env:CARGO_HOME)) {
+            $env:CARGO_HOME
         } else {
-            [Environment]::SetEnvironmentVariable(
-                "Path",
-                (($pathEntries + $BinaryDirectory) -join ";"),
-                "User"
-            )
-            $env:Path = "$BinaryDirectory;$env:Path"
-            Write-Host "Added $BinaryDirectory to the user PATH"
+            Join-Path $env:USERPROFILE ".cargo"
+        }
+        $cargoDirectory = Join-Path $cargoRoot "bin"
+        if (Test-Path -LiteralPath $cargoDirectory -PathType Container) {
+            $pathsToAdd += $cargoDirectory
+        }
+    }
+    $addedPaths = @()
+    foreach ($pathToAdd in $pathsToAdd) {
+        $alreadyPresent = $false
+        foreach ($pathEntry in $pathEntries) {
+            if ([StringComparer]::OrdinalIgnoreCase.Equals($pathEntry.TrimEnd('\'), $pathToAdd.TrimEnd('\'))) {
+                $alreadyPresent = $true
+                break
+            }
+        }
+        if (-not $alreadyPresent) {
+            if ($DryRun) {
+                Write-Host "+ add $pathToAdd to the user PATH"
+            } else {
+                $pathEntries += $pathToAdd
+                $addedPaths += $pathToAdd
+                $env:Path = "$pathToAdd;$env:Path"
+            }
+        }
+    }
+    if (-not $DryRun -and $addedPaths.Count -gt 0) {
+        [Environment]::SetEnvironmentVariable("Path", ($pathEntries -join ";"), "User")
+        foreach ($addedPath in $addedPaths) {
+            Write-Host "Added $addedPath to the user PATH"
         }
     }
 }

@@ -38,7 +38,7 @@ Options:
   --root PATH       Install below PATH (default: ~/.local)
   --release TAG     Install a published Linux x86_64 release without Rust
   --no-rustup       Fail instead of installing Rust when cargo is missing
-  --no-path         Do not print PATH guidance
+  --no-path         Do not update PATH profiles or print guidance
   --offline         Do not access the network during cargo install
   --dry-run         Show actions without changing the system
   --check           Verify an existing installation only
@@ -312,7 +312,35 @@ install_binary() {
 
 print_path_guidance() {
     ((update_path)) || return 0
+    local cargo_bin="${CARGO_HOME:-${HOME}/.cargo}/bin"
+    local shell_name="${SHELL##*/}"
+    local profile="${HOME}/.profile"
     local bin_dir="${install_root}/bin"
+
+    case "$shell_name" in
+        bash)
+            if [[ -f "${HOME}/.bash_profile" ]]; then
+                profile="${HOME}/.bash_profile"
+            elif [[ -f "${HOME}/.bash_login" ]]; then
+                profile="${HOME}/.bash_login"
+            fi
+            ;;
+        zsh) profile="${HOME}/.zprofile" ;;
+    esac
+
+    if [[ -z "$release_tag" && -d "$cargo_bin" ]]; then
+        mkdir -p -- "$(dirname -- "$profile")"
+        touch -- "$profile"
+        if ! grep -Fq -- "$cargo_bin" "$profile"; then
+            local quoted_cargo_bin="$cargo_bin"
+            quoted_cargo_bin="${quoted_cargo_bin//\\/\\\\}"
+            quoted_cargo_bin="${quoted_cargo_bin//\"/\\\"}"
+            quoted_cargo_bin="${quoted_cargo_bin//\$/\\\$}"
+            quoted_cargo_bin="${quoted_cargo_bin//\`/\\\`}"
+            printf '\n# Added by the Zelyra installer so Rust tools remain available in future login shells.\nexport PATH="%s:$PATH"\n' "$quoted_cargo_bin" >>"$profile"
+            printf 'Added Cargo tools to future login shells through %s.\n' "$profile"
+        fi
+    fi
     case ":${PATH}:" in
         *":${bin_dir}:"*) ;;
         *)
