@@ -268,7 +268,7 @@ mod pdf_template;
 mod pure_builtins;
 mod step_budget;
 pub use mail::{prepare_mail_queue_query, supports_mail_outbox_database};
-pub use markdown::render_markdown;
+pub use markdown::{markdown_toc, render_markdown};
 pub use operators::{evaluate_binary_value, evaluate_unary_value, index_collection_value};
 pub use package_settings::PackageSettings;
 use pdf_template::interpolate_pdf_data;
@@ -1116,6 +1116,7 @@ fn is_runtime_builtin(name: &str) -> bool {
         "print"
             | "assert"
             | "render_markdown"
+            | "markdown_toc"
             | "render_pdf"
             | "api_response"
             | "len"

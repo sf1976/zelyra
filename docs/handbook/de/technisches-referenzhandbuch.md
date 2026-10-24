@@ -1030,6 +1030,17 @@ page "/dashboard" {
 
 Die reine Funktion `render_markdown(source)` erzeugt sicheres HTML aus CommonMark mit GFM-Tabellen, Durchstreichungen, Task-Listen und Fußnoten. Überschriften erhalten stabile IDs; doppelte Überschriften bekommen einen eindeutigen Suffix. Eingebettetes HTML wird als Text escaped und nie als Markup ausgeführt. Links dürfen HTTP(S), Mailto und relative URLs verwenden; Bilder nur relative URLs, damit kein fremder Host beim Anzeigen nachgeladen wird. Andere Link-Schemes werden nicht als Links gerendert. Die Quelle ist auf 1 MiB pro Aufruf begrenzt.
 
+`markdown_toc(source, label)` erstellt Markdown für ein lokalisiertes Inhaltsverzeichnis mit Links auf alle Überschriften. Die Ziele verwenden dieselben stabilen IDs wie `render_markdown`. Das Ergebnis ist Markdown-Text, kein HTML: Mit der Quelle kombinieren und anschließend durch `render_markdown` rendern:
+
+~~~zelyra
+fn artikel_html(markdown_quelle: String) -> String {
+    inhaltsverzeichnis = markdown_toc(markdown_quelle, "Inhaltsverzeichnis")
+    return render_markdown(inhaltsverzeichnis + "\n\n" + markdown_quelle)
+}
+~~~
+
+Quelle und erzeugte Ausgabe sind begrenzt. Beschriftungen und Überschriftentexte werden für Markdown escaped; der abschließende Renderer escaped weiterhin rohes HTML und weist unsichere Links zurück. Es entsteht kein Raw-HTML-Ausgabepfad.
+
 In einem HTML-Template wird Markdown ausdrücklich als Inhalt gerendert:
 
 ~~~zelyra

@@ -26,6 +26,20 @@ impl Checker<'_> {
             self.expect_type(&Type::String, &source, args[0].span);
             return Type::String;
         }
+        if name == "markdown_toc" {
+            if !type_args.is_empty() || args.len() != 2 {
+                self.error(
+                    span,
+                    "markdown_toc expects a Markdown String, a label String, and no type arguments",
+                );
+                return Type::Unknown;
+            }
+            for argument in args {
+                let actual = self.check_expr(argument, scopes);
+                self.expect_type(&Type::String, &actual, argument.span);
+            }
+            return Type::String;
+        }
         if name == "render_pdf" {
             if !type_args.is_empty() || args.len() != 2 {
                 self.error(span, "render_pdf expects a named View and one record value");

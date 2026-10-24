@@ -682,6 +682,34 @@ fn render_markdown_is_a_typed_pure_builtin() {
 }
 
 #[test]
+fn markdown_toc_is_typed_pure_and_requires_a_localized_label() {
+    let source = r##"
+        fn main() {
+            print(markdown_toc("# Guide\n\n## Setup", "Contents"))
+        }
+    "##;
+    let program = parse(&lex(source).unwrap()).unwrap();
+    check(&program).unwrap_or_else(|errors| panic!("Markdown TOC check failed: {errors:?}"));
+    assert_eq!(
+        execute(&program).unwrap(),
+        ["**Contents**\n\n- [Guide](#guide)\n- [Setup](#setup)\n"]
+    );
+
+    for invalid_source in [
+        "fn main() { markdown_toc(42, \"Contents\") }",
+        "fn main() { markdown_toc(\"# Guide\", 42) }",
+        "fn main() { markdown_toc(\"# Guide\") }",
+        "fn main() { markdown_toc<String>(\"# Guide\", \"Contents\") }",
+    ] {
+        let invalid = parse(&lex(invalid_source).unwrap()).unwrap();
+        assert!(
+            check(&invalid).is_err(),
+            "expected rejection: {invalid_source}"
+        );
+    }
+}
+
+#[test]
 fn pdf_view_templates_expand_zelyra_collection_blocks() {
     let row = |description: &str, amount: &str| Value::Object {
         type_name: "InvoiceLine".into(),

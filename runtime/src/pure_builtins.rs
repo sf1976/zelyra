@@ -14,6 +14,7 @@ pub fn is_pure_builtin(name: &str) -> bool {
         name,
         "assert"
             | "render_markdown"
+            | "markdown_toc"
             | "Some"
             | "None"
             | "Ok"
@@ -151,6 +152,24 @@ pub fn execute_pure_builtin(
         "render_markdown" => Err(builtin_error(
             span,
             "render_markdown expects exactly one String and no type arguments",
+        )),
+        "markdown_toc" if arguments.len() == 2 => match arguments.as_slice() {
+            [Value::String(source), Value::String(label)] => markdown_toc(source, label)
+                .map(Value::String)
+                .map_err(|error| builtin_error(span, error)),
+            [source, label] => Err(builtin_error(
+                span,
+                format!(
+                    "markdown_toc expects String and String, found {} and {}",
+                    source.ty(),
+                    label.ty()
+                ),
+            )),
+            _ => unreachable!("the arity guard ensures two arguments"),
+        },
+        "markdown_toc" => Err(builtin_error(
+            span,
+            "markdown_toc expects exactly two Strings and no type arguments",
         )),
         "assert" if (1..=2).contains(&arguments.len()) => match arguments.as_slice() {
             [Value::Bool(true)] | [Value::Bool(true), Value::String(_)] => Ok(Value::Unit),
