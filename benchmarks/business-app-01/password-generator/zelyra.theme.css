@@ -174,19 +174,12 @@ html:has(form[action="/login"]) .zelyra-page-content main {
 
 html:has(form[action="/login"]) .zelyra-page-content main::before {
     display: grid;
-    width: 3.25rem;
-    height: 3.25rem;
-    margin-bottom: 1.5rem;
+    width: min(17rem, 78vw);
+    height: 7rem;
+    margin-bottom: .75rem;
     place-items: center;
-    border: 1px solid rgb(255 255 255 / 22%);
-    border-radius: 1.05rem;
-    background: linear-gradient(145deg, #5279c4, #244785);
-    box-shadow: 0 10px 24px rgb(49 87 164 / 25%);
-    color: #fff;
-    content: "Z";
-    font-size: 1.65rem;
-    font-weight: 800;
-    letter-spacing: -.06em;
+    background: url("/zelyra-logo.png") center / contain no-repeat;
+    content: "";
 }
 
 html:has(form[action="/login"]) .zelyra-page-content h1 {
