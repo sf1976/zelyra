@@ -1,3 +1,4 @@
+use semver::Version;
 use serde_json::Value;
 use std::collections::BTreeMap;
 use std::fs;
@@ -688,7 +689,13 @@ fn module_init_creates_a_checkable_local_package_and_never_overwrites() {
     );
     let package_manifest =
         fs::read_to_string(directory.join("packages/small_tools/zelyra.toml")).unwrap();
-    assert!(package_manifest.contains("zelyra = \">=1.2.0, <1.3.0\""));
+    let compiler_version = Version::parse(env!("CARGO_PKG_VERSION")).unwrap();
+    let next_minor = compiler_version.minor.checked_add(1).unwrap();
+    let expected_requirement = format!(
+        "zelyra = \">={}.{}.0, <{}.{}.0\"",
+        compiler_version.major, compiler_version.minor, compiler_version.major, next_minor
+    );
+    assert!(package_manifest.contains(&expected_requirement));
     assert!(package_manifest.contains("effects = []"));
     assert!(directory.join("packages/small_tools/README.md").is_file());
 
