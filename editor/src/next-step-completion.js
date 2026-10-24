@@ -78,3 +78,32 @@ export function nextCrudCompletions(map, language = "en") {
   }
   return suggestions;
 }
+
+export function nextFormCompletions(map, language = "en") {
+  if (map?.incomplete || !Array.isArray(map?.nodes) || !Array.isArray(map?.edges)) return [];
+  const tablesByName = new Map();
+  const existingNames = new Set(map.nodes.map((node) => node.label).filter((name) => typeof name === "string"));
+  for (const node of map.nodes) {
+    if (node.kind !== "table" || !/^[A-Za-z_][A-Za-z0-9_]*$/.test(node.label || "")) continue;
+    const group = tablesByName.get(node.label) || [];
+    group.push(node);
+    tablesByName.set(node.label, group);
+  }
+  const usedTables = new Set(map.edges.filter((edge) => edge.label === "writes table").map((edge) => edge.to));
+  const suggestions = [];
+  for (const [tableName, tables] of tablesByName) {
+    if (tables.length !== 1 || usedTables.has(tables[0].id)) continue;
+    const fields = tables[0].editable_fields;
+    if (!Array.isArray(fields) || fields.length === 0 || fields.some((field) => !/^[A-Za-z_][A-Za-z0-9_]*$/.test(field))) continue;
+    const name = `${crudName(tableName)}Form`;
+    if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(name) || existingNames.has(name)) continue;
+    const code = `form ${name} -> ${tableName} {\n    fields {\n${fields.map((field) => `        ${field}`).join("\n")}\n    }\n}`;
+    suggestions.push({
+      label: `form ${name} -> ${tableName} { … }`,
+      apply: code,
+      type: "keyword",
+      detail: language === "de" ? `Formulargerüst mit editierbaren Feldern aus ${tableName}` : `Form scaffold with editable fields from ${tableName}`,
+    });
+  }
+  return suggestions;
+}
