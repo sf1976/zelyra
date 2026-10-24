@@ -179,10 +179,7 @@
   :where(html[data-z-ui] .zelyra-skip-link) { position: fixed; z-index: var(--z-layer-dialog); inset: .75rem auto auto .75rem; transform: translateY(-180%); padding: .65rem .9rem; border-radius: var(--z-radius-sm); background: var(--z-color-surface); color: var(--z-color-link); }
   :where(html[data-z-ui] .zelyra-skip-link:focus) { transform: translateY(0); }
   :where(html[data-z-ui] .zelyra-sidebar) { border-color: var(--z-color-sidebar-border); background: var(--z-color-sidebar); color: var(--z-color-sidebar-text); }
-  :where(html[data-z-ui] .zelyra-sidebar a) { color: var(--z-color-sidebar-text); }
   :where(html[data-z-ui] .zelyra-sidebar .z-app-shell__navigation a) { border-radius: var(--z-radius-sm); transition: background var(--z-motion-fast) ease, color var(--z-motion-fast) ease; }
-  :where(html[data-z-ui] .zelyra-sidebar .z-app-shell__navigation a:hover) { background: color-mix(in srgb, var(--z-color-sidebar-text) 9%, transparent); }
-  :where(html[data-z-ui] .zelyra-sidebar .z-app-shell__navigation a[aria-current="page"]) { background: var(--z-color-sidebar-active); color: #fff; box-shadow: inset 3px 0 var(--z-color-primary); }
   :where(html[data-z-ui] .zelyra-sidebar-caption, html[data-z-ui] .zelyra-sidebar-footer) { color: var(--z-color-sidebar-muted); }
   :where(html[data-z-ui] .zelyra-brand) { display: flex; align-items: center; gap: .75rem; margin: .1rem .35rem 1.5rem; color: var(--z-color-sidebar-text); text-decoration: none; }
   :where(html[data-z-ui] .zelyra-brand-copy) { display: grid; min-width: 0; gap: .05rem; }

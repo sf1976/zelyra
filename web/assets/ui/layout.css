@@ -88,7 +88,7 @@
     align-items: center;
     padding: .6rem .75rem;
     border-radius: var(--z-radius-sm);
-    color: var(--z-color-text);
+    color: inherit;
     text-decoration: none;
   }
   :where(html[data-z-ui]) .z-app-shell__navigation a:hover,

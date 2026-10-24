@@ -2529,9 +2529,17 @@ fn default_design_system_exposes_the_complete_public_theme_token_set() {
     assert!(ZELYRA_DESIGN_SYSTEM_CSS.contains("[data-z-theme=\"dark\"]"));
     assert!(ZELYRA_DESIGN_SYSTEM_CSS.contains(".z-output"));
     assert!(ZELYRA_DESIGN_SYSTEM_CSS.contains(".z-action-stack"));
-    assert!(ZELYRA_DESIGN_SYSTEM_CSS.starts_with("/* Zelyra UI CSS bundle v1.2.0"));
-    assert!(ZELYRA_UI_CSS_PATH.contains("/v1.2.0/zelyra-ui.css"));
-    assert!(ZELYRA_UI_JS_PATH.contains("/v1.2.0/zelyra-ui.js"));
+    assert!(ZELYRA_DESIGN_SYSTEM_CSS.contains(
+        ".z-app-shell__navigation a:hover,\n  :where(html[data-z-ui]) .z-app-shell__navigation a[aria-current=\"page\"]"
+    ));
+    assert!(ZELYRA_DESIGN_SYSTEM_CSS.contains(
+        "border-radius: var(--z-radius-sm);\n    color: inherit;\n    text-decoration: none;"
+    ));
+    assert!(!ZELYRA_DESIGN_SYSTEM_CSS
+        .contains(".zelyra-sidebar .z-app-shell__navigation a:hover) { background: color-mix"));
+    assert!(ZELYRA_DESIGN_SYSTEM_CSS.starts_with("/* Zelyra UI CSS bundle v1.2.1"));
+    assert!(ZELYRA_UI_CSS_PATH.contains("/v1.2.1/zelyra-ui.css"));
+    assert!(ZELYRA_UI_JS_PATH.contains("/v1.2.1/zelyra-ui.js"));
     assert!(include_str!("../assets/zelyra-ui.v1.js").contains("theme || \"light\""));
 }
 

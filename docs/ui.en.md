@@ -232,7 +232,10 @@ into new projects. The generated bundle header also tracks an independent
 design-system version. Patch releases refine visuals or fix styles without
 changing the token/class contract; minor releases may add compatible tokens or
 components; a breaking token or public-class change requires a major version.
-The current CSS bundle is v1.2.0.
+The current CSS bundle is v1.2.1. Navigation uses the same blue hover and
+active states across all AppShell views. Like other defaults, these can be
+customized through the `--z-color-primary-soft` and `--z-color-primary` theme
+tokens or regular CSS overrides; there is no page-specific exception.
 
 The Zelyra default theme uses the clear blue Dashboard palette and starts in
 light mode. `AppShell` includes an accessible light/dark toggle; its choice is

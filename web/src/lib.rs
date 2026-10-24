@@ -56,12 +56,12 @@ const ZELYRA_UI_JAVASCRIPT: &str = include_str!("../assets/zelyra-ui.v1.js");
 pub const ZELYRA_UI_CSS_PATH: &str = concat!(
     "/__zelyra/ui/",
     env!("CARGO_PKG_VERSION"),
-    "/v1.2.0/zelyra-ui.css"
+    "/v1.2.1/zelyra-ui.css"
 );
 pub const ZELYRA_UI_JS_PATH: &str = concat!(
     "/__zelyra/ui/",
     env!("CARGO_PKG_VERSION"),
-    "/v1.2.0/zelyra-ui.js"
+    "/v1.2.1/zelyra-ui.js"
 );
 pub const PROJECT_UI_CSS_PATH: &str = "/__zelyra/ui/project.css";
 pub const PROJECT_THEME_CSS_PATH: &str = "/__zelyra/theme.css";

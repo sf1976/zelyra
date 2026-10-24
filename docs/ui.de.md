@@ -244,7 +244,10 @@ Designsystemversion. Patch-Releases verbessern das Aussehen oder korrigieren
 Stile ohne Änderung am Token-/Klassenvertrag; Minor-Releases dürfen kompatible
 Tokens oder Komponenten ergänzen. Eine inkompatible Änderung an öffentlichen
 Tokens oder Klassen erfordert eine neue Major-Version. Das aktuelle CSS-Bundle
-hat Version 1.2.0.
+hat Version 1.2.1. Die Navigation verwendet in allen AppShell-Ansichten dieselben
+blauen Hover- und Aktivzustände. Sie lassen sich wie andere Standardfarben über
+die Theme-Tokens `--z-color-primary-soft` und `--z-color-primary` oder reguläre
+CSS-Overrides anpassen; es gibt keine seitenbezogene Sonderregel.
 
 Das Zelyra-Standardtheme verwendet die klare blaue Dashboard-Palette und startet
 hell. `AppShell` enthält den barrierefrei beschrifteten Hell-/Dunkel-Umschalter;
