@@ -3142,7 +3142,7 @@ In a standard layout, setting `strict_architecture = true` in `zelyra.toml` enab
 
 Keep direct database mutations in `domain/<feature>/actions.zyl`. API handlers and embedded form/CRUD actions may call domain functions; existing import and table-access checks still apply. Domain modules may not import modules from `routes/` (`E-ARCH-004`). The analysis follows statically resolved Zelyra calls but not arbitrary dynamic or unresolved calls. Request, Response, Session, and Cookie types are not currently exposed as usable Zelyra APIs.
 
-The unreleased `main` branch additionally follows local named function values and propagates statically known callback values through typed function parameters. An unresolved indirect call fails closed with `E-ARCH-005` when its function type carries the `Database` capability; pure callbacks do not trigger this diagnostic. This change is not part of the v1.2.56 release.
+The unreleased `main` branch additionally follows local named function values, direct named function values returned from helpers, and statically known callback values passed through typed function parameters. An unresolved indirect call fails closed with `E-ARCH-005` when its function type carries the `Database` capability; pure callbacks do not trigger this diagnostic. Complex returned expressions and other dynamic callback flows are not resolved. This change is not part of the v1.2.56 release.
 
 ```bash
 # Check layout migration without moving or modifying files

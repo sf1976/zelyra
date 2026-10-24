@@ -2662,6 +2662,34 @@ fn strict_architecture_checks_reachable_route_sql_and_preserves_domain_writes() 
     assert_eq!(unresolved_callback_issue["file"], "routes/customers.zyl");
     assert_eq!(unresolved_callback_issue["span"]["start"]["line"], 2);
 
+    let through_returned_callback = check_project(
+        "strict-route-sql-returned-function-value",
+        "fn write_customer() -> Int uses Database {\n    sql { INSERT INTO customers (name) VALUES ('Ada') }\n    return 1\n}\nfn get_writer() -> Function<() -> Int> uses {Database} { return &write_customer }\nfn create_customer() -> Int uses Database {\n    saved = get_writer()\n    return saved()\n}\napi POST \"/customers\" { handler create_customer output Int }\n",
+        None,
+    );
+    assert!(
+        through_returned_callback["diagnostics"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|diagnostic| diagnostic["code"] == "E-ARCH-002"),
+        "statically returned named callback was not followed: {through_returned_callback}"
+    );
+
+    let unresolved_returned_callback = check_project(
+        "strict-route-sql-unresolved-returned-function-value",
+        "fn echo_writer(callback: Function<() -> Int> uses {Database}) -> Function<() -> Int> uses {Database} { return callback }\nfn create_customer() -> Int uses Database {\n    saved = echo_writer(&write_customer)\n    return saved()\n}\nfn write_customer() -> Int uses Database { sql { INSERT INTO customers (name) VALUES ('Ada') } return 1 }\napi POST \"/customers\" { handler create_customer output Int }\n",
+        None,
+    );
+    assert!(
+        unresolved_returned_callback["diagnostics"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|diagnostic| diagnostic["code"] == "E-ARCH-005"),
+        "unresolved returned Database callback was not rejected: {unresolved_returned_callback}"
+    );
+
     let unresolved_pure_callback = check_project(
         "strict-route-sql-unresolved-pure-function-parameter",
         "fn invoke(callback: Function<(Int) -> Int>) -> Int { return callback(1) }\nfn route_handler(callback: Function<(Int) -> Int>) -> Int { return invoke(callback) }\napi GET \"/customers/value\" { handler route_handler output Int }\n",
