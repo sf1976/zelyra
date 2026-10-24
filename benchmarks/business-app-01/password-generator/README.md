@@ -28,9 +28,11 @@ published. An authorized administrator creates and manages accounts at
 After sign-in, the **Benutzerkonto** navigation item opens `/account/profile`,
 where a user can update their display name and email after confirming their
 current password or change their password. Password changes revoke other
-sessions. Active sessions can be reviewed at `/account/sessions`; account and
-role administration remains restricted to administrators. Sign-in is part of
-the shared identity module and is not an application tile.
+sessions. `/account/sessions` shows each user's own active sessions;
+administrators with `identity.users.manage` also see every active session and
+the audit log there. User, role, and permission administration remains at
+`/admin/users`. Sign-in is part of the shared identity module and is not an
+application tile.
 
 The app is composed from three local packages:
 

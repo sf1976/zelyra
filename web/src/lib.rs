@@ -57,12 +57,12 @@ const ZELYRA_UI_LOGO_PNG: &[u8] = include_bytes!("../../assets/zelyra-logo.png")
 pub const ZELYRA_UI_CSS_PATH: &str = concat!(
     "/__zelyra/ui/",
     env!("CARGO_PKG_VERSION"),
-    "/v1.2.4/zelyra-ui.css"
+    "/v1.2.5/zelyra-ui.css"
 );
 pub const ZELYRA_UI_JS_PATH: &str = concat!(
     "/__zelyra/ui/",
     env!("CARGO_PKG_VERSION"),
-    "/v1.2.4/zelyra-ui.js"
+    "/v1.2.5/zelyra-ui.js"
 );
 pub const ZELYRA_UI_LOGO_PATH: &str = concat!(
     "/__zelyra/ui/",
@@ -5057,7 +5057,35 @@ fn dispatch_account_sessions(
                     return Response::html(500, "<h1>500 Internal Server Error</h1>");
                 }
             };
-            Response::html(200, render_account_sessions(auth, &rows, app.ui_language))
+            let admin_activity = match (
+                auth.admin_permission.as_deref(),
+                auth.admin_path.as_deref(),
+                database_url,
+            ) {
+                (Some(permission), Some(_), Some(database_url))
+                    if authorize(
+                        true,
+                        &[permission.to_owned()],
+                        request,
+                        app,
+                        Some(database_url),
+                    )
+                    .is_none() =>
+                {
+                    match load_auth_admin_activity_data(auth, database_url) {
+                        Ok(data) => Some(data),
+                        Err(error) => {
+                            eprintln!("zelyra web: admin session and audit lookup failed: {error}");
+                            return Response::html(500, "<h1>500 Internal Server Error</h1>");
+                        }
+                    }
+                }
+                _ => None,
+            };
+            Response::html(
+                200,
+                render_account_sessions(auth, &rows, admin_activity.as_ref(), app.ui_language),
+            )
         }
         "POST" => {
             let input = match parse_urlencoded(&request.body) {
@@ -5340,6 +5368,7 @@ fn account_sessions_for_user(
 fn render_account_sessions(
     auth: &AuthRoute,
     sessions: &[AccountSessionRow],
+    admin_activity: Option<&AuthAdminActivityData>,
     language: UiLanguage,
 ) -> String {
     let csrf = html_escape(auth.csrf.token());
@@ -5395,7 +5424,20 @@ fn render_account_sessions(
             tr(language, "auth.revoke_session"),
         ));
     }
-    html.push_str("</tbody></table></div></div></section></main>");
+    html.push_str("</tbody></table></div></div></section>");
+    if let Some(admin_activity) = admin_activity {
+        if administrable_session_table(auth).is_some() {
+            html.push_str(&render_auth_sessions(
+                auth,
+                &admin_activity.sessions,
+                language,
+            ));
+        }
+        if auth.audit_table.is_some() {
+            html.push_str(&render_auth_audit(&admin_activity.audit, language));
+        }
+    }
+    html.push_str("</main>");
     html
 }
 
@@ -5460,8 +5502,6 @@ fn dispatch_auth_admin(
                     &data.users,
                     &data.assignments,
                     &data.permissions,
-                    &data.audit,
-                    &data.sessions,
                     app.ui_language,
                 ),
             ),
@@ -5485,6 +5525,9 @@ struct AuthAdminData {
     users: Vec<Vec<String>>,
     assignments: Vec<Vec<String>>,
     permissions: Vec<Vec<String>>,
+}
+
+struct AuthAdminActivityData {
     audit: Vec<Vec<String>>,
     sessions: Vec<Vec<String>>,
 }
@@ -5729,6 +5772,17 @@ fn load_auth_admin_data(auth: &AuthRoute, database_url: &str) -> Result<AuthAdmi
     )
     .map_err(|error| error.to_string())?
     .rows;
+    Ok(AuthAdminData {
+        users,
+        assignments,
+        permissions,
+    })
+}
+
+fn load_auth_admin_activity_data(
+    auth: &AuthRoute,
+    database_url: &str,
+) -> Result<AuthAdminActivityData, String> {
     let audit = if let Some(audit_table) = auth.audit_table.as_deref() {
         zelyra_database::execute_mariadb_query(
             database_url,
@@ -5759,13 +5813,7 @@ fn load_auth_admin_data(auth: &AuthRoute, database_url: &str) -> Result<AuthAdmi
     } else {
         Vec::new()
     };
-    Ok(AuthAdminData {
-        users,
-        assignments,
-        permissions,
-        audit,
-        sessions,
-    })
+    Ok(AuthAdminActivityData { audit, sessions })
 }
 
 fn dispatch_auth_admin_post(
@@ -6271,7 +6319,11 @@ fn dispatch_auth_admin_post(
         eprintln!("zelyra web: auth administration write failed: {error}");
         return Response::html(500, "<h1>500 Internal Server Error</h1>");
     }
-    Response::redirect(auth.admin_path.as_deref().unwrap_or("/"))
+    Response::redirect(if operation == "revoke_session" {
+        ACCOUNT_SESSIONS_PATH
+    } else {
+        auth.admin_path.as_deref().unwrap_or("/")
+    })
 }
 
 fn render_auth_admin(
@@ -6279,8 +6331,6 @@ fn render_auth_admin(
     users: &[Vec<String>],
     assignments: &[Vec<String>],
     permissions: &[Vec<String>],
-    audit: &[Vec<String>],
-    sessions: &[Vec<String>],
     language: UiLanguage,
 ) -> String {
     let path = html_escape(auth.admin_path.as_deref().unwrap_or("/"));
@@ -6351,11 +6401,8 @@ fn render_auth_admin(
         }
     }
     html.push_str("</tbody></table></div></div></section>");
-    if administrable_session_table(auth).is_some() {
-        html.push_str(&render_auth_sessions(auth, sessions, language));
-    }
     html.push_str(&format!(
-        "<section class=\"z-card\" aria-labelledby=\"auth-assign-role-title\"><header class=\"z-card__header\"><h2 class=\"z-card__title\" id=\"auth-assign-role-title\">{}</h2></header><div class=\"z-card__body\"><div class=\"z-admin-role-scroll\"><form class=\"z-stack z-admin-assign-role\" method=\"post\" action=\"{path}\"><input type=\"hidden\" name=\"_zelyra_csrf\" value=\"{csrf}\"><input type=\"hidden\" name=\"operation\" value=\"grant_role\"><label class=\"z-field\"><span class=\"z-field__label\">{}</span><input class=\"z-input\" name=\"user_id\" type=\"number\" min=\"1\" required></label><label class=\"z-field\"><span class=\"z-field__label\">{}</span><input class=\"z-input\" name=\"role\" required></label><div class=\"z-action-stack\"><button class=\"z-button z-button--primary\" type=\"submit\">{}</button></div></form></div></div></section><section class=\"z-card z-admin-grid__wide\" aria-labelledby=\"auth-role-assignments-title\"><header class=\"z-card__header\"><h2 class=\"z-card__title\" id=\"auth-role-assignments-title\">{}</h2></header><div class=\"z-card__body\"><div class=\"z-table-scroll\"><table class=\"z-table\"><thead><tr><th scope=\"col\">{}</th><th scope=\"col\">{}</th><th scope=\"col\">{}</th></tr></thead><tbody>",
+        "<section class=\"z-card z-admin-grid__wide\" aria-labelledby=\"auth-assign-role-title\"><header class=\"z-card__header\"><h2 class=\"z-card__title\" id=\"auth-assign-role-title\">{}</h2></header><div class=\"z-card__body\"><div class=\"z-admin-role-scroll\"><form class=\"z-admin-assign-role\" method=\"post\" action=\"{path}\"><input type=\"hidden\" name=\"_zelyra_csrf\" value=\"{csrf}\"><input type=\"hidden\" name=\"operation\" value=\"grant_role\"><label class=\"z-field\"><span class=\"z-field__label\">{}</span><input class=\"z-input\" name=\"user_id\" type=\"number\" min=\"1\" required></label><label class=\"z-field\"><span class=\"z-field__label\">{}</span><input class=\"z-input\" name=\"role\" required></label><div class=\"z-action-stack\"><button class=\"z-button z-button--primary\" type=\"submit\">{}</button></div></form></div><section class=\"z-admin-subsection\" aria-labelledby=\"auth-role-assignments-title\"><h3 class=\"z-admin-subsection__title\" id=\"auth-role-assignments-title\">{}</h3><div class=\"z-table-scroll\"><table class=\"z-table\"><thead><tr><th scope=\"col\">{}</th><th scope=\"col\">{}</th><th scope=\"col\">{}</th></tr></thead><tbody>",
         tr(language, "auth.assign_role"),
         tr(language, "auth.user_id"),
         tr(language, "auth.role"),
@@ -6380,7 +6427,7 @@ fn render_auth_admin(
         }
     }
     html.push_str(&format!(
-        "</tbody></table></div></div></section><section class=\"z-card\" aria-labelledby=\"auth-grant-permission-title\"><header class=\"z-card__header\"><h2 class=\"z-card__title\" id=\"auth-grant-permission-title\">{}</h2></header><div class=\"z-card__body\"><div class=\"z-admin-role-scroll\"><form class=\"z-stack z-admin-assign-role\" method=\"post\" action=\"{path}\"><input type=\"hidden\" name=\"_zelyra_csrf\" value=\"{csrf}\"><input type=\"hidden\" name=\"operation\" value=\"grant_permission\"><label class=\"z-field\"><span class=\"z-field__label\">{}</span><input class=\"z-input\" name=\"role\" required></label><label class=\"z-field\"><span class=\"z-field__label\">{}</span><input class=\"z-input\" name=\"permission\" required></label><div class=\"z-action-stack\"><button class=\"z-button z-button--primary\" type=\"submit\">{}</button></div></form></div></div></section><section class=\"z-card\" aria-labelledby=\"auth-role-permissions-title\"><header class=\"z-card__header\"><h2 class=\"z-card__title\" id=\"auth-role-permissions-title\">{}</h2></header><div class=\"z-card__body\"><div class=\"z-table-scroll\"><table class=\"z-table\"><thead><tr><th scope=\"col\">{}</th><th scope=\"col\">{}</th><th scope=\"col\">{}</th></tr></thead><tbody>",
+        "</tbody></table></div></section></div></section><section class=\"z-card z-admin-grid__wide\" aria-labelledby=\"auth-grant-permission-title\"><header class=\"z-card__header\"><h2 class=\"z-card__title\" id=\"auth-grant-permission-title\">{}</h2></header><div class=\"z-card__body\"><div class=\"z-admin-role-scroll\"><form class=\"z-admin-assign-role\" method=\"post\" action=\"{path}\"><input type=\"hidden\" name=\"_zelyra_csrf\" value=\"{csrf}\"><input type=\"hidden\" name=\"operation\" value=\"grant_permission\"><label class=\"z-field\"><span class=\"z-field__label\">{}</span><input class=\"z-input\" name=\"role\" required></label><label class=\"z-field\"><span class=\"z-field__label\">{}</span><input class=\"z-input\" name=\"permission\" required></label><div class=\"z-action-stack\"><button class=\"z-button z-button--primary\" type=\"submit\">{}</button></div></form></div><section class=\"z-admin-subsection\" aria-labelledby=\"auth-role-permissions-title\"><h3 class=\"z-admin-subsection__title\" id=\"auth-role-permissions-title\">{}</h3><div class=\"z-table-scroll\"><table class=\"z-table\"><thead><tr><th scope=\"col\">{}</th><th scope=\"col\">{}</th><th scope=\"col\">{}</th></tr></thead><tbody>",
         tr(language, "auth.grant_permission"),
         tr(language, "auth.role"),
         tr(language, "auth.permission"),
@@ -6404,32 +6451,7 @@ fn render_auth_admin(
             ));
         }
     }
-    html.push_str("</tbody></table></div></div></section>");
-    if auth.audit_table.is_some() {
-        html.push_str("<section class=\"z-card z-admin-grid__wide\" aria-labelledby=\"auth-audit-title\"><header class=\"z-card__header\"><h2 class=\"z-card__title\" id=\"auth-audit-title\">");
-        html.push_str(&tr(language, "auth.audit_log"));
-        html.push_str("</h2></header><div class=\"z-card__body\"><p>");
-        html.push_str(&tr(language, "auth.audit_latest"));
-        html.push_str("</p><div class=\"z-table-scroll\"><table class=\"z-table\"><thead><tr><th scope=\"col\">");
-        html.push_str(&tr(language, "auth.actor"));
-        html.push_str("</th><th>");
-        html.push_str(&tr(language, "auth.action"));
-        html.push_str("</th><th>");
-        html.push_str(&tr(language, "auth.target"));
-        html.push_str("</th><th>");
-        html.push_str(&tr(language, "auth.details"));
-        html.push_str("</th><th>");
-        html.push_str(&tr(language, "auth.created"));
-        html.push_str("</th></tr></thead><tbody>");
-        for row in audit {
-            let cells = row
-                .iter()
-                .map(|value| format!("<td>{}</td>", html_escape(value)))
-                .collect::<String>();
-            html.push_str(&format!("<tr>{cells}</tr>"));
-        }
-        html.push_str("</tbody></table></div></div></section>");
-    }
+    html.push_str("</tbody></table></div></section></div></section>");
     html.push_str("</div></main>");
     html
 }
@@ -6561,6 +6583,37 @@ fn render_auth_sessions(
             html.push_str(&format!("<tr><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td><div class=\"z-action-stack\"><form method=\"post\" action=\"{path}\"><input type=\"hidden\" name=\"_zelyra_csrf\" value=\"{csrf}\"><input type=\"hidden\" name=\"operation\" value=\"revoke_session\"><input type=\"hidden\" name=\"session_id\" value=\"{}\"><input type=\"hidden\" name=\"user_id\" value=\"{}\"><button class=\"z-button z-button--danger\" type=\"submit\">{}</button></form></div></td></tr>",
                 html_escape(id), html_escape(email), html_escape(expires), device, html_escape(id), html_escape(user_id), tr(language, "auth.revoke_session")));
         }
+    }
+    html.push_str("</tbody></table></div></div></section>");
+    html
+}
+
+fn render_auth_audit(audit: &[Vec<String>], language: UiLanguage) -> String {
+    let mut html = String::from(
+        "<section class=\"z-card z-admin-grid__wide\" aria-labelledby=\"auth-audit-title\"><header class=\"z-card__header\"><h2 class=\"z-card__title\" id=\"auth-audit-title\">",
+    );
+    html.push_str(&tr(language, "auth.audit_log"));
+    html.push_str("</h2></header><div class=\"z-card__body\"><p>");
+    html.push_str(&tr(language, "auth.audit_latest"));
+    html.push_str(
+        "</p><div class=\"z-table-scroll\"><table class=\"z-table\"><thead><tr><th scope=\"col\">",
+    );
+    html.push_str(&tr(language, "auth.actor"));
+    html.push_str("</th><th>");
+    html.push_str(&tr(language, "auth.action"));
+    html.push_str("</th><th>");
+    html.push_str(&tr(language, "auth.target"));
+    html.push_str("</th><th>");
+    html.push_str(&tr(language, "auth.details"));
+    html.push_str("</th><th>");
+    html.push_str(&tr(language, "auth.created"));
+    html.push_str("</th></tr></thead><tbody>");
+    for row in audit {
+        let cells = row
+            .iter()
+            .map(|value| format!("<td>{}</td>", html_escape(value)))
+            .collect::<String>();
+        html.push_str(&format!("<tr>{cells}</tr>"));
     }
     html.push_str("</tbody></table></div></div></section>");
     html

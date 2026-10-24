@@ -2570,9 +2570,9 @@ fn default_design_system_exposes_the_complete_public_theme_token_set() {
         .contains(".zelyra-sidebar .z-app-shell__navigation a:hover) { background: color-mix"));
     assert!(ZELYRA_DESIGN_SYSTEM_CSS.contains(".z-input,\n  :where(html[data-z-ui]) .z-select"));
     assert!(ZELYRA_DESIGN_SYSTEM_CSS.contains("border: 1px solid var(--z-color-control-border)"));
-    assert!(ZELYRA_DESIGN_SYSTEM_CSS.starts_with("/* Zelyra UI CSS bundle v1.2.4"));
-    assert!(ZELYRA_UI_CSS_PATH.contains("/v1.2.4/zelyra-ui.css"));
-    assert!(ZELYRA_UI_JS_PATH.contains("/v1.2.4/zelyra-ui.js"));
+    assert!(ZELYRA_DESIGN_SYSTEM_CSS.starts_with("/* Zelyra UI CSS bundle v1.2.5"));
+    assert!(ZELYRA_UI_CSS_PATH.contains("/v1.2.5/zelyra-ui.css"));
+    assert!(ZELYRA_UI_JS_PATH.contains("/v1.2.5/zelyra-ui.js"));
     assert!(include_str!("../assets/zelyra-ui.v1.js").contains("theme || \"light\""));
 }
 
@@ -5468,7 +5468,12 @@ fn session_device_metadata_is_bounded_and_escaped_in_self_service_view() {
         device: Some("<script>".into()),
     }];
     let html = localize_html(
-        &render_account_sessions(&account_sessions_test_auth(), &rows, UiLanguage::English),
+        &render_account_sessions(
+            &account_sessions_test_auth(),
+            &rows,
+            None,
+            UiLanguage::English,
+        ),
         UiLanguage::English,
     );
     assert!(html.contains("&lt;script&gt;"));
@@ -5516,8 +5521,7 @@ fn session_administration_preserves_legacy_tables_and_escapes_rows() {
     };
     assert!(administrable_session_table(&auth).is_none());
     assert!(
-        !render_auth_admin(&auth, &[], &[], &[], &[], &[], UiLanguage::English)
-            .contains("revoke_session")
+        !render_auth_admin(&auth, &[], &[], &[], UiLanguage::English).contains("revoke_session")
     );
     auth.schema.tables[0].columns.push(zelyra_database::Column {
         name: "id".into(),
@@ -5550,7 +5554,7 @@ fn session_administration_preserves_legacy_tables_and_escapes_rows() {
 }
 
 #[test]
-fn access_management_uses_separate_cards_and_uniform_vertical_actions() {
+fn access_management_groups_assignments_in_full_width_cards() {
     let mut auth = account_sessions_test_auth();
     auth.admin_path = Some("/admin/users".into());
     auth.roles_table = Some("user_roles".into());
@@ -5601,19 +5605,6 @@ fn access_management_uses_separate_cards_and_uniform_vertical_actions() {
             ],
             &[vec!["7".into(), "ada@example.test".into(), "admin".into()]],
             &[vec!["admin".into(), "auth.manage".into()]],
-            &[vec![
-                "7".into(),
-                "user.create".into(),
-                "8".into(),
-                "created".into(),
-                "today".into(),
-            ]],
-            &[vec![
-                "11".into(),
-                "7".into(),
-                "ada@example.test".into(),
-                "tomorrow".into(),
-            ]],
             UiLanguage::English,
         ),
         UiLanguage::English,
@@ -5621,17 +5612,18 @@ fn access_management_uses_separate_cards_and_uniform_vertical_actions() {
 
     for section_id in [
         "auth-users-title",
-        "auth-sessions-title",
         "auth-assign-role-title",
         "auth-role-assignments-title",
         "auth-grant-permission-title",
         "auth-role-permissions-title",
-        "auth-audit-title",
     ] {
         assert!(html.contains(&format!("aria-labelledby=\"{section_id}\"")));
     }
     assert!(html.contains("class=\"z-page-header__title\">Access management"));
     assert!(html.contains("class=\"z-auth-admin\""));
+    assert!(!html.contains("auth-sessions-title"));
+    assert!(!html.contains("auth-audit-title"));
+    assert!(!html.contains("auth.sessions_help"));
     assert!(html.contains("class=\"z-admin-grid\">"));
     assert!(html.contains("class=\"z-card z-admin-grid__wide\""));
     assert!(html.contains("class=\"z-grid z-grid--three z-admin-create-user\""));
@@ -5639,12 +5631,17 @@ fn access_management_uses_separate_cards_and_uniform_vertical_actions() {
     assert!(html.contains("class=\"z-table z-admin-users-table\""));
     assert!(html.contains("class=\"z-table-scroll z-admin-users-scroll\""));
     assert!(html.contains("class=\"z-admin-user-rows\""));
-    assert_eq!(
-        html.matches("class=\"z-stack z-admin-assign-role\"")
-            .count(),
-        2
-    );
+    assert_eq!(html.matches("class=\"z-admin-assign-role\"").count(), 2);
     assert!(html.contains("class=\"z-admin-role-scroll\""));
+    assert!(html.contains(
+        "class=\"z-card z-admin-grid__wide\" aria-labelledby=\"auth-assign-role-title\""
+    ));
+    assert!(html.contains(
+        "class=\"z-card z-admin-grid__wide\" aria-labelledby=\"auth-grant-permission-title\""
+    ));
+    assert!(html.contains(
+        "class=\"z-card z-admin-grid__wide\" aria-labelledby=\"auth-role-permissions-title\""
+    ));
     assert_eq!(
         html.matches("class=\"z-button z-button--primary z-button--icon\"")
             .count(),

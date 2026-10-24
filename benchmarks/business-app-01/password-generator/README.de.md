@@ -31,10 +31,12 @@ Rolle `admin` die Rechte `identity.users.manage` und
 Nach der Anmeldung führt **Profil** zu `/account/profile`. Dort kann ein
 Benutzer den Anzeigenamen und die E-Mail-Adresse nach Bestätigung des aktuellen
 Passworts ändern sowie sein Passwort ändern. Ein Passwortwechsel widerruft die
-anderen Sitzungen. `/account/sessions` bietet die Verwaltung aktiver Sitzungen;
-Konten, Rollen und Berechtigungen bleiben Administratoraufgaben. Die Anmeldung
-ist ein zentraler Bestandteil des Identitätsmoduls und erscheint deshalb nicht
-als eigene Anwendungskachel auf dem Dashboard.
+anderen Sitzungen. `/account/sessions` zeigt die eigenen aktiven Sitzungen;
+Administratoren mit `identity.users.manage` sehen dort zusätzlich alle aktiven
+Sitzungen und das Audit-Protokoll. Benutzerverwaltung, Rollen und Berechtigungen
+bleiben auf `/admin/users`. Die Anmeldung ist ein zentraler Bestandteil des
+Identitätsmoduls und erscheint deshalb nicht als eigene Anwendungskachel auf dem
+Dashboard.
 
 Die Anwendung besteht aus drei lokalen Paketen:
 
