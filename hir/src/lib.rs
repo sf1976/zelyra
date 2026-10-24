@@ -984,6 +984,7 @@ impl<'a> Resolver<'a> {
                             | "http_result"
                             | "mail_queue"
                             | "render_markdown"
+                            | "markdown_toc"
                             | "render_pdf"
                             | "mail_deliver"
                             | "run_process"

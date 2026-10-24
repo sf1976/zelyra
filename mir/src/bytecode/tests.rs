@@ -3710,6 +3710,59 @@ fn main() {}
 }
 
 #[test]
+fn markdown_toc_matches_heading_ids_and_escapes_output_across_backends() {
+    let source = r##"
+fn toc() -> String {
+    return markdown_toc("# Guide & Setup\n\n## Duplicate\n\n## Duplicate\n\n### `x](https://evil.example)` {#own-id}\n", "Contents")
+}
+fn rendered() -> String {
+    body = "# Guide & Setup\n\n## Duplicate\n\n## Duplicate\n\n### `x](https://evil.example)` {#own-id}\n"
+    contents = markdown_toc(body, "Contents")
+    return render_markdown(contents + "\n" + body)
+}
+fn main() {}
+"##;
+    let ast = parse(&lex(source).expect("source lexes")).expect("source parses");
+    let mir = crate::lower(&ast).expect("source lowers to MIR");
+    let expected_toc = "**Contents**\n\n- [Guide \\& Setup](#guide-setup)\n- [Duplicate](#duplicate)\n- [Duplicate](#duplicate-2)\n- [x\\]\\(https\\:\\/\\/evil\\.example\\)](#own-id)\n";
+
+    for (function, expected) in [("toc", Some(expected_toc)), ("rendered", None)] {
+        let ast_result = zelyra_runtime::execute_function(&ast, function, vec![], None)
+            .expect("AST Markdown function executes");
+        let mir_result =
+            execution::execute_function(&mir, function, vec![], ExecutionLimits::default())
+                .expect("MIR Markdown function executes")
+                .value;
+        let bytecode = decode(
+            &encode(&compile(&mir, function).expect("bytecode compiles"))
+                .expect("bytecode encodes"),
+        )
+        .expect("bytecode verifies after decoding");
+        let bytecode_result = execute(&bytecode, vec![], ExecutionLimits::default())
+            .expect("bytecode Markdown function executes")
+            .value;
+
+        assert_eq!(ast_result, mir_result, "MIR parity for {function}");
+        assert_eq!(
+            ast_result, bytecode_result,
+            "bytecode parity for {function}"
+        );
+        if let Some(expected) = expected {
+            assert_eq!(ast_result, Value::String(expected.into()), "TOC Markdown");
+        } else {
+            let Value::String(rendered) = ast_result else {
+                panic!("Markdown renderer must return a String");
+            };
+            assert!(rendered.contains("<a href=\"#guide-setup\">Guide &amp; Setup</a>"));
+            assert!(rendered.contains("<a href=\"#duplicate-2\">Duplicate</a>"));
+            assert!(rendered.contains("id=\"own-id\""));
+            assert!(rendered.contains("x](https://evil.example)"));
+            assert!(!rendered.contains("href=\"https://evil.example\""));
+        }
+    }
+}
+
+#[test]
 fn bytecode_clock_and_environment_use_declared_capabilities_and_host_grants() {
     let source = r#"
             fn current() -> Timestamp uses Clock { return now() }
