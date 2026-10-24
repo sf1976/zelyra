@@ -2,6 +2,7 @@
 """Exercise the Zelyra-only password generator through its HTTP interface."""
 
 import html
+import http.cookiejar
 import os
 import re
 import socket
@@ -21,9 +22,14 @@ with socket.socket() as listener:
     listener.bind(("127.0.0.1", 0))
     port = listener.getsockname()[1]
 base = f"http://127.0.0.1:{port}"
+email = os.environ.get("ZELYRA_TEST_EMAIL")
+password = os.environ.get("ZELYRA_TEST_PASSWORD")
+if not email or not password:
+    raise SystemExit("set ZELYRA_TEST_EMAIL and ZELYRA_TEST_PASSWORD for the protected app E2E")
 environment = os.environ.copy()
 environment["ZELYRA_LEVEL"] = "work"
 environment["ZELYRA_LANGUAGE"] = "de"
+environment["ZELYRA_ALLOWED_HOSTS"] = "127.0.0.1,localhost"
 server = subprocess.Popen(
     [zelyra, "serve", "main.zyl", f"127.0.0.1:{port}"],
     cwd=project,
@@ -33,19 +39,39 @@ server = subprocess.Popen(
 )
 
 
-def get_form():
-    request = urllib.request.Request(base + "/generator", headers={"Origin": base})
-    with urllib.request.urlopen(request, timeout=2) as response:
+jar = http.cookiejar.CookieJar()
+opener = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(jar))
+
+
+def request_form_token(path):
+    request = urllib.request.Request(base + path, headers={"Origin": base})
+    with opener.open(request, timeout=2) as response:
         body = response.read().decode()
         assert response.status == 200
-        assert "Passwortgenerator" in body
-        assert "Passwort erzeugen" in body
         token = re.search(r'name="_zelyra_csrf" value="([^"]+)"', body).group(1)
         return token
 
 
+def sign_in():
+    token = request_form_token("/login")
+    data = urllib.parse.urlencode(
+        {"_zelyra_csrf": token, "email": email, "password": password}
+    ).encode()
+    request = urllib.request.Request(
+        base + "/login",
+        data=data,
+        headers={
+            "Origin": base,
+            "Content-Type": "application/x-www-form-urlencoded",
+        },
+    )
+    with opener.open(request, timeout=5) as response:
+        assert response.status == 200
+    assert any(cookie.name == "zelyra_session" for cookie in jar)
+
+
 def post(length, profile):
-    token = get_form()
+    token = request_form_token("/generator")
     data = urllib.parse.urlencode(
         {"_zelyra_csrf": token, "length": str(length), "character_set": profile}
     ).encode()
@@ -58,7 +84,7 @@ def post(length, profile):
         },
     )
     try:
-        response = urllib.request.urlopen(request, timeout=5)
+        response = opener.open(request, timeout=5)
     except urllib.error.HTTPError as error:
         return error.code, error.read().decode(), error.headers
     with response:
@@ -90,12 +116,33 @@ try:
         if server.poll() is not None:
             raise RuntimeError(f"zelyra serve exited with status {server.returncode}")
         try:
-            get_form()
+            with urllib.request.urlopen(base + "/login", timeout=2) as response:
+                assert response.status == 200
             break
         except (OSError, urllib.error.URLError):
             if time.monotonic() >= deadline:
                 raise
             time.sleep(0.1)
+
+    anonymous = urllib.request.build_opener()
+    with anonymous.open(base + "/") as response:
+        landing = response.read().decode()
+        assert 'href="/login"' in landing
+    try:
+        anonymous.open(base + "/generator", timeout=2)
+        raise AssertionError("anonymous generator request unexpectedly succeeded")
+    except urllib.error.HTTPError as error:
+        assert error.code == 401
+    sign_in()
+
+    with opener.open(base + "/admin/users", timeout=5) as response:
+        admin_page = response.read().decode()
+        assert response.status == 200 and "create_user" in admin_page
+    try:
+        anonymous.open(base + "/register", timeout=2)
+        raise AssertionError("public registration route unexpectedly exists")
+    except urllib.error.HTTPError as error:
+        assert error.code == 404
 
     for profile, check in profiles.items():
         status, body, headers = post(24, profile)

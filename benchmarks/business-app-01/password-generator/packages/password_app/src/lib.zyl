@@ -1,7 +1,8 @@
 import "zelyra/ui" as ui
-import "domain::passwords" as passwords
+import "pkg:password_engine" as passwords
+import "pkg:zelyra_identity" as identity
 
-fn generate_password(length: Int, character_set: String) -> String uses Random {
+pub fn generate_password(length: Int, character_set: String) -> String uses Random {
     return passwords::generate_password(length, character_set)
 }
 
@@ -10,12 +11,16 @@ page "/" {
         <Container>
             <PageHeader
                 title="Passwortgenerator"
-                description="Erzeuge starke Passwörter direkt auf diesem Server."
+                description="Sicher anmelden und Passwörter direkt auf diesem Server erzeugen."
             />
             <Grid columns="two">
+                <Card title="Dein geschützter Arbeitsbereich">
+                    <p>Der Generator ist nur nach einer Anmeldung erreichbar. Benutzerkonten werden verwaltet, eine öffentliche Registrierung ist ausgeschaltet.</p>
+                    <Button label="Anmelden" href="/login" />
+                    <Button label="Zum Passwortgenerator" href="/generator" appearance="success" />
+                </Card>
                 <Card title="Sicher und lokal">
                     <p>Die Zufallswerte werden mit Zelyras sicherer Random-Capability erzeugt. Passwörter werden weder gespeichert noch protokolliert.</p>
-                    <Button label="Passwort erstellen" href="/generator" appearance="success" />
                 </Card>
                 <Card title="Zelyra Work-Modus">
                     <p>Diese Anwendung läuft mit <code>ZELYRA_LEVEL=work</code>. Sie enthält keinen Lernmodus und keine Anwendung in einer Fremdsprache.</p>
@@ -44,6 +49,8 @@ form PasswordGenerator {
 
     action generate {
         label: "Passwort erzeugen"
+        requires auth
+        permits "password_generator.use"
         handler: generate_password
         uses Random
     }

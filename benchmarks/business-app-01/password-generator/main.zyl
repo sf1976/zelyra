@@ -1,4 +1,4 @@
-import "routes::web" as web
-import "schema::tables" as schema
+import "pkg:zelyra_identity" as identity
+import "pkg:password_app" as app
 
 fn main() {}

@@ -1252,6 +1252,86 @@ fn standalone_form_handler_returns_escaped_non_cacheable_result_after_csrf_valid
     assert_eq!(handler_calls.load(Ordering::SeqCst), 1);
 }
 
+#[test]
+fn standalone_form_handler_enforces_action_authentication_and_permissions() {
+    let mut route = form_route();
+    route.form.actions = vec![zelyra_ast::FormAction {
+        name: "generate".into(),
+        label: Some("Generate value".into()),
+        icon: None,
+        confirm: None,
+        confirm_page: None,
+        success_page: None,
+        error_page: None,
+        fields: Vec::new(),
+        requires_auth: true,
+        permissions: vec!["password_generator.use".into()],
+        handler: Some("generate_value".into()),
+        capabilities: Vec::new(),
+        require_match: false,
+        statements: Vec::new(),
+        execute_body: None,
+        guard: None,
+        success: None,
+        redirect: None,
+        span: zelyra_ast::Span::default(),
+    }];
+    let calls = Arc::new(AtomicUsize::new(0));
+    let handler_calls = calls.clone();
+    route.handler = Some(FormHandler::new("generate_value", move |_| {
+        handler_calls.fetch_add(1, Ordering::SeqCst);
+        Ok("generated".into())
+    }));
+    let denied = WebApp::new(Vec::new(), vec![route.clone()])
+        .with_database_capability(false)
+        .with_auth(Some("shared-token".into()), Vec::new());
+    let app = WebApp::new(Vec::new(), vec![route]).with_database_capability(false);
+    let request = |authorization: Option<&str>| {
+        let mut headers = HashMap::from([
+            ("host".into(), "localhost".into()),
+            (
+                "content-type".into(),
+                "application/x-www-form-urlencoded".into(),
+            ),
+            ("origin".into(), "http://localhost".into()),
+        ]);
+        if let Some(authorization) = authorization {
+            headers.insert("authorization".into(), authorization.into());
+        }
+        Request {
+            method: "POST".into(),
+            target: "/forms/CustomerCreate".into(),
+            path: "/forms/CustomerCreate".into(),
+            headers,
+            body: "_zelyra_csrf=csrf-token&name=before".into(),
+            remote_addr: None,
+        }
+    };
+
+    assert_eq!(app.dispatch(&request(None)).status, 401);
+    assert_eq!(calls.load(Ordering::SeqCst), 0);
+
+    assert_eq!(
+        denied
+            .dispatch(&request(Some("Bearer shared-token")))
+            .status,
+        403
+    );
+    assert_eq!(calls.load(Ordering::SeqCst), 0);
+
+    let allowed = app.with_auth(
+        Some("shared-token".into()),
+        vec!["password_generator.use".into()],
+    );
+    assert_eq!(
+        allowed
+            .dispatch(&request(Some("Bearer shared-token")))
+            .status,
+        200
+    );
+    assert_eq!(calls.load(Ordering::SeqCst), 1);
+}
+
 fn child_collection_form_route() -> FormRoute {
     let mut route = form_route();
     let fields = vec![

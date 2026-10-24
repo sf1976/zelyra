@@ -2042,12 +2042,10 @@ fn validate_typed_crud_actions(path: &str, program: &zelyra_ast::Program) -> boo
                     || action.success_page.is_some()
                     || action.error_page.is_some()
                     || action.icon.is_some()
-                    || action.requires_auth
-                    || !action.permissions.is_empty()
                 {
                     report(
                         "E-FORM-003",
-                        "a standalone form handler action may declare only its label and capabilities; SQL, redirects, confirmation, authorization, notices, guards, and action-specific fields are not supported".into(),
+                        "a standalone form handler action may declare its label, authorization, and capabilities; SQL, redirects, confirmation, notices, guards, icons, and action-specific fields are not supported".into(),
                     );
                 }
                 let Some(function) = program

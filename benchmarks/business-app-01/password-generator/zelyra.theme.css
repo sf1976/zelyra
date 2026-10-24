@@ -124,3 +124,237 @@ Token- und Konfigurationsreferenz: https://github.com/sf1976/zelyra/blob/main/do
         font-size: 1.05rem;
     }
 }
+
+/* The product identity is shown by the Zelyra mark; this environment chip is
+   operational metadata and does not belong in the customer-facing design. */
+:where(html[data-z-ui]) .zelyra-environment {
+    display: none;
+}
+
+/* Focused sign-in surface, built entirely from the native Zelyra UI shell. */
+html:has(form[action="/login"]) .z-app-shell {
+    grid-template: "main" minmax(100vh, 1fr) / minmax(0, 1fr);
+    min-height: 100vh;
+    background: #edf2fa;
+}
+
+html:has(form[action="/login"]) .z-app-shell__header,
+html:has(form[action="/login"]) .z-app-shell__sidebar,
+html:has(form[action="/login"]) .z-app-shell__footer {
+    display: none;
+}
+
+html:has(form[action="/login"]) .z-app-shell__main {
+    display: grid;
+    width: 100%;
+    min-height: 100vh;
+    padding: clamp(1.25rem, 5vw, 4rem);
+    place-items: center;
+    background:
+        radial-gradient(ellipse at 18% 14%, rgb(84 124 197 / 15%), transparent 36%),
+        radial-gradient(ellipse at 88% 86%, rgb(80 154 179 / 12%), transparent 34%),
+        #edf2fa;
+}
+
+html:has(form[action="/login"]) .zelyra-page-content {
+    display: grid;
+    width: 100%;
+    place-items: center;
+}
+
+html:has(form[action="/login"]) .zelyra-page-content main {
+    width: min(100%, 27rem);
+    margin: 0;
+    padding: clamp(1.75rem, 5vw, 2.75rem);
+    border: 1px solid rgb(191 205 226 / 78%);
+    border-radius: 1.5rem;
+    background: rgb(255 255 255 / 96%);
+    box-shadow: 0 28px 72px rgb(24 44 78 / 14%), 0 3px 10px rgb(24 44 78 / 5%);
+}
+
+html:has(form[action="/login"]) .zelyra-page-content main::before {
+    display: grid;
+    width: 3.25rem;
+    height: 3.25rem;
+    margin-bottom: 1.5rem;
+    place-items: center;
+    border: 1px solid rgb(255 255 255 / 22%);
+    border-radius: 1.05rem;
+    background: linear-gradient(145deg, #5279c4, #244785);
+    box-shadow: 0 10px 24px rgb(49 87 164 / 25%);
+    color: #fff;
+    content: "Z";
+    font-size: 1.65rem;
+    font-weight: 800;
+    letter-spacing: -.06em;
+}
+
+html:has(form[action="/login"]) .zelyra-page-content h1 {
+    margin: 0 0 .5rem;
+    color: #172438;
+    font-size: clamp(1.7rem, 4vw, 2rem);
+    letter-spacing: -.035em;
+}
+
+html:has(form[action="/login"]) .zelyra-page-content form[action="/login"] {
+    display: grid;
+    gap: .65rem;
+    margin-top: 1.5rem;
+}
+
+html:has(form[action="/login"]) form[action="/login"] input[type="hidden"] {
+    display: none;
+}
+
+html:has(form[action="/login"]) form[action="/login"] label {
+    margin: .35rem 0 0;
+    color: #34445c;
+    font-size: .9rem;
+    font-weight: 650;
+}
+
+html:has(form[action="/login"]) form[action="/login"] input {
+    width: 100%;
+    min-height: 3rem;
+    padding: .7rem .85rem;
+    border: 1px solid #cbd6e6;
+    border-radius: .7rem;
+    background: #fff;
+    color: #172438;
+    font: inherit;
+    transition: border-color 140ms ease, box-shadow 140ms ease;
+}
+
+html:has(form[action="/login"]) form[action="/login"] input:focus-visible {
+    border-color: #3157a4;
+    outline: 0;
+    box-shadow: 0 0 0 4px rgb(49 87 164 / 15%);
+}
+
+html:has(form[action="/login"]) form[action="/login"] button {
+    width: 100%;
+    min-height: 3rem;
+    margin-top: .75rem;
+    border-radius: .7rem;
+    font-size: .98rem;
+    font-weight: 700;
+}
+
+html:has(form[action="/login"]) .zelyra-page-content main::after {
+    display: block;
+    margin-top: 1.5rem;
+    color: #74839a;
+    content: "ZELYRA · SICHERER ARBEITSBEREICH";
+    font-size: .68rem;
+    font-weight: 700;
+    letter-spacing: .12em;
+    text-align: center;
+}
+
+/* The generator keeps the normal Zelyra app shell and uses its design tokens. */
+.z-app-shell__main:has(form[action="/generator"]) .zelyra-page-content main {
+    width: min(100%, 54rem);
+    margin-inline: auto;
+}
+
+.z-app-shell__main:has(form[action="/generator"]) .zelyra-page-content main::before {
+    display: block;
+    margin: 0 0 1rem;
+    color: #172438;
+    content: "Passwortgenerator";
+    font-size: clamp(1.6rem, 4vw, 2rem);
+    font-weight: 750;
+    letter-spacing: -.035em;
+}
+
+.z-app-shell__main:has(form[action="/generator"]) .zelyra-page-content main::after {
+    display: block;
+    margin-top: 1.25rem;
+    color: #697b94;
+    content: "Sicher erzeugt · nicht gespeichert";
+    font-size: .85rem;
+}
+
+.z-app-shell__main form[action="/generator"] {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 1.25rem;
+    margin-top: 1rem;
+    padding: clamp(1.25rem, 3vw, 2rem);
+    border: 1px solid #d7e1ef;
+    border-radius: 1.1rem;
+    background: #fff;
+    box-shadow: 0 18px 48px rgb(27 45 73 / 8%);
+}
+
+.z-app-shell__main form[action="/generator"] input[type="hidden"] {
+    display: none;
+}
+
+.z-app-shell__main form[action="/generator"] .z-field {
+    margin: 0;
+}
+
+.z-app-shell__main form[action="/generator"] .z-field__label {
+    margin-bottom: .5rem;
+    color: #34445c;
+    font-weight: 650;
+}
+
+.z-app-shell__main form[action="/generator"] .z-input,
+.z-app-shell__main form[action="/generator"] .z-select {
+    min-height: 3rem;
+    border-radius: .7rem;
+}
+
+.z-app-shell__main form[action="/generator"] > button {
+    grid-column: 1 / -1;
+    justify-self: start;
+    min-height: 3rem;
+    padding-inline: 1.35rem;
+    border-radius: .7rem;
+    font-weight: 700;
+}
+
+.z-app-shell__main:has(form[action="/generator"]) .zelyra-form-result {
+    padding: clamp(1.25rem, 3vw, 2rem);
+    border-color: #b9d9c8;
+    border-radius: 1.1rem;
+    box-shadow: 0 14px 36px rgb(27 45 73 / 6%);
+}
+
+@media (max-width: 42rem) {
+    .z-app-shell__main form[action="/generator"] {
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    .z-app-shell__main form[action="/generator"] > button {
+        width: 100%;
+        justify-self: stretch;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    html:has(form[action="/login"]) form[action="/login"] input {
+        transition: none;
+    }
+}
+
+/* Keep navigation landmarks distinct and avoid repeating the app footer. */
+:where(html[data-z-ui]) .zelyra-nav a {
+    gap: .75rem;
+}
+
+:where(html[data-z-ui]) .zelyra-nav-icon {
+    display: inline-flex;
+    width: 1.75rem;
+    flex: 0 0 1.75rem;
+    justify-content: center;
+    font-size: .72rem;
+    font-weight: 750;
+    letter-spacing: .03em;
+}
+
+:where(html[data-z-ui]) .z-app-shell__footer {
+    display: none;
+}

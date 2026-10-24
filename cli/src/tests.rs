@@ -155,6 +155,13 @@ fn standalone_form_handlers_require_matching_typed_fields_and_effects() {
     let program = zelyra_parser::parse(&zelyra_lexer::lex(valid).unwrap()).unwrap();
     assert!(validate_typed_crud_actions(&entry, &program));
 
+    let authorized = valid.replace(
+        "                handler: generate_password",
+        "                requires auth\n                permits \"password_generator.use\"\n                handler: generate_password",
+    );
+    let program = zelyra_parser::parse(&zelyra_lexer::lex(&authorized).unwrap()).unwrap();
+    assert!(validate_typed_crud_actions(&entry, &program));
+
     let invalid_signature = valid.replace("field length: Int", "field size: Int");
     let program = zelyra_parser::parse(&zelyra_lexer::lex(&invalid_signature).unwrap()).unwrap();
     assert!(!validate_typed_crud_actions(&entry, &program));
