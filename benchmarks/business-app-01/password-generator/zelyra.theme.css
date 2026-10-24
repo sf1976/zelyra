@@ -239,7 +239,7 @@ html:has(form[action="/login"]) form[action="/login"] button:hover {
     color: #172438;
 }
 
-html:has(.dashboard-app-status) .zelyra-page-content a.z-button:hover {
+html:has(.dashboard-app-status) .z-app-shell__main a.z-button:hover {
     border-color: #c5d0df;
     background: #e5ebf3;
     color: #172438;
