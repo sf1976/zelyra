@@ -26,7 +26,7 @@ proof claims guide every phase. The [manifesto](MANIFESTO.md) states the
 principles; the roadmap below tracks what is actually implemented.
 
 The current stable release is
-[1.2.56](https://github.com/sf1976/zelyra/releases/tag/v1.2.56).
+[1.3.0](https://github.com/sf1976/zelyra/releases/tag/v1.3.0).
 **Current milestones** is the source of near-term commitments. Older numbered release sections below are retained as
 historical planning and evidence; they do not by themselves define current
 release targets. Longer-term ideas remain in the post-1.0 evolution section.
@@ -44,7 +44,7 @@ security and compatibility gates stated for that milestone.
 | Version | Focus | Exit criteria |
 | --- | --- | --- |
 | 1.2.56 | Studio File/Edit menus, readable UI, and SQL workbench | Released as [v1.2.56](https://github.com/sf1976/zelyra/releases/tag/v1.2.56); full PR CI, reproducible Linux/Windows packages, checksums, and SPDX SBOMs passed. |
-| 1.3.0 | Compiler and Studio foundations | Canonical project layout, architecture checks/migration preview, and a compiler-aware Studio workflow are verified. AST remains the default; MIR/Bytecode stay optional, and unsupported paths fail safely. |
+| 1.3.0 | Compiler and Studio foundations | Released with canonical database starters, architecture checks and declaration-level migration preview, plus compiler-guided Studio workflows. AST remains the default; MIR/Bytecode stay optional, with unsupported paths failing closed. |
 | 1.3.1–1.3.50 | Hardening through two native Zelyra projects | After 1.3.0 ships, freeze broad feature work. First implement and verify the work-mode password generator in the manually provisioned customer area. Only after it works, begin Mini-ERP Benchmark 01 as the first integrated business application, with its language gaps fixed in Zelyra itself. Finish 1.3.50 against the benchmark acceptance criteria; report incomplete scope honestly. |
 | 1.4.0 | Zelyra Visual Design Platform | A usable first release with a shared component registry and preview, Zelyra source as the only authoritative description, theme/style core, visual form editing, and safe source synchronization. Phase 0 analysis and specification starts after 1.3.0. |
 | 1.5.0 | Bytecode readiness and default gate | Bytecode becomes the default only with demonstrated parity, safe fail-closed behavior, verified artifact upgrades, and measured benefit. Otherwise AST remains the default and Bytecode stays optional. |

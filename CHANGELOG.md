@@ -1,38 +1,38 @@
 ## Unreleased
 
-- Extend strict architecture checks to follow statically resolved calls from
-  API handlers in `routes/`, reporting write SQL and SQL whose effects cannot
-  be safely classified; keep business writes in `domain/`. / Strenge
-  Architekturprüfungen so erweitern, dass statisch aufgelöste Aufrufe aus
-  API-Handlern in `routes/` verfolgt und schreibendes beziehungsweise nicht
-  sicher klassifizierbares SQL gemeldet werden; fachliche Schreibzugriffe
-  gehören nach `domain/`.
-- Add source locations and stable rule identifiers to the read-only project
-  layout migration preview, alongside its reason and candidate destination. /
-  Die schreibgeschützte Projektlayout-Vorschau um Quellpositionen und stabile
-  Regelkennungen ergänzen; Grund und Zielvorschlag bleiben ebenfalls sichtbar.
-- Attach declaration source spans to strict architecture placement
-  diagnostics, instead of pointing every finding at line 1. / Bei Verstößen
-  gegen die strenge Architektur die Quellposition der Deklaration melden,
-  statt alle Befunde auf Zeile 1 zu verweisen.
-- Continue route SQL analysis through every statically reachable module until
-  the intentional `domain/` boundary, including project entrypoint and package
-  helpers. / Die SQL-Prüfung von Routen durch alle statisch erreichbaren
-  Module bis zur vorgesehenen `domain/`-Grenze fortsetzen, auch über Hilfen
-  im Projekteinstieg und in Paketen.
-- Reject direct imports from `routes/` inside `domain/` modules with a
-  source-mapped architecture diagnostic. / Direkte Importe aus `routes/` in
-  `domain/`-Modulen mit einer quellpositionierten Architekturdiagnose
-  zurückweisen.
-- Apply the route SQL boundary check to embedded form and CRUD actions as well
-  as API handlers. / Die SQL-Grenzprüfung für Routen auch auf eingebettete
-  Form- und CRUD-Aktionen anwenden.
-- Include scalar foreign-key targets when selecting Laravel schema
-  dependencies, so generated customer and invoice subsets compile with their
-  referenced tenant and user tables. / Bei der Auswahl von Laravel-Schema-
-  Abhängigkeiten auch skalare Fremdschlüsselziele aufnehmen, damit generierte
-  Kunden- und Rechnungsausschnitte samt Tenant- und Benutzertabellen
-  kompilieren.
+## 1.3.0 — Compiler and Studio foundations
+
+- Add the opt-in standard project layout with compiler-checked MariaDB
+  minimal, CRUD, auth, and business starters; preserve explicit imports and
+  legacy project behavior. / Das optionale Standardlayout mit compiler-
+  geprüften MariaDB-Minimal-, CRUD-, Auth- und Business-Vorlagen ergänzen;
+  explizite Importe und das Verhalten bestehender Projekte erhalten.
+- Extend `strict_architecture` to follow statically resolved API, form, and
+  CRUD calls through local and typed callback values to the `domain/` boundary.
+  Report route write SQL, unresolved database calls, and direct `routes/` to
+  `domain/` imports with source locations. / `strict_architecture` so erweitern,
+  dass statisch aufgelöste API-, Formular- und CRUD-Aufrufe über lokale und
+  typisierte Callback-Werte bis zur `domain/`-Grenze verfolgt werden. Schreib-
+  SQL, ungelöste Datenbankaufrufe und direkte `routes/`-zu-`domain/`-Importe
+  quellbezogen melden.
+- Add a deterministic, declaration-level, read-only layout migration preview
+  with source positions, rule identifiers, reasons, and candidate destinations.
+  / Eine deterministische, deklarationsbezogene, schreibgeschützte
+  Layoutmigrationsvorschau mit Quellpositionen, Regelkennungen, Gründen und
+  Zielvorschlägen ergänzen.
+- Add compiler-guided CRUD/form suggestions and expression-hole suggestions
+  based on known inferred types; require explicit selection before source is
+  inserted. / Compilergeführte CRUD-/Formular- und Ausdruckslückenvorschläge
+  aus bekannten inferierten Typen ergänzen; Quelltext erst nach ausdrücklicher
+  Auswahl einfügen.
+- Persist the Cargo binary path from source installers and offer interactive
+  Compose v2 installation for supported MariaDB setup paths. / Den Cargo-
+  Binärpfad durch Quellcode-Installer dauerhaft einrichten und Compose v2 bei
+  unterstützter interaktiver MariaDB-Einrichtung anbieten.
+- Add the pure `markdown_toc(source, label)` builtin with escaped links and
+  heading IDs compatible with the bounded Markdown renderer. / Das reine
+  Builtin `markdown_toc(source, label)` mit escaped Links und zum begrenzten
+  Markdown-Renderer passenden Überschriften-IDs ergänzen.
 
 ## 1.2.56 — Zelyra Studio SQL workbench and editor usability
 

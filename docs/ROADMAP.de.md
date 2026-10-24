@@ -28,7 +28,7 @@ Ressourcendisziplin und ehrliche Beweisaussagen leiten jede Phase. Das
 den tatsächlich implementierten Stand.
 
 Das aktuelle stabile Release ist
-[1.2.56](https://github.com/sf1976/zelyra/releases/tag/v1.2.56).
+[1.3.0](https://github.com/sf1976/zelyra/releases/tag/v1.3.0).
 **Aktuelle Meilensteine** ist die verbindliche Übersicht der nächsten Vorhaben.
 Ältere, nummerierte Release-
 Abschnitte bleiben als historische Planung und Nachweise erhalten; sie legen
@@ -49,7 +49,7 @@ abgeschlossen.
 | Version | Schwerpunkt | Abschlusskriterium |
 | --- | --- | --- |
 | 1.2.56 | Studio-Menüs Datei/Bearbeiten, lesbare UI und SQL-Arbeitsplatz | Als [v1.2.56](https://github.com/sf1976/zelyra/releases/tag/v1.2.56) veröffentlicht; vollständige PR-CI, reproduzierbare Linux-/Windows-Pakete, Prüfsummen und SPDX-SBOMs bestanden. |
-| 1.3.0 | Compiler- und Studio-Grundlage | Kanonisches Projektlayout, Architekturprüfung/Migrationsvorschau und compilerbewusster Studio-Arbeitsfluss sind nachvollziehbar geprüft. AST bleibt Standard; MIR/Bytecode bleiben optional und nicht unterstützte Pfade scheitern sicher. |
+| 1.3.0 | Compiler- und Studio-Grundlage | Veröffentlicht mit kanonischen Datenbankvorlagen, Architekturprüfung und deklarationsbezogener Migrationsvorschau sowie compilergeführten Studio-Abläufen. AST bleibt Standard; MIR/Bytecode bleiben optional und nicht unterstützte Pfade scheitern geschlossen. |
 | 1.3.1–1.3.50 | Härtung anhand zweier nativer Zelyra-Projekte | Nach Veröffentlichung von 1.3.0 werden breite neue Features eingefroren. Zuerst werden der Passwortgenerator im Work-Modus und der manuell verwaltete Kundenbereich ausschließlich mit Zelyra umgesetzt und geprüft. Erst wenn der Passwortgenerator funktioniert, beginnt Mini-ERP Benchmark 01 als erste integrierte Geschäftsanwendung; dabei entdeckte Sprachlücken werden in Zelyra selbst behoben. 1.3.50 wird an den Abnahmekriterien des Benchmarks gemessen; Unvollständiges wird klar ausgewiesen. |
 | 1.4.0 | Zelyra Visual Design Platform | Ein produktiver erster Schnitt mit gemeinsamem Komponentenregister und Vorschau, Zelyra-Quellcode als einziger maßgeblicher Beschreibung, Theme-/Style-Core, visueller Formularbearbeitung und sicherer Quellsynchronisierung. Phase 0 beginnt nach 1.3.0 mit Bestandsanalyse und Spezifikation. |
 | 1.5.0 | Bytecode-Reife und Standard-Gate | Bytecode wird nur bei belegter Parität, sicherem fail-closed Verhalten, geprüften Artefakt-Upgrades und messbarem Nutzen Standard. Andernfalls bleibt AST Standard und Bytecode optional. |

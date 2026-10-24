@@ -11,22 +11,20 @@ Business-, Datenbank- und Webanwendungen. Schemaabhängiges SQL, Formulare,
 CRUD, Views und Geschäftslogik greifen ineinander; gewöhnlicher Programmcode
 und natives SQL bleiben jederzeit möglich.
 
-> **Release 1.2.56 · Sprachkompatibilitätslinie: 0.1** · [GitHub-Release](https://github.com/sf1976/zelyra/releases/tag/v1.2.56)
+> **Release 1.3.0 · Sprachkompatibilitätslinie: 0.1** · [GitHub-Release](https://github.com/sf1976/zelyra/releases/tag/v1.3.0)
 >
 > Die Compilerprüfung und der Verifier decken klar abgegrenzte Bereiche ab. Sie beweisen nicht die Korrektheit beliebiger Anwendungen. Prüfe vor dem Einsatz die unterstützten Abläufe und Grenzen in der jeweiligen Dokumentation.
 
-Zelyra 1.2.56 ergänzt einen SQL-Arbeitsplatz im Studio für MariaDB und
-PostgreSQL. Schemaabhängige Vorschläge, lokale Entwürfe und Abfragehistorie
-sowie begrenzte Ergebnistabellen unterstützen Nur-Lese-`SELECT`- und `WITH`-
-Abfragen. Studio enthält außerdem das lokal ausgelieferte originale
-Zelyra-Logo, typgerechte Datenbank-Datensatzeditoren und compilergeführte
-Vorschläge für Imports, Record-Felder und CRUD-Blöcke. Vorschläge sind
-explizit und fügen erst nach Auswahl Code ein. Die Menüs Datei und Bearbeiten
-bieten gängige Aktionen einschließlich Suchen und Ersetzen im aktiven Dokument.
-Menüs, Werkzeugleisten und Dateileiste haben nun eine gut lesbare Standardschrift;
-mittlere und große Stufen bleiben verfügbar. Frühere Releases ergänzten das
-CSS-1.1.0-Designsystem, compilerbewusstes Editieren sowie die experimentellen
-MIR- und Bytecode-Backends. Siehe die
+Zelyra 1.3.0 ergänzt ein optionales Standardlayout mit compilergeprüften
+MariaDB-Vorlagen für Minimalprojekte, CRUD, Authentifizierung und
+Geschäftsabläufe. Studio schlägt nun geeignete CRUD- und Formularstrukturen aus
+deklarierten Tabellendaten vor. Architekturprüfungen verfolgen statisch
+auflösbare Routenaufrufe; die Migrationsvorschau zeigt quellbezogene Befunde je
+Deklaration. Quellcode-Installer richten Cargo dauerhaft ein; bei interaktiver
+MariaDB-Einrichtung kann Compose v2 angeboten werden. AST bleibt Standard;
+experimentelles MIR und Bytecode bleiben opt-in und weisen nicht unterstützte
+Programme sicher zurück. Der Business-Starter ist noch kein fertiges ERP.
+Siehe die [Release-Notizen 1.3.0](docs/release-notes/1.3.0.de.md),
 [Release-Notizen 1.2.56](docs/release-notes/1.2.56.de.md),
 [Release-Notizen 1.2.55](docs/release-notes/1.2.55.de.md),
 [Release-Notizen 1.2.54](docs/release-notes/1.2.54.de.md),
@@ -133,7 +131,7 @@ einem Arbeitsablauf:
   verifiziertes Bytecode (v30) — mit angeglichenen Diagnosen, Schrittbudgets
   und differenzieller Testabdeckung;
 - die Grenzen dieses Releases sind in den
-  [Release-Notizen 1.2.56](docs/release-notes/1.2.56.de.md) beschrieben;
+  [Release-Notizen 1.3.0](docs/release-notes/1.3.0.de.md) beschrieben;
 - lokales Text-PDF-Rendering und geprüfte PDF-Outbox-Anhänge mit Größen- und
   Zeilenlimits. Das Renderer-PDF übernimmt keine CSS-Layouts, Bilder oder
   Diagramme; für grafische Ausdrucke bleibt die Browser-Druckansicht verfügbar.
@@ -219,7 +217,7 @@ weitere Einstellungen stehen in der Umgebungsreferenz.
 | Zelyra UI verwenden möchtest | [Komponenten-, Formular-, Theme-, Druck-, Diagramm- und E-Mail-Referenz](docs/ui.de.md) · [English](docs/ui.en.md) |
 | die interaktive Sprachkonsole nutzen möchtest | [Anleitung zur Sprachkonsole](docs/language-console.de.md) · [English](docs/language-console.en.md) |
 | den implementierten Umfang und seine Grenzen prüfen möchtest | [Implementierte Funktionen](docs/implemented.de.md) · [English](docs/implemented.en.md) |
-| aktuelle und geplante Arbeiten prüfen möchtest | [Roadmap](docs/ROADMAP.de.md) · [Release-Notizen 1.2.56](docs/release-notes/1.2.56.de.md) |
+| aktuelle und geplante Arbeiten prüfen möchtest | [Roadmap](docs/ROADMAP.de.md) · [Release-Notizen 1.3.0](docs/release-notes/1.3.0.de.md) |
 | die Entwicklungsrichtung verstehen möchtest | [Manifest](docs/MANIFESTO.de.md) · [KI-native Architektur](docs/architecture/ai-native-development.de.md) · [Entwurf lesbarer Regex-Textbearbeitung](docs/design/readable-regex-text-editing.de.md) |
 | konkrete Release-Änderungen suchst | [Changelog](CHANGELOG.md) · [GitHub-Releases](https://github.com/sf1976/zelyra/releases) |
 
