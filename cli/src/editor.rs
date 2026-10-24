@@ -1268,6 +1268,17 @@ fn editor_project_map(
                         .iter()
                         .map(|column| &column.name)
                         .collect::<Vec<_>>());
+                    node["editable_fields"] = json!(table
+                        .columns
+                        .iter()
+                        .filter(|column| {
+                            !column.primary_key
+                                && !column.auto
+                                && column.computed.is_none()
+                                && column.auto_sequence.is_none()
+                        })
+                        .map(|column| &column.name)
+                        .collect::<Vec<_>>());
                 }
                 tables_by_name
                     .entry(table.name.clone())
@@ -5538,6 +5549,7 @@ fn main() {}
             .find(|node| node["kind"] == "table" && node["label"] == "items")
             .expect("declared table node");
         assert_eq!(table_node["columns"], json!(["id", "name"]));
+        assert_eq!(table_node["editable_fields"], json!(["name"]));
         let edges = map["edges"].as_array().unwrap();
         assert!(
             edges

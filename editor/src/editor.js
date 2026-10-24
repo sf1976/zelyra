@@ -22,7 +22,7 @@ import { zelyraEditingExtensions, zelyraEditingKeymap } from "./zelyra-editing.j
 import { sqlBodyPrefix, sqlCompletionOptions } from "./sql-completion.js";
 import { createSqlWorkbenchEditor } from "./sql-workbench.js";
 import { importPathCompletion, importSignature, importedModuleAlias, importedModuleAliasAtCursor, importedModuleCompletion } from "./module-completion.js";
-import { isTopLevelBlankPosition, nextCrudCompletions } from "./next-step-completion.js";
+import { isTopLevelBlankPosition, nextCrudCompletions, nextFormCompletions } from "./next-step-completion.js";
 import { databaseRecordEnumOptions, databaseRecordInputKind, databaseRecordInputValue, parseDatabaseRecordInput } from "./database-record-inputs.js";
 import {
   crosshairCursor,
@@ -965,7 +965,7 @@ function completionSource(context) {
     if (!localNames.has("main") && !projectOptions.some((item) => item.label === "main")) {
       projectOptions.push({ label: "main", type: "function", detail: t("symbolEntrypoint") });
     }
-    return [...localOptions, ...projectOptions, ...sqlOptions, ...nextCrudCompletions(projectMap, language)];
+    return [...localOptions, ...projectOptions, ...sqlOptions, ...nextCrudCompletions(projectMap, language), ...nextFormCompletions(projectMap, language)];
   });
   const fast = { from, options: basicOptions };
   const complete = projectOptions.then((options) => {

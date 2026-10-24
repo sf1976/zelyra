@@ -73,6 +73,21 @@ try {
     || document.querySelector("#status-message")?.textContent?.includes("erfolgreich"), undefined, { timeout: 10_000 });
   await page.locator(".cm-content").click();
   await page.keyboard.press("Control+A");
+  await page.keyboard.insertText("table customers {\n    id: Id primary auto\n    name: String?\n}\n\nfn main() {}\n");
+  await page.keyboard.press("Control+Home");
+  for (let line = 0; line < 4; line += 1) await page.keyboard.press("ArrowDown");
+  await page.keyboard.press("Control+Space");
+  const formCompletion = page.locator(".cm-tooltip-autocomplete");
+  await formCompletion.waitFor({ timeout: 10_000 });
+  const formLabels = await formCompletion.locator(".cm-completionLabel").allTextContents();
+  assert.ok(formLabels.includes("form CustomersForm -> customers { … }"), `editable table form was not suggested: ${formLabels}`);
+  await formCompletion.locator(".cm-completionLabel", { hasText: "form CustomersForm -> customers" }).click();
+  await page.waitForFunction(() => document.querySelector(".cm-content")?.textContent?.includes("        name"));
+  await page.locator("#check-button").click();
+  await page.waitForFunction(() => document.querySelector("#problems-list")?.textContent?.includes("Keine Probleme")
+    || document.querySelector("#status-message")?.textContent?.includes("erfolgreich"), undefined, { timeout: 10_000 });
+  await page.locator(".cm-content").click();
+  await page.keyboard.press("Control+A");
   await page.keyboard.insertText("table customers { id: Id primary auto name: String? }\nfn main() {\n\n}\n");
   await page.keyboard.press("Control+Home");
   await page.keyboard.press("ArrowDown");

@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { isTopLevelBlankPosition, nextCrudCompletions } from "../src/next-step-completion.js";
+import { isTopLevelBlankPosition, nextCrudCompletions, nextFormCompletions } from "../src/next-step-completion.js";
 
 const topLevelSource = "table customers { id: Id primary auto }\n\nfn main() {}";
 const nextStepPosition = topLevelSource.indexOf("\n\n") + 1;
@@ -37,4 +37,24 @@ assert.deepEqual(nextCrudCompletions({ ...map, edges: [] }, "en").map((item) => 
 assert.deepEqual(nextCrudCompletions({ ...map, nodes: [...map.nodes, { ...map.nodes[0], id: "table:duplicate.zyl:customers" }] }, "de").map((item) => item.label), [
   "crud ArchiveCustomers -> archive_customers {}",
 ]);
+const formMap = {
+  ...map,
+  nodes: map.nodes.map((node) => node.kind === "table" && node.label === "customers"
+    ? { ...node, editable_fields: ["name", "email"] }
+    : node.kind === "table" && node.label === "orders"
+      ? { ...node, editable_fields: ["number"] }
+      : node.kind === "table"
+        ? { ...node, editable_fields: [] }
+        : node),
+  edges: [...map.edges, { from: "form:main.zyl:OrderForm", to: "table:src/orders.zyl:orders", label: "writes table" }],
+};
+assert.deepEqual(nextFormCompletions(formMap, "de"), [{
+  label: "form CustomersForm -> customers { … }",
+  apply: "form CustomersForm -> customers {\n    fields {\n        name\n        email\n    }\n}",
+  type: "keyword",
+  detail: "Formulargerüst mit editierbaren Feldern aus customers",
+}]);
+assert.deepEqual(nextFormCompletions({ ...formMap, incomplete: true }, "de"), []);
+assert.deepEqual(nextFormCompletions({ ...formMap, nodes: formMap.nodes.map((node) => node.label === "customers" ? { ...node, editable_fields: [] } : node) }, "en"), []);
+assert.deepEqual(nextFormCompletions({ ...formMap, nodes: [...formMap.nodes, { id: "form:other.zyl:CustomersForm", kind: "form", label: "CustomersForm" }] }, "en"), []);
 console.log("Studio next-step completion unit tests passed");
