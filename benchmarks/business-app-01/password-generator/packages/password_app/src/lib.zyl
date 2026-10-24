@@ -6,24 +6,48 @@ pub fn generate_password(length: Int, character_set: String) -> String uses Rand
     return passwords::generate_password(length, character_set)
 }
 
+view AppDashboardShell {
+    html {
+        <!doctype html>
+        <html data-z-ui data-zelyra-language>
+            <head>
+                <meta charset="utf-8" />
+                <meta name="viewport" content="width=device-width, initial-scale=1" />
+                <title>Dashboard · Zelyra</title>
+            </head>
+            <body>
+                <AppShell id="zelyra-dashboard" navigation_label="Anwendungsnavigation">
+                    <slot name="header"><img class="dashboard-brand-logo" src="/zelyra-logo.png" alt="Zelyra" /></slot>
+                    <slot name="navigation">
+                        <a href="/">Dashboard</a>
+                        <a href="/generator">Passwortgenerator</a>
+                        <a href="/account/profile">Benutzerkonto</a>
+                    </slot>
+                    <slot name="footer"><span>Zelyra</span></slot>
+                    <slot />
+                </AppShell>
+            </body>
+        </html>
+    }
+}
+
 page "/" {
+    view: AppDashboardShell
+
     html {
         <Container>
             <PageHeader
-                title="Passwortgenerator"
-                description="Sicher anmelden und Passwörter direkt auf diesem Server erzeugen."
+                title="Dashboard"
+                description="Deine Zelyra-Anwendungen an einem Ort."
             />
-            <Grid columns="two">
-                <Card title="Dein geschützter Arbeitsbereich">
-                    <p>Der Generator ist nur nach einer Anmeldung erreichbar. Benutzerkonten werden verwaltet, eine öffentliche Registrierung ist ausgeschaltet.</p>
-                    <Button label="Anmelden" href="/login" />
-                    <Button label="Zum Passwortgenerator" href="/generator" appearance="success" />
+            <Grid columns="three">
+                <Card title="Passwortgenerator">
+                    <p>Erzeuge sichere Passwörter direkt auf diesem Server. Die Werte werden nicht gespeichert.</p>
+                    <Button label="Anwendung öffnen" href="/generator" appearance="success" />
                 </Card>
-                <Card title="Sicher und lokal">
-                    <p>Die Zufallswerte werden mit Zelyras sicherer Random-Capability erzeugt. Passwörter werden weder gespeichert noch protokolliert.</p>
-                </Card>
-                <Card title="Zelyra Work-Modus">
-                    <p>Diese Anwendung läuft mit <code>ZELYRA_LEVEL=work</code>. Sie enthält keinen Lernmodus und keine Anwendung in einer Fremdsprache.</p>
+                <Card title="Warenwirtschaft">
+                    <p>Das Mini-ERP wird als nächste Anwendung in dieses Dashboard aufgenommen.</p>
+                    <span class="dashboard-app-status">In Entwicklung</span>
                 </Card>
             </Grid>
         </Container>

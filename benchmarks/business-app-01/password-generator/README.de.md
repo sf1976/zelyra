@@ -20,16 +20,27 @@ zelyra run tests.zyl
 zelyra serve main.zyl
 ```
 
-Unter `/login` meldest du dich an. Eine öffentliche Selbstregistrierung ist
-absichtlich nicht vorhanden. Ein berechtigter Administrator legt Konten unter
+Die Startseite ist das Anwendungs-Dashboard mit Zelyra-AppShell und einer
+Kachel pro Anwendung. Der Passwortgenerator liegt unter `/generator`; die
+Warenwirtschaft ist als nächste Anwendung markiert und noch in Entwicklung.
+Eine öffentliche Selbstregistrierung ist absichtlich nicht vorhanden. Ein berechtigter Administrator legt Konten unter
 `/admin/users` an und verwaltet sie dort. Bei der Ersteinrichtung erhält die
 Rolle `admin` die Rechte `identity.users.manage` und
 `password_generator.use`.
 
+Nach der Anmeldung führt **Profil** zu `/account/profile`. Dort kann ein
+Benutzer den Anzeigenamen und die E-Mail-Adresse nach Bestätigung des aktuellen
+Passworts ändern sowie sein Passwort ändern. Ein Passwortwechsel widerruft die
+anderen Sitzungen. `/account/sessions` bietet die Verwaltung aktiver Sitzungen;
+Konten, Rollen und Berechtigungen bleiben Administratoraufgaben. Die Anmeldung
+ist ein zentraler Bestandteil des Identitätsmoduls und erscheint deshalb nicht
+als eigene Anwendungskachel auf dem Dashboard.
+
 Die Anwendung besteht aus drei lokalen Paketen:
 
 - `zelyra_identity`: wiederverwendbare Zelyra-Anmeldung, dauerhafte Sitzungen,
-  Rollen, Audit-Einträge und geschützte Benutzerverwaltung.
+  Rollen, Audit-Einträge, geschützte Benutzerverwaltung und das eigene
+  Benutzerprofil.
 - `password_app`: geschützte Seiten und der typisierte Formular-Handler.
 - `password_engine`: die Passwortgenerierung.
 
@@ -40,7 +51,8 @@ Plugin-ABI.
 Das Projekttheme liegt als reguläres CSS in `zelyra.theme.css` und nutzt die
 nativen Zelyra-UI-Tokens und -Komponenten. Es gestaltet eine gebrandete,
 responsive Anmeldung und die passende Generatoroberfläche. Der
-Umgebungshinweis ist in der Produktansicht ausgeblendet.
+Umgebungshinweis ist in der Produktansicht ausgeblendet. Das Original-Logo liegt
+unter `public/zelyra-logo.png`.
 
 ## Verhalten des Generators
 

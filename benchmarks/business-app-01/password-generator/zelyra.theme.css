@@ -233,6 +233,12 @@ html:has(form[action="/login"]) form[action="/login"] button {
     font-weight: 700;
 }
 
+html:has(form[action="/login"]) form[action="/login"] button:hover {
+    border-color: #c5d0df;
+    background: #e5ebf3;
+    color: #172438;
+}
+
 html:has(form[action="/login"]) .zelyra-page-content main::after {
     display: block;
     margin-top: 1.5rem;
@@ -244,7 +250,91 @@ html:has(form[action="/login"]) .zelyra-page-content main::after {
     text-align: center;
 }
 
-/* The generator keeps the normal Zelyra app shell and uses its design tokens. */
+.dashboard-brand-logo {
+    display: block;
+    width: 8rem;
+    max-height: 2.5rem;
+    margin-inline: auto;
+    object-fit: contain;
+}
+
+.dashboard-app-status {
+    display: inline-flex;
+    align-items: center;
+    margin-top: .5rem;
+    padding: .35rem .65rem;
+    border: 1px solid #d7e1ef;
+    border-radius: 999px;
+    background: #f2f5fa;
+    color: #52647c;
+    font-size: .78rem;
+    font-weight: 700;
+}
+
+.zelyra-page-content main:has(form[action="/account/profile"]) {
+    display: grid;
+    width: min(100%, 54rem);
+    gap: 1.25rem;
+    margin-inline: auto;
+}
+
+.zelyra-page-content main:has(form[action="/account/profile"]) > h1 {
+    margin-bottom: 0;
+    font-size: clamp(1.7rem, 4vw, 2.25rem);
+    letter-spacing: -.035em;
+}
+
+.zelyra-page-content main:has(form[action="/account/profile"]) > p {
+    margin-top: -.75rem;
+    color: var(--z-color-text-muted);
+}
+
+.zelyra-page-content main:has(form[action="/account/profile"]) section {
+    padding: clamp(1.25rem, 3vw, 1.75rem);
+}
+
+.zelyra-page-content main:has(form[action="/account/profile"]) form {
+    display: grid;
+    max-width: 38rem;
+    gap: .65rem;
+    margin-top: 1rem;
+}
+
+.zelyra-page-content main:has(form[action="/account/profile"]) form label {
+    margin-top: .4rem;
+    color: #34445c;
+    font-size: .9rem;
+    font-weight: 650;
+}
+
+.zelyra-page-content main:has(form[action="/account/profile"]) form input:not([type="hidden"]) {
+    width: 100%;
+    min-height: 2.9rem;
+    padding: .65rem .8rem;
+    border: 1px solid #cbd6e6;
+    border-radius: .7rem;
+    background: #fff;
+    color: #172438;
+    font: inherit;
+}
+
+.zelyra-page-content main:has(form[action="/account/profile"]) form input:focus-visible {
+    border-color: #3157a4;
+    outline: 0;
+    box-shadow: 0 0 0 4px rgb(49 87 164 / 15%);
+}
+
+.zelyra-page-content main:has(form[action="/account/profile"]) form button {
+    justify-self: start;
+    min-width: 12rem;
+    margin-top: .75rem;
+}
+
+html:has(.dashboard-app-status) .zelyra-page-content main {
+    width: min(100%, 76rem);
+    margin-inline: auto;
+}
+
 .z-app-shell__main:has(form[action="/generator"]) .zelyra-page-content main {
     width: min(100%, 54rem);
     margin-inline: auto;

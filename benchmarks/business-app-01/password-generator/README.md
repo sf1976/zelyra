@@ -19,15 +19,24 @@ zelyra run tests.zyl
 zelyra serve main.zyl
 ```
 
-Open `/login` to sign in. Self-service registration is deliberately not
+The home page is the application dashboard, built with the Zelyra AppShell and
+one tile per application. The password generator is at `/generator`; the
+upcoming mini-ERP is shown as in development. Self-service registration is not
 published. An authorized administrator creates and manages accounts at
 `/admin/users`; grant the `admin` role the `identity.users.manage` and
 `password_generator.use` permissions during initial provisioning.
+After sign-in, the **Benutzerkonto** navigation item opens `/account/profile`,
+where a user can update their display name and email after confirming their
+current password or change their password. Password changes revoke other
+sessions. Active sessions can be reviewed at `/account/sessions`; account and
+role administration remains restricted to administrators. Sign-in is part of
+the shared identity module and is not an application tile.
 
 The app is composed from three local packages:
 
 - `zelyra_identity`: reusable Zelyra authentication, persistent sessions,
-  roles, audit records, and protected user administration.
+  roles, audit records, protected user administration, and self-service profile
+  management.
 - `password_app`: protected web pages and the typed password form handler.
 - `password_engine`: password generation logic.
 
@@ -36,8 +45,8 @@ example, not a published registry package or a stable plugin ABI.
 
 The application theme is regular project CSS in `zelyra.theme.css` using the
 native Zelyra UI tokens and components. It provides a branded, responsive sign-in
-screen and a matching generator surface. The environment chip is hidden from
-the product UI.
+screen with the original logo from `public/zelyra-logo.png` and a matching
+generator surface. The environment chip is hidden from the product UI.
 
 ## Generator behavior
 

@@ -125,15 +125,53 @@ try:
             time.sleep(0.1)
 
     anonymous = urllib.request.build_opener()
-    with anonymous.open(base + "/") as response:
+    with anonymous.open(base + "/", timeout=2) as response:
         landing = response.read().decode()
-        assert 'href="/login"' in landing
+        assert "Dashboard" in landing
+        assert 'href="/generator"' in landing
+        assert "Warenwirtschaft" in landing
     try:
         anonymous.open(base + "/generator", timeout=2)
         raise AssertionError("anonymous generator request unexpectedly succeeded")
     except urllib.error.HTTPError as error:
         assert error.code == 401
     sign_in()
+
+    with opener.open(base + "/", timeout=5) as response:
+        dashboard = response.read().decode()
+        assert response.status == 200
+        assert 'href="/account/profile">Benutzerkonto</a>' in dashboard
+        assert 'href="/login">Benutzerkonto</a>' not in dashboard
+
+    with opener.open(base + "/account/profile", timeout=5) as response:
+        profile_page = response.read().decode()
+        assert response.status == 200
+        assert 'name="display_name"' in profile_page
+        assert 'name="email"' in profile_page
+        assert 'name="new_password"' in profile_page
+    profile_token = request_form_token("/account/profile")
+    profile_data = urllib.parse.urlencode(
+        {
+            "_zelyra_csrf": profile_token,
+            "operation": "update_profile",
+            "display_name": "Invalid update must not be applied",
+            "email": email,
+            "current_password": "incorrect-test-password",
+        }
+    ).encode()
+    profile_request = urllib.request.Request(
+        base + "/account/profile",
+        data=profile_data,
+        headers={
+            "Origin": base,
+            "Content-Type": "application/x-www-form-urlencoded",
+        },
+    )
+    try:
+        opener.open(profile_request, timeout=5)
+        raise AssertionError("profile changed without the current password")
+    except urllib.error.HTTPError as error:
+        assert error.code == 403
 
     with opener.open(base + "/admin/users", timeout=5) as response:
         admin_page = response.read().decode()

@@ -5944,34 +5944,46 @@ fn project_uses_reserved_schedule_probe_route(program: &zelyra_ast::Program) -> 
         })
 }
 
-fn project_uses_reserved_account_sessions_route(program: &zelyra_ast::Program) -> bool {
-    !program.auth.is_empty()
-        && (program.pages.iter().any(|page| {
-            zelyra_web::route_pattern_matches_path(&page.path, zelyra_web::ACCOUNT_SESSIONS_PATH)
-        }) || program.apis.iter().any(|api| {
-            zelyra_web::route_pattern_matches_path(&api.path, zelyra_web::ACCOUNT_SESSIONS_PATH)
-        }) || program.cruds.iter().any(|crud| {
-            let base = format!("/{}", crud.table);
-            [
-                base.clone(),
-                format!("{base}/new"),
-                format!("{base}/{{id}}"),
-                format!("{base}/{{id}}/edit"),
-                format!("{base}/{{id}}/delete"),
-                format!("{base}/{{id}}/restore"),
-            ]
+fn project_reserved_account_route(program: &zelyra_ast::Program) -> Option<&'static str> {
+    let reserved_paths = [
+        zelyra_web::ACCOUNT_SESSIONS_PATH,
+        zelyra_web::ACCOUNT_PROFILE_PATH,
+    ];
+    if program.auth.is_empty() {
+        return None;
+    }
+    reserved_paths.into_iter().find(|reserved_path| {
+        program
+            .pages
             .iter()
-            .any(|pattern| {
-                zelyra_web::route_pattern_matches_path(pattern, zelyra_web::ACCOUNT_SESSIONS_PATH)
-            }) || crud.actions.iter().any(|action| {
-                let pattern = format!("{base}/{{id}}/{}", action.name);
-                zelyra_web::route_pattern_matches_path(&pattern, zelyra_web::ACCOUNT_SESSIONS_PATH)
+            .any(|page| zelyra_web::route_pattern_matches_path(&page.path, reserved_path))
+            || program
+                .apis
+                .iter()
+                .any(|api| zelyra_web::route_pattern_matches_path(&api.path, reserved_path))
+            || program.cruds.iter().any(|crud| {
+                let base = format!("/{}", crud.table);
+                [
+                    base.clone(),
+                    format!("{base}/new"),
+                    format!("{base}/{{id}}"),
+                    format!("{base}/{{id}}/edit"),
+                    format!("{base}/{{id}}/delete"),
+                    format!("{base}/{{id}}/restore"),
+                ]
+                .iter()
+                .any(|pattern| zelyra_web::route_pattern_matches_path(pattern, reserved_path))
+                    || crud.actions.iter().any(|action| {
+                        let pattern = format!("{base}/{{id}}/{}", action.name);
+                        zelyra_web::route_pattern_matches_path(&pattern, reserved_path)
+                    })
             })
-        }) || program.auth.iter().any(|auth| {
-            auth.admin_path.as_deref().is_some_and(|path| {
-                zelyra_web::route_pattern_matches_path(path, zelyra_web::ACCOUNT_SESSIONS_PATH)
+            || program.auth.iter().any(|auth| {
+                auth.admin_path
+                    .as_deref()
+                    .is_some_and(|path| zelyra_web::route_pattern_matches_path(path, reserved_path))
             })
-        }))
+    })
 }
 
 fn project_uses_reserved_mfa_route(program: &zelyra_ast::Program) -> bool {
@@ -11244,13 +11256,13 @@ fn serve_command(mut args: impl Iterator<Item = String>) -> ExitCode {
         );
         return ExitCode::from(1);
     }
-    if !program.auth.is_empty() && project_uses_reserved_account_sessions_route(&program) {
+    if let Some(reserved_path) = project_reserved_account_route(&program) {
         diagnostic(
             &path,
             "E-AUTH-029",
             &format!(
-                "route `{}` is reserved for account session management",
-                zelyra_web::ACCOUNT_SESSIONS_PATH
+                "route `{}` is reserved for account profile and session management",
+                reserved_path
             ),
             1,
             1,

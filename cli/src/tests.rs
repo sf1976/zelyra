@@ -1563,6 +1563,12 @@ fn account_session_route_is_reserved_for_authenticated_projects() {
         .unwrap(),
     )
     .unwrap();
+    let profile_page = parse(
+        &lex(r#"auth users { table: users }
+               page "/account/profile" { html { <main>Project page</main> } }"#)
+        .unwrap(),
+    )
+    .unwrap();
     let auth_crud = parse(
         &lex(r#"auth users { table: users }
                table account { id: Id primary auto }
@@ -1574,12 +1580,23 @@ fn account_session_route_is_reserved_for_authenticated_projects() {
         parse(&lex(r#"page "/account/sessions" { html { <main>Project page</main> } }"#).unwrap())
             .unwrap();
 
-    assert!(project_uses_reserved_account_sessions_route(&auth_page));
-    assert!(project_uses_reserved_account_sessions_route(&auth_api));
-    assert!(project_uses_reserved_account_sessions_route(&auth_crud));
-    assert!(!project_uses_reserved_account_sessions_route(
-        &ordinary_page
-    ));
+    assert_eq!(
+        project_reserved_account_route(&auth_page),
+        Some(zelyra_web::ACCOUNT_SESSIONS_PATH)
+    );
+    assert_eq!(
+        project_reserved_account_route(&auth_api),
+        Some(zelyra_web::ACCOUNT_SESSIONS_PATH)
+    );
+    assert_eq!(
+        project_reserved_account_route(&profile_page),
+        Some(zelyra_web::ACCOUNT_PROFILE_PATH)
+    );
+    assert_eq!(
+        project_reserved_account_route(&auth_crud),
+        Some(zelyra_web::ACCOUNT_SESSIONS_PATH)
+    );
+    assert_eq!(project_reserved_account_route(&ordinary_page), None);
 }
 
 #[test]

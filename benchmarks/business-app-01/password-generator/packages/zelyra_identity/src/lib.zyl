@@ -19,6 +19,7 @@ auth users {
 
 table users {
     id: Id primary auto
+    display_name: String(150)?
     email: Email required unique
     password_hash: String(255) required
     active: Bool default true

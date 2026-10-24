@@ -4,14 +4,14 @@ lock_version = 1
 name = "zelyra-password-generator"
 version = "1.3.0"
 path = ""
-checksum = "sha256:fb4973a2439f2ee9e1ea0f6e1857403f0149a3900b4e01e0070db2020f3a9cd8"
+checksum = "sha256:f049990554707e9c26dc269f023b546238f89fe886d735434bcf1af8fcafe9ed"
 dependencies = ["password_app=packages/password_app", "zelyra_identity=packages/zelyra_identity"]
 
 [[package]]
 name = "password_app"
 version = "0.1.0"
 path = "packages/password_app"
-checksum = "sha256:f5806b21884f87a428b5baf6a033424f44f16b3098c63e34f40ae3bec374904b"
+checksum = "sha256:cc0860beb1e5c0550f13664bceff61d2e7bb0c1de06e18c1b3e5e8ffd5b45632"
 dependencies = ["password_engine=packages/password_engine", "zelyra_identity=packages/zelyra_identity"]
 
 [[package]]
@@ -25,5 +25,5 @@ dependencies = []
 name = "zelyra_identity"
 version = "0.1.0"
 path = "packages/zelyra_identity"
-checksum = "sha256:70cecb7a78d78fe718bf2ee90cc6924ccd052327aec86acd6f46ada46c5b64c4"
+checksum = "sha256:316679dd60ae8e7ccbf01a1ed632f1bcd0fa317ac56cd6b0a3457d70de97ac9f"
 dependencies = []
