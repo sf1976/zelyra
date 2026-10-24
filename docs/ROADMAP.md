@@ -45,7 +45,7 @@ security and compatibility gates stated for that milestone.
 | --- | --- | --- |
 | 1.2.56 | Studio File/Edit menus, readable UI, and SQL workbench | Released as [v1.2.56](https://github.com/sf1976/zelyra/releases/tag/v1.2.56); full PR CI, reproducible Linux/Windows packages, checksums, and SPDX SBOMs passed. |
 | 1.3.0 | Compiler and Studio foundations | Canonical project layout, architecture checks/migration preview, and a compiler-aware Studio workflow are verified. AST remains the default; MIR/Bytecode stay optional, and unsupported paths fail safely. |
-| 1.3.1–1.3.50 | Hardening on a practical Zelyra customer portal | After 1.3.0 ships, freeze broad feature work and focus on bug fixes, security, reliability, compatibility, and performance evidence from the customer portal. Its first application is a password generator written entirely in idiomatic Zelyra. Add only narrowly scoped language/runtime support required to implement and verify that project natively. |
+| 1.3.1–1.3.50 | Hardening through two native Zelyra projects | After 1.3.0 ships, freeze broad feature work. First implement and verify the work-mode password generator in the manually provisioned customer area. Only after it works, begin Mini-ERP Benchmark 01 as the first integrated business application, with its language gaps fixed in Zelyra itself. Finish 1.3.50 against the benchmark acceptance criteria; report incomplete scope honestly. |
 | 1.4.0 | Zelyra Visual Design Platform | A usable first release with a shared component registry and preview, Zelyra source as the only authoritative description, theme/style core, visual form editing, and safe source synchronization. Phase 0 analysis and specification starts after 1.3.0. |
 | 1.5.0 | Bytecode readiness and default gate | Bytecode becomes the default only with demonstrated parity, safe fail-closed behavior, verified artifact upgrades, and measured benefit. Otherwise AST remains the default and Bytecode stays optional. |
 | 1.6.0 | Packages, modules, and deployment | Reusable, trusted modules and reproducible offline/deployment bundles are accepted against real consumer projects; no stable native ABI is assumed. |
@@ -75,7 +75,7 @@ Neither capability may be described as supported until implemented and
 verified. Other workflows that have not yet been tested remain “not assessed”
 until a reproducible Zelyra attempt demonstrates the result.
 
-### 1.3.1–1.3.50 hardening project: customer area and password generator
+### 1.3.1–1.3.50 hardening: password generator, then Mini-ERP Benchmark 01
 
 This phase starts after 1.3.0 is complete. Install Zelyra itself under `/opt/`
 and use it to run a customer area with no public self-registration. Accounts
@@ -85,9 +85,31 @@ Zelyra's own syntax, compiler, runtime, and UI. Run it with
 `ZELYRA_LEVEL=work` and German as its initial interface language. Do not use
 another language or an uncharacteristic escape hatch to fill a gap. If a
 required capability is missing, add the smallest native Zelyra support needed
-and verify it through the project. Add later applications only after the first
-workflow works and its regressions are covered.
+and verify it through the project.
 
+**Mini-ERP Benchmark 01 is queued after the password generator works. Do not
+start its Phase A before that gate.** The benchmark then tests Zelyra against a
+complete, integrated, native business application—not a CRUD-only showcase.
+Its scope includes customer, supplier, and article master data; multi-warehouse
+stock movements, reservations, inventory, and atomic concurrent bookings;
+purchasing and sales workflows; offers, orders, partial deliveries, invoices,
+credit notes, exact decimal money, and PDF output; dashboards and reports; and
+manually provisioned users, server-enforced roles, row-level permissions, and
+audit history. MariaDB is the primary database. The UI, validation, SQL,
+transactions, authorization, and application logic must use idiomatic Zelyra.
+
+Apply STOP → ANALYZE → FIX → TEST → RESUME whenever a requirement exposes a
+language, compiler, runtime, database, UI, or Studio gap. Do not hide gaps with
+foreign-language business logic, direct DOM manipulation, or benchmark-only
+compiler exceptions. Add positive and negative tests, concurrency and security
+checks, interpreter/VM differential tests where relevant, realistic data and
+performance measurements, bilingual docs, and benchmark metrics. Track each
+language gap in `benchmarks/business-app-01/reports/LANGUAGE_GAPS.md` when
+Phase A begins. The detailed user brief is the acceptance source; Phase A must
+first produce the capability matrix, domain/data model, process map, role
+model, UI plan, and test strategy. Release 1.3.50 is the target for a completed
+benchmark; if any mandatory criterion remains open, report the benchmark as
+incomplete instead of claiming success.
 ### Continuous functional testing with a real business application
 
 The business capabilities of the application in
@@ -665,7 +687,7 @@ The initial documented comparison and its test evidence are in the
 
 - [🧪] **1.3.0 — HTTP-independent domain modules:** `strict_architecture` reports direct imports of modules from `routes/` inside `domain/` as `E-ARCH-004` at the import site. Domain functions are called with business inputs instead of depending on route modules. Types for incoming requests, responses, sessions, or cookies are not currently exposed as usable Zelyra APIs, so deeper type checks for these values are not yet possible.
 
-- [🧪] **1.3.0 — Laravel application acceptance check:** A read-only run against `/opt/siedelmann-laravel/app` exposed a generator defect: selected customer/invoice tables omitted scalar foreign-key targets such as `tenants`, leaving the generated Zelyra schema uncompilable. Selection now follows both typed relations and `references_table` foreign keys. The selected `customers`, `invoices`, and `invoice_items` slice now includes `customer_groups`, `document_templates`, `suppliers`, `tenants`, and `users` and passes `zelyra check`. A fresh static analysis on 2026-10-24 reports 2,279 findings (1,326 manual, 70 unresolved, 883 partial); the requested schema slice regenerated with eight dependency-closed tables and still passes `zelyra check`. Neither result proves workflow, authorization, tenant-security, or full feature parity. No PHP, environment files, database, or application rows were accessed in this run.
+- [🧪] **1.3.0 — Laravel read-only schema/compiler check:** A read-only run against `/opt/siedelmann-laravel/app` exposed a generator defect: selected customer/invoice tables omitted scalar foreign-key targets such as `tenants`, leaving the generated Zelyra schema uncompilable. Selection now follows both typed relations and `references_table` foreign keys. The selected `customers`, `invoices`, and `invoice_items` slice now includes `customer_groups`, `document_templates`, `suppliers`, `tenants`, and `users` and passes `zelyra check`. A fresh static analysis on 2026-10-24 reports 2,279 findings (1,326 manual, 70 unresolved, 883 partial); the requested schema slice regenerated with eight dependency-closed tables and still passes `zelyra check`. Neither result proves workflow, authorization, tenant-security, or full feature parity. No PHP, environment files, database, or application rows were accessed in this run. This 1.3.0 item is only a read-only generator/schema regression check; reproducing real business workflows is explicitly deferred until after the work-mode password generator in the 1.3.1–1.3.50 benchmark phase.
 
 - [🗺️] **1.5.0 — Bytecode as a candidate default backend:** Keep AST as the
   default through this milestone; MIR and Bytecode remain explicitly selectable
