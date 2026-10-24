@@ -45,6 +45,14 @@ struct Summary {
     unchanged_entrypoints: usize,
 }
 
+#[derive(Debug, Clone)]
+struct RouteCall {
+    name: String,
+    args: Vec<Expr>,
+    callback_targets: std::collections::HashMap<String, std::collections::HashSet<String>>,
+    span: Span,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(super) struct ArchitectureIssue {
     pub(super) path: String,
@@ -244,7 +252,12 @@ fn route_handler_sql_issues(
         issues.extend(reachable_route_sql_issues(
             &functions,
             sources,
-            vec![handler.to_owned()],
+            vec![RouteCall {
+                name: handler.to_owned(),
+                args: Vec::new(),
+                callback_targets: std::collections::HashMap::new(),
+                span: api.span,
+            }],
             Vec::new(),
             route_source.path.clone(),
             format!("API handler `{handler}`"),
@@ -259,7 +272,7 @@ fn route_handler_sql_issues(
             continue;
         }
         for action in &form.actions {
-            let (calls, sql) = inspect_action(action);
+            let (calls, sql) = inspect_action(action, &functions);
             issues.extend(reachable_route_sql_issues(
                 &functions,
                 sources,
@@ -279,7 +292,7 @@ fn route_handler_sql_issues(
             continue;
         }
         for action in &crud.actions {
-            let (calls, sql) = inspect_action(action);
+            let (calls, sql) = inspect_action(action, &functions);
             issues.extend(reachable_route_sql_issues(
                 &functions,
                 sources,
@@ -306,7 +319,10 @@ fn route_handler_sql_issues(
     issues
 }
 
-fn inspect_action(action: &zelyra_ast::FormAction) -> (Vec<String>, Vec<(String, Span)>) {
+fn inspect_action(
+    action: &zelyra_ast::FormAction,
+    functions: &std::collections::HashMap<&str, &zelyra_ast::Function>,
+) -> (Vec<RouteCall>, Vec<(String, Span)>) {
     let mut calls = Vec::new();
     let mut sql = Vec::new();
     let block = Block {
@@ -325,14 +341,13 @@ fn inspect_action(action: &zelyra_ast::FormAction) -> (Vec<String>, Vec<(String,
     if let Some(body) = &action.execute_body {
         collect_function_aliases(body, &mut aliases);
     }
-    expand_aliased_calls(&mut calls, &aliases);
-    (calls, sql)
+    (expand_route_calls(calls, &aliases, functions), sql)
 }
 
 fn reachable_route_sql_issues(
     functions: &std::collections::HashMap<&str, &zelyra_ast::Function>,
     sources: &[crate::project::ProjectSource],
-    initial_calls: Vec<String>,
+    initial_calls: Vec<RouteCall>,
     initial_sql: Vec<(String, Span)>,
     initial_path: String,
     entry_label: String,
@@ -341,11 +356,15 @@ fn reachable_route_sql_issues(
     append_sql_issues(&mut issues, &initial_path, &entry_label, initial_sql);
     let mut pending = initial_calls;
     let mut visited = std::collections::HashSet::new();
-    while let Some(name) = pending.pop() {
-        if !visited.insert(name.clone()) {
+    while let Some(call) = pending.pop() {
+        let visit_key = (
+            call.name.clone(),
+            callback_targets_key(&call.callback_targets),
+        );
+        if !visited.insert(visit_key) {
             continue;
         }
-        let Some(function) = functions.get(name.as_str()).copied() else {
+        let Some(function) = functions.get(call.name.as_str()).copied() else {
             continue;
         };
         let Some(function_source) = sources.get(function.span.source_id as usize) else {
@@ -362,36 +381,185 @@ fn reachable_route_sql_issues(
 
         let mut calls = Vec::new();
         let mut sql = Vec::new();
-        inspect_block(&function.body, &mut calls, &mut sql);
-        let mut aliases = std::collections::HashMap::new();
+        let mut aliases = call.callback_targets;
         collect_function_aliases(&function.body, &mut aliases);
-        expand_aliased_calls(&mut calls, &aliases);
-        pending.extend(calls);
+        let mut function_valued_locals = std::collections::HashSet::new();
+        collect_typed_function_locals(&function.body, &mut function_valued_locals);
+        inspect_block(&function.body, &mut calls, &mut sql);
+        for next_call in calls {
+            if let Some(targets) = aliases.get(&next_call.name) {
+                for target in targets {
+                    if let Some(callee) = functions.get(target.as_str()) {
+                        pending.push(RouteCall {
+                            name: target.clone(),
+                            callback_targets: bind_callback_arguments(&next_call, callee, &aliases),
+                            args: next_call.args.clone(),
+                            span: next_call.span,
+                        });
+                    }
+                }
+                continue;
+            }
+            if function.params.iter().any(|parameter| {
+                parameter.name == next_call.name && may_write_database(&parameter.ty)
+            }) || function_valued_locals.contains(&next_call.name)
+            {
+                issues.push(ArchitectureIssue {
+                    path: function_source.path.clone(),
+                    code: "E-ARCH-005",
+                    message: format!(
+                        "{entry_label} reaches an indirect function call `{}` whose target cannot be resolved; pass a statically named function or move the call into a `domain/` function",
+                        next_call.name
+                    ),
+                    span: Some(next_call.span),
+                });
+                continue;
+            }
+            if let Some(callee) = functions.get(next_call.name.as_str()) {
+                let callback_targets = bind_callback_arguments(&next_call, callee, &aliases);
+                pending.push(RouteCall {
+                    name: next_call.name,
+                    args: next_call.args,
+                    callback_targets,
+                    span: next_call.span,
+                });
+            }
+        }
         append_sql_issues(&mut issues, &function_source.path, &entry_label, sql);
     }
     issues
 }
 
-/// Add statically known targets for local function values used as call names.
+impl RouteCall {
+    fn new(name: String, args: Vec<Expr>, span: Span) -> Self {
+        Self {
+            name,
+            args,
+            callback_targets: std::collections::HashMap::new(),
+            span,
+        }
+    }
+}
+
+/// Resolve statically known local function values used as call names.
 ///
-/// This is intentionally an over-approximation: if a local is assigned more
-/// than one named function value in different branches, every known target is
-/// checked. Unknown/dynamic function values remain outside this analysis.
-fn expand_aliased_calls(
-    calls: &mut Vec<String>,
+/// If a local is assigned more than one named function value in different
+/// branches, every known target is checked. Unknown targets are rejected at
+/// the callback call site while traversing the reachable function.
+fn expand_route_calls(
+    calls: Vec<RouteCall>,
     aliases: &std::collections::HashMap<String, std::collections::HashSet<String>>,
-) {
-    let mut index = 0;
-    let mut expanded = std::collections::HashSet::new();
-    while index < calls.len() {
-        let name = calls[index].clone();
-        if expanded.insert(name.clone()) {
-            if let Some(targets) = aliases.get(&name) {
-                calls.extend(targets.iter().cloned());
+    functions: &std::collections::HashMap<&str, &zelyra_ast::Function>,
+) -> Vec<RouteCall> {
+    let mut expanded = Vec::new();
+    for call in calls {
+        let names = aliases
+            .get(&call.name)
+            .cloned()
+            .unwrap_or_else(|| std::collections::HashSet::from([call.name.clone()]));
+        for name in names {
+            if let Some(callee) = functions.get(name.as_str()) {
+                expanded.push(RouteCall {
+                    callback_targets: bind_callback_arguments(&call, callee, aliases),
+                    name,
+                    args: call.args.clone(),
+                    span: call.span,
+                });
             }
         }
-        index += 1;
     }
+    expanded
+}
+
+fn collect_typed_function_locals(block: &Block, names: &mut std::collections::HashSet<String>) {
+    for statement in &block.statements {
+        match statement {
+            Stmt::Let {
+                name, ty: Some(ty), ..
+            } if may_write_database(ty) => {
+                names.insert(name.clone());
+            }
+            Stmt::If {
+                then_block,
+                else_block,
+                ..
+            } => {
+                collect_typed_function_locals(then_block, names);
+                if let Some(block) = else_block {
+                    collect_typed_function_locals(block, names);
+                }
+            }
+            Stmt::While { body, .. }
+            | Stmt::For { body, .. }
+            | Stmt::Loop { body, .. }
+            | Stmt::Transaction { body, .. }
+            | Stmt::Parallel { body, .. } => collect_typed_function_locals(body, names),
+            Stmt::Match { arms, .. } => {
+                for arm in arms {
+                    collect_typed_function_locals(&arm.body, names);
+                }
+            }
+            Stmt::Let { .. }
+            | Stmt::BindOrAssign { .. }
+            | Stmt::ArrayIndexAssign { .. }
+            | Stmt::TupleBindOrAssign { .. }
+            | Stmt::Expr(_)
+            | Stmt::Return { .. }
+            | Stmt::Break { .. }
+            | Stmt::Continue { .. } => {}
+        }
+    }
+}
+
+fn may_write_database(ty: &zelyra_ast::Type) -> bool {
+    matches!(
+        ty,
+        zelyra_ast::Type::Function { capabilities, .. }
+            if capabilities.iter().any(|capability| capability == "Database")
+    )
+}
+
+fn callback_targets_key(
+    targets: &std::collections::HashMap<String, std::collections::HashSet<String>>,
+) -> Vec<(String, Vec<String>)> {
+    let mut key = targets
+        .iter()
+        .map(|(name, values)| {
+            let mut values = values.iter().cloned().collect::<Vec<_>>();
+            values.sort();
+            (name.clone(), values)
+        })
+        .collect::<Vec<_>>();
+    key.sort_by(|left, right| left.0.cmp(&right.0));
+    key
+}
+
+fn bind_callback_arguments(
+    call: &RouteCall,
+    callee: &zelyra_ast::Function,
+    aliases: &std::collections::HashMap<String, std::collections::HashSet<String>>,
+) -> std::collections::HashMap<String, std::collections::HashSet<String>> {
+    let mut targets = std::collections::HashMap::new();
+    for (parameter, argument) in callee.params.iter().zip(&call.args) {
+        if !matches!(parameter.ty, zelyra_ast::Type::Function { .. }) {
+            continue;
+        }
+        match &argument.kind {
+            ExprKind::FunctionValue(target) => {
+                targets
+                    .entry(parameter.name.clone())
+                    .or_insert_with(std::collections::HashSet::new)
+                    .insert(target.clone());
+            }
+            ExprKind::Variable(source) => {
+                if let Some(values) = aliases.get(source) {
+                    targets.insert(parameter.name.clone(), values.clone());
+                }
+            }
+            _ => {}
+        }
+    }
+    targets
 }
 
 fn collect_function_aliases(
@@ -587,7 +755,7 @@ fn sql_main_keyword(query: &str) -> Option<String> {
     first.filter(|keyword| keyword != "WITH")
 }
 
-fn inspect_block(block: &Block, calls: &mut Vec<String>, sql: &mut Vec<(String, Span)>) {
+fn inspect_block(block: &Block, calls: &mut Vec<RouteCall>, sql: &mut Vec<(String, Span)>) {
     for statement in &block.statements {
         match statement {
             Stmt::Let { value, .. }
@@ -654,7 +822,7 @@ fn inspect_block(block: &Block, calls: &mut Vec<String>, sql: &mut Vec<(String, 
     }
 }
 
-fn inspect_expr(expression: &Expr, calls: &mut Vec<String>, sql: &mut Vec<(String, Span)>) {
+fn inspect_expr(expression: &Expr, calls: &mut Vec<RouteCall>, sql: &mut Vec<(String, Span)>) {
     match &expression.kind {
         ExprKind::Array(items) => {
             for item in items {
@@ -681,7 +849,7 @@ fn inspect_expr(expression: &Expr, calls: &mut Vec<String>, sql: &mut Vec<(Strin
         | ExprKind::Unary { expr: target, .. }
         | ExprKind::Await(target) => inspect_expr(target, calls, sql),
         ExprKind::Call { name, args, .. } => {
-            calls.push(name.clone());
+            calls.push(RouteCall::new(name.clone(), args.clone(), expression.span));
             for argument in args {
                 inspect_expr(argument, calls, sql);
             }

@@ -3330,6 +3330,8 @@ Wird in einem Standardlayout in der `zelyra.toml` `strict_architecture = true` a
 
 Direkte Datenbankmutationen gehören in `domain/<feature>/actions.zyl`. API-Handler und eingebettete Form-/CRUD-Aktionen dürfen solche Domain-Funktionen aufrufen; die vorhandenen Import- und Tabellenzugriffsregeln gelten weiterhin. Domain-Module dürfen keine Module aus `routes/` importieren (`E-ARCH-004`). Die Analyse folgt statisch auflösbaren Zelyra-Aufrufen, aber keinen beliebigen dynamischen oder unaufgelösten Aufrufen. Request-, Response-, Session- und Cookie-Typen sind derzeit keine benutzbare Zelyra-API.
 
+Der noch unveröffentlichte Branch `main` verfolgt zusätzlich lokal gespeicherte benannte Funktionsreferenzen und gibt statisch bekannte Callback-Werte über typisierte Funktionsparameter weiter. Ein ungelöster indirekter Aufruf führt fail-closed zu `E-ARCH-005`, wenn sein Funktionstyp die `Database`-Capability enthält; reine Callbacks lösen diese Diagnose nicht aus. Diese Änderung ist nicht Bestandteil von v1.2.56.
+
 ```bash
 # Migrationsvorschau auf das Standardlayout prüfen (schreibgeschützt, verändert keine Dateien)
 zelyra migrate-layout --check main.zyl
