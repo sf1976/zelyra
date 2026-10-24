@@ -238,8 +238,10 @@ The initial documented comparison and its test evidence are in the
   enables the MariaDB minimal, CRUD, auth, and business starters in this layout.
   Their schema declarations go to `schema/tables.zyl`, their connected web
   declarations to `routes/web.zyl`, and generated table access remains explicit.
-  Deeper architecture checks remain open; `plugins/` is deferred until it has a
-  secured loader.
+  These starters pass the normal project compiler check; this does not claim
+  conformance with opt-in `strict_architecture`, which remains a separate open
+  check for templates that contain route-local SQL actions. `plugins/` is
+  deferred until it has a secured loader.
 - [~] **1.2.14 — invoice tutorial and project architecture:** Give the invoice
   tutorial a consistent responsive Zelyra UI theme, a designed sample invoice,
   aligned CRUD cards with clear labels, and a shared source-code dialog.

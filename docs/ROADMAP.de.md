@@ -260,8 +260,11 @@ Der erste dokumentierte Abgleich und seine Testbelege stehen im
   in 1.3.x ermöglicht auch die MariaDB-Minimal-, CRUD-, Auth- und
   Business-Vorlagen in diesem Layout. Schemadeklarationen kommen nach
   `schema/tables.zyl`, zusammengehörige Webdeklarationen nach `routes/web.zyl`;
-  Tabellenzugriffe bleiben explizit. Weitergehende Architekturprüfungen bleiben
-  offen; `plugins/` wird bis zu einem abgesicherten Loader zurückgestellt.
+  Tabellenzugriffe bleiben explizit. Die Vorlagen bestehen den normalen
+  Projekt-Compilercheck. Das belegt keine Konformität mit dem optionalen
+  `strict_architecture`; dessen separate Prüfung bleibt für Vorlagen mit
+  SQL-Aktionen in Routen offen. `plugins/` wird bis zu einem abgesicherten
+  Loader zurückgestellt.
 - [~] **1.2.14 — Rechnungstutorial und Projektarchitektur:** Das
   Rechnungstutorial erhält ein durchgängiges responsives Zelyra-UI-Theme,
   eine gestaltete Beispielrechnung, ausgerichtete CRUD-Karten mit
