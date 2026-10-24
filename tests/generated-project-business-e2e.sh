@@ -9,6 +9,15 @@ database_host="${ZELYRA_GENERATED_BUSINESS_DB_HOST:-127.0.0.1}"
 database_port="${ZELYRA_GENERATED_BUSINESS_DB_PORT:-3308}"
 generated_database_host_port="${ZELYRA_GENERATED_BUSINESS_GENERATED_DB_HOST_PORT:-3309}"
 address="${ZELYRA_GENERATED_BUSINESS_ADDRESS:-127.0.0.1:38530}"
+layout_args=()
+case "${ZELYRA_GENERATED_BUSINESS_LAYOUT:-legacy}" in
+    legacy) ;;
+    standard) layout_args+=(--layout standard) ;;
+    *)
+        echo "error: ZELYRA_GENERATED_BUSINESS_LAYOUT must be legacy or standard" >&2
+        exit 1
+        ;;
+esac
 
 if [[ -z "${root_password}" ]]; then
     echo "error: ZELYRA_GENERATED_BUSINESS_ROOT_PASSWORD must be set" >&2
@@ -46,6 +55,7 @@ MYSQL_PWD="${root_password}" mariadb \
 
 echo "[1/4] generating the MariaDB business project"
 "${zelyra_bin}" new "${project_dir}" --template mariadb-business \
+    "${layout_args[@]}" \
     --web-port 8080 --host-port 18090 \
     --db-host-port "${generated_database_host_port}"
 "${zelyra_bin}" setup "${project_dir}"

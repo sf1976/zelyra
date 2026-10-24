@@ -256,9 +256,15 @@ Der erste dokumentierte Abgleich und seine Testbelege stehen im
   liegende Ordner. Die bestehende Schreibweise `import
   "domain::feature::actions" as actions` löst Projektnamensräume unter
   `schema/`, `domain/` und `routes/` nur in diesem Profil auf; bisherige Importe
-  bleiben unverändert. Alte Projekte bleiben unverändert. Datenbankvorlagen
-  und weitergehende Architekturprüfungen bleiben offen; `plugins/` wird bis
-  zu einem abgesicherten Loader zurückgestellt.
+  bleiben unverändert. Alte Projekte bleiben unverändert. Nachfolgende Arbeit
+  in 1.3.x ermöglicht auch die MariaDB-Minimal-, CRUD-, Auth- und
+  Business-Vorlagen in diesem Layout. Schemadeklarationen kommen nach
+  `schema/tables.zyl`, zusammengehörige Webdeklarationen nach `routes/web.zyl`;
+  Tabellenzugriffe bleiben explizit. Die Vorlagen bestehen den normalen
+  Projekt-Compilercheck. Das belegt keine Konformität mit dem optionalen
+  `strict_architecture`; dessen separate Prüfung bleibt für Vorlagen mit
+  SQL-Aktionen in Routen offen. `plugins/` wird bis zu einem abgesicherten
+  Loader zurückgestellt.
 - [~] **1.2.14 — Rechnungstutorial und Projektarchitektur:** Das
   Rechnungstutorial erhält ein durchgängiges responsives Zelyra-UI-Theme,
   eine gestaltete Beispielrechnung, ausgerichtete CRUD-Karten mit
@@ -730,8 +736,9 @@ Der erste dokumentierte Abgleich und seine Testbelege stehen im
   Metadatenausschnitt.
 - [ ] **1.3.0 — kanonische Struktur und experimenteller Bytecode:** Das
   optionale, versionierte Projektlayout (`routes/`, `domain/`, `schema/`,
-  `public/` und `assets/`), Architekturprüfungen und eine sichere
-  Migrationsvorschau abschließen. `plugins/` bleibt zurückgestellt, bis ein
+  `public/` und `assets/`) einschließlich compilergeprüfter MariaDB-Minimal-,
+  CRUD-, Auth- und Business-Projektvorlagen, Architekturprüfungen und eine
+  sichere Migrationsvorschau abschließen. `plugins/` bleibt zurückgestellt, bis ein
   konkretes, abgesichertes Ladeformat besteht. Bytecode bleibt optional und fail-closed;
   AST bleibt Referenz und Standard für `run`, `serve` und deklarierte Tasks.
   Den Bytecode-Ausschnitt, seine Differentialtests und Sicherheitsprüfungen

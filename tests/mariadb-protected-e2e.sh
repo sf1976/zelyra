@@ -197,9 +197,20 @@ fi
 
 if [[ -n "${readiness_path}" ]]; then
     echo "[3a/10] checking generated application readiness against MariaDB"
+    readiness_curl_status=0
     readiness_status="$(curl --silent --show-error --output "${temp_dir}/readiness.json" \
-        --write-out '%{http_code}' "${base_url}${readiness_path}")"
-    [[ "${readiness_status}" == "200" ]]
+        --write-out '%{http_code}' "${base_url}${readiness_path}")" || readiness_curl_status=$?
+    if [[ "${readiness_curl_status}" != "0" || "${readiness_status}" != "200" ]]; then
+        echo "error: readiness request failed (curl=${readiness_curl_status}, HTTP=${readiness_status:-none})" >&2
+        if [[ -f "${temp_dir}/readiness.json" ]]; then
+            sed -E 's#(mariadb|mysql|postgresql)://[^[:space:]"<>]+#\1://[redacted]#g' \
+                "${temp_dir}/readiness.json" | head -c 2000 >&2 || true
+            echo >&2
+        fi
+        sed -E 's#(mariadb|mysql|postgresql)://[^[:space:]]+#\1://[redacted]#g' \
+            "${temp_dir}/server.log" | tail -n 40 >&2 || true
+        exit 1
+    fi
     python3 - "${temp_dir}/readiness.json" <<'PY'
 import json, pathlib, sys
 payload = json.loads(pathlib.Path(sys.argv[1]).read_text())
@@ -229,7 +240,11 @@ PY
     wait "${unready_server_pid}" || unready_status=$?
     [[ "${unready_status}" == "1" ]]
     grep -Fq 'E-DB-TEMPORAL' "${temp_dir}/unready-server.log"
-    grep -Fq ' --> main.zyl:' "${temp_dir}/unready-server.log"
+    expected_source_path="main.zyl"
+    if [[ -f "$(dirname -- "${project_file}")/schema/tables.zyl" ]]; then
+        expected_source_path="schema/tables.zyl"
+    fi
+    grep -Fq " --> ${expected_source_path}:" "${temp_dir}/unready-server.log"
     ! grep -Eiq 'unavailable:invalid@|127\.0\.0\.1:1/|access denied' "${temp_dir}/unready-server.log"
     unready_server_pid=""
 fi

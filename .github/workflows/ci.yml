@@ -375,6 +375,15 @@ jobs:
           ZELYRA_GENERATED_BUSINESS_ADDRESS: 127.0.0.1:38530
           ZELYRA_BIN: target/debug/zelyra
         run: ./tests/generated-project-business-e2e.sh
+      - name: Run generated business project with standard layout
+        env:
+          ZELYRA_GENERATED_BUSINESS_ROOT_PASSWORD: root
+          ZELYRA_GENERATED_BUSINESS_DB_PORT: 3306
+          ZELYRA_GENERATED_BUSINESS_LAYOUT: standard
+          ZELYRA_GENERATED_BUSINESS_GENERATED_DB_HOST_PORT: 3310
+          ZELYRA_GENERATED_BUSINESS_ADDRESS: 127.0.0.1:38532
+          ZELYRA_BIN: target/debug/zelyra
+        run: ./tests/generated-project-business-e2e.sh
       - name: Run MariaDB CRUD integration test
         env:
           DATABASE_URL: mariadb://root:root@127.0.0.1:3306/zelyra_ci
