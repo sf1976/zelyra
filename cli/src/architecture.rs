@@ -358,12 +358,16 @@ fn inspect_action(
             &mut unresolved_function_values,
         );
     }
+    let unresolved_calls = calls
+        .iter()
+        .filter(|call| unresolved_function_values.contains(&call.name))
+        .cloned()
+        .collect::<Vec<_>>();
     let mut expanded = expand_route_calls(calls, &aliases, functions);
-    for call in &mut expanded {
-        if unresolved_function_values.contains(&call.name) {
-            call.callback_targets
-                .insert(call.name.clone(), Default::default());
-        }
+    for mut call in unresolved_calls {
+        call.callback_targets
+            .insert(call.name.clone(), Default::default());
+        expanded.push(call);
     }
     (expanded, sql)
 }
@@ -519,6 +523,17 @@ fn reachable_route_sql_issues(
                             span: next_call.span,
                         });
                     }
+                }
+                if unresolved_function_values.contains(&next_call.name) {
+                    issues.push(ArchitectureIssue {
+                        path: function_source.path.clone(),
+                        code: "E-ARCH-005",
+                        message: format!(
+                            "{entry_label} reaches an indirect function call `{}` whose target cannot be resolved; pass a statically named function or move the call into a `domain/` function",
+                            next_call.name
+                        ),
+                        span: Some(next_call.span),
+                    });
                 }
                 continue;
             }
