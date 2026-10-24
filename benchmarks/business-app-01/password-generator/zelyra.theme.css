@@ -239,6 +239,12 @@ html:has(form[action="/login"]) form[action="/login"] button:hover {
     color: #172438;
 }
 
+html:has(.dashboard-app-status) .zelyra-page-content a.z-button:hover {
+    border-color: #c5d0df;
+    background: #e5ebf3;
+    color: #172438;
+}
+
 html:has(form[action="/login"]) .zelyra-page-content main::after {
     display: block;
     margin-top: 1.5rem;
