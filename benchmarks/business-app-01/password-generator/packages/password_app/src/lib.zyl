@@ -17,10 +17,9 @@ view AppDashboardShell {
             </head>
             <body>
                 <AppShell id="zelyra-dashboard" navigation_label="Anwendungsnavigation">
-                    <slot name="header"><img class="dashboard-brand-logo" src="/zelyra-logo.png" alt="Zelyra" /></slot>
+                    <slot name="header"><img src="/zelyra-logo.png" alt="Zelyra" /></slot>
                     <slot name="navigation">
-                        <a href="/">Dashboard</a>
-                        <a href="/generator">Passwortgenerator</a>
+                        <a href="/">Übersicht</a>
                         <a href="/account/profile">Benutzerkonto</a>
                     </slot>
                     <slot name="footer"><span>Zelyra</span></slot>
@@ -47,7 +46,7 @@ page "/" {
                 </Card>
                 <Card title="Warenwirtschaft">
                     <p>Das Mini-ERP wird als nächste Anwendung in dieses Dashboard aufgenommen.</p>
-                    <span class="dashboard-app-status">In Entwicklung</span>
+                    <Badge text="In Entwicklung" appearance="warning" />
                 </Card>
             </Grid>
         </Container>
@@ -56,6 +55,8 @@ page "/" {
 
 form PasswordGenerator {
     route: "/generator"
+    title: "Passwortgenerator"
+    description: "Erzeuge sichere Passwörter direkt auf diesem Server. Die Werte werden nicht gespeichert."
 
     field length: Int {
         label: "Länge"

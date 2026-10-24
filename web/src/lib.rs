@@ -53,10 +53,16 @@ use ui::*;
 
 const ZELYRA_DESIGN_SYSTEM_CSS: &str = include_str!("../assets/zelyra-ui.v1.css");
 const ZELYRA_UI_JAVASCRIPT: &str = include_str!("../assets/zelyra-ui.v1.js");
-pub const ZELYRA_UI_CSS_PATH: &str =
-    concat!("/__zelyra/ui/", env!("CARGO_PKG_VERSION"), "/zelyra-ui.css");
-pub const ZELYRA_UI_JS_PATH: &str =
-    concat!("/__zelyra/ui/", env!("CARGO_PKG_VERSION"), "/zelyra-ui.js");
+pub const ZELYRA_UI_CSS_PATH: &str = concat!(
+    "/__zelyra/ui/",
+    env!("CARGO_PKG_VERSION"),
+    "/v1.2.0/zelyra-ui.css"
+);
+pub const ZELYRA_UI_JS_PATH: &str = concat!(
+    "/__zelyra/ui/",
+    env!("CARGO_PKG_VERSION"),
+    "/v1.2.0/zelyra-ui.js"
+);
 pub const PROJECT_UI_CSS_PATH: &str = "/__zelyra/ui/project.css";
 pub const PROJECT_THEME_CSS_PATH: &str = "/__zelyra/theme.css";
 pub const HEALTH_LIVENESS_PATH: &str = "/__zelyra/health/live";
@@ -4966,7 +4972,7 @@ fn render_account_profile(
 ) -> String {
     let csrf = html_escape(auth.csrf.token());
     let mut html = format!(
-        "<main><h1>{}</h1><p>{}</p><section class=\"z-card\"><h2>{}</h2><form method=\"post\" action=\"{}\"><input type=\"hidden\" name=\"_zelyra_csrf\" value=\"{csrf}\"><input type=\"hidden\" name=\"operation\" value=\"update_profile\">",
+        "<main><header class=\"z-page-header\"><div class=\"z-page-header__copy\"><h1 class=\"z-page-header__title\">{}</h1><p class=\"z-page-header__description\">{}</p></div></header><section class=\"z-card\" aria-labelledby=\"profile-details-title\"><header class=\"z-card__header\"><h2 class=\"z-card__title\" id=\"profile-details-title\">{}</h2></header><div class=\"z-card__body\"><form class=\"z-stack\" method=\"post\" action=\"{}\"><input type=\"hidden\" name=\"_zelyra_csrf\" value=\"{csrf}\"><input type=\"hidden\" name=\"operation\" value=\"update_profile\">",
         tr(language, "auth.self_profile_title"),
         tr(language, "auth.self_profile_help"),
         tr(language, "auth.profile_details"),
@@ -4974,13 +4980,13 @@ fn render_account_profile(
     );
     if let Some(display_name) = display_name {
         html.push_str(&format!(
-            "<label for=\"display-name\">{}</label><input id=\"display-name\" name=\"display_name\" maxlength=\"150\" value=\"{}\">",
+            "<label class=\"z-field\" for=\"display-name\"><span class=\"z-field__label\">{}</span><input class=\"z-input\" id=\"display-name\" name=\"display_name\" maxlength=\"150\" value=\"{}\"></label>",
             tr(language, "auth.display_name"),
             html_escape(display_name),
         ));
     }
     html.push_str(&format!(
-        "<label for=\"profile-email\">{}</label><input id=\"profile-email\" name=\"email\" type=\"email\" maxlength=\"254\" required value=\"{}\"><label for=\"profile-current-password\">{}</label><input id=\"profile-current-password\" name=\"current_password\" type=\"password\" autocomplete=\"current-password\" required><button type=\"submit\">{}</button></form></section><section class=\"z-card\"><h2>{}</h2><form method=\"post\" action=\"{}\"><input type=\"hidden\" name=\"_zelyra_csrf\" value=\"{csrf}\"><input type=\"hidden\" name=\"operation\" value=\"change_password\"><label for=\"password-current\">{}</label><input id=\"password-current\" name=\"current_password\" type=\"password\" autocomplete=\"current-password\" required><label for=\"password-new\">{}</label><input id=\"password-new\" name=\"new_password\" type=\"password\" minlength=\"12\" autocomplete=\"new-password\" required><label for=\"password-confirm\">{}</label><input id=\"password-confirm\" name=\"confirm_password\" type=\"password\" minlength=\"12\" autocomplete=\"new-password\" required><button type=\"submit\">{}</button></form></section></main>",
+        "<label class=\"z-field\" for=\"profile-email\"><span class=\"z-field__label\">{}</span><input class=\"z-input\" id=\"profile-email\" name=\"email\" type=\"email\" maxlength=\"254\" required value=\"{}\"></label><label class=\"z-field\" for=\"profile-current-password\"><span class=\"z-field__label\">{}</span><input class=\"z-input\" id=\"profile-current-password\" name=\"current_password\" type=\"password\" autocomplete=\"current-password\" required></label><div class=\"z-action-stack\"><button class=\"z-button z-button--primary\" type=\"submit\">{}</button></div></form></div></section><section class=\"z-card\" aria-labelledby=\"change-password-title\"><header class=\"z-card__header\"><h2 class=\"z-card__title\" id=\"change-password-title\">{}</h2></header><div class=\"z-card__body\"><form class=\"z-stack\" method=\"post\" action=\"{}\"><input type=\"hidden\" name=\"_zelyra_csrf\" value=\"{csrf}\"><input type=\"hidden\" name=\"operation\" value=\"change_password\"><label class=\"z-field\" for=\"password-current\"><span class=\"z-field__label\">{}</span><input class=\"z-input\" id=\"password-current\" name=\"current_password\" type=\"password\" autocomplete=\"current-password\" required></label><label class=\"z-field\" for=\"password-new\"><span class=\"z-field__label\">{}</span><input class=\"z-input\" id=\"password-new\" name=\"new_password\" type=\"password\" minlength=\"12\" autocomplete=\"new-password\" required></label><label class=\"z-field\" for=\"password-confirm\"><span class=\"z-field__label\">{}</span><input class=\"z-input\" id=\"password-confirm\" name=\"confirm_password\" type=\"password\" minlength=\"12\" autocomplete=\"new-password\" required></label><div class=\"z-action-stack\"><button class=\"z-button z-button--primary\" type=\"submit\">{}</button></div></form></div></section></main>",
         tr(language, "auth.email"),
         html_escape(email),
         tr(language, "auth.current_password"),
@@ -5324,9 +5330,10 @@ fn render_account_sessions(
 ) -> String {
     let csrf = html_escape(auth.csrf.token());
     let mut html = format!(
-        "<main><h1>{}</h1><p>{}</p><table><thead><tr><th>{}</th><th>{}</th><th>{}</th><th>{}</th></tr></thead><tbody>",
+        "<main><header class=\"z-page-header\"><div class=\"z-page-header__copy\"><h1 class=\"z-page-header__title\">{}</h1><p class=\"z-page-header__description\">{}</p></div></header><section class=\"z-card\" aria-labelledby=\"account-sessions-title\"><header class=\"z-card__header\"><h2 class=\"z-card__title\" id=\"account-sessions-title\">{}</h2></header><div class=\"z-card__body\"><div class=\"z-table-scroll\"><table class=\"z-table\"><thead><tr><th scope=\"col\">{}</th><th scope=\"col\">{}</th><th scope=\"col\">{}</th><th scope=\"col\">{}</th></tr></thead><tbody>",
         tr(language, "auth.self_sessions_title"),
         tr(language, "auth.self_sessions_help"),
+        tr(language, "auth.self_sessions_title"),
         tr(language, "auth.session_label"),
         tr(language, "auth.session_expiry"),
         tr(language, "auth.session_device"),
@@ -5364,7 +5371,7 @@ fn render_account_sessions(
             .map(html_escape)
             .unwrap_or_else(|| tr(language, "auth.session_device_unknown"));
         html.push_str(&format!(
-            "<tr><td>{}</td><td>{}</td><td>{}</td><td><form method=\"post\" action=\"{}\"><input type=\"hidden\" name=\"_zelyra_csrf\" value=\"{}\"><input type=\"hidden\" name=\"session_key\" value=\"{}\"><button type=\"submit\">{}</button></form></td></tr>",
+            "<tr><td>{}</td><td>{}</td><td>{}</td><td><div class=\"z-action-stack\"><form method=\"post\" action=\"{}\"><input type=\"hidden\" name=\"_zelyra_csrf\" value=\"{}\"><input type=\"hidden\" name=\"session_key\" value=\"{}\"><button class=\"z-button z-button--danger\" type=\"submit\">{}</button></form></div></td></tr>",
             label,
             expires,
             device,
@@ -5374,7 +5381,7 @@ fn render_account_sessions(
             tr(language, "auth.revoke_session"),
         ));
     }
-    html.push_str("</tbody></table></main>");
+    html.push_str("</tbody></table></div></div></section></main>");
     html
 }
 
@@ -6271,8 +6278,9 @@ fn render_auth_admin(
         .find(|table| table.name == auth.table)
         .is_some_and(|table| table.columns.iter().any(|column| column.name == "active"));
     let mut html = format!(
-        "<main><h1>{}</h1><h2>{}</h2><form method=\"post\" action=\"{path}\"><input type=\"hidden\" name=\"_zelyra_csrf\" value=\"{csrf}\"><input type=\"hidden\" name=\"operation\" value=\"create_user\"><label>{}</label><input name=\"email\" type=\"email\" required><label>{}</label><input name=\"password\" type=\"password\" minlength=\"8\" required><button type=\"submit\">{}</button></form><table><tr><th>{}</th><th>{}</th><th>{}</th></tr>",
+        "<main><header class=\"z-page-header\"><div class=\"z-page-header__copy\"><h1 class=\"z-page-header__title\">{}</h1><p class=\"z-page-header__description\">{}</p></div></header><section class=\"z-card\" aria-labelledby=\"auth-users-title\"><header class=\"z-card__header\"><h2 class=\"z-card__title\" id=\"auth-users-title\">{}</h2></header><div class=\"z-card__body\"><form class=\"z-stack\" method=\"post\" action=\"{path}\"><input type=\"hidden\" name=\"_zelyra_csrf\" value=\"{csrf}\"><input type=\"hidden\" name=\"operation\" value=\"create_user\"><label class=\"z-field\"><span class=\"z-field__label\">{}</span><input class=\"z-input\" name=\"email\" type=\"email\" autocomplete=\"email\" required></label><label class=\"z-field\"><span class=\"z-field__label\">{}</span><input class=\"z-input\" name=\"password\" type=\"password\" minlength=\"8\" autocomplete=\"new-password\" required></label><div class=\"z-action-stack\"><button class=\"z-button z-button--primary\" type=\"submit\">{}</button></div></form><div class=\"z-table-scroll\"><table class=\"z-table\"><thead><tr><th scope=\"col\">{}</th><th scope=\"col\">{}</th><th scope=\"col\">{}</th></tr></thead><tbody>",
         tr(language, "auth.admin_title"),
+        tr(language, "auth.admin_description"),
         tr(language, "auth.users_title"),
         tr(language, "auth.email"),
         tr(language, "auth.initial_password"),
@@ -6285,8 +6293,9 @@ fn render_auth_admin(
         if let (Some(user_id), Some(email), Some(active)) = (row.first(), row.get(1), row.get(2)) {
             let is_active = matches!(active.as_str(), "1" | "true" | "TRUE");
             html.push_str(&format!(
-                "<tr><td>{}</td><td>{}</td><td><form method=\"post\" action=\"{}\"><input type=\"hidden\" name=\"_zelyra_csrf\" value=\"{}\"><input type=\"hidden\" name=\"operation\" value=\"reset_password\"><input type=\"hidden\" name=\"user_id\" value=\"{}\"><input name=\"password\" type=\"password\" minlength=\"8\" required placeholder=\"{}\"><button type=\"submit\">{}</button></form>{}</td></tr>",
+                "<tr><td>{}</td><td><span class=\"z-badge z-badge--{}\">{}</span></td><td><div class=\"z-action-stack\"><form method=\"post\" action=\"{}\"><input type=\"hidden\" name=\"_zelyra_csrf\" value=\"{}\"><input type=\"hidden\" name=\"operation\" value=\"reset_password\"><input type=\"hidden\" name=\"user_id\" value=\"{}\"><label class=\"z-field\"><span class=\"z-field__label\">{}</span><input class=\"z-input\" name=\"password\" type=\"password\" minlength=\"8\" autocomplete=\"new-password\" required></label><button class=\"z-button z-button--primary\" type=\"submit\">{}</button></form>{}</div></td></tr>",
                 html_escape(email),
+                if is_active { "success" } else { "warning" },
                 tr(language, if is_active { "auth.active" } else { "auth.inactive" }),
                 path,
                 csrf,
@@ -6295,11 +6304,12 @@ fn render_auth_admin(
                 tr(language, "auth.reset_password"),
                 if active_supported {
                     format!(
-                        "<form method=\"post\" action=\"{}\"><input type=\"hidden\" name=\"_zelyra_csrf\" value=\"{}\"><input type=\"hidden\" name=\"operation\" value=\"{}\"><input type=\"hidden\" name=\"user_id\" value=\"{}\"><button type=\"submit\">{}</button></form>",
+                        "<form method=\"post\" action=\"{}\"><input type=\"hidden\" name=\"_zelyra_csrf\" value=\"{}\"><input type=\"hidden\" name=\"operation\" value=\"{}\"><input type=\"hidden\" name=\"user_id\" value=\"{}\"><button class=\"z-button z-button--{}\" type=\"submit\">{}</button></form>",
                         path,
                         csrf,
                         if is_active { "deactivate_user" } else { "activate_user" },
                         html_escape(user_id),
+                        if is_active { "warning" } else { "success" },
                         tr(language, if is_active { "auth.deactivate" } else { "auth.activate" }),
                     )
                 } else {
@@ -6308,35 +6318,25 @@ fn render_auth_admin(
             ));
         }
     }
-    html.push_str("</table>");
+    html.push_str("</tbody></table></div></div></section>");
     if administrable_session_table(auth).is_some() {
         html.push_str(&render_auth_sessions(auth, sessions, language));
     }
-    html.push_str("<h2>");
-    html.push_str(&tr(language, "auth.assign_role"));
-    html.push_str("</h2><form method=\"post\" action=\"");
-    html.push_str(&path);
-    html.push_str("\"><input type=\"hidden\" name=\"_zelyra_csrf\" value=\"");
-    html.push_str(&csrf);
-    html.push_str("\"><input type=\"hidden\" name=\"operation\" value=\"grant_role\"><label>");
-    html.push_str(&tr(language, "auth.user_id"));
-    html.push_str("</label><input name=\"user_id\" type=\"number\" required><label>");
-    html.push_str(&tr(language, "auth.role"));
-    html.push_str("</label><input name=\"role\" required><button type=\"submit\">");
-    html.push_str(&tr(language, "auth.grant_role"));
-    html.push_str("</button></form><h2>");
-    html.push_str(&tr(language, "auth.role_assignments"));
-    html.push_str("</h2><table><tr><th>");
-    html.push_str(&tr(language, "auth.user"));
-    html.push_str("</th><th>");
-    html.push_str(&tr(language, "auth.role"));
-    html.push_str("</th><th>");
-    html.push_str(&tr(language, "auth.action"));
-    html.push_str("</th></tr>");
+    html.push_str(&format!(
+        "<section class=\"z-card\" aria-labelledby=\"auth-assign-role-title\"><header class=\"z-card__header\"><h2 class=\"z-card__title\" id=\"auth-assign-role-title\">{}</h2></header><div class=\"z-card__body\"><form class=\"z-stack\" method=\"post\" action=\"{path}\"><input type=\"hidden\" name=\"_zelyra_csrf\" value=\"{csrf}\"><input type=\"hidden\" name=\"operation\" value=\"grant_role\"><label class=\"z-field\"><span class=\"z-field__label\">{}</span><input class=\"z-input\" name=\"user_id\" type=\"number\" min=\"1\" required></label><label class=\"z-field\"><span class=\"z-field__label\">{}</span><input class=\"z-input\" name=\"role\" required></label><div class=\"z-action-stack\"><button class=\"z-button z-button--primary\" type=\"submit\">{}</button></div></form></div></section><section class=\"z-card\" aria-labelledby=\"auth-role-assignments-title\"><header class=\"z-card__header\"><h2 class=\"z-card__title\" id=\"auth-role-assignments-title\">{}</h2></header><div class=\"z-card__body\"><div class=\"z-table-scroll\"><table class=\"z-table\"><thead><tr><th scope=\"col\">{}</th><th scope=\"col\">{}</th><th scope=\"col\">{}</th></tr></thead><tbody>",
+        tr(language, "auth.assign_role"),
+        tr(language, "auth.user_id"),
+        tr(language, "auth.role"),
+        tr(language, "auth.grant_role"),
+        tr(language, "auth.role_assignments"),
+        tr(language, "auth.user"),
+        tr(language, "auth.role"),
+        tr(language, "auth.action"),
+    ));
     for row in assignments {
         if let (Some(user_id), Some(email), Some(role)) = (row.first(), row.get(1), row.get(2)) {
             html.push_str(&format!(
-                "<tr><td>{}</td><td>{}</td><td><form method=\"post\" action=\"{}\"><input type=\"hidden\" name=\"_zelyra_csrf\" value=\"{}\"><input type=\"hidden\" name=\"operation\" value=\"revoke_role\"><input type=\"hidden\" name=\"user_id\" value=\"{}\"><input type=\"hidden\" name=\"role\" value=\"{}\"><button type=\"submit\">{}</button></form></td></tr>",
+                "<tr><td>{}</td><td>{}</td><td><div class=\"z-action-stack\"><form method=\"post\" action=\"{}\"><input type=\"hidden\" name=\"_zelyra_csrf\" value=\"{}\"><input type=\"hidden\" name=\"operation\" value=\"revoke_role\"><input type=\"hidden\" name=\"user_id\" value=\"{}\"><input type=\"hidden\" name=\"role\" value=\"{}\"><button class=\"z-button z-button--danger\" type=\"submit\">{}</button></form></div></td></tr>",
                 html_escape(email),
                 html_escape(role),
                 path,
@@ -6347,31 +6347,21 @@ fn render_auth_admin(
             ));
         }
     }
-    html.push_str("</table><h2>");
-    html.push_str(&tr(language, "auth.role_permissions"));
-    html.push_str("</h2><form method=\"post\" action=\"");
-    html.push_str(&path);
-    html.push_str("\"><input type=\"hidden\" name=\"_zelyra_csrf\" value=\"");
-    html.push_str(&csrf);
-    html.push_str(
-        "\"><input type=\"hidden\" name=\"operation\" value=\"grant_permission\"><label>",
-    );
-    html.push_str(&tr(language, "auth.role"));
-    html.push_str("</label><input name=\"role\" required><label>");
-    html.push_str(&tr(language, "auth.permission"));
-    html.push_str("</label><input name=\"permission\" required><button type=\"submit\">");
-    html.push_str(&tr(language, "auth.grant_permission"));
-    html.push_str("</button></form><table><tr><th>");
-    html.push_str(&tr(language, "auth.role"));
-    html.push_str("</th><th>");
-    html.push_str(&tr(language, "auth.permission"));
-    html.push_str("</th><th>");
-    html.push_str(&tr(language, "auth.action"));
-    html.push_str("</th></tr>");
+    html.push_str(&format!(
+        "</tbody></table></div></div></section><section class=\"z-card\" aria-labelledby=\"auth-grant-permission-title\"><header class=\"z-card__header\"><h2 class=\"z-card__title\" id=\"auth-grant-permission-title\">{}</h2></header><div class=\"z-card__body\"><form class=\"z-stack\" method=\"post\" action=\"{path}\"><input type=\"hidden\" name=\"_zelyra_csrf\" value=\"{csrf}\"><input type=\"hidden\" name=\"operation\" value=\"grant_permission\"><label class=\"z-field\"><span class=\"z-field__label\">{}</span><input class=\"z-input\" name=\"role\" required></label><label class=\"z-field\"><span class=\"z-field__label\">{}</span><input class=\"z-input\" name=\"permission\" required></label><div class=\"z-action-stack\"><button class=\"z-button z-button--primary\" type=\"submit\">{}</button></div></form></div></section><section class=\"z-card\" aria-labelledby=\"auth-role-permissions-title\"><header class=\"z-card__header\"><h2 class=\"z-card__title\" id=\"auth-role-permissions-title\">{}</h2></header><div class=\"z-card__body\"><div class=\"z-table-scroll\"><table class=\"z-table\"><thead><tr><th scope=\"col\">{}</th><th scope=\"col\">{}</th><th scope=\"col\">{}</th></tr></thead><tbody>",
+        tr(language, "auth.grant_permission"),
+        tr(language, "auth.role"),
+        tr(language, "auth.permission"),
+        tr(language, "auth.grant_permission"),
+        tr(language, "auth.role_permissions"),
+        tr(language, "auth.role"),
+        tr(language, "auth.permission"),
+        tr(language, "auth.action"),
+    ));
     for row in permissions {
         if let (Some(role), Some(permission)) = (row.first(), row.get(1)) {
             html.push_str(&format!(
-                "<tr><td>{}</td><td>{}</td><td><form method=\"post\" action=\"{}\"><input type=\"hidden\" name=\"_zelyra_csrf\" value=\"{}\"><input type=\"hidden\" name=\"operation\" value=\"revoke_permission\"><input type=\"hidden\" name=\"role\" value=\"{}\"><input type=\"hidden\" name=\"permission\" value=\"{}\"><button type=\"submit\">{}</button></form></td></tr>",
+                "<tr><td>{}</td><td>{}</td><td><div class=\"z-action-stack\"><form method=\"post\" action=\"{}\"><input type=\"hidden\" name=\"_zelyra_csrf\" value=\"{}\"><input type=\"hidden\" name=\"operation\" value=\"revoke_permission\"><input type=\"hidden\" name=\"role\" value=\"{}\"><input type=\"hidden\" name=\"permission\" value=\"{}\"><button class=\"z-button z-button--danger\" type=\"submit\">{}</button></form></div></td></tr>",
                 html_escape(role),
                 html_escape(permission),
                 path,
@@ -6382,12 +6372,13 @@ fn render_auth_admin(
             ));
         }
     }
+    html.push_str("</tbody></table></div></div></section>");
     if auth.audit_table.is_some() {
-        html.push_str("</table><h2>");
+        html.push_str("<section class=\"z-card\" aria-labelledby=\"auth-audit-title\"><header class=\"z-card__header\"><h2 class=\"z-card__title\" id=\"auth-audit-title\">");
         html.push_str(&tr(language, "auth.audit_log"));
-        html.push_str("</h2><p>");
+        html.push_str("</h2></header><div class=\"z-card__body\"><p>");
         html.push_str(&tr(language, "auth.audit_latest"));
-        html.push_str("</p><table><tr><th>");
+        html.push_str("</p><div class=\"z-table-scroll\"><table class=\"z-table\"><thead><tr><th scope=\"col\">");
         html.push_str(&tr(language, "auth.actor"));
         html.push_str("</th><th>");
         html.push_str(&tr(language, "auth.action"));
@@ -6397,7 +6388,7 @@ fn render_auth_admin(
         html.push_str(&tr(language, "auth.details"));
         html.push_str("</th><th>");
         html.push_str(&tr(language, "auth.created"));
-        html.push_str("</th></tr>");
+        html.push_str("</th></tr></thead><tbody>");
         for row in audit {
             let cells = row
                 .iter()
@@ -6405,9 +6396,7 @@ fn render_auth_admin(
                 .collect::<String>();
             html.push_str(&format!("<tr>{cells}</tr>"));
         }
-        html.push_str("</table>");
-    } else {
-        html.push_str("</table>");
+        html.push_str("</tbody></table></div></div></section>");
     }
     html.push_str("</main>");
     html
@@ -6521,7 +6510,7 @@ fn render_auth_sessions(
     let path = html_escape(auth.admin_path.as_deref().unwrap_or("/"));
     let csrf = html_escape(auth.csrf.token());
     let mut html = format!(
-        "<h2>{}</h2><p>{}</p><table><tr><th>ID</th><th>{}</th><th>{}</th><th>{}</th><th>{}</th></tr>",
+        "<section class=\"z-card\" aria-labelledby=\"auth-sessions-title\"><header class=\"z-card__header\"><h2 class=\"z-card__title\" id=\"auth-sessions-title\">{}</h2></header><div class=\"z-card__body\"><p>{}</p><div class=\"z-table-scroll\"><table class=\"z-table\"><thead><tr><th scope=\"col\">ID</th><th scope=\"col\">{}</th><th scope=\"col\">{}</th><th scope=\"col\">{}</th><th scope=\"col\">{}</th></tr></thead><tbody>",
         tr(language, "auth.sessions"),
         tr(language, "auth.sessions_help"),
         tr(language, "auth.email"),
@@ -6537,11 +6526,11 @@ fn render_auth_sessions(
                 .filter(|device| !device.is_empty() && *device != "NULL")
                 .map(html_escape)
                 .unwrap_or_else(|| tr(language, "auth.session_device_unknown"));
-            html.push_str(&format!("<tr><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td><form method=\"post\" action=\"{path}\"><input type=\"hidden\" name=\"_zelyra_csrf\" value=\"{csrf}\"><input type=\"hidden\" name=\"operation\" value=\"revoke_session\"><input type=\"hidden\" name=\"session_id\" value=\"{}\"><input type=\"hidden\" name=\"user_id\" value=\"{}\"><button type=\"submit\">{}</button></form></td></tr>",
+            html.push_str(&format!("<tr><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td><div class=\"z-action-stack\"><form method=\"post\" action=\"{path}\"><input type=\"hidden\" name=\"_zelyra_csrf\" value=\"{csrf}\"><input type=\"hidden\" name=\"operation\" value=\"revoke_session\"><input type=\"hidden\" name=\"session_id\" value=\"{}\"><input type=\"hidden\" name=\"user_id\" value=\"{}\"><button class=\"z-button z-button--danger\" type=\"submit\">{}</button></form></div></td></tr>",
                 html_escape(id), html_escape(email), html_escape(expires), device, html_escape(id), html_escape(user_id), tr(language, "auth.revoke_session")));
         }
     }
-    html.push_str("</table>");
+    html.push_str("</tbody></table></div></div></section>");
     html
 }
 
@@ -6594,6 +6583,9 @@ fn account_profile_escapes_account_values_and_exposes_secure_password_forms() {
     assert!(html.contains("&lt;script&gt;alert(1)&lt;/script&gt;@example.test"));
     assert!(!html.contains("<script>alert(1)</script>"));
     assert!(html.contains("&lt;img src=x onerror=alert(1)&gt;"));
+    assert!(html.contains("class=\"z-page-header__title\""));
+    assert_eq!(html.matches("class=\"z-card\"").count(), 2);
+    assert_eq!(html.matches("class=\"z-action-stack\"").count(), 2);
 }
 
 #[test]
@@ -8312,6 +8304,8 @@ fn crud_child_route(parent: &FormRoute, child: &CrudChildFormRoute) -> FormRoute
     route.form = zelyra_ast::FormDef {
         name: format!("{}Child", child.definition.name),
         table: Some(child.table.name.clone()),
+        title: None,
+        description: None,
         path: None,
         post_only: false,
         verify: None,

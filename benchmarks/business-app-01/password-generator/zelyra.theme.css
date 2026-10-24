@@ -16,115 +16,6 @@ Diese Datei wird an Browser ausgeliefert: niemals Passwörter, API-Schlüssel
 oder andere private Daten eintragen.
 Token- und Konfigurationsreferenz: https://github.com/sf1976/zelyra/blob/main/docs/env.md
 */
-:where(html[data-z-ui]) {
-    --z-color-primary: #3157a4;
-    --z-color-on-primary: #ffffff;
-    --z-color-primary-hover: #274889;
-    --z-color-success: #147a52;
-    --z-color-on-success: #ffffff;
-    --z-color-canvas: #f2f5fa;
-    --z-color-surface: #ffffff;
-    --z-color-surface-raised: #ffffff;
-    --z-color-text: #172438;
-    --z-color-text-muted: #56667c;
-    --z-color-border: #d6dfeb;
-    --z-font-sans: Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
-    --z-font-mono: ui-monospace, "Cascadia Code", "SFMono-Regular", Consolas, monospace;
-    --z-content-width: 74rem;
-    --z-radius-md: .75rem;
-    --z-radius-lg: 1.1rem;
-    --z-shadow-md: 0 16px 42px rgb(27 45 73 / 10%);
-    /* Pair foreground and background tokens when changing a color. */
-    /* --z-color-primary: #3157a4; */
-    /* --z-color-on-primary: #ffffff; */
-    /* --z-color-primary-hover: #274889; */
-    /* --z-color-primary-soft: #eaf0fb; */
-    /* --z-color-success: #16734c; */
-    /* --z-color-on-success: #ffffff; */
-    /* --z-color-success-soft: #e9f6ef; */
-    /* --z-color-warning: #795000; */
-    /* --z-color-on-warning: #ffffff; */
-    /* --z-color-warning-soft: #fff4d8; */
-    /* --z-color-danger: #a12e39; */
-    /* --z-color-on-danger: #ffffff; */
-    /* --z-color-danger-soft: #fff0f0; */
-    /* --z-color-info: #175e83; */
-    /* --z-color-on-info: #ffffff; */
-    /* --z-color-info-soft: #eaf5fa; */
-    /* --z-color-canvas: #f4f6fa; */
-    /* --z-color-surface: #ffffff; */
-    /* --z-color-surface-raised: #ffffff; */
-    /* --z-color-text: #182230; */
-    /* --z-color-text-muted: #526174; */
-    /* --z-color-border: #d8e0e9; */
-    /* --z-color-focus: #275fc5; */
-    /* --z-color-link: #244f9a; */
-    /* --z-font-sans: system-ui, -apple-system, "Segoe UI", sans-serif; */
-    /* --z-font-mono: ui-monospace, "Cascadia Code", monospace; */
-    /* --z-font-size: 1rem; */
-    /* --z-line-height: 1.5; */
-    /* --z-space-1: .25rem; */
-    /* --z-space-2: .5rem; */
-    /* --z-space-3: .75rem; */
-    /* --z-space-4: 1rem; */
-    /* --z-space-5: 1.25rem; */
-    /* --z-space-6: 1.5rem; */
-    /* --z-space-8: 2rem; */
-    /* --z-radius-sm: .35rem; */
-    /* --z-content-width: 76rem; */
-    /* --z-radius-pill: 999px; */
-    /* --z-shadow-sm: 0 1px 3px rgb(20 34 54 / 8%); */
-    /* --z-shadow-md: 0 12px 32px rgb(20 34 54 / 12%); */
-    /* --z-control-height: 2.75rem; */
-    /* --z-radius-md: .65rem; */
-    /* --z-radius-lg: 1rem; */
-    /* --z-layer-sticky: 10; */
-    /* --z-layer-dropdown: 20; */
-    /* --z-layer-dialog: 100; */
-    /* --z-layer-toast: 120; */
-    /* --z-motion-fast: 140ms; */
-    /* --z-motion-normal: 220ms; */
-}
-
-.z-app-shell__main .z-card,
-.z-app-shell__main .zelyra-crud-form-card {
-    border-color: #dce5f0;
-    box-shadow: 0 12px 32px rgb(27 45 73 / 6%);
-}
-
-.zelyra-form-result {
-    margin-block: 1.5rem;
-    padding: 1.25rem;
-    border: 1px solid #b9d9c8;
-    border-radius: 1rem;
-    background: #f0faf4;
-}
-
-.zelyra-form-result h2 {
-    margin: 0 0 .75rem;
-    color: #155b3d;
-    font-size: 1rem;
-}
-
-.zelyra-form-result output {
-    display: block;
-    overflow-wrap: anywhere;
-    padding: 1rem;
-    border: 1px solid #d4eadd;
-    border-radius: .75rem;
-    background: #fff;
-    color: #13251c;
-    font: 600 1.3rem/1.6 var(--z-font-mono);
-    letter-spacing: .04em;
-    user-select: all;
-}
-
-@media (max-width: 42rem) {
-    .zelyra-form-result output {
-        font-size: 1.05rem;
-    }
-}
-
 /* The product identity is shown by the Zelyra mark; this environment chip is
    operational metadata and does not belong in the customer-facing design. */
 :where(html[data-z-ui]) .zelyra-environment {
@@ -135,7 +26,7 @@ Token- und Konfigurationsreferenz: https://github.com/sf1976/zelyra/blob/main/do
 html:has(form[action="/login"]) .z-app-shell {
     grid-template: "main" minmax(100vh, 1fr) / minmax(0, 1fr);
     min-height: 100vh;
-    background: #edf2fa;
+    background: var(--z-color-canvas);
 }
 
 html:has(form[action="/login"]) .z-app-shell__header,
@@ -153,7 +44,7 @@ html:has(form[action="/login"]) .z-app-shell__main {
     background:
         radial-gradient(ellipse at 18% 14%, rgb(84 124 197 / 15%), transparent 36%),
         radial-gradient(ellipse at 88% 86%, rgb(80 154 179 / 12%), transparent 34%),
-        #edf2fa;
+        var(--z-color-canvas);
 }
 
 html:has(form[action="/login"]) .zelyra-page-content {
@@ -166,10 +57,10 @@ html:has(form[action="/login"]) .zelyra-page-content main {
     width: min(100%, 27rem);
     margin: 0;
     padding: clamp(1.75rem, 5vw, 2.75rem);
-    border: 1px solid rgb(191 205 226 / 78%);
+    border: 1px solid var(--z-color-border);
     border-radius: 1.5rem;
-    background: rgb(255 255 255 / 96%);
-    box-shadow: 0 28px 72px rgb(24 44 78 / 14%), 0 3px 10px rgb(24 44 78 / 5%);
+    background: color-mix(in srgb, var(--z-color-surface) 96%, transparent);
+    box-shadow: var(--z-shadow-lg);
 }
 
 html:has(form[action="/login"]) .zelyra-page-content main::before {
@@ -184,7 +75,7 @@ html:has(form[action="/login"]) .zelyra-page-content main::before {
 
 html:has(form[action="/login"]) .zelyra-page-content h1 {
     margin: 0 0 .5rem;
-    color: #172438;
+    color: var(--z-color-text);
     font-size: clamp(1.7rem, 4vw, 2rem);
     letter-spacing: -.035em;
 }
@@ -201,7 +92,7 @@ html:has(form[action="/login"]) form[action="/login"] input[type="hidden"] {
 
 html:has(form[action="/login"]) form[action="/login"] label {
     margin: .35rem 0 0;
-    color: #34445c;
+    color: var(--z-color-text);
     font-size: .9rem;
     font-weight: 650;
 }
@@ -210,18 +101,18 @@ html:has(form[action="/login"]) form[action="/login"] input {
     width: 100%;
     min-height: 3rem;
     padding: .7rem .85rem;
-    border: 1px solid #cbd6e6;
+    border: 1px solid var(--z-color-border);
     border-radius: .7rem;
-    background: #fff;
-    color: #172438;
+    background: var(--z-color-surface);
+    color: var(--z-color-text);
     font: inherit;
     transition: border-color 140ms ease, box-shadow 140ms ease;
 }
 
 html:has(form[action="/login"]) form[action="/login"] input:focus-visible {
-    border-color: #3157a4;
+    border-color: var(--z-color-focus);
     outline: 0;
-    box-shadow: 0 0 0 4px rgb(49 87 164 / 15%);
+    box-shadow: 0 0 0 4px color-mix(in srgb, var(--z-color-focus) 15%, transparent);
 }
 
 html:has(form[action="/login"]) form[action="/login"] button {
@@ -233,194 +124,15 @@ html:has(form[action="/login"]) form[action="/login"] button {
     font-weight: 700;
 }
 
-html:has(form[action="/login"]) form[action="/login"] button:hover {
-    border-color: #c5d0df;
-    background: #e5ebf3;
-    color: #172438;
-}
-
-html:has(.dashboard-app-status) .z-app-shell__main a.z-button:hover {
-    border-color: #c5d0df;
-    background: #e5ebf3;
-    color: #172438;
-}
-
 html:has(form[action="/login"]) .zelyra-page-content main::after {
     display: block;
     margin-top: 1.5rem;
-    color: #74839a;
+    color: var(--z-color-text-muted);
     content: "ZELYRA · SICHERER ARBEITSBEREICH";
     font-size: .68rem;
     font-weight: 700;
     letter-spacing: .12em;
     text-align: center;
-}
-
-.dashboard-brand-logo {
-    display: block;
-    width: 8rem;
-    max-height: 2.5rem;
-    margin-inline: auto;
-    object-fit: contain;
-}
-
-.dashboard-app-status {
-    display: inline-flex;
-    align-items: center;
-    margin-top: .5rem;
-    padding: .35rem .65rem;
-    border: 1px solid #d7e1ef;
-    border-radius: 999px;
-    background: #f2f5fa;
-    color: #52647c;
-    font-size: .78rem;
-    font-weight: 700;
-}
-
-.zelyra-page-content main:has(form[action="/account/profile"]) {
-    display: grid;
-    width: min(100%, 54rem);
-    gap: 1.25rem;
-    margin-inline: auto;
-}
-
-.zelyra-page-content main:has(form[action="/account/profile"]) > h1 {
-    margin-bottom: 0;
-    font-size: clamp(1.7rem, 4vw, 2.25rem);
-    letter-spacing: -.035em;
-}
-
-.zelyra-page-content main:has(form[action="/account/profile"]) > p {
-    margin-top: -.75rem;
-    color: var(--z-color-text-muted);
-}
-
-.zelyra-page-content main:has(form[action="/account/profile"]) section {
-    padding: clamp(1.25rem, 3vw, 1.75rem);
-}
-
-.zelyra-page-content main:has(form[action="/account/profile"]) form {
-    display: grid;
-    max-width: 38rem;
-    gap: .65rem;
-    margin-top: 1rem;
-}
-
-.zelyra-page-content main:has(form[action="/account/profile"]) form label {
-    margin-top: .4rem;
-    color: #34445c;
-    font-size: .9rem;
-    font-weight: 650;
-}
-
-.zelyra-page-content main:has(form[action="/account/profile"]) form input:not([type="hidden"]) {
-    width: 100%;
-    min-height: 2.9rem;
-    padding: .65rem .8rem;
-    border: 1px solid #cbd6e6;
-    border-radius: .7rem;
-    background: #fff;
-    color: #172438;
-    font: inherit;
-}
-
-.zelyra-page-content main:has(form[action="/account/profile"]) form input:focus-visible {
-    border-color: #3157a4;
-    outline: 0;
-    box-shadow: 0 0 0 4px rgb(49 87 164 / 15%);
-}
-
-.zelyra-page-content main:has(form[action="/account/profile"]) form button {
-    justify-self: start;
-    min-width: 12rem;
-    margin-top: .75rem;
-}
-
-html:has(.dashboard-app-status) .zelyra-page-content main {
-    width: min(100%, 76rem);
-    margin-inline: auto;
-}
-
-.z-app-shell__main:has(form[action="/generator"]) .zelyra-page-content main {
-    width: min(100%, 54rem);
-    margin-inline: auto;
-}
-
-.z-app-shell__main:has(form[action="/generator"]) .zelyra-page-content main::before {
-    display: block;
-    margin: 0 0 1rem;
-    color: #172438;
-    content: "Passwortgenerator";
-    font-size: clamp(1.6rem, 4vw, 2rem);
-    font-weight: 750;
-    letter-spacing: -.035em;
-}
-
-.z-app-shell__main:has(form[action="/generator"]) .zelyra-page-content main::after {
-    display: block;
-    margin-top: 1.25rem;
-    color: #697b94;
-    content: "Sicher erzeugt · nicht gespeichert";
-    font-size: .85rem;
-}
-
-.z-app-shell__main form[action="/generator"] {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 1.25rem;
-    margin-top: 1rem;
-    padding: clamp(1.25rem, 3vw, 2rem);
-    border: 1px solid #d7e1ef;
-    border-radius: 1.1rem;
-    background: #fff;
-    box-shadow: 0 18px 48px rgb(27 45 73 / 8%);
-}
-
-.z-app-shell__main form[action="/generator"] input[type="hidden"] {
-    display: none;
-}
-
-.z-app-shell__main form[action="/generator"] .z-field {
-    margin: 0;
-}
-
-.z-app-shell__main form[action="/generator"] .z-field__label {
-    margin-bottom: .5rem;
-    color: #34445c;
-    font-weight: 650;
-}
-
-.z-app-shell__main form[action="/generator"] .z-input,
-.z-app-shell__main form[action="/generator"] .z-select {
-    min-height: 3rem;
-    border-radius: .7rem;
-}
-
-.z-app-shell__main form[action="/generator"] > button {
-    grid-column: 1 / -1;
-    justify-self: start;
-    min-height: 3rem;
-    padding-inline: 1.35rem;
-    border-radius: .7rem;
-    font-weight: 700;
-}
-
-.z-app-shell__main:has(form[action="/generator"]) .zelyra-form-result {
-    padding: clamp(1.25rem, 3vw, 2rem);
-    border-color: #b9d9c8;
-    border-radius: 1.1rem;
-    box-shadow: 0 14px 36px rgb(27 45 73 / 6%);
-}
-
-@media (max-width: 42rem) {
-    .z-app-shell__main form[action="/generator"] {
-        grid-template-columns: minmax(0, 1fr);
-    }
-
-    .z-app-shell__main form[action="/generator"] > button {
-        width: 100%;
-        justify-self: stretch;
-    }
 }
 
 @media (prefers-reduced-motion: reduce) {

@@ -26,6 +26,7 @@
   "auth.page_title": "Administration",
   "auth.page_description": "You are signed in to this protected Zelyra page.",
   "auth.admin_title": "Access management",
+  "auth.admin_description": "Manage user accounts, roles, permissions, and active sessions in one place.",
   "auth.users_title": "Users",
   "auth.initial_password": "Initial password",
   "auth.create_user": "Create user",

@@ -26,6 +26,7 @@
   "auth.page_title": "Verwaltung",
   "auth.page_description": "Du bist bei dieser geschützten Zelyra-Seite angemeldet.",
   "auth.admin_title": "Zugriffsverwaltung",
+  "auth.admin_description": "Benutzerkonten, Rollen, Berechtigungen und aktive Sitzungen an einem Ort verwalten.",
   "auth.users_title": "Benutzer",
   "auth.initial_password": "Initiales Passwort",
   "auth.create_user": "Benutzer anlegen",

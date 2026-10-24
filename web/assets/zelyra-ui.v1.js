@@ -60,7 +60,7 @@
     if (root === document) {
       const theme = (() => { try { return localStorage.getItem(themeKey); } catch (_) { return null; } })();
       const density = (() => { try { return localStorage.getItem(densityKey); } catch (_) { return null; } })();
-      setTheme(theme || "system", Boolean(theme));
+      setTheme(theme || "light", Boolean(theme));
       setDensity(density || "comfortable", Boolean(density));
     }
 

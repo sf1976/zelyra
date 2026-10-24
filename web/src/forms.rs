@@ -16,11 +16,20 @@ pub(super) fn render_form_result(
     language: UiLanguage,
 ) -> String {
     let mut html = render_form_with_language(route, values, &[], None, &HashMap::new(), language);
-    html.push_str("<section class=\"zelyra-form-result\" aria-live=\"polite\" aria-labelledby=\"zelyra-form-result-title\"><h2 id=\"zelyra-form-result-title\">");
-    html.push_str(&tr(language, "form.result_title"));
-    html.push_str("</h2><output><code>");
-    html.push_str(&html_escape(result));
-    html.push_str("</code></output></section>");
+    let has_page_wrapper =
+        route.form_view.mode == CrudFormViewMode::Cards || route.form.title.is_some();
+    let insertion = if has_page_wrapper {
+        html.rfind("</section>").unwrap_or(html.len())
+    } else {
+        html.len()
+    };
+    let mut result_markup = String::from("<section class=\"z-card\" aria-live=\"polite\" aria-labelledby=\"zelyra-form-result-title\"><header class=\"z-card__header\"><h2 class=\"z-card__title\" id=\"zelyra-form-result-title\">");
+    result_markup.push_str(&tr(language, "form.result_title"));
+    result_markup
+        .push_str("</h2></header><div class=\"z-card__body\"><output class=\"z-output\"><code>");
+    result_markup.push_str(&html_escape(result));
+    result_markup.push_str("</code></output></div></section>");
+    html.insert_str(insertion, &result_markup);
     html
 }
 
@@ -75,7 +84,9 @@ pub(super) fn render_form_with_language(
         }
     }
     let cards = route.form_view.mode == CrudFormViewMode::Cards;
-    if cards {
+    let titled_standalone = !cards && route.form.title.is_some();
+    let page_wrapper = cards || titled_standalone;
+    if page_wrapper {
         html.push_str("<section class=\"z-generated-page\">");
     }
     let form_kind = if route.form.name.ends_with("Create") {
@@ -102,16 +113,40 @@ pub(super) fn render_form_with_language(
                 &localized_identifier_reference(language, resource),
             )
         });
-    if let Some(title) = route
+    let title = route
         .form_view
         .title
         .as_ref()
         .map(|title| localize_user_text(language, title))
-        .or(generated_title)
-    {
+        .or_else(|| {
+            route
+                .form
+                .title
+                .as_ref()
+                .map(|title| localize_user_text(language, title))
+        })
+        .or(generated_title);
+    let description = route
+        .form
+        .description
+        .as_ref()
+        .map(|description| localize_user_text(language, description));
+    let has_header = title.is_some() || description.is_some();
+    if has_header {
+        html.push_str("<header class=\"z-page-header\">");
+    }
+    if let Some(title) = title {
         html.push_str("<h1 class=\"z-page-header__title\">");
         html.push_str(&html_escape_preserving_locale_references(&title));
         html.push_str("</h1>");
+    }
+    if let Some(description) = description {
+        html.push_str("<p class=\"z-page-header__description\">");
+        html.push_str(&html_escape_preserving_locale_references(&description));
+        html.push_str("</p>");
+    }
+    if has_header {
+        html.push_str("</header>");
     }
     if !errors.is_empty() {
         html.push_str("<div class=\"z-error-summary\" role=\"alert\" tabindex=\"-1\"><h2>");
@@ -143,7 +178,7 @@ pub(super) fn render_form_with_language(
             &template_values,
         ));
     }
-    if cards {
+    if cards || titled_standalone {
         html.push_str("<section class=\"zelyra-crud-form-card\">");
     }
     html.push_str("<form method=\"post\"");
@@ -443,8 +478,10 @@ pub(super) fn render_form_with_language(
             &template_values,
         ));
     }
-    if cards {
+    if cards || titled_standalone {
         html.push_str("</section>");
+    }
+    if page_wrapper {
         html.push_str("</section>");
     }
     html

@@ -689,6 +689,10 @@ pub struct TableViewRowActionsDef {
 pub struct FormDef {
     pub name: String,
     pub table: Option<String>,
+    /// Optional user-facing title rendered by the native form page header.
+    pub title: Option<String>,
+    /// Optional short description rendered below the form title.
+    pub description: Option<String>,
     /// Optional explicit browser route for a standalone or table-backed form.
     /// When absent, the CLI keeps the conventional `/forms/<name>` route.
     pub path: Option<String>,

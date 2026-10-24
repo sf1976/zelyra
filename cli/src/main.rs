@@ -12321,6 +12321,8 @@ fn generated_crud_form(
         form: zelyra_ast::FormDef {
             name: format!("{}{}", crud.name, if edit { "Edit" } else { "Create" }),
             table: Some(table.name.clone()),
+            title: None,
+            description: None,
             path: None,
             post_only: false,
             verify: None,
@@ -12447,6 +12449,8 @@ fn generated_crud_action(
             form: zelyra_ast::FormDef {
                 name: format!("{}{}", crud.name, action.name),
                 table: Some(table.name.clone()),
+                title: None,
+                description: None,
                 path: None,
                 post_only: false,
                 verify: None,

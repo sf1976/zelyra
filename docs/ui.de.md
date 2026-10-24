@@ -109,7 +109,7 @@ schließendem Komponenten-Tag.
 
 | Komponente | Eigenschaften | Slots / Verhalten |
 |---|---|---|
-| `AppShell` | `id: String`, `navigation_label: String` | `header`, `navigation`, Standardinhalt, `footer`; responsives Kopf-/Navigations-/Inhalts-/Fußlayout |
+| `AppShell` | `id: String`, `navigation_label: String` | `header`, `navigation`, Standardinhalt, `footer`; responsives Layout und integrierter Hell-/Dunkel-Umschalter |
 | `Container` | — | Standardinhalt; zentrierte `--z-content-width` |
 | `PageHeader` | `title: String`, `description: String?` | `actions`; Seitentitel, Beschreibung und Aktionen |
 | `Grid` | `columns: UiGridColumns?` (`one`, `two`, `three`, `four`; Standard `one`) | Standardinhalt; 3/4 Spalten werden unter 900 px zweispaltig, unter 600 px einspaltig |
@@ -244,12 +244,15 @@ Designsystemversion. Patch-Releases verbessern das Aussehen oder korrigieren
 Stile ohne Änderung am Token-/Klassenvertrag; Minor-Releases dürfen kompatible
 Tokens oder Komponenten ergänzen. Eine inkompatible Änderung an öffentlichen
 Tokens oder Klassen erfordert eine neue Major-Version. Das aktuelle CSS-Bundle
-hat Version 1.1.0.
+hat Version 1.2.0.
 
-Helles und dunkles Theme, Systempräferenz, gespeicherte manuelle Auswahl,
-komfortable/kompakte Dichte, `prefers-reduced-motion` und Druckregeln sind
-enthalten. JavaScript verbessert Dialoge, Tabs, Mobile Navigation, Theme-
-und Dichtewechsel sowie Toasts. Navigation, Links, GET-/POST-Formulare,
+Das Zelyra-Standardtheme verwendet die klare blaue Dashboard-Palette und startet
+hell. `AppShell` enthält den barrierefrei beschrifteten Hell-/Dunkel-Umschalter;
+die Auswahl bleibt im Browser gespeichert und gilt für alle Anwendungsseiten.
+Ein dunkles Theme, optionale Systempräferenz, komfortable/kompakte Dichte,
+`prefers-reduced-motion` und Druckregeln sind enthalten. JavaScript verbessert
+Dialoge, Tabs, Mobile Navigation, Theme- und Dichtewechsel sowie Toasts.
+Navigation, Links, GET-/POST-Formulare,
 Disclosure, Auswahlfelder und Druckinhalte haben native HTML-Grundbedienung.
 
 `ZELYRA_UI_STYLESHEET` wählt `zelyra` (Standard), `tabler` (lokal gebündelte

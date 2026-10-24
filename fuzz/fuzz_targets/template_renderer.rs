@@ -34,6 +34,8 @@ fuzz_target!(|input: &[u8]| {
         form: FormDef {
             name: "FuzzForm".into(),
             table: None,
+            title: None,
+            description: None,
             path: None,
             post_only: false,
             verify: None,

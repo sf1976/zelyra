@@ -2247,6 +2247,8 @@ impl<'a> Parser<'a> {
         };
         self.expect(TokenKind::LBrace, "`{` after form name")?;
         let mut path = None;
+        let mut title = None;
+        let mut description = None;
         let mut post_only = false;
         let mut post_only_declared = false;
         let mut verify = None;
@@ -2255,7 +2257,28 @@ impl<'a> Parser<'a> {
         let mut actions = Vec::new();
         self.skip_newlines();
         while !self.at(&TokenKind::RBrace) && !self.at(&TokenKind::Eof) {
-            if self.at_word("route") {
+            if self.at(&TokenKind::Title) {
+                let marker = self.advance();
+                self.expect(TokenKind::Colon, "`:` after form `title`")?;
+                if title.replace(self.form_value("form title")?).is_some() {
+                    return Err(ParseError {
+                        message: "duplicate `title` property in form".into(),
+                        span: marker.span,
+                    });
+                }
+            } else if self.at_word("description") {
+                let marker = self.advance();
+                self.expect(TokenKind::Colon, "`:` after form `description`")?;
+                if description
+                    .replace(self.form_value("form description")?)
+                    .is_some()
+                {
+                    return Err(ParseError {
+                        message: "duplicate `description` property in form".into(),
+                        span: marker.span,
+                    });
+                }
+            } else if self.at_word("route") {
                 let route = self.advance();
                 self.expect(TokenKind::Colon, "`:` after `route`")?;
                 if path.is_some() {
@@ -2376,7 +2399,7 @@ impl<'a> Parser<'a> {
                 actions.push(self.form_action()?);
             } else {
                 return self
-                    .error("expected `route`, `post_only`, `verify`, `field`, `fields`, or `action` in form definition");
+                    .error("expected `title`, `description`, `route`, `post_only`, `verify`, `field`, `fields`, or `action` in form definition");
             }
             self.skip_newlines();
         }
@@ -2384,6 +2407,8 @@ impl<'a> Parser<'a> {
         Ok(FormDef {
             name,
             table,
+            title,
+            description,
             path,
             post_only,
             verify,
@@ -6382,6 +6407,25 @@ mod tests {
         let action = &program.forms[0].actions[0];
         assert_eq!(action.handler.as_deref(), Some("generate_password"));
         assert_eq!(action.capabilities, ["Random"]);
+    }
+
+    #[test]
+    fn parses_standalone_form_page_title_and_description() {
+        let program = parse(
+            &lex(r#"form PasswordGenerator {
+                    title: "Passwortgenerator"
+                    description: "Erzeuge sichere Passwörter."
+                    field length: Int { required }
+                }
+                fn main() {}"#)
+            .unwrap(),
+        )
+        .unwrap();
+        assert_eq!(program.forms[0].title.as_deref(), Some("Passwortgenerator"));
+        assert_eq!(
+            program.forms[0].description.as_deref(),
+            Some("Erzeuge sichere Passwörter.")
+        );
     }
 
     #[test]

@@ -68,6 +68,12 @@
     border-bottom: 1px solid var(--z-color-border);
     background: var(--z-color-surface);
   }
+  :where(html[data-z-ui]) .z-app-shell__header > img {
+    display: block;
+    width: min(5.5rem, 32vw);
+    max-height: 1.75rem;
+    object-fit: contain;
+  }
   :where(html[data-z-ui]) .z-app-shell__sidebar {
     grid-area: sidebar;
     min-width: 0;

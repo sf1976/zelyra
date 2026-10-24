@@ -448,6 +448,8 @@ fn computed_field_evaluation_preserves_decimal_input_for_storage_validation() {
     let mut input_form = zelyra_ast::FormDef {
         name: "InvoiceItemCreate".into(),
         table: Some("invoice_items".into()),
+        title: None,
+        description: None,
         path: None,
         post_only: false,
         verify: None,
@@ -1119,6 +1121,8 @@ fn form_route() -> FormRoute {
         form: FormDef {
             name: "CustomerCreate".into(),
             table: None,
+            title: None,
+            description: None,
             path: None,
             post_only: false,
             verify: None,
@@ -1165,6 +1169,23 @@ fn form_route() -> FormRoute {
         layout_html: None,
         child_collections: Vec::new(),
     }
+}
+
+#[test]
+fn titled_standalone_form_uses_the_shared_generated_page_and_escapes_copy() {
+    let mut route = form_route();
+    route.form.name = "PasswordGenerator".into();
+    route.form.title = Some("Passwortgenerator".into());
+    route.form.description = Some("Sicher & einfach <lokal>".into());
+
+    let html = forms::render_form(&route, &HashMap::new(), &[], None);
+
+    assert!(html.starts_with("<section class=\"z-generated-page\">"));
+    assert!(html.contains("<header class=\"z-page-header\">"));
+    assert!(html.contains("<h1 class=\"z-page-header__title\">Passwortgenerator</h1>"));
+    assert!(html.contains("Sicher &amp; einfach &lt;lokal&gt;"));
+    assert!(html.contains("<section class=\"zelyra-crud-form-card\">"));
+    assert!(html.ends_with("</section></section>"));
 }
 
 #[test]
@@ -1237,7 +1258,7 @@ fn standalone_form_handler_returns_escaped_non_cacheable_result_after_csrf_valid
     assert!(response.body.contains(">Generate value</button>"));
     assert!(response
         .body
-        .contains("<h2 id=\"zelyra-form-result-title\">Result</h2>"));
+        .contains("<h2 class=\"z-card__title\" id=\"zelyra-form-result-title\">Result</h2>"));
     assert!(response
         .headers
         .iter()
@@ -2504,6 +2525,14 @@ fn default_design_system_exposes_the_complete_public_theme_token_set() {
             "default design system misses {token}"
         );
     }
+    assert!(ZELYRA_DESIGN_SYSTEM_CSS.contains("--z-color-primary: #3157a4"));
+    assert!(ZELYRA_DESIGN_SYSTEM_CSS.contains("[data-z-theme=\"dark\"]"));
+    assert!(ZELYRA_DESIGN_SYSTEM_CSS.contains(".z-output"));
+    assert!(ZELYRA_DESIGN_SYSTEM_CSS.contains(".z-action-stack"));
+    assert!(ZELYRA_DESIGN_SYSTEM_CSS.starts_with("/* Zelyra UI CSS bundle v1.2.0"));
+    assert!(ZELYRA_UI_CSS_PATH.contains("/v1.2.0/zelyra-ui.css"));
+    assert!(ZELYRA_UI_JS_PATH.contains("/v1.2.0/zelyra-ui.js"));
+    assert!(include_str!("../assets/zelyra-ui.v1.js").contains("theme || \"light\""));
 }
 
 #[test]
@@ -5469,11 +5498,104 @@ fn session_administration_preserves_legacy_tables_and_escapes_rows() {
     assert!(html.contains("&lt;script&gt;@example.test"));
     assert!(!html.contains("<script>"));
     assert!(html.contains("name=\"session_id\" value=\"1\""));
+    assert!(html.contains("class=\"z-card\""));
+    assert!(html.contains("class=\"z-table-scroll\""));
+    assert!(html.contains("class=\"z-action-stack\""));
     assert!(localize_html(
         &render_auth_sessions(&auth, &rows, UiLanguage::German),
         UiLanguage::German
     )
     .contains("Sitzung sperren"));
+}
+
+#[test]
+fn access_management_uses_separate_cards_and_uniform_vertical_actions() {
+    let mut auth = account_sessions_test_auth();
+    auth.admin_path = Some("/admin/users".into());
+    auth.roles_table = Some("user_roles".into());
+    auth.role_permissions_table = Some("role_permissions".into());
+    auth.audit_table = Some("auth_audit".into());
+    auth.session_table = Some("sessions".into());
+    auth.schema.tables = vec![
+        zelyra_database::Table {
+            name: "users".into(),
+            tenant_scope_column: None,
+            columns: vec![zelyra_database::Column {
+                name: "active".into(),
+                sql_type: "BOOLEAN".into(),
+                nullable: false,
+                primary_key: false,
+                auto: false,
+                unique: false,
+                default: None,
+            }],
+            foreign_keys: vec![],
+            indexes: vec![],
+            uniques: vec![],
+        },
+        zelyra_database::Table {
+            name: "sessions".into(),
+            tenant_scope_column: None,
+            columns: vec![zelyra_database::Column {
+                name: "id".into(),
+                sql_type: "BIGINT".into(),
+                nullable: false,
+                primary_key: true,
+                auto: true,
+                unique: false,
+                default: None,
+            }],
+            foreign_keys: vec![],
+            indexes: vec![],
+            uniques: vec![],
+        },
+    ];
+
+    let html = localize_html(
+        &render_auth_admin(
+            &auth,
+            &[vec!["7".into(), "ada@example.test".into(), "true".into()]],
+            &[vec!["7".into(), "ada@example.test".into(), "admin".into()]],
+            &[vec!["admin".into(), "auth.manage".into()]],
+            &[vec![
+                "7".into(),
+                "user.create".into(),
+                "8".into(),
+                "created".into(),
+                "today".into(),
+            ]],
+            &[vec![
+                "11".into(),
+                "7".into(),
+                "ada@example.test".into(),
+                "tomorrow".into(),
+            ]],
+            UiLanguage::English,
+        ),
+        UiLanguage::English,
+    );
+
+    for section_id in [
+        "auth-users-title",
+        "auth-sessions-title",
+        "auth-assign-role-title",
+        "auth-role-assignments-title",
+        "auth-grant-permission-title",
+        "auth-role-permissions-title",
+        "auth-audit-title",
+    ] {
+        assert!(html.contains(&format!("aria-labelledby=\"{section_id}\"")));
+    }
+    assert!(html.contains("class=\"z-page-header__title\">Access management"));
+    assert!(html.contains("class=\"z-table-scroll\""));
+    assert!(!html.contains("<td><form"));
+    assert!(html.matches("<button class=\"z-button").count() >= 7);
+    assert_eq!(
+        html.matches("<button").count(),
+        html.matches("<button class=\"z-button").count(),
+        "every page action uses the shared button component"
+    );
+    assert!(html.matches("class=\"z-action-stack\"").count() >= 7);
 }
 
 #[test]
@@ -5555,7 +5677,8 @@ fn renders_form_with_csrf_and_field_attributes() {
     cards_route.form_view.title = Some("Customer form".into());
     cards_route.form_view.submit = Some("Save customer <now>".into());
     let cards_html = render_form(&cards_route, &HashMap::new(), &[], None);
-    assert!(cards_html.starts_with("<section class=\"z-generated-page\"><h1"));
+    assert!(cards_html
+        .starts_with("<section class=\"z-generated-page\"><header class=\"z-page-header\"><h1"));
     assert!(cards_html.ends_with("</section></section>"));
     assert!(cards_html.contains(">Customer form</h1>"));
     assert!(cards_html.contains("zelyra-crud-form-card"));
