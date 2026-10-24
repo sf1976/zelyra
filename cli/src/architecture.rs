@@ -309,20 +309,23 @@ fn route_handler_sql_issues(
 fn inspect_action(action: &zelyra_ast::FormAction) -> (Vec<String>, Vec<(String, Span)>) {
     let mut calls = Vec::new();
     let mut sql = Vec::new();
-    inspect_block(
-        &Block {
-            statements: action.statements.clone(),
-            span: action.span,
-        },
-        &mut calls,
-        &mut sql,
-    );
+    let block = Block {
+        statements: action.statements.clone(),
+        span: action.span,
+    };
+    inspect_block(&block, &mut calls, &mut sql);
     if let Some(body) = &action.execute_body {
         inspect_block(body, &mut calls, &mut sql);
     }
     if let Some(guard) = &action.guard {
         inspect_expr(&guard.condition, &mut calls, &mut sql);
     }
+    let mut aliases = std::collections::HashMap::new();
+    collect_function_aliases(&block, &mut aliases);
+    if let Some(body) = &action.execute_body {
+        collect_function_aliases(body, &mut aliases);
+    }
+    expand_aliased_calls(&mut calls, &aliases);
     (calls, sql)
 }
 
@@ -360,10 +363,79 @@ fn reachable_route_sql_issues(
         let mut calls = Vec::new();
         let mut sql = Vec::new();
         inspect_block(&function.body, &mut calls, &mut sql);
+        let mut aliases = std::collections::HashMap::new();
+        collect_function_aliases(&function.body, &mut aliases);
+        expand_aliased_calls(&mut calls, &aliases);
         pending.extend(calls);
         append_sql_issues(&mut issues, &function_source.path, &entry_label, sql);
     }
     issues
+}
+
+/// Add statically known targets for local function values used as call names.
+///
+/// This is intentionally an over-approximation: if a local is assigned more
+/// than one named function value in different branches, every known target is
+/// checked. Unknown/dynamic function values remain outside this analysis.
+fn expand_aliased_calls(
+    calls: &mut Vec<String>,
+    aliases: &std::collections::HashMap<String, std::collections::HashSet<String>>,
+) {
+    let mut index = 0;
+    let mut expanded = std::collections::HashSet::new();
+    while index < calls.len() {
+        let name = calls[index].clone();
+        if expanded.insert(name.clone()) {
+            if let Some(targets) = aliases.get(&name) {
+                calls.extend(targets.iter().cloned());
+            }
+        }
+        index += 1;
+    }
+}
+
+fn collect_function_aliases(
+    block: &Block,
+    aliases: &mut std::collections::HashMap<String, std::collections::HashSet<String>>,
+) {
+    for statement in &block.statements {
+        match statement {
+            Stmt::Let { name, value, .. } | Stmt::BindOrAssign { name, value, .. } => {
+                if let ExprKind::FunctionValue(target) = &value.kind {
+                    aliases
+                        .entry(name.clone())
+                        .or_default()
+                        .insert(target.clone());
+                }
+            }
+            Stmt::If {
+                then_block,
+                else_block,
+                ..
+            } => {
+                collect_function_aliases(then_block, aliases);
+                if let Some(block) = else_block {
+                    collect_function_aliases(block, aliases);
+                }
+            }
+            Stmt::While { body, .. }
+            | Stmt::For { body, .. }
+            | Stmt::Loop { body, .. }
+            | Stmt::Transaction { body, .. }
+            | Stmt::Parallel { body, .. } => collect_function_aliases(body, aliases),
+            Stmt::Match { arms, .. } => {
+                for arm in arms {
+                    collect_function_aliases(&arm.body, aliases);
+                }
+            }
+            Stmt::ArrayIndexAssign { .. }
+            | Stmt::TupleBindOrAssign { .. }
+            | Stmt::Expr(_)
+            | Stmt::Return { .. }
+            | Stmt::Break { .. }
+            | Stmt::Continue { .. } => {}
+        }
+    }
 }
 
 fn append_sql_issues(

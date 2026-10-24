@@ -2618,6 +2618,20 @@ fn strict_architecture_checks_reachable_route_sql_and_preserves_domain_writes() 
     );
     assert_eq!(through_local_helper["diagnostics"][0]["code"], "E-ARCH-002");
 
+    let through_function_value = check_project(
+        "strict-route-sql-function-value",
+        "fn write_customer() -> Int uses Database {\n    sql { INSERT INTO customers (name) VALUES ('Ada') }\n    return 1\n}\nfn create_customer() -> Int uses Database {\n    saved = &write_customer\n    return saved()\n}\napi POST \"/customers\" { handler create_customer output Int }\n",
+        None,
+    );
+    assert!(
+        through_function_value["diagnostics"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|diagnostic| diagnostic["code"] == "E-ARCH-002"),
+        "stored named function value bypassed strict architecture check: {through_function_value}"
+    );
+
     let through_domain = check_project(
         "strict-route-sql-domain",
         "import \"domain::actions\" as actions\nfn create_customer() -> Int uses Database { return actions::create_customer() }\napi POST \"/customers\" { handler create_customer output Int }\n",
@@ -2658,6 +2672,22 @@ fn strict_architecture_checks_reachable_route_sql_and_preserves_domain_writes() 
         None,
     );
     assert_eq!(crud_action["diagnostics"][0]["code"], "E-ARCH-002");
+
+    let stored_function_value_actions = check_project(
+        "strict-route-sql-stored-function-value-actions",
+        "fn write_customer() -> Int uses Database {\n    sql { UPDATE customers SET name = 'Ada' }\n    return 1\n}\nfn archive_customer() -> Int uses Database {\n    sql { UPDATE customers SET name = 'Archived' }\n    return 1\n}\nform CustomerCreate -> customers { action save { saved = &write_customer saved() } }\ncrud Customer -> customers { action archive { saved = &archive_customer saved() } }\n",
+        None,
+    );
+    assert_eq!(
+        stored_function_value_actions["diagnostics"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter(|diagnostic| diagnostic["code"] == "E-ARCH-002")
+            .count(),
+        2,
+        "stored function value should be checked in both form and CRUD actions: {stored_function_value_actions}"
+    );
 }
 
 #[test]
