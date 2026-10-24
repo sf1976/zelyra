@@ -232,7 +232,7 @@ into new projects. The generated bundle header also tracks an independent
 design-system version. Patch releases refine visuals or fix styles without
 changing the token/class contract; minor releases may add compatible tokens or
 components; a breaking token or public-class change requires a major version.
-The current CSS bundle is v1.2.3. Navigation uses the same blue hover and
+The current CSS bundle is v1.2.4. Navigation uses the same blue hover and
 active states across all AppShell views. Like other defaults, these can be
 customized through the `--z-color-primary-soft` and `--z-color-primary` theme
 tokens or regular CSS overrides; there is no page-specific exception. Inputs

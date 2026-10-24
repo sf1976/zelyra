@@ -2570,9 +2570,9 @@ fn default_design_system_exposes_the_complete_public_theme_token_set() {
         .contains(".zelyra-sidebar .z-app-shell__navigation a:hover) { background: color-mix"));
     assert!(ZELYRA_DESIGN_SYSTEM_CSS.contains(".z-input,\n  :where(html[data-z-ui]) .z-select"));
     assert!(ZELYRA_DESIGN_SYSTEM_CSS.contains("border: 1px solid var(--z-color-control-border)"));
-    assert!(ZELYRA_DESIGN_SYSTEM_CSS.starts_with("/* Zelyra UI CSS bundle v1.2.3"));
-    assert!(ZELYRA_UI_CSS_PATH.contains("/v1.2.3/zelyra-ui.css"));
-    assert!(ZELYRA_UI_JS_PATH.contains("/v1.2.3/zelyra-ui.js"));
+    assert!(ZELYRA_DESIGN_SYSTEM_CSS.starts_with("/* Zelyra UI CSS bundle v1.2.4"));
+    assert!(ZELYRA_UI_CSS_PATH.contains("/v1.2.4/zelyra-ui.css"));
+    assert!(ZELYRA_UI_JS_PATH.contains("/v1.2.4/zelyra-ui.js"));
     assert!(include_str!("../assets/zelyra-ui.v1.js").contains("theme || \"light\""));
 }
 
@@ -5637,7 +5637,14 @@ fn access_management_uses_separate_cards_and_uniform_vertical_actions() {
     assert!(html.contains("class=\"z-grid z-grid--three z-admin-create-user\""));
     assert_eq!(html.matches("class=\"z-admin-user-row\"").count(), 2);
     assert!(html.contains("class=\"z-table z-admin-users-table\""));
+    assert!(html.contains("class=\"z-table-scroll z-admin-users-scroll\""));
     assert!(html.contains("class=\"z-admin-user-rows\""));
+    assert_eq!(
+        html.matches("class=\"z-stack z-admin-assign-role\"")
+            .count(),
+        2
+    );
+    assert!(html.contains("class=\"z-admin-role-scroll\""));
     assert_eq!(
         html.matches("class=\"z-button z-button--primary z-button--icon\"")
             .count(),
