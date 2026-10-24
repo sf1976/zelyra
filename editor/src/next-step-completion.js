@@ -56,6 +56,7 @@ function crudName(tableName) {
 export function nextCrudCompletions(map, language = "en") {
   if (map?.incomplete || !Array.isArray(map?.nodes) || !Array.isArray(map?.edges)) return [];
   const tablesByName = new Map();
+  const existingNames = new Set(map.nodes.filter((node) => node.kind !== "table").map((node) => node.label).filter((name) => typeof name === "string"));
   for (const node of map.nodes) {
     if (node.kind !== "table" || !/^[A-Za-z_][A-Za-z0-9_]*$/.test(node.label || "")) continue;
     const group = tablesByName.get(node.label) || [];
@@ -63,11 +64,19 @@ export function nextCrudCompletions(map, language = "en") {
     tablesByName.set(node.label, group);
   }
   const usedTables = new Set(map.edges.filter((edge) => edge.label === "uses table").map((edge) => edge.to));
+  const generatedNameCounts = new Map();
+  for (const [tableName, tables] of tablesByName) {
+    if (tables.length !== 1 || usedTables.has(tables[0].id)) continue;
+    const name = crudName(tableName);
+    if (name && /^[A-Za-z_][A-Za-z0-9_]*$/.test(name)) {
+      generatedNameCounts.set(name, (generatedNameCounts.get(name) || 0) + 1);
+    }
+  }
   const suggestions = [];
   for (const [tableName, tables] of tablesByName) {
     if (tables.length !== 1 || usedTables.has(tables[0].id)) continue;
     const name = crudName(tableName);
-    if (!name || !/^[A-Za-z_][A-Za-z0-9_]*$/.test(name)) continue;
+    if (!name || !/^[A-Za-z_][A-Za-z0-9_]*$/.test(name) || existingNames.has(name) || generatedNameCounts.get(name) !== 1) continue;
     const code = `crud ${name} -> ${tableName} {}`;
     suggestions.push({
       label: code,
@@ -90,13 +99,21 @@ export function nextFormCompletions(map, language = "en") {
     tablesByName.set(node.label, group);
   }
   const usedTables = new Set(map.edges.filter((edge) => edge.label === "writes table").map((edge) => edge.to));
+  const generatedNameCounts = new Map();
+  for (const [tableName, tables] of tablesByName) {
+    if (tables.length !== 1 || usedTables.has(tables[0].id)) continue;
+    const fields = tables[0].editable_fields;
+    if (!Array.isArray(fields) || fields.length === 0 || fields.some((field) => !/^[A-Za-z_][A-Za-z0-9_]*$/.test(field))) continue;
+    const name = `${crudName(tableName)}Form`;
+    if (/^[A-Za-z_][A-Za-z0-9_]*$/.test(name)) generatedNameCounts.set(name, (generatedNameCounts.get(name) || 0) + 1);
+  }
   const suggestions = [];
   for (const [tableName, tables] of tablesByName) {
     if (tables.length !== 1 || usedTables.has(tables[0].id)) continue;
     const fields = tables[0].editable_fields;
     if (!Array.isArray(fields) || fields.length === 0 || fields.some((field) => !/^[A-Za-z_][A-Za-z0-9_]*$/.test(field))) continue;
     const name = `${crudName(tableName)}Form`;
-    if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(name) || existingNames.has(name)) continue;
+    if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(name) || existingNames.has(name) || generatedNameCounts.get(name) !== 1) continue;
     const code = `form ${name} -> ${tableName} {\n    fields {\n${fields.map((field) => `        ${field}`).join("\n")}\n    }\n}`;
     suggestions.push({
       label: `form ${name} -> ${tableName} { … }`,
