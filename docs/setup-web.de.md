@@ -71,9 +71,11 @@ modernen eigenständigen `docker-compose`-Programm (v2 oder neuer). Python
 Compose v1 wird nicht unterstützt, weil aktuelle Docker-Engines das benötigte
 `ContainerConfig`-Feld nicht mehr bereitstellen. MariaDB wird als Container
 eingerichtet, wenn sie noch nicht läuft. Fehlt Compose v2, zeigt der
-Assistent die Installationsanleitung. Bei einem interaktiven
-`zelyra setup --database`, `--schema` oder `--all` fragt Zelyra ausdrücklich,
-ob es die Installation über einen unterstützten Paketmanager starten soll.
+Assistent die Installationsanleitung. Beim Erstellen eines MariaDB-Projekts
+mit `zelyra init --mariadb` oder `zelyra new --mariadb` sowie bei einem
+interaktiven `zelyra setup --database`, `--schema` oder `--all` fragt Zelyra
+ausdrücklich, ob es die Installation über einen unterstützten Paketmanager
+starten soll.
 Unter Linux sind APT, DNF, YUM, Pacman und Zypper möglich; macOS kann Homebrew
 verwenden, und unter Windows bietet `winget` Docker Desktop mit Compose an.
 Linux-Paketinstallationen können erhöhte Rechte verlangen. Ohne Zustimmung,

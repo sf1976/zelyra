@@ -5782,7 +5782,7 @@ fn ensure_docker_compose(
         return Ok(None);
     }
 
-    println!("{}", docker_compose_install_hint());
+    println!("Docker Compose v2 is required. No system package will be changed without your confirmation.");
     print!(
         "Docker Compose v2 is missing. Install it now using the detected package manager? [y/N] "
     );
@@ -5799,14 +5799,17 @@ fn ensure_docker_compose(
     }
 
     let Some((program, args, requires_sudo)) = compose_package_install_command() else {
-        return Err("automatic Compose installation is not supported by the detected package manager; follow the official instructions above, then retry".into());
+        return Err(format!(
+            "automatic Compose installation is not supported by the detected package manager; follow the official instructions, then retry\n{}",
+            docker_compose_install_hint()
+        ));
     };
     let (program, args) = if requires_sudo && !is_effective_root() {
         let Some(sudo) = find_executable("sudo") else {
-            return Err(
-                "`sudo` is required to install Docker Compose; install it manually, then retry"
-                    .into(),
-            );
+            return Err(format!(
+                "`sudo` is required to install Docker Compose; install it manually, then retry\n{}",
+                docker_compose_install_hint()
+            ));
         };
         let mut sudo_args = vec![program];
         sudo_args.extend(args);
@@ -5821,25 +5824,39 @@ fn ensure_docker_compose(
         } else {
             Command::new(&program).arg("apt-get").arg("update").status()
         };
-        let update_status =
-            update.map_err(|error| format!("could not refresh package indexes: {error}"))?;
+        let update_status = update.map_err(|error| {
+            format!(
+                "could not refresh package indexes: {error}\n{}",
+                docker_compose_install_hint()
+            )
+        })?;
         if !update_status.success() {
             return Err(format!(
-                "could not refresh package indexes ({update_status}); review the package-manager output"
+                "could not refresh package indexes ({update_status}); review the package-manager output\n{}",
+                docker_compose_install_hint()
             ));
         }
     }
     let status = Command::new(&program)
         .args(&args)
         .status()
-        .map_err(|error| format!("could not start the Compose installation command: {error}"))?;
+        .map_err(|error| {
+            format!(
+                "could not start the Compose installation command: {error}\n{}",
+                docker_compose_install_hint()
+            )
+        })?;
     if !status.success() {
         return Err(format!(
-            "Docker Compose installation failed with {status}; review the package-manager output and retry"
+            "Docker Compose installation failed with {status}; review the package-manager output and retry\n{}",
+            docker_compose_install_hint()
         ));
     }
     detect_docker_compose().map(Some).ok_or_else(|| {
-        "the package installation completed, but Docker Compose v2 is still not available; verify with `docker compose version`".into()
+        format!(
+            "the package installation completed, but Docker Compose v2 is still not available; verify with `docker compose version`\n{}",
+            docker_compose_install_hint()
+        )
     })
 }
 
@@ -5976,12 +5993,13 @@ fn docker_compose_install_hint() -> String {
 }
 
 fn print_compose_start_hint() {
-    match detect_docker_compose() {
-        Some(command) => println!(
+    match ensure_docker_compose(true) {
+        Ok(Some(command)) => println!(
             "  {} --env-file .env -f docker-compose.mariadb.yml up -d --build",
             command.label()
         ),
-        None => println!("{}", docker_compose_install_hint()),
+        Ok(None) => println!("{}", docker_compose_install_hint()),
+        Err(error) => println!("{error}\n{}", docker_compose_install_hint()),
     }
 }
 
