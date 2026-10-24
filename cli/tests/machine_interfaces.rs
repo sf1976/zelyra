@@ -2632,6 +2632,50 @@ fn strict_architecture_checks_reachable_route_sql_and_preserves_domain_writes() 
         "stored named function value bypassed strict architecture check: {through_function_value}"
     );
 
+    let through_callback_parameter = check_project(
+        "strict-route-sql-function-parameter",
+        "fn write_customer(value: Int) -> Int uses Database {\n    sql { INSERT INTO customers (name) VALUES ('Ada') }\n    return value\n}\nfn invoke(callback: Function<(Int) -> Int> uses {Database}) -> Int uses Database { return callback(1) }\nfn create_customer() -> Int uses Database {\n    saved = &write_customer\n    return invoke(saved)\n}\napi POST \"/customers\" { handler create_customer output Int }\n",
+        None,
+    );
+    assert!(
+        through_callback_parameter["diagnostics"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|diagnostic| diagnostic["code"] == "E-ARCH-002"),
+        "statically named callback argument was not followed: {through_callback_parameter}"
+    );
+
+    let unresolved_callback = check_project(
+        "strict-route-sql-unresolved-function-parameter",
+        "fn invoke(callback: Function<(Int) -> Int> uses {Database}) -> Int uses Database { return callback(1) }\nfn create_customer(callback: Function<(Int) -> Int> uses {Database}) -> Int uses Database { return invoke(callback) }\napi POST \"/customers\" { handler create_customer output Int }\n",
+        None,
+    );
+    let unresolved_callback_issue = unresolved_callback["diagnostics"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|diagnostic| diagnostic["code"] == "E-ARCH-005")
+        .unwrap_or_else(|| {
+            panic!("unresolved function callback was not rejected: {unresolved_callback}")
+        });
+    assert_eq!(unresolved_callback_issue["file"], "routes/customers.zyl");
+    assert_eq!(unresolved_callback_issue["span"]["start"]["line"], 2);
+
+    let unresolved_pure_callback = check_project(
+        "strict-route-sql-unresolved-pure-function-parameter",
+        "fn invoke(callback: Function<(Int) -> Int>) -> Int { return callback(1) }\nfn route_handler(callback: Function<(Int) -> Int>) -> Int { return invoke(callback) }\napi GET \"/customers/value\" { handler route_handler output Int }\n",
+        None,
+    );
+    assert!(
+        unresolved_pure_callback["diagnostics"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .all(|diagnostic| diagnostic["code"] != "E-ARCH-005"),
+        "a callback without Database capability should not raise E-ARCH-005: {unresolved_pure_callback}"
+    );
+
     let through_domain = check_project(
         "strict-route-sql-domain",
         "import \"domain::actions\" as actions\nfn create_customer() -> Int uses Database { return actions::create_customer() }\napi POST \"/customers\" { handler create_customer output Int }\n",
