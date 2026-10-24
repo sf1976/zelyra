@@ -121,6 +121,12 @@
   :where(html[data-z-ui] .zelyra-page-content main th, html[data-z-ui] .zelyra-page-content main td) { padding: .85rem 1rem; border-bottom: 1px solid var(--z-color-border); text-align: start; }
   :where(html[data-z-ui] .zelyra-page-content main th) { background: var(--z-color-surface-raised); color: var(--z-color-text-muted); font-size: .76rem; font-weight: 750; letter-spacing: .045em; text-transform: uppercase; }
   :where(html[data-z-ui] .zelyra-page-content main tbody tr:hover) { background: var(--z-color-primary-soft); }
+  :where(html[data-z-ui]) .z-admin-users-table { min-width: 48rem; }
+  :where(html[data-z-ui]) .z-admin-user-row > td { vertical-align: middle; }
+  :where(html[data-z-ui]) .z-admin-user-row + .z-admin-user-row > td { border-top: 2px solid var(--z-color-border); }
+  :where(html[data-z-ui]) .z-admin-users-table td:first-child { min-width: 14rem; overflow-wrap: anywhere; font-weight: 700; }
+  :where(html[data-z-ui]) .z-admin-users-table td:nth-child(2) { width: 7rem; white-space: nowrap; }
+  :where(html[data-z-ui]) .z-admin-users-table td:last-child { width: 18rem; }
   :where(html[data-z-ui] .zelyra-page-content .zelyra-success, html[data-z-ui] .zelyra-page-content .zelyra-notice) { padding: 1rem; border: 1px solid var(--z-color-success); border-radius: var(--z-radius-md); background: var(--z-color-success-soft); color: var(--z-color-success); }
   :where(html[data-z-ui] .zelyra-page-content .zelyra-error, html[data-z-ui] .zelyra-page-content .zelyra-crud-error, html[data-z-ui] .zelyra-page-content .zelyra-action-error) { padding: 1rem; border: 1px solid var(--z-color-danger); border-radius: var(--z-radius-md); background: var(--z-color-danger-soft); color: var(--z-color-danger); }
   :where(html[data-z-ui] .zelyra-query-controls input, html[data-z-ui] .zelyra-query-controls select) { min-width: min(10rem, 100%); }
@@ -200,7 +206,7 @@
     :where(html[data-z-ui] .zelyra-ui-toolbar .z-button) { max-width: 100%; padding-inline: .6rem; font-size: .82rem; }
     :where(html[data-z-ui] .zelyra-page-content) { padding: .75rem; }
     :where(html[data-z-ui] .zelyra-page-content > main) { padding: 1rem .75rem; }
-    :where(html[data-z-ui] .zelyra-page-content table) { display: block; overflow-x: auto; white-space: nowrap; }
+    :where(html[data-z-ui] .zelyra-page-content table:not(.z-table)) { display: block; overflow-x: auto; white-space: nowrap; }
     :where(html[data-z-ui]) .zelyra-crud-form-card form { grid-template-columns: minmax(0, 1fr); }
     :where(html[data-z-ui]) .zelyra-crud-form-card form > .z-button,
     :where(html[data-z-ui]) .zelyra-crud-form-card form > .zelyra-notice { grid-column: 1; }

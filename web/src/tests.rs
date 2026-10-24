@@ -2570,9 +2570,9 @@ fn default_design_system_exposes_the_complete_public_theme_token_set() {
         .contains(".zelyra-sidebar .z-app-shell__navigation a:hover) { background: color-mix"));
     assert!(ZELYRA_DESIGN_SYSTEM_CSS.contains(".z-input,\n  :where(html[data-z-ui]) .z-select"));
     assert!(ZELYRA_DESIGN_SYSTEM_CSS.contains("border: 1px solid var(--z-color-control-border)"));
-    assert!(ZELYRA_DESIGN_SYSTEM_CSS.starts_with("/* Zelyra UI CSS bundle v1.2.2"));
-    assert!(ZELYRA_UI_CSS_PATH.contains("/v1.2.2/zelyra-ui.css"));
-    assert!(ZELYRA_UI_JS_PATH.contains("/v1.2.2/zelyra-ui.js"));
+    assert!(ZELYRA_DESIGN_SYSTEM_CSS.starts_with("/* Zelyra UI CSS bundle v1.2.3"));
+    assert!(ZELYRA_UI_CSS_PATH.contains("/v1.2.3/zelyra-ui.css"));
+    assert!(ZELYRA_UI_JS_PATH.contains("/v1.2.3/zelyra-ui.js"));
     assert!(include_str!("../assets/zelyra-ui.v1.js").contains("theme || \"light\""));
 }
 
@@ -5595,7 +5595,10 @@ fn access_management_uses_separate_cards_and_uniform_vertical_actions() {
     let html = localize_html(
         &render_auth_admin(
             &auth,
-            &[vec!["7".into(), "ada@example.test".into(), "true".into()]],
+            &[
+                vec!["7".into(), "ada@example.test".into(), "true".into()],
+                vec!["8".into(), "linus@example.test".into(), "false".into()],
+            ],
             &[vec!["7".into(), "ada@example.test".into(), "admin".into()]],
             &[vec!["admin".into(), "auth.manage".into()]],
             &[vec![
@@ -5632,6 +5635,17 @@ fn access_management_uses_separate_cards_and_uniform_vertical_actions() {
     assert!(html.contains("class=\"z-admin-grid\">"));
     assert!(html.contains("class=\"z-card z-admin-grid__wide\""));
     assert!(html.contains("class=\"z-grid z-grid--three z-admin-create-user\""));
+    assert_eq!(html.matches("class=\"z-admin-user-row\"").count(), 2);
+    assert!(html.contains("class=\"z-table z-admin-users-table\""));
+    assert!(html.contains("class=\"z-admin-user-rows\""));
+    assert_eq!(
+        html.matches("class=\"z-button z-button--primary z-button--icon\"")
+            .count(),
+        2
+    );
+    assert!(html.contains("aria-label=\"Reset password\""));
+    assert!(html.contains("aria-label=\"Deactivate\""));
+    assert!(html.contains("aria-label=\"Activate\""));
     assert!(html.ends_with("</div></main>"));
     assert!(html.contains("class=\"z-table-scroll\""));
     assert!(!html.contains("<td><form"));

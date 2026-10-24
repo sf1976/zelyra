@@ -57,12 +57,12 @@ const ZELYRA_UI_LOGO_PNG: &[u8] = include_bytes!("../../assets/zelyra-logo.png")
 pub const ZELYRA_UI_CSS_PATH: &str = concat!(
     "/__zelyra/ui/",
     env!("CARGO_PKG_VERSION"),
-    "/v1.2.2/zelyra-ui.css"
+    "/v1.2.3/zelyra-ui.css"
 );
 pub const ZELYRA_UI_JS_PATH: &str = concat!(
     "/__zelyra/ui/",
     env!("CARGO_PKG_VERSION"),
-    "/v1.2.2/zelyra-ui.js"
+    "/v1.2.3/zelyra-ui.js"
 );
 pub const ZELYRA_UI_LOGO_PATH: &str = concat!(
     "/__zelyra/ui/",
@@ -6292,7 +6292,7 @@ fn render_auth_admin(
         .find(|table| table.name == auth.table)
         .is_some_and(|table| table.columns.iter().any(|column| column.name == "active"));
     let mut html = format!(
-        "<main class=\"z-auth-admin\"><header class=\"z-page-header\"><div class=\"z-page-header__copy\"><h1 class=\"z-page-header__title\">{}</h1><p class=\"z-page-header__description\">{}</p></div></header><div class=\"z-admin-grid\"><section class=\"z-card z-admin-grid__wide\" aria-labelledby=\"auth-users-title\"><header class=\"z-card__header\"><h2 class=\"z-card__title\" id=\"auth-users-title\">{}</h2></header><div class=\"z-card__body\"><form class=\"z-grid z-grid--three z-admin-create-user\" method=\"post\" action=\"{path}\"><input type=\"hidden\" name=\"_zelyra_csrf\" value=\"{csrf}\"><input type=\"hidden\" name=\"operation\" value=\"create_user\"><label class=\"z-field\"><span class=\"z-field__label\">{}</span><input class=\"z-input\" name=\"email\" type=\"email\" autocomplete=\"email\" required></label><label class=\"z-field\"><span class=\"z-field__label\">{}</span><input class=\"z-input\" name=\"password\" type=\"password\" minlength=\"8\" autocomplete=\"new-password\" required></label><div class=\"z-action-stack z-admin-form__action\"><button class=\"z-button z-button--primary\" type=\"submit\">{}</button></div></form><div class=\"z-table-scroll\"><table class=\"z-table\"><thead><tr><th scope=\"col\">{}</th><th scope=\"col\">{}</th><th scope=\"col\">{}</th></tr></thead><tbody>",
+        "<main class=\"z-auth-admin\"><header class=\"z-page-header\"><div class=\"z-page-header__copy\"><h1 class=\"z-page-header__title\">{}</h1><p class=\"z-page-header__description\">{}</p></div></header><div class=\"z-admin-grid\"><section class=\"z-card z-admin-grid__wide\" aria-labelledby=\"auth-users-title\"><header class=\"z-card__header\"><h2 class=\"z-card__title\" id=\"auth-users-title\">{}</h2></header><div class=\"z-card__body\"><form class=\"z-grid z-grid--three z-admin-create-user\" method=\"post\" action=\"{path}\"><input type=\"hidden\" name=\"_zelyra_csrf\" value=\"{csrf}\"><input type=\"hidden\" name=\"operation\" value=\"create_user\"><label class=\"z-field\"><span class=\"z-field__label\">{}</span><input class=\"z-input\" name=\"email\" type=\"email\" autocomplete=\"email\" required></label><label class=\"z-field\"><span class=\"z-field__label\">{}</span><input class=\"z-input\" name=\"password\" type=\"password\" minlength=\"8\" autocomplete=\"new-password\" required></label><div class=\"z-action-stack z-admin-form__action\"><button class=\"z-button z-button--primary\" type=\"submit\">{}</button></div></form><div class=\"z-table-scroll\"><table class=\"z-table z-admin-users-table\"><thead><tr><th scope=\"col\">{}</th><th scope=\"col\">{}</th><th scope=\"col\">{}</th></tr></thead><tbody class=\"z-admin-user-rows\">",
         tr(language, "auth.admin_title"),
         tr(language, "auth.admin_description"),
         tr(language, "auth.users_title"),
@@ -6306,8 +6306,37 @@ fn render_auth_admin(
     for row in users {
         if let (Some(user_id), Some(email), Some(active)) = (row.first(), row.get(1), row.get(2)) {
             let is_active = matches!(active.as_str(), "1" | "true" | "TRUE");
+            let reset_password_label = tr(language, "auth.reset_password");
+            let status_label = tr(
+                language,
+                if is_active {
+                    "auth.deactivate"
+                } else {
+                    "auth.activate"
+                },
+            );
+            let status_icon = if is_active {
+                "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><circle cx=\"12\" cy=\"12\" r=\"9\"/><path d=\"M8 12h8\"/></svg>"
+            } else {
+                "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><circle cx=\"12\" cy=\"12\" r=\"9\"/><path d=\"m8 12 2.5 2.5L16 9\"/></svg>"
+            };
+            let status_button = if active_supported {
+                format!(
+                    "<form method=\"post\" action=\"{}\"><input type=\"hidden\" name=\"_zelyra_csrf\" value=\"{}\"><input type=\"hidden\" name=\"operation\" value=\"{}\"><input type=\"hidden\" name=\"user_id\" value=\"{}\"><button class=\"z-button z-button--{} z-button--icon\" type=\"submit\" aria-label=\"{}\" title=\"{}\">{}</button></form>",
+                    path,
+                    csrf,
+                    if is_active { "deactivate_user" } else { "activate_user" },
+                    html_escape(user_id),
+                    if is_active { "warning" } else { "success" },
+                    html_escape_preserving_locale_references(&status_label),
+                    html_escape_preserving_locale_references(&status_label),
+                    status_icon,
+                )
+            } else {
+                String::new()
+            };
             html.push_str(&format!(
-                "<tr><td>{}</td><td><span class=\"z-badge z-badge--{}\">{}</span></td><td><div class=\"z-action-stack\"><form method=\"post\" action=\"{}\"><input type=\"hidden\" name=\"_zelyra_csrf\" value=\"{}\"><input type=\"hidden\" name=\"operation\" value=\"reset_password\"><input type=\"hidden\" name=\"user_id\" value=\"{}\"><label class=\"z-field\"><span class=\"z-field__label\">{}</span><input class=\"z-input\" name=\"password\" type=\"password\" minlength=\"8\" autocomplete=\"new-password\" required></label><button class=\"z-button z-button--primary\" type=\"submit\">{}</button></form>{}</div></td></tr>",
+                "<tr class=\"z-admin-user-row\"><td>{}</td><td><span class=\"z-badge z-badge--{}\">{}</span></td><td><div class=\"z-action-stack\"><form method=\"post\" action=\"{}\"><input type=\"hidden\" name=\"_zelyra_csrf\" value=\"{}\"><input type=\"hidden\" name=\"operation\" value=\"reset_password\"><input type=\"hidden\" name=\"user_id\" value=\"{}\"><label class=\"z-field\"><span class=\"z-field__label\">{}</span><input class=\"z-input\" name=\"password\" type=\"password\" minlength=\"8\" autocomplete=\"new-password\" required></label><button class=\"z-button z-button--primary z-button--icon\" type=\"submit\" aria-label=\"{}\" title=\"{}\"><svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><circle cx=\"8\" cy=\"15\" r=\"4\"/><path d=\"m10.8 12.2 8.7-8.7m-3 3 2 2m-5-1 2 2\"/></svg></button></form>{}</div></td></tr>",
                 html_escape(email),
                 if is_active { "success" } else { "warning" },
                 tr(language, if is_active { "auth.active" } else { "auth.inactive" }),
@@ -6315,20 +6344,9 @@ fn render_auth_admin(
                 csrf,
                 html_escape(user_id),
                 tr(language, "auth.new_password_placeholder"),
-                tr(language, "auth.reset_password"),
-                if active_supported {
-                    format!(
-                        "<form method=\"post\" action=\"{}\"><input type=\"hidden\" name=\"_zelyra_csrf\" value=\"{}\"><input type=\"hidden\" name=\"operation\" value=\"{}\"><input type=\"hidden\" name=\"user_id\" value=\"{}\"><button class=\"z-button z-button--{}\" type=\"submit\">{}</button></form>",
-                        path,
-                        csrf,
-                        if is_active { "deactivate_user" } else { "activate_user" },
-                        html_escape(user_id),
-                        if is_active { "warning" } else { "success" },
-                        tr(language, if is_active { "auth.deactivate" } else { "auth.activate" }),
-                    )
-                } else {
-                    String::new()
-                },
+                html_escape_preserving_locale_references(&reset_password_label),
+                html_escape_preserving_locale_references(&reset_password_label),
+                status_button,
             ));
         }
     }

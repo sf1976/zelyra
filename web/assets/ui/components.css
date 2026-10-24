@@ -74,6 +74,8 @@
     background: var(--z-color-primary-soft);
     color: var(--z-color-text);
   }
+  :where(html[data-z-ui]) .z-button--icon { width: 2.75rem; height: 2.75rem; min-width: 2.75rem; padding: .55rem; aspect-ratio: 1; }
+  :where(html[data-z-ui]) .z-button--icon svg { display: block; width: 1.2rem; height: 1.2rem; fill: none; stroke: currentColor; stroke-linecap: round; stroke-linejoin: round; stroke-width: 1.8; }
   :where(html[data-z-ui]) .z-link { color: var(--z-color-link); text-underline-offset: .16em; }
   :where(html[data-z-ui]) .z-button-group > * { flex: 0 0 auto; }
 
@@ -215,6 +217,7 @@
   :where(html[data-z-ui]) .z-action-stack form { display: grid; min-width: 0; gap: .5rem; margin: 0; }
   :where(html[data-z-ui]) .z-action-stack .z-field { min-width: 0; margin: 0; }
   :where(html[data-z-ui]) .z-action-stack .z-button { width: 100%; min-height: 2.75rem; white-space: normal; }
+  :where(html[data-z-ui]) .z-action-stack .z-button--icon { width: 2.75rem; justify-self: start; }
   :where(html[data-z-ui]) .z-admin-create-user { align-items: end; margin-block-end: var(--z-space-5); }
   :where(html[data-z-ui]) .z-admin-form__action { align-self: end; }
   :where(html[data-z-ui]) .z-progress-field { display: grid; gap: .35rem; max-width: 36rem; }
