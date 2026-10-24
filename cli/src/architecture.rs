@@ -337,11 +337,112 @@ fn inspect_action(
         inspect_expr(&guard.condition, &mut calls, &mut sql);
     }
     let mut aliases = std::collections::HashMap::new();
-    collect_function_aliases(&block, &mut aliases);
+    let (returned_function_values, unresolved_function_returns) =
+        returned_function_values(functions);
+    let mut unresolved_function_values = std::collections::HashSet::new();
+    collect_function_aliases(
+        &block,
+        &mut aliases,
+        &returned_function_values,
+        &unresolved_function_returns,
+        functions,
+        &mut unresolved_function_values,
+    );
     if let Some(body) = &action.execute_body {
-        collect_function_aliases(body, &mut aliases);
+        collect_function_aliases(
+            body,
+            &mut aliases,
+            &returned_function_values,
+            &unresolved_function_returns,
+            functions,
+            &mut unresolved_function_values,
+        );
     }
-    (expand_route_calls(calls, &aliases, functions), sql)
+    let mut expanded = expand_route_calls(calls, &aliases, functions);
+    for call in &mut expanded {
+        if unresolved_function_values.contains(&call.name) {
+            call.callback_targets
+                .insert(call.name.clone(), Default::default());
+        }
+    }
+    (expanded, sql)
+}
+
+fn returned_function_values(
+    functions: &std::collections::HashMap<&str, &zelyra_ast::Function>,
+) -> (
+    std::collections::HashMap<String, std::collections::HashSet<String>>,
+    std::collections::HashSet<String>,
+) {
+    let mut known = std::collections::HashMap::new();
+    let mut unresolved = std::collections::HashSet::new();
+    for (name, function) in functions {
+        let mut targets = std::collections::HashSet::new();
+        let mut has_unresolved_return = false;
+        collect_returned_function_values(&function.body, &mut targets, &mut has_unresolved_return);
+        if !targets.is_empty() {
+            known.insert((*name).to_string(), targets);
+        }
+        if has_unresolved_return
+            && function
+                .return_type
+                .as_ref()
+                .is_some_and(may_write_database)
+        {
+            unresolved.insert((*name).to_string());
+        }
+    }
+    (known, unresolved)
+}
+
+fn collect_returned_function_values(
+    block: &Block,
+    targets: &mut std::collections::HashSet<String>,
+    unresolved: &mut bool,
+) {
+    for statement in &block.statements {
+        match statement {
+            Stmt::Return {
+                value: Some(value), ..
+            } => {
+                if let ExprKind::FunctionValue(name) = &value.kind {
+                    targets.insert(name.clone());
+                } else {
+                    *unresolved = true;
+                }
+            }
+            Stmt::If {
+                then_block,
+                else_block,
+                ..
+            } => {
+                collect_returned_function_values(then_block, targets, unresolved);
+                if let Some(block) = else_block {
+                    collect_returned_function_values(block, targets, unresolved);
+                }
+            }
+            Stmt::While { body, .. }
+            | Stmt::For { body, .. }
+            | Stmt::Loop { body, .. }
+            | Stmt::Transaction { body, .. }
+            | Stmt::Parallel { body, .. } => {
+                collect_returned_function_values(body, targets, unresolved)
+            }
+            Stmt::Match { arms, .. } => {
+                for arm in arms {
+                    collect_returned_function_values(&arm.body, targets, unresolved);
+                }
+            }
+            Stmt::Let { .. }
+            | Stmt::BindOrAssign { .. }
+            | Stmt::ArrayIndexAssign { .. }
+            | Stmt::TupleBindOrAssign { .. }
+            | Stmt::Expr(_)
+            | Stmt::Return { value: None, .. }
+            | Stmt::Break { .. }
+            | Stmt::Continue { .. } => {}
+        }
+    }
 }
 
 fn reachable_route_sql_issues(
@@ -356,6 +457,8 @@ fn reachable_route_sql_issues(
     append_sql_issues(&mut issues, &initial_path, &entry_label, initial_sql);
     let mut pending = initial_calls;
     let mut visited = std::collections::HashSet::new();
+    let (returned_function_values, unresolved_function_returns) =
+        returned_function_values(functions);
     while let Some(call) = pending.pop() {
         let visit_key = (
             call.name.clone(),
@@ -365,6 +468,17 @@ fn reachable_route_sql_issues(
             continue;
         }
         let Some(function) = functions.get(call.name.as_str()).copied() else {
+            if call.callback_targets.contains_key(&call.name) {
+                issues.push(ArchitectureIssue {
+                    path: initial_path.clone(),
+                    code: "E-ARCH-005",
+                    message: format!(
+                        "{entry_label} reaches an indirect function call `{}` whose target cannot be resolved; pass a statically named function or move the call into a `domain/` function",
+                        call.name
+                    ),
+                    span: Some(call.span),
+                });
+            }
             continue;
         };
         let Some(function_source) = sources.get(function.span.source_id as usize) else {
@@ -382,7 +496,15 @@ fn reachable_route_sql_issues(
         let mut calls = Vec::new();
         let mut sql = Vec::new();
         let mut aliases = call.callback_targets;
-        collect_function_aliases(&function.body, &mut aliases);
+        let mut unresolved_function_values = std::collections::HashSet::new();
+        collect_function_aliases(
+            &function.body,
+            &mut aliases,
+            &returned_function_values,
+            &unresolved_function_returns,
+            functions,
+            &mut unresolved_function_values,
+        );
         let mut function_valued_locals = std::collections::HashSet::new();
         collect_typed_function_locals(&function.body, &mut function_valued_locals);
         inspect_block(&function.body, &mut calls, &mut sql);
@@ -403,6 +525,7 @@ fn reachable_route_sql_issues(
             if function.params.iter().any(|parameter| {
                 parameter.name == next_call.name && may_write_database(&parameter.ty)
             }) || function_valued_locals.contains(&next_call.name)
+                || unresolved_function_values.contains(&next_call.name)
             {
                 issues.push(ArchitectureIssue {
                     path: function_source.path.clone(),
@@ -565,6 +688,10 @@ fn bind_callback_arguments(
 fn collect_function_aliases(
     block: &Block,
     aliases: &mut std::collections::HashMap<String, std::collections::HashSet<String>>,
+    returned: &std::collections::HashMap<String, std::collections::HashSet<String>>,
+    unresolved_returns: &std::collections::HashSet<String>,
+    functions: &std::collections::HashMap<&str, &zelyra_ast::Function>,
+    unresolved: &mut std::collections::HashSet<String>,
 ) {
     for statement in &block.statements {
         match statement {
@@ -574,6 +701,22 @@ fn collect_function_aliases(
                         .entry(name.clone())
                         .or_default()
                         .insert(target.clone());
+                } else if let ExprKind::Call { name: callee, .. } = &value.kind {
+                    if let Some(targets) = returned.get(callee) {
+                        aliases
+                            .entry(name.clone())
+                            .or_default()
+                            .extend(targets.clone());
+                    }
+                    if unresolved_returns.contains(callee)
+                        || (returned.get(callee).is_none()
+                            && functions
+                                .get(callee.as_str())
+                                .and_then(|function| function.return_type.as_ref())
+                                .is_some_and(may_write_database))
+                    {
+                        unresolved.insert(name.clone());
+                    }
                 }
             }
             Stmt::If {
@@ -581,19 +724,47 @@ fn collect_function_aliases(
                 else_block,
                 ..
             } => {
-                collect_function_aliases(then_block, aliases);
+                collect_function_aliases(
+                    then_block,
+                    aliases,
+                    returned,
+                    unresolved_returns,
+                    functions,
+                    unresolved,
+                );
                 if let Some(block) = else_block {
-                    collect_function_aliases(block, aliases);
+                    collect_function_aliases(
+                        block,
+                        aliases,
+                        returned,
+                        unresolved_returns,
+                        functions,
+                        unresolved,
+                    );
                 }
             }
             Stmt::While { body, .. }
             | Stmt::For { body, .. }
             | Stmt::Loop { body, .. }
             | Stmt::Transaction { body, .. }
-            | Stmt::Parallel { body, .. } => collect_function_aliases(body, aliases),
+            | Stmt::Parallel { body, .. } => collect_function_aliases(
+                body,
+                aliases,
+                returned,
+                unresolved_returns,
+                functions,
+                unresolved,
+            ),
             Stmt::Match { arms, .. } => {
                 for arm in arms {
-                    collect_function_aliases(&arm.body, aliases);
+                    collect_function_aliases(
+                        &arm.body,
+                        aliases,
+                        returned,
+                        unresolved_returns,
+                        functions,
+                        unresolved,
+                    );
                 }
             }
             Stmt::ArrayIndexAssign { .. }
