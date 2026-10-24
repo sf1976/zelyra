@@ -234,8 +234,11 @@ The initial documented comparison and its test evidence are in the
   `serve` require these roots to be real directories contained in the project.
   The existing `import "domain::feature::actions" as actions` syntax now
   resolves project namespaces under `schema/`, `domain/`, and `routes/` only in
-  this profile; legacy imports remain unchanged. Database templates and deeper
-  architecture checks remain open; `plugins/` is deferred until it has a
+  this profile; legacy imports remain unchanged. Subsequent 1.3.x work also
+  enables the MariaDB minimal, CRUD, auth, and business starters in this layout.
+  Their schema declarations go to `schema/tables.zyl`, their connected web
+  declarations to `routes/web.zyl`, and generated table access remains explicit.
+  Deeper architecture checks remain open; `plugins/` is deferred until it has a
   secured loader.
 - [~] **1.2.14 — invoice tutorial and project architecture:** Give the invoice
   tutorial a consistent responsive Zelyra UI theme, a designed sample invoice,
@@ -667,7 +670,9 @@ The initial documented comparison and its test evidence are in the
   schema changes.
 - [ ] **1.3.0 — canonical structure and experimental Bytecode:** Complete the
   opt-in versioned project layout (`routes/`, `domain/`, `schema/`, `public/`,
-  and `assets/`), architecture checks, and safe layout migration preview.
+  and `assets/`), including compiler-checked MariaDB minimal, CRUD, auth, and
+  business project starters; complete architecture checks and safe layout
+  migration preview.
   `plugins/` remains deferred until a concrete secured loading format exists.
   Keep Bytecode opt-in and fail-closed; AST remains the reference and
   default for `run`, `serve`, and declared tasks. Expand the supported Bytecode

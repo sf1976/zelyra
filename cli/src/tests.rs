@@ -5318,6 +5318,61 @@ fn mariadb_crud_scaffold_includes_the_fictional_demo_fixture() {
 }
 
 #[test]
+fn canonical_layout_generates_checkable_database_templates() {
+    for (template, crud_template, auth_template, business_template) in [
+        ("mariadb", false, false, false),
+        ("crud", true, false, false),
+        ("auth", false, true, false),
+        ("business", false, false, true),
+    ] {
+        let path = env::temp_dir().join(format!(
+            "zelyra-cli-canonical-{template}-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        let status = create_project(
+            path.to_str().unwrap(),
+            ProjectOptions {
+                allow_current_directory: false,
+                with_mariadb: true,
+                crud_template,
+                auth_template,
+                business_template,
+                canonical_layout: true,
+                web_port: DEFAULT_WEB_PORT,
+                host_port: DEFAULT_WEB_PORT,
+                database_host_port: DEFAULT_DATABASE_HOST_PORT,
+                host_port_given: false,
+                database_host_port_given: false,
+            },
+        );
+        assert_eq!(status, ExitCode::SUCCESS, "failed to generate {template}");
+        assert!(path.join("schema/tables.zyl").is_file());
+        assert!(path.join("routes/web.zyl").is_file());
+        assert!(path.join("domain/dashboard/actions.zyl").is_file());
+        assert!(!path.join("src/database.zyl").exists());
+        let schema = fs::read_to_string(path.join("schema/tables.zyl")).unwrap();
+        assert!(
+            schema.contains("database main"),
+            "{template} schema misses database declaration"
+        );
+        if template != "mariadb" {
+            assert!(
+                schema.contains("table "),
+                "{template} schema misses table declarations"
+            );
+        }
+        validate(path.join("main.zyl").to_str().unwrap()).unwrap_or_else(|()| {
+            panic!("generated canonical {template} project failed validation")
+        });
+        fs::remove_dir_all(path).unwrap();
+    }
+}
+
+#[test]
 fn generated_mariadb_template_uses_selected_web_port() {
     let path = env::temp_dir().join(format!(
         "zelyra-cli-port-template-{}-{}",

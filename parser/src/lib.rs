@@ -3303,11 +3303,12 @@ impl<'a> Parser<'a> {
         let (name, _) = self.ident("type name")?;
         self.expect(TokenKind::Equal, "`=` in type definition")?;
         let target = self.type_name()?;
+        let end = self.tokens[self.pos - 1].span;
         Ok(TypeDef {
             name,
             is_public,
             target,
-            span: start,
+            span: start.join(end),
         })
     }
 
@@ -7615,6 +7616,14 @@ mod tests {
         assert!(
             matches!(&value.kind, ExprKind::Record { type_name, .. } if type_name == "crm::Customer")
         );
+    }
+
+    #[test]
+    fn type_alias_source_span_covers_the_complete_definition() {
+        let source = "type CustomerId = Id\n";
+        let program = parse(&lex(source).unwrap()).unwrap();
+        let span = program.types[0].span;
+        assert_eq!(&source[span.start..span.end], "type CustomerId = Id");
     }
 
     #[test]

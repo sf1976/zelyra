@@ -800,15 +800,6 @@ fn create_project_with_setup_hint(
         eprintln!("error[E-INIT-001]: directory `{path}` already exists");
         return ExitCode::from(1);
     }
-    if options.canonical_layout
-        && (options.with_mariadb
-            || options.crud_template
-            || options.auth_template
-            || options.business_template)
-    {
-        eprintln!("error[E-INIT-006]: `--layout standard` currently supports the minimal starter; database templates are not yet migrated into the canonical layout");
-        return ExitCode::from(2);
-    }
     let (host_port, database_host_port, port_notes) =
         match resolve_project_host_ports(path, &options) {
             Ok(ports) => ports,
@@ -892,14 +883,28 @@ console = false
         ("locales/en.json", "{}\n".to_owned()),
     ];
     if options.canonical_layout {
+        let (schema_source, route_source) = if options.with_mariadb && !preserve_existing_main {
+            match canonical_template_modules(main_template) {
+                Ok(modules) => modules,
+                Err(message) => {
+                    eprintln!("error[E-INIT-007]: cannot prepare canonical template: {message}");
+                    return ExitCode::from(2);
+                }
+            }
+        } else {
+            (
+                "// Declarative table definitions for this project.\n".to_owned(),
+                "page \"/\" {\n    html {\n        <main class=\"z-container\">\n            <h1>Welcome to your Zelyra project</h1>\n            <p>Start building a business application with typed Zelyra modules.</p>\n        </main>\n    }\n}\n".to_owned(),
+            )
+        };
         files.extend([
-            ("schema/tables.zyl", "// Declarative table definitions for this project.\n".to_owned()),
+            ("schema/tables.zyl", schema_source),
             ("domain/dashboard/actions.zyl", "pub fn welcome_message() -> String {\n    return \"Welcome to your Zelyra project\"\n}\n".to_owned()),
-            ("routes/web.zyl", "page \"/\" {\n    html {\n        <main class=\"z-container\">\n            <h1>Welcome to your Zelyra project</h1>\n            <p>Start building a business application with typed Zelyra modules.</p>\n        </main>\n    }\n}\n".to_owned()),
+            ("routes/web.zyl", route_source),
             ("assets/.keep", String::new()),
         ]);
     }
-    if options.with_mariadb && !preserve_existing_main {
+    if options.with_mariadb && !options.canonical_layout && !preserve_existing_main {
         files.push(("src/database.zyl", MARIADB_DATABASE_MODULE.to_owned()));
     }
     if options.crud_template {
@@ -1119,6 +1124,203 @@ CMD ["zelyra", "serve", "main.zyl", "0.0.0.0:__WEB_PORT__"]
         println!("next: cd {} && zelyra run main.zyl", path);
     }
     ExitCode::SUCCESS
+}
+
+/// Split a bundled database template into the canonical schema and route
+/// modules using parser source spans. This keeps the template source itself
+/// as the only source of truth and avoids hand-maintained string surgery.
+fn canonical_template_modules(source: &str) -> Result<(String, String), String> {
+    let tokens = lex(source).map_err(|error| error.message)?;
+    let program = parse(&tokens).map_err(|error| error.message)?;
+    let needs_database = program.databases.is_empty();
+    let schema_type_names = program
+        .types
+        .iter()
+        .map(|definition| definition.name.clone())
+        .chain(
+            program
+                .records
+                .iter()
+                .map(|definition| definition.name.clone()),
+        )
+        .chain(
+            program
+                .enums
+                .iter()
+                .map(|definition| definition.name.clone()),
+        )
+        .collect::<HashSet<_>>();
+    let mut schema_spans = Vec::new();
+    let mut route_spans = Vec::new();
+    let mut table_starts = HashSet::new();
+    let public_schema_starts = program
+        .types
+        .iter()
+        .filter(|definition| !definition.is_public)
+        .map(|definition| definition.span.start)
+        .chain(
+            program
+                .records
+                .iter()
+                .filter(|definition| !definition.is_public)
+                .map(|definition| definition.span.start),
+        )
+        .chain(
+            program
+                .enums
+                .iter()
+                .filter(|definition| !definition.is_public)
+                .map(|definition| definition.span.start),
+        )
+        .collect::<HashSet<_>>();
+    macro_rules! collect {
+        ($items:expr, $schema:expr) => {
+            for item in $items {
+                if $schema {
+                    schema_spans.push(item.span);
+                } else {
+                    route_spans.push(item.span);
+                }
+            }
+        };
+    }
+    collect!(program.databases, true);
+    for table in &program.tables {
+        if table.access.span.is_some() {
+            return Err(format!(
+                "table `{}` already declares module access; canonical generation cannot safely broaden it",
+                table.name
+            ));
+        }
+        table_starts.insert(table.span.start);
+        schema_spans.push(table.span);
+    }
+    collect!(program.types, true);
+    collect!(program.records, true);
+    collect!(program.enums, true);
+    collect!(program.views, false);
+    collect!(program.components, false);
+    collect!(program.pages, false);
+    collect!(program.tableviews, false);
+    collect!(program.forms, false);
+    collect!(program.cruds, false);
+    collect!(program.auth, false);
+    collect!(program.apis, false);
+    collect!(program.commands, false);
+    collect!(program.schedules, false);
+    collect!(program.functions, false);
+
+    fn emit(
+        source: &str,
+        spans: &mut [zelyra_ast::Span],
+        table_starts: &HashSet<usize>,
+        public_starts: &HashSet<usize>,
+    ) -> Result<String, String> {
+        spans.sort_by_key(|span| span.start);
+        let mut output = String::new();
+        for span in spans {
+            let start = span.start;
+            let end = span.end;
+            if start > end
+                || end > source.len()
+                || !source.is_char_boundary(start)
+                || !source.is_char_boundary(end)
+            {
+                return Err("template parser returned an invalid source span".to_owned());
+            }
+            let mut declaration = source[start..end].trim().to_owned();
+            if public_starts.contains(&span.start) {
+                declaration.insert_str(0, "pub ");
+            }
+            if table_starts.contains(&span.start) {
+                let closing = declaration
+                    .rfind('}')
+                    .ok_or_else(|| "table declaration has no closing brace".to_owned())?;
+                declaration.insert_str(
+                    closing,
+                    "\n    access {\n        read_write: [\"routes/web.zyl\"]\n    }\n",
+                );
+            }
+            if !declaration.is_empty() {
+                output.push_str(&declaration);
+                output.push_str("\n\n");
+            }
+        }
+        Ok(output)
+    }
+
+    let mut schema = emit(
+        source,
+        &mut schema_spans,
+        &table_starts,
+        &public_schema_starts,
+    )?;
+    if needs_database {
+        schema.insert_str(0, "database main {\n    engine: mariadb\n}\n\n");
+    }
+    if schema.is_empty() {
+        schema.push_str("// No table declarations in this starter yet.\n");
+    }
+    let mut routes = String::from("import \"schema::tables\" as schema\n");
+    for import in program.imports {
+        let start = import.span.start;
+        let end = import.span.end;
+        if start > end
+            || end > source.len()
+            || !source.is_char_boundary(start)
+            || !source.is_char_boundary(end)
+        {
+            return Err("template parser returned an invalid import span".to_owned());
+        }
+        routes.push_str(source[start..end].trim());
+        routes.push('\n');
+    }
+    if !routes.is_empty() {
+        routes.push('\n');
+    }
+    let route_declarations = emit(
+        source,
+        &mut route_spans,
+        &table_starts,
+        &public_schema_starts,
+    )?;
+    if route_declarations.trim().is_empty() {
+        return Err("template contains no route or application declarations".to_owned());
+    }
+    routes.push('\n');
+    routes.push_str(&route_declarations);
+    if !schema_type_names.is_empty() {
+        let route_tokens = lex(&routes).map_err(|error| error.message)?;
+        let mut edits = route_tokens
+            .iter()
+            .enumerate()
+            .filter_map(|(index, token)| {
+                let TokenKind::Ident(name) = &token.kind else {
+                    return None;
+                };
+                if !schema_type_names.contains(name)
+                    || route_tokens
+                        .get(index + 1)
+                        .is_some_and(|next| next.kind == TokenKind::DoubleColon)
+                {
+                    return None;
+                }
+                Some((token.span.start, token.span.end, format!("schema::{name}")))
+            })
+            .collect::<Vec<_>>();
+        edits.sort_by_key(|edit| std::cmp::Reverse(edit.0));
+        for (start, end, replacement) in edits {
+            if start > end
+                || end > routes.len()
+                || !routes.is_char_boundary(start)
+                || !routes.is_char_boundary(end)
+            {
+                return Err("template parser returned an invalid type reference span".to_owned());
+            }
+            routes.replace_range(start..end, &replacement);
+        }
+    }
+    Ok((schema, routes))
 }
 
 fn begin_json_diagnostics(path: &str, source: &str) {

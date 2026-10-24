@@ -872,9 +872,11 @@ fn function_return_type_span(function: Span, body_start: usize, tokens: &[Token]
 }
 
 fn declaration_type_value_span(declaration: Span, tokens: &[Token]) -> Option<Span> {
-    let equal = tokens
-        .iter()
-        .position(|token| token.span.start >= declaration.end && token.kind == TokenKind::Equal)?;
+    let equal = tokens.iter().position(|token| {
+        token.span.start >= declaration.start
+            && token.span.end <= declaration.end
+            && token.kind == TokenKind::Equal
+    })?;
     let mut type_tokens = Vec::new();
     for token in tokens.iter().skip(equal + 1) {
         if matches!(token.kind, TokenKind::Newline | TokenKind::Eof) {
