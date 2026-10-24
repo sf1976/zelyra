@@ -11,21 +11,20 @@ for database-backed business and web applications. It brings schema-aware SQL,
 forms, CRUD, views, and application logic together while keeping ordinary code
 and native SQL available.
 
-> **Release 1.2.56 · language compatibility line: 0.1** · [GitHub release](https://github.com/sf1976/zelyra/releases/tag/v1.2.56)
+> **Release 1.3.0 · language compatibility line: 0.1** · [GitHub release](https://github.com/sf1976/zelyra/releases/tag/v1.3.0)
 >
 > Compiler checks and the verifier cover defined scopes. They do not prove arbitrary applications correct. Review the documented support and limits for each workflow before deployment.
 
-Zelyra 1.2.56 adds a built-in Studio SQL workbench for MariaDB and
-PostgreSQL. Schema-aware completion, local drafts and query history, and
-bounded result tables support read-only `SELECT` and `WITH` queries. Studio
-also includes the original offline-served Zelyra logo, typed database-record
-editors, and compiler-guided suggestions for imports, record fields, and CRUD
-blocks. Suggestions are explicit and never insert code without selection.
-The File and Edit menus include common editing actions and document-level Find
-and Replace. Studio menus, toolbars, and the file sidebar now have more readable
-default text sizes, with medium and large settings still available. Earlier
-releases added the CSS 1.1.0 design system, compiler-aware editing,
-and the experimental MIR and Bytecode backends. See the
+Zelyra 1.3.0 adds an opt-in standard project layout with compiler-checked
+MariaDB starters for minimal projects, CRUD, authentication, and business
+workflows. Studio now suggests suitable CRUD and form scaffolds from declared
+table metadata, while architecture checks follow statically resolved route
+calls and the migration preview reports source-mapped, declaration-level
+findings. Source installers persist Cargo's binary path, and interactive
+MariaDB setup can offer Compose v2 installation. AST remains the default;
+experimental MIR and Bytecode remain opt-in and reject unsupported programs.
+The business starter is not a completed ERP. See the
+[1.3.0 release notes](docs/release-notes/1.3.0.en.md),
 [1.2.56 release notes](docs/release-notes/1.2.56.en.md),
 [1.2.55 release notes](docs/release-notes/1.2.55.en.md),
 [1.2.54 release notes](docs/release-notes/1.2.54.en.md),
@@ -122,7 +121,7 @@ in one workflow:
 - three execution backends — AST (default), MIR, and experimental verified
   Bytecode (v30) — with aligned diagnostics, step budgets, and differential
   coverage;
-- release limits are listed in the [1.2.56 release notes](docs/release-notes/1.2.56.en.md);
+- release limits are listed in the [1.3.0 release notes](docs/release-notes/1.3.0.en.md);
 - local text-PDF rendering and checked PDF outbox attachments with byte and
   row limits. The renderer does not preserve CSS layout, images, or charts;
   use browser print for graphical documents.
@@ -203,7 +202,7 @@ other settings.
 | Use Zelyra UI | [Components, forms, themes, print, charts, and email reference](docs/ui.en.md) · [Deutsch](docs/ui.de.md) |
 | Use the interactive language console | [Language console guide](docs/language-console.en.md) · [Deutsch](docs/language-console.de.md) |
 | Review implemented capabilities and their limits | [Implemented features](docs/implemented.en.md) · [Deutsch](docs/implemented.de.md) |
-| Review current and planned work | [Roadmap](docs/ROADMAP.md) · [1.2.56 release notes](docs/release-notes/1.2.56.en.md) |
+| Review current and planned work | [Roadmap](docs/ROADMAP.md) · [1.3.0 release notes](docs/release-notes/1.3.0.en.md) |
 | Read the design direction | [Manifesto](docs/MANIFESTO.md) · [AI-native architecture](docs/architecture/ai-native-development.md) · [Readable regex text-edit design](docs/design/readable-regex-text-editing.en.md) |
 | See exact release changes | [Changelog](CHANGELOG.md) · [GitHub releases](https://github.com/sf1976/zelyra/releases) |
 
