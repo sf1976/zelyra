@@ -114,7 +114,10 @@ Compiler. Der lokale `/opt/zelyra/bin/zelyra` meldet ebenfalls Version 1.3.0,
 weist aber den neuen typisierten Standalone-Form-Handler noch mit einem
 Parserfehler zurück. Der am 24.10. aufgezeichnete HTTP-E2E-Lauf deckte alle fünf
 Profile, Login, Sitzungscookie, Adminseite, ungültige Eingaben und
-`no-store`-Antworten ab; er belegt nicht, dass die lokale `/opt`-Installation
+`no-store`-Antworten ab. Am 01.11. wurde der vollständige HTTP-E2E-Lauf mit
+dem Feature-Branch-Compiler und einer temporären, isolierten MariaDB erneut
+ausgeführt; alle fünf Profile, Anmeldung und Zurückweisung ungültiger Eingaben
+bestanden. Das belegt weiterhin nicht, dass die lokale `/opt`-Installation
 mit dem aktuellen Projektstand läuft. Die Handler- und Autorisierungserweiterung
 ist noch nicht gemergt oder veröffentlicht. Die Mini-ERP-Phase-A-Unterlagen und
 ein erster Stammdaten-Schnitt liegen als Entwicklungsstand vor; Phase A gilt

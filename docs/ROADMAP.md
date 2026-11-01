@@ -103,8 +103,11 @@ transactions, authorization, and application logic must use idiomatic Zelyra.
 feature branch. The local `/opt/zelyra/bin/zelyra` also reports version 1.3.0,
 but rejects the new typed standalone form handler with a parser error. The HTTP
 E2E run recorded on 2026-10-24 covered all five profiles, login, session cookie,
-admin page, invalid input, and `no-store` responses; it does not establish that
-the local `/opt` installation runs the current project. The handler and
+admin page, invalid input, and `no-store` responses. The complete HTTP E2E was
+rerun on 2026-11-01 with the feature-branch compiler and a temporary, isolated
+MariaDB; all five profiles, sign-in, and invalid-input rejection passed. This
+still does not establish that the local `/opt` installation runs the current
+project. The handler and
 authorization extensions are not merged or released. Mini-ERP Phase A documents
 and an initial master-data slice exist as development work; Phase A is complete
 only after review of the capability matrix, data/domain model, workflows, roles,

@@ -186,7 +186,7 @@ try:
         status, body, headers = post(24, profile)
         assert status == 200, (profile, status, body[:500])
         assert "Ergebnis" in body
-        match = re.search(r"<output><code>(.*?)</code></output>", body)
+        match = re.search(r"<output\b[^>]*><code>(.*?)</code></output>", body)
         assert match, body[-1000:]
         password = html.unescape(match.group(1))
         assert len(password) == 24 and check(password), (profile, password)
@@ -197,7 +197,7 @@ try:
     for length, profile in ((7, "Alle Zeichen"), (65, "Alle Zeichen"), (24, "invalid")):
         status, body, _ = post(length, profile)
         assert status == 422, (length, profile, status, body[:500])
-        assert "<output><code>" not in body
+        assert not re.search(r"<output\b[^>]*><code>", body)
         print(f"PASS rejected invalid input: length={length}, profile={profile}")
 finally:
     server.terminate()
