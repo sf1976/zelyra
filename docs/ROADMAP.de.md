@@ -108,21 +108,18 @@ serverseitige Rollen und Datensatzberechtigungen sowie Audit-Historie. MariaDB
 ist die primäre Datenbank. UI, Validierung, SQL, Transaktionen, Autorisierung
 und Geschäftslogik werden idiomatisch mit Zelyra umgesetzt.
 
-**Aktueller Nachweis (24.10.2026):** Zelyra 1.3.0 ist unter `/opt/` installiert.
-Das Passwortgenerator-Projekt verwendet Zelyras native `Random`-Capability,
-typisierte Standalone-Form-Handler, serverseitige Feldvalidierung und den
-Work-Modus. Das lokale Paket `zelyra_identity` verwendet Zelyras native
-Authentifizierung, MariaDB-Sitzungen, Rollen und geschützte Benutzerverwaltung.
-`/login` zeigt ein gestaltetes Zelyra-Webformular; öffentliche Registrierung
-ist deaktiviert, Administratoren verwalten Konten unter `/admin/users`. Die
-Projektdatei `zelyra.theme.css` gestaltet Login, Navigation und Generator; der
-Hinweis `ZELYRA-ANWENDUNG` wird ausgeblendet. Das E2E bestand alle fünf Profile,
-Login, Session-Cookie, Adminseite, ungültige Werte und nicht gecachte
-Ergebnisse – auch über `https://zelyra.eu:8176`. Die Formular-Handler- und
-Autorisierungserweiterung liegt noch auf einem Feature-Branch und ist weder
-gemergt noch veröffentlicht. Phase A des Benchmarks hat begonnen; als
-abgeschlossen gilt sie erst nach geprüfter Fähigkeitsmatrix, Daten-/Domänenmodell
-und Teststrategie.
+**Aktueller Nachweis (01.11.2026):** Das Passwortgenerator-Projekt besteht
+`zelyra check` und seine Zelyra-Profiltests mit dem im Feature-Branch gebauten
+Compiler. Der lokale `/opt/zelyra/bin/zelyra` meldet ebenfalls Version 1.3.0,
+weist aber den neuen typisierten Standalone-Form-Handler noch mit einem
+Parserfehler zurück. Der am 24.10. aufgezeichnete HTTP-E2E-Lauf deckte alle fünf
+Profile, Login, Sitzungscookie, Adminseite, ungültige Eingaben und
+`no-store`-Antworten ab; er belegt nicht, dass die lokale `/opt`-Installation
+mit dem aktuellen Projektstand läuft. Die Handler- und Autorisierungserweiterung
+ist noch nicht gemergt oder veröffentlicht. Die Mini-ERP-Phase-A-Unterlagen und
+ein erster Stammdaten-Schnitt liegen als Entwicklungsstand vor; Phase A gilt
+erst nach Prüfung der Fähigkeitsmatrix, des Daten-/Domänenmodells, der Abläufe,
+Rollen, Oberfläche und Teststrategie als abgeschlossen.
 
 Bei jeder Sprach-, Compiler-, Runtime-, Datenbank-, UI- oder Studio-Lücke gilt
 STOP → ANALYSE → BEHEBUNG → TEST → FORTSETZUNG. Keine fremdsprachige
