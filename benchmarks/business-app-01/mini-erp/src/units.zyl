@@ -1,0 +1,42 @@
+import "src/database.zyl" as db
+import "src/auth.zyl" as identity
+import "src/shell.zyl" as shell
+
+pub struct Unit {
+    id: Id
+    code: String
+    label: String
+    quantity_scale: Int
+    active: Bool
+}
+
+table units {
+    id: Id primary auto
+    code: String(12) required unique
+    label: String(60) required
+    quantity_scale: Int default 0
+    active: Bool default true
+    archived_at: Timestamp?
+}
+
+crud Unit -> units {
+    requires auth
+    permits "articles.view"
+    permits create "articles.create"
+    permits edit "articles.edit"
+    permits delete "articles.archive"
+    soft_delete {
+        column: archived_at
+    }
+    layout: MiniErpShell
+    title: "Einheiten"
+    view {
+        fields { code label quantity_scale active }
+        list { mode: cards }
+        detail { mode: cards }
+        form { mode: cards }
+    }
+    list { code label quantity_scale active }
+    search { code label }
+    filter { active }
+}

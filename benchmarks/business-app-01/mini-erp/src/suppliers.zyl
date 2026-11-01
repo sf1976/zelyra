@@ -1,0 +1,53 @@
+import "src/database.zyl" as db
+import "src/auth.zyl" as identity
+import "src/shell.zyl" as shell
+
+pub struct Supplier {
+    id: Id
+    supplier_number: String
+    company_name: String
+    contact_name: String?
+    email: Email?
+    active: Bool
+}
+
+table suppliers {
+    id: Id primary auto
+    supplier_number: String(30) required unique
+    company_name: String(180) required
+    contact_name: String(150)?
+    email: Email?
+    phone: String(50)?
+    street: String(180)?
+    postal_code: String(20)?
+    city: String(100)?
+    country: String(2) default "DE"
+    payment_terms_days: Int default 30
+    delivery_days: Int?
+    notes: String(2000)?
+    active: Bool default true
+    archived_at: Timestamp?
+}
+
+crud Supplier -> suppliers {
+    requires auth
+    permits "suppliers.view"
+    permits create "suppliers.create"
+    permits edit "suppliers.edit"
+    permits delete "suppliers.archive"
+    soft_delete {
+        column: archived_at
+    }
+
+    layout: MiniErpShell
+    title: "Lieferanten"
+    view {
+        fields { supplier_number company_name contact_name email phone payment_terms_days delivery_days active }
+        list { mode: cards }
+        detail { mode: cards }
+        form { mode: cards }
+    }
+    list { supplier_number company_name contact_name email phone payment_terms_days active }
+    search { supplier_number company_name contact_name email }
+    filter { active }
+}

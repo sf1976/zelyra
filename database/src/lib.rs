@@ -1262,7 +1262,7 @@ fn contains_applied_type(ty: &Type) -> bool {
 
 fn table_for_type(name: &str, table_names: &HashSet<String>) -> Option<String> {
     let name = name.rsplit("::").next().unwrap_or(name);
-    let snake = name.to_ascii_lowercase();
+    let snake = type_name_to_snake_case(name);
     if table_names.contains(&snake) {
         return Some(snake);
     }
@@ -1272,6 +1272,28 @@ fn table_for_type(name: &str, table_names: &HashSet<String>) -> Option<String> {
         format!("{snake}s")
     };
     table_names.contains(&plural).then_some(plural)
+}
+
+/// Converts a Zelyra record type identifier from PascalCase to the
+/// conventional snake_case database table spelling.
+pub fn type_name_to_snake_case(name: &str) -> String {
+    let chars = name.chars().collect::<Vec<_>>();
+    let mut snake = String::with_capacity(name.len() + 4);
+    for (index, character) in chars.iter().copied().enumerate() {
+        if character.is_ascii_uppercase() && index > 0 {
+            let previous = chars[index - 1];
+            let next = chars.get(index + 1).copied();
+            if previous.is_ascii_lowercase()
+                || previous.is_ascii_digit()
+                || (previous.is_ascii_uppercase()
+                    && next.is_some_and(|next| next.is_ascii_lowercase()))
+            {
+                snake.push('_');
+            }
+        }
+        snake.push(character.to_ascii_lowercase());
+    }
+    snake
 }
 
 fn default_sql(value: &DefaultValue) -> String {
@@ -7645,6 +7667,32 @@ mod tests {
         assert_eq!(
             table_for_type("src/models.zyl::Customer", &table_names),
             Some("customers".to_owned())
+        );
+    }
+
+    #[test]
+    fn record_relations_map_pascal_case_names_to_snake_case_tables() {
+        let table_names = HashSet::from([
+            "article_groups".to_owned(),
+            "invoice_lines".to_owned(),
+            "units".to_owned(),
+        ]);
+
+        assert_eq!(
+            table_for_type("src/article_groups.zyl::ArticleGroup", &table_names),
+            Some("article_groups".to_owned())
+        );
+        assert_eq!(
+            table_for_type("src/invoices.zyl::InvoiceLine", &table_names),
+            Some("invoice_lines".to_owned())
+        );
+        assert_eq!(
+            table_for_type("Unit", &table_names),
+            Some("units".to_owned())
+        );
+        assert_eq!(
+            type_name_to_snake_case("XMLInvoiceLine"),
+            "xml_invoice_line"
         );
     }
 

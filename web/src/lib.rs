@@ -6427,7 +6427,7 @@ fn render_auth_admin(
         }
     }
     html.push_str(&format!(
-        "</tbody></table></div></section></div></section><section class=\"z-card z-admin-grid__wide\" aria-labelledby=\"auth-grant-permission-title\"><header class=\"z-card__header\"><h2 class=\"z-card__title\" id=\"auth-grant-permission-title\">{}</h2></header><div class=\"z-card__body\"><div class=\"z-admin-role-scroll\"><form class=\"z-admin-assign-role\" method=\"post\" action=\"{path}\"><input type=\"hidden\" name=\"_zelyra_csrf\" value=\"{csrf}\"><input type=\"hidden\" name=\"operation\" value=\"grant_permission\"><label class=\"z-field\"><span class=\"z-field__label\">{}</span><input class=\"z-input\" name=\"role\" required></label><label class=\"z-field\"><span class=\"z-field__label\">{}</span><input class=\"z-input\" name=\"permission\" required></label><div class=\"z-action-stack\"><button class=\"z-button z-button--primary\" type=\"submit\">{}</button></div></form></div><section class=\"z-admin-subsection\" aria-labelledby=\"auth-role-permissions-title\"><h3 class=\"z-admin-subsection__title\" id=\"auth-role-permissions-title\">{}</h3><div class=\"z-table-scroll\"><table class=\"z-table\"><thead><tr><th scope=\"col\">{}</th><th scope=\"col\">{}</th><th scope=\"col\">{}</th></tr></thead><tbody>",
+        "</tbody></table></div></section></div></section><section class=\"z-card z-admin-grid__wide\" aria-labelledby=\"auth-grant-permission-title\"><header class=\"z-card__header\"><h2 class=\"z-card__title\" id=\"auth-grant-permission-title\">{}</h2></header><div class=\"z-card__body\"><div class=\"z-admin-role-scroll\"><form class=\"z-admin-assign-role\" method=\"post\" action=\"{path}\"><input type=\"hidden\" name=\"_zelyra_csrf\" value=\"{csrf}\"><input type=\"hidden\" name=\"operation\" value=\"grant_permission\"><label class=\"z-field\"><span class=\"z-field__label\">{}</span><input class=\"z-input\" name=\"role\" required></label><label class=\"z-field\"><span class=\"z-field__label\">{}</span><input class=\"z-input\" name=\"permission\" required></label><div class=\"z-action-stack\"><button class=\"z-button z-button--primary\" type=\"submit\">{}</button></div></form></div></div></section><section class=\"z-card z-admin-grid__wide\" aria-labelledby=\"auth-role-permissions-title\"><header class=\"z-card__header\"><h2 class=\"z-card__title\" id=\"auth-role-permissions-title\">{}</h2></header><div class=\"z-card__body\"><div class=\"z-admin-role-scroll\"><div class=\"z-table-scroll\"><table class=\"z-table\"><thead><tr><th scope=\"col\">{}</th><th scope=\"col\">{}</th><th scope=\"col\">{}</th></tr></thead><tbody>",
         tr(language, "auth.grant_permission"),
         tr(language, "auth.role"),
         tr(language, "auth.permission"),
@@ -6451,7 +6451,7 @@ fn render_auth_admin(
             ));
         }
     }
-    html.push_str("</tbody></table></div></section></div></section>");
+    html.push_str("</tbody></table></div></div></div></section>");
     html.push_str("</div></main>");
     html
 }
@@ -7242,7 +7242,9 @@ fn dispatch_form_with_language(
                 Err(error) => return relation_options_error(database_url, error),
             }
         } else {
-            EditValues::default()
+            let mut values = EditValues::default();
+            apply_create_form_defaults(&rendered_form, &mut values);
+            values
         };
         for child in &rendered_form.child_collections {
             if is_edit_form(form) {
@@ -7270,6 +7272,27 @@ fn dispatch_form_with_language(
                 }
             } else {
                 values.values.insert(child.count_key.clone(), "1".into());
+                for field in &child.fields {
+                    let Some(column) = child
+                        .table
+                        .columns
+                        .iter()
+                        .find(|column| column.name == field.name)
+                    else {
+                        continue;
+                    };
+                    if column.computed.is_some() {
+                        continue;
+                    }
+                    if let Some(value) =
+                        displayable_form_default(column.default.as_ref(), &column.ty)
+                    {
+                        values.values.insert(
+                            crud_child_value_key(&child.definition.name, 0, &field.name),
+                            value,
+                        );
+                    }
+                }
             }
         }
         if is_edit_form(form) {
@@ -12880,6 +12903,110 @@ fn relation_options_error(database_url: Option<&str>, error: String) -> Response
     }
 }
 
+/// Initializes generated create forms from their declared table defaults so
+/// the visual state matches the value Zelyra will use when the record is saved.
+fn apply_create_form_defaults(form: &FormRoute, values: &mut EditValues) {
+    let Some(table) = form.table.as_ref() else {
+        return;
+    };
+    for field in &form.form.fields {
+        if values.values.contains_key(&field.name) {
+            continue;
+        }
+        let Some(column) = table
+            .columns
+            .iter()
+            .find(|column| column.name == field.name)
+        else {
+            continue;
+        };
+        if column.computed.is_some() {
+            continue;
+        }
+        if let Some(value) = displayable_form_default(column.default.as_ref(), &column.ty) {
+            values.values.insert(field.name.clone(), value);
+        }
+    }
+}
+
+fn displayable_form_default(
+    default: Option<&zelyra_ast::DefaultValue>,
+    ty: &Type,
+) -> Option<String> {
+    match default? {
+        zelyra_ast::DefaultValue::Int(value) => Some(value.to_string()),
+        zelyra_ast::DefaultValue::Bool(value) => Some(value.to_string()),
+        zelyra_ast::DefaultValue::String(value) => Some(value.clone()),
+        // Identifier defaults commonly represent enum variants. SQL
+        // expressions such as `current_timestamp` must remain server-side
+        // and must not be shown as literal input values.
+        zelyra_ast::DefaultValue::Ident(value)
+            if !matches!(ty, Type::Timestamp | Type::Date | Type::Time) =>
+        {
+            Some(value.clone())
+        }
+        zelyra_ast::DefaultValue::Ident(_) => None,
+    }
+}
+
+#[cfg(test)]
+mod create_form_default_tests {
+    use super::*;
+
+    #[test]
+    fn create_form_defaults_render_boolean_and_enum_literals() {
+        assert_eq!(
+            displayable_form_default(Some(&zelyra_ast::DefaultValue::Bool(true)), &Type::Bool),
+            Some("true".into())
+        );
+        assert_eq!(
+            displayable_form_default(
+                Some(&zelyra_ast::DefaultValue::Ident("draft".into())),
+                &Type::Named("OrderStatus".into())
+            ),
+            Some("draft".into())
+        );
+    }
+
+    #[test]
+    fn create_form_defaults_do_not_expose_database_expressions_as_input() {
+        assert_eq!(
+            displayable_form_default(
+                Some(&zelyra_ast::DefaultValue::Ident("current_timestamp".into())),
+                &Type::Timestamp
+            ),
+            None
+        );
+        assert_eq!(displayable_form_default(None, &Type::Bool), None);
+    }
+
+    #[test]
+    fn relation_options_prefer_human_readable_label_and_code_columns() {
+        let table = |names: &[&str]| zelyra_database::Table {
+            name: "related".into(),
+            tenant_scope_column: None,
+            columns: names
+                .iter()
+                .map(|name| zelyra_database::Column {
+                    name: (*name).into(),
+                    sql_type: "VARCHAR(100)".into(),
+                    nullable: false,
+                    primary_key: false,
+                    auto: false,
+                    unique: false,
+                    default: None,
+                })
+                .collect(),
+            foreign_keys: Vec::new(),
+            indexes: Vec::new(),
+            uniques: Vec::new(),
+        };
+
+        assert_eq!(relation_display_column(&table(&["id", "label"])), "label");
+        assert_eq!(relation_display_column(&table(&["id", "code"])), "code");
+    }
+}
+
 fn load_relation_options(
     form: &FormRoute,
     database_url: Option<&str>,
@@ -12917,17 +13044,29 @@ fn load_relation_options(
             .map(|col| col.name.as_str());
 
         let mut params = Vec::new();
-        let where_clause = if let (Some(tenant_context), Some(tenant_col)) =
-            (tenant_context, target_tenant_column)
-        {
+        let mut conditions = Vec::new();
+        if let (Some(tenant_context), Some(tenant_col)) = (tenant_context, target_tenant_column) {
             params.extend(tenant_query_params(tenant_context));
-            format!(
-                " WHERE {} = :zelyra_tenant_id AND {}",
+            conditions.push(format!(
+                "{} = :zelyra_tenant_id AND {}",
                 quote_ident(tenant_col, is_postgres),
                 tenant_access_predicate(tenant_context, is_postgres)
-            )
-        } else {
+            ));
+        }
+        if schema_table
+            .columns
+            .iter()
+            .any(|column| column.name == "archived_at")
+        {
+            conditions.push(format!(
+                "{} IS NULL",
+                quote_ident("archived_at", is_postgres)
+            ));
+        }
+        let where_clause = if conditions.is_empty() {
             String::new()
+        } else {
+            format!(" WHERE {}", conditions.join(" AND "))
         };
 
         let query = format!(
@@ -13854,7 +13993,7 @@ fn timestamp_value(value: &str) -> Option<i64> {
 /// table validation evaluates them as integer identities.
 fn table_name_for_type(program: &Program, name: &str) -> Option<String> {
     let name = name.rsplit("::").next()?;
-    let snake = name.to_ascii_lowercase();
+    let snake = zelyra_database::type_name_to_snake_case(name);
     if program.tables.iter().any(|table| table.name == snake) {
         return Some(snake);
     }
@@ -13890,14 +14029,14 @@ fn relation_target_for_field(form: &FormRoute, field: &zelyra_ast::FormField) ->
         return None;
     }
     let schema = form.schema.as_ref()?;
-    let lower = name.rsplit("::").next()?.to_ascii_lowercase();
-    if schema.tables.iter().any(|table| table.name == lower) {
-        return Some(lower);
+    let snake = zelyra_database::type_name_to_snake_case(name.rsplit("::").next()?);
+    if schema.tables.iter().any(|table| table.name == snake) {
+        return Some(snake);
     }
-    let plural = if lower.ends_with('y') {
-        format!("{}ies", &lower[..lower.len() - 1])
+    let plural = if snake.ends_with('y') {
+        format!("{}ies", &snake[..snake.len() - 1])
     } else {
-        format!("{lower}s")
+        format!("{snake}s")
     };
     schema
         .tables
@@ -13907,7 +14046,7 @@ fn relation_target_for_field(form: &FormRoute, field: &zelyra_ast::FormField) ->
 }
 
 fn relation_display_column(table: &zelyra_database::Table) -> &str {
-    ["name", "number", "title", "email"]
+    ["name", "label", "title", "code", "number", "email"]
         .iter()
         .find(|candidate| {
             table
