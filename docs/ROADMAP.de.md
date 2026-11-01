@@ -118,7 +118,10 @@ Profile, Login, Sitzungscookie, Adminseite, ungültige Eingaben und
 dem Feature-Branch-Compiler und einer temporären, isolierten MariaDB erneut
 ausgeführt; alle fünf Profile, Anmeldung und Zurückweisung ungültiger Eingaben
 bestanden. Das belegt weiterhin nicht, dass die lokale `/opt`-Installation
-mit dem aktuellen Projektstand läuft. Die Handler- und Autorisierungserweiterung
+mit dem aktuellen Projektstand läuft. Auch der Mini-ERP-Stammdatenschnitt
+bestand am selben Tag seinen MariaDB-HTTP-E2E-Lauf: Gruppe und Einheit anlegen,
+Artikel verknüpfen, Gruppe archivieren und sie aus neuen Relationsauswahlen
+ausschließen. Die Handler- und Autorisierungserweiterung
 ist noch nicht gemergt oder veröffentlicht. Die Mini-ERP-Phase-A-Unterlagen und
 ein erster Stammdaten-Schnitt liegen als Entwicklungsstand vor; Phase A gilt
 erst nach Prüfung der Fähigkeitsmatrix, des Daten-/Domänenmodells, der Abläufe,
