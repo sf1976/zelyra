@@ -1,0 +1,57 @@
+import "src/database.zyl" as db
+import "src/auth.zyl" as identity
+import "src/shell.zyl" as shell
+
+pub struct Customer {
+    id: Id
+    customer_number: String
+    company_name: String
+    contact_name: String?
+    email: Email?
+    active: Bool
+}
+
+table customers {
+    id: Id primary auto
+    customer_number: String(30) required unique
+    company_name: String(180) required
+    contact_name: String(150)?
+    email: Email?
+    phone: String(50)?
+    billing_street: String(180)?
+    billing_postal_code: String(20)?
+    billing_city: String(100)?
+    billing_country: String(2) default "DE"
+    shipping_street: String(180)?
+    shipping_postal_code: String(20)?
+    shipping_city: String(100)?
+    shipping_country: String(2) default "DE"
+    payment_terms_days: Int default 14
+    credit_limit: Money?
+    notes: String(2000)?
+    active: Bool default true
+    archived_at: Timestamp?
+}
+
+crud Customer -> customers {
+    requires auth
+    permits "customers.view"
+    permits create "customers.create"
+    permits edit "customers.edit"
+    permits delete "customers.archive"
+    soft_delete {
+        column: archived_at
+    }
+
+    layout: MiniErpShell
+    title: "Kunden"
+    view {
+        fields { customer_number company_name contact_name email phone active }
+        list { mode: cards }
+        detail { mode: cards }
+        form { mode: cards }
+    }
+    list { customer_number company_name contact_name email phone active }
+    search { customer_number company_name contact_name email }
+    filter { active }
+}

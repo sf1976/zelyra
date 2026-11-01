@@ -21,6 +21,17 @@
   :where(html[data-z-ui]) .z-card__footer:empty { display: none; }
   :where(html[data-z-ui]) .z-card__title { margin: 0; font-size: 1.05rem; }
   :where(html[data-z-ui]) .z-card__body { min-width: 0; padding: var(--z-space-5); }
+  :where(html[data-z-ui]) .z-output {
+    display: block;
+    overflow-wrap: anywhere;
+    padding: var(--z-space-4);
+    border: 1px solid var(--z-color-border);
+    border-radius: var(--z-radius-md);
+    background: var(--z-color-surface-raised);
+    color: var(--z-color-text);
+    font: 600 1.1rem/1.6 var(--z-font-mono);
+    user-select: all;
+  }
 
   :where(html[data-z-ui]) .z-button,
   :where(html[data-z-ui]) .z-link-button {
@@ -54,6 +65,17 @@
   :where(html[data-z-ui]) .z-button--warning { border-color: var(--z-color-warning); background: var(--z-color-warning); color: var(--z-color-on-warning); }
   :where(html[data-z-ui]) .z-button--danger { border-color: var(--z-color-danger); background: var(--z-color-danger); color: var(--z-color-on-danger); }
   :where(html[data-z-ui]) .z-button--default { background: var(--z-color-surface-raised); color: var(--z-color-text); }
+  :where(html[data-z-ui]) .z-button--primary:hover,
+  :where(html[data-z-ui]) .z-button--success:hover,
+  :where(html[data-z-ui]) .z-button--warning:hover,
+  :where(html[data-z-ui]) .z-button--danger:hover,
+  :where(html[data-z-ui]) .z-link-button--primary:hover {
+    border-color: var(--z-color-primary);
+    background: var(--z-color-primary-soft);
+    color: var(--z-color-text);
+  }
+  :where(html[data-z-ui]) .z-button--icon { width: 2.75rem; height: 2.75rem; min-width: 2.75rem; padding: .55rem; aspect-ratio: 1; }
+  :where(html[data-z-ui]) .z-button--icon svg { display: block; width: 1.2rem; height: 1.2rem; fill: none; stroke: currentColor; stroke-linecap: round; stroke-linejoin: round; stroke-width: 1.8; }
   :where(html[data-z-ui]) .z-link { color: var(--z-color-link); text-underline-offset: .16em; }
   :where(html[data-z-ui]) .z-button-group > * { flex: 0 0 auto; }
 
@@ -120,7 +142,7 @@
     min-width: 0;
     min-height: var(--z-control-height);
     padding: .55rem .7rem;
-    border: 1px solid var(--z-color-border);
+    border: 1px solid var(--z-color-control-border);
     border-radius: var(--z-radius-sm);
     background: var(--z-color-surface);
     color: var(--z-color-text);
@@ -133,7 +155,7 @@
   :where(html[data-z-ui]) .z-textarea[readonly] { background: var(--z-color-surface-raised); }
   :where(html[data-z-ui]) .z-input--default,
   :where(html[data-z-ui]) .z-select--default,
-  :where(html[data-z-ui]) .z-textarea--default { border-color: var(--z-color-border); }
+  :where(html[data-z-ui]) .z-textarea--default { border-color: var(--z-color-control-border); }
   :where(html[data-z-ui]) .z-input--success,
   :where(html[data-z-ui]) .z-select--success,
   :where(html[data-z-ui]) .z-textarea--success { border-color: var(--z-color-success); }
@@ -185,6 +207,19 @@
   :where(html[data-z-ui]) .z-table th { background: var(--z-color-surface-raised); font-weight: 750; }
   :where(html[data-z-ui]) .z-table tbody tr:hover { background: var(--z-color-primary-soft); }
   :where(html[data-z-ui]) .z-table-tools { display: flex; flex-wrap: wrap; align-items: end; gap: var(--z-space-3); margin-block: 0 1rem; }
+  :where(html[data-z-ui]) .z-action-stack {
+    display: grid;
+    width: min(100%, 13rem);
+    align-content: start;
+    justify-items: stretch;
+    gap: .5rem;
+  }
+  :where(html[data-z-ui]) .z-action-stack form { display: grid; min-width: 0; gap: .5rem; margin: 0; }
+  :where(html[data-z-ui]) .z-action-stack .z-field { min-width: 0; margin: 0; }
+  :where(html[data-z-ui]) .z-action-stack .z-button { width: 100%; min-height: 2.75rem; white-space: normal; }
+  :where(html[data-z-ui]) .z-action-stack .z-button--icon { width: 2.75rem; justify-self: start; }
+  :where(html[data-z-ui]) .z-admin-create-user { align-items: end; margin-block-end: var(--z-space-5); }
+  :where(html[data-z-ui]) .z-admin-form__action { align-self: end; }
   :where(html[data-z-ui]) .z-progress-field { display: grid; gap: .35rem; max-width: 36rem; }
   :where(html[data-z-ui]) .z-progress { display: block; width: 100%; height: .7rem; accent-color: var(--z-color-primary); }
 

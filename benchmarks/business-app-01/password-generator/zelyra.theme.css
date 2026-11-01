@@ -1,0 +1,161 @@
+/*
+Projekt-CSS für Zelyra UI. Diese Datei wird nach dem UI-Stylesheet geladen;
+du kannst hier vorhandene Komponenten anpassen, ohne Framework-Dateien zu ändern.
+
+So überschreibst du vorhandene UI-Gestaltung:
+1. Begrenze eigene Regeln auf :where(html[data-z-ui]) oder nutze z- Klassen.
+2. Ändere Farben über --z- Tokens. Primär-Hintergrund und Textfarbe gehören
+   zusammen: --z-color-primary und --z-color-on-primary.
+3. Für einzelne Komponenten kannst du z. B. .z-card oder .z-button ergänzen.
+   Eigene CSS-Klassen kannst du im HTML deiner Zelyra-Seiten verwenden.
+4. Halte Selektoren möglichst spezifitätsarm; !important ist normalerweise
+   nicht nötig. Die UI-Dokumentation steht unter https://siedelmann.com/handbuch.
+
+Für ein vollständig ersetzendes Stylesheet setze ZELYRA_UI_STYLESHEET in .env.
+Diese Datei wird an Browser ausgeliefert: niemals Passwörter, API-Schlüssel
+oder andere private Daten eintragen.
+Token- und Konfigurationsreferenz: https://github.com/sf1976/zelyra/blob/main/docs/env.md
+*/
+/* The product identity is shown by the Zelyra mark; this environment chip is
+   operational metadata and does not belong in the customer-facing design. */
+:where(html[data-z-ui]) .zelyra-environment {
+    display: none;
+}
+
+/* Focused sign-in surface, built entirely from the native Zelyra UI shell. */
+html:has(form[action="/login"]) .z-app-shell {
+    grid-template: "main" minmax(100vh, 1fr) / minmax(0, 1fr);
+    min-height: 100vh;
+    background: var(--z-color-canvas);
+}
+
+html:has(form[action="/login"]) .z-app-shell__header,
+html:has(form[action="/login"]) .z-app-shell__sidebar,
+html:has(form[action="/login"]) .z-app-shell__footer {
+    display: none;
+}
+
+html:has(form[action="/login"]) .z-app-shell__main {
+    display: grid;
+    width: 100%;
+    min-height: 100vh;
+    padding: clamp(1.25rem, 5vw, 4rem);
+    place-items: center;
+    background:
+        radial-gradient(ellipse at 18% 14%, rgb(84 124 197 / 15%), transparent 36%),
+        radial-gradient(ellipse at 88% 86%, rgb(80 154 179 / 12%), transparent 34%),
+        var(--z-color-canvas);
+}
+
+html:has(form[action="/login"]) .zelyra-page-content {
+    display: grid;
+    width: 100%;
+    place-items: center;
+}
+
+html:has(form[action="/login"]) .zelyra-page-content main {
+    width: min(100%, 27rem);
+    margin: 0;
+    padding: clamp(1.75rem, 5vw, 2.75rem);
+    border: 1px solid var(--z-color-border);
+    border-radius: 1.5rem;
+    background: color-mix(in srgb, var(--z-color-surface) 96%, transparent);
+    box-shadow: var(--z-shadow-lg);
+}
+
+html:has(form[action="/login"]) .zelyra-page-content main::before {
+    display: grid;
+    width: min(17rem, 78vw);
+    height: 7rem;
+    margin-bottom: .75rem;
+    place-items: center;
+    background: url("/zelyra-logo.png") center / contain no-repeat;
+    content: "";
+}
+
+html:has(form[action="/login"]) .zelyra-page-content h1 {
+    margin: 0 0 .5rem;
+    color: var(--z-color-text);
+    font-size: clamp(1.7rem, 4vw, 2rem);
+    letter-spacing: -.035em;
+}
+
+html:has(form[action="/login"]) .zelyra-page-content form[action="/login"] {
+    display: grid;
+    gap: .65rem;
+    margin-top: 1.5rem;
+}
+
+html:has(form[action="/login"]) form[action="/login"] input[type="hidden"] {
+    display: none;
+}
+
+html:has(form[action="/login"]) form[action="/login"] label {
+    margin: .35rem 0 0;
+    color: var(--z-color-text);
+    font-size: .9rem;
+    font-weight: 650;
+}
+
+html:has(form[action="/login"]) form[action="/login"] input {
+    width: 100%;
+    min-height: 3rem;
+    padding: .7rem .85rem;
+    border: 1px solid var(--z-color-control-border);
+    border-radius: .7rem;
+    background: var(--z-color-surface);
+    color: var(--z-color-text);
+    font: inherit;
+    transition: border-color 140ms ease, box-shadow 140ms ease;
+}
+
+html:has(form[action="/login"]) form[action="/login"] input:focus-visible {
+    border-color: var(--z-color-focus);
+    outline: 0;
+    box-shadow: 0 0 0 4px color-mix(in srgb, var(--z-color-focus) 15%, transparent);
+}
+
+html:has(form[action="/login"]) form[action="/login"] button {
+    width: 100%;
+    min-height: 3rem;
+    margin-top: .75rem;
+    border-radius: .7rem;
+    font-size: .98rem;
+    font-weight: 700;
+}
+
+html:has(form[action="/login"]) .zelyra-page-content main::after {
+    display: block;
+    margin-top: 1.5rem;
+    color: var(--z-color-text-muted);
+    content: "ZELYRA · SICHERER ARBEITSBEREICH";
+    font-size: .68rem;
+    font-weight: 700;
+    letter-spacing: .12em;
+    text-align: center;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    html:has(form[action="/login"]) form[action="/login"] input {
+        transition: none;
+    }
+}
+
+/* Keep navigation landmarks distinct and avoid repeating the app footer. */
+:where(html[data-z-ui]) .zelyra-nav a {
+    gap: .75rem;
+}
+
+:where(html[data-z-ui]) .zelyra-nav-icon {
+    display: inline-flex;
+    width: 1.75rem;
+    flex: 0 0 1.75rem;
+    justify-content: center;
+    font-size: .72rem;
+    font-weight: 750;
+    letter-spacing: .03em;
+}
+
+:where(html[data-z-ui]) .z-app-shell__footer {
+    display: none;
+}

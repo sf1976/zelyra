@@ -272,7 +272,15 @@ fn route_handler_sql_issues(
             continue;
         }
         for action in &form.actions {
-            let (calls, sql) = inspect_action(action, &functions);
+            let (mut calls, sql) = inspect_action(action, &functions);
+            if let Some(handler) = &action.handler {
+                calls.push(RouteCall {
+                    name: handler.clone(),
+                    args: Vec::new(),
+                    callback_targets: std::collections::HashMap::new(),
+                    span: action.span,
+                });
+            }
             issues.extend(reachable_route_sql_issues(
                 &functions,
                 sources,

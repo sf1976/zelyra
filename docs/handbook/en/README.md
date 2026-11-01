@@ -1412,16 +1412,22 @@ permissions. With an `active` column, deactivated users cannot log in and
 their persistent sessions are removed on deactivation. Password resets also
 remove all persistent sessions belonging to that user. The last assignment of
 the configured administrator role and the last active administrator are
-protected. User deletion and self-service account management remain future
-work.
+protected. User deletion remains future work. Signed-in users can use
+`/account/profile` to change their email and,
+when the user table declares `display_name`, their display name after confirming
+their current password. The same page supports password changes with a minimum
+length of twelve characters and revokes other persistent sessions. Projects
+with an `auth` block reserve `/account/profile` and `/account/sessions` for
+these built-in handlers.
 
 `zelyra routes app.zyl` lists each generated HTTP method separately. An
 `auth` block enables `GET` and `POST` for `/login`, `POST /logout`, and `GET`
-and `POST` for `/account/sessions`. Declaring `reset_tokens` adds `GET` and
+and `POST` for `/account/profile` and `/account/sessions`. Declaring `reset_tokens` adds `GET` and
 `POST` handlers for `/forgot-password` and `/reset-password`. When
 `admin_path`, `admin_permission`, and `admin_role` are all configured, the
 inventory also lists `GET` and `POST` for the admin path. With both password
-reset and administration enabled, this is eleven method/path routes; handlers
+profile, sessions, password reset, and administration enabled, this is
+thirteen method/path routes; handlers
 that need optional tables or settings are not reported as available without
 those declarations.
 

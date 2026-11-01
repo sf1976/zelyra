@@ -1,0 +1,29 @@
+import "zelyra/ui" as ui
+
+pub view MiniErpShell {
+    html {
+        <!doctype html>
+        <html data-z-ui data-zelyra-language>
+            <head>
+                <meta charset="utf-8" />
+                <meta name="viewport" content="width=device-width, initial-scale=1" />
+                <title>Warenwirtschaft · Zelyra</title>
+            </head>
+            <body>
+                <AppShell id="mini-erp" navigation_label="ERP-Navigation">
+                    <slot name="header"><strong class="erp-brand">Zelyra · Warenwirtschaft</strong></slot>
+                    <slot name="navigation">
+                        <a href="/">Übersicht</a>
+                        <a href="/customers">Kunden</a>
+                        <a href="/suppliers">Lieferanten</a>
+                        <a href="/articles">Artikel</a>
+                        <a href="/warehouses">Lager</a>
+                        <a href="/account/profile">Benutzerkonto</a>
+                    </slot>
+                    <slot name="footer"><span>Zelyra</span></slot>
+                    <slot />
+                </AppShell>
+            </body>
+        </html>
+    }
+}

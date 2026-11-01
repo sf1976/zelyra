@@ -1373,6 +1373,8 @@ mod tests {
         FormDef {
             name: "CustomerCreate".into(),
             table: None,
+            title: None,
+            description: None,
             path: None,
             post_only: false,
             verify: None,
@@ -1535,6 +1537,7 @@ mod tests {
             confirm_page: None,
             success_page: None,
             error_page: None,
+            handler: None,
             fields: Vec::new(),
             requires_auth: false,
             permissions: Vec::new(),
@@ -1612,6 +1615,7 @@ mod tests {
             confirm_page: None,
             success_page: None,
             error_page: None,
+            handler: None,
             fields: vec![valid.fields[0].clone()],
             requires_auth: false,
             permissions: Vec::new(),
@@ -1731,6 +1735,8 @@ mod tests {
             forms: vec![FormDef {
                 name: "DocumentCreate".into(),
                 table: Some("documents".into()),
+                title: None,
+                description: None,
                 path: None,
                 post_only: false,
                 verify: None,
@@ -1744,6 +1750,7 @@ mod tests {
                     confirm_page: None,
                     success_page: None,
                     error_page: None,
+                    handler: None,
                     fields: Vec::new(),
                     requires_auth: false,
                     permissions: Vec::new(),
@@ -1900,6 +1907,8 @@ mod tests {
             forms: vec![FormDef {
                 name: "BulkUpload".into(),
                 table: None,
+                title: None,
+                description: None,
                 path: None,
                 post_only: false,
                 verify: None,
@@ -2167,6 +2176,8 @@ mod tests {
         let bounded = FormDef {
             name: "Bounded".into(),
             table: None,
+            title: None,
+            description: None,
             path: None,
             post_only: false,
             verify: None,
@@ -2211,6 +2222,8 @@ mod tests {
             forms: vec![FormDef {
                 name: "Invalid".into(),
                 table: None,
+                title: None,
+                description: None,
                 path: None,
                 post_only: false,
                 verify: None,
@@ -2242,6 +2255,8 @@ mod tests {
         let form = FormDef {
             name: "Invoice".into(),
             table: None,
+            title: None,
+            description: None,
             path: None,
             post_only: false,
             verify: None,
@@ -2272,6 +2287,8 @@ mod tests {
             forms: vec![FormDef {
                 name: "InvalidChoice".into(),
                 table: None,
+                title: None,
+                description: None,
                 path: None,
                 post_only: false,
                 verify: None,
@@ -2311,6 +2328,8 @@ mod tests {
         let form = FormDef {
             name: "CustomerCreate".into(),
             table: Some("customers".into()),
+            title: None,
+            description: None,
             path: None,
             post_only: false,
             verify: None,

@@ -98,6 +98,23 @@ manually provisioned users, server-enforced roles, row-level permissions, and
 audit history. MariaDB is the primary database. The UI, validation, SQL,
 transactions, authorization, and application logic must use idiomatic Zelyra.
 
+**Current evidence (2026-11-01):** The password-generator project passes
+`zelyra check` and its Zelyra profile tests with the compiler built from the
+feature branch. The local `/opt/zelyra/bin/zelyra` also reports version 1.3.0,
+but rejects the new typed standalone form handler with a parser error. The HTTP
+E2E run recorded on 2026-10-24 covered all five profiles, login, session cookie,
+admin page, invalid input, and `no-store` responses. The complete HTTP E2E was
+rerun on 2026-11-01 with the feature-branch compiler and a temporary, isolated
+MariaDB; all five profiles, sign-in, and invalid-input rejection passed. The
+Mini-ERP master-data slice also passed its MariaDB HTTP E2E that day: create a
+group and unit, link an article, archive the group, and exclude it from new
+relation choices. This still does not establish that the local `/opt`
+installation runs the current project. The handler and
+authorization extensions are not merged or released. Mini-ERP Phase A documents
+and an initial master-data slice exist as development work; Phase A is complete
+only after review of the capability matrix, data/domain model, workflows, roles,
+UI plan, and test strategy.
+
 Apply STOP → ANALYZE → FIX → TEST → RESUME whenever a requirement exposes a
 language, compiler, runtime, database, UI, or Studio gap. Do not hide gaps with
 foreign-language business logic, direct DOM manipulation, or benchmark-only

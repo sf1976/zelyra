@@ -689,6 +689,10 @@ pub struct TableViewRowActionsDef {
 pub struct FormDef {
     pub name: String,
     pub table: Option<String>,
+    /// Optional user-facing title rendered by the native form page header.
+    pub title: Option<String>,
+    /// Optional short description rendered below the form title.
+    pub description: Option<String>,
     /// Optional explicit browser route for a standalone or table-backed form.
     /// When absent, the CLI keeps the conventional `/forms/<name>` route.
     pub path: Option<String>,
@@ -760,6 +764,8 @@ pub struct FormAction {
     pub fields: Vec<FormField>,
     pub requires_auth: bool,
     pub permissions: Vec<String>,
+    /// Typed Zelyra function used by a standalone form action.
+    pub handler: Option<String>,
     /// Explicit language capabilities required by the typed execution block.
     pub capabilities: Vec<String>,
     /// Require the first SQL statement to be a SELECT and to return a row in

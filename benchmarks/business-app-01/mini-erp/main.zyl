@@ -1,0 +1,44 @@
+import "src/database.zyl" as db
+import "src/auth.zyl" as identity
+import "src/shell.zyl" as shell
+import "src/customers.zyl" as customers
+import "src/suppliers.zyl" as suppliers
+import "src/articles.zyl" as articles
+import "src/warehouses.zyl" as warehouses
+
+import "zelyra/ui" as ui
+
+page "/" {
+    requires auth
+    permits "dashboard.view"
+    view: MiniErpShell
+
+    html {
+        <Container>
+            <PageHeader
+                title="Warenwirtschaft"
+                description="Stammdaten, Lager und Geschäftsvorgänge in einem Zelyra-Arbeitsbereich."
+            />
+            <Grid columns="three">
+                <Card title="Kunden">
+                    <p>Kundenstammdaten und Adressen verwalten.</p>
+                    <Button label="Kunden öffnen" href="/customers" appearance="success" />
+                </Card>
+                <Card title="Lieferanten">
+                    <p>Lieferanten und Einkaufskonditionen pflegen.</p>
+                    <Button label="Lieferanten öffnen" href="/suppliers" appearance="success" />
+                </Card>
+                <Card title="Artikel">
+                    <p>Artikel, Warengruppen und Einheiten verwalten.</p>
+                    <Button label="Artikel öffnen" href="/articles" appearance="success" />
+                </Card>
+                <Card title="Lager">
+                    <p>Lager und Lagerplätze anlegen. Bestandsbewegungen folgen als eigener geprüfter Prozess.</p>
+                    <Button label="Lager öffnen" href="/warehouses" appearance="success" />
+                </Card>
+            </Grid>
+        </Container>
+    }
+}
+
+fn main() {}

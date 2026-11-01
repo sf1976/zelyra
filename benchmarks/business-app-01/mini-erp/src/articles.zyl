@@ -1,0 +1,54 @@
+import "src/database.zyl" as db
+import "src/auth.zyl" as identity
+import "src/shell.zyl" as shell
+import "src/article_groups.zyl" as groups
+import "src/units.zyl" as units
+
+pub struct Article {
+    id: Id
+    article_number: String
+    name: String
+    group: groups::ArticleGroup
+    unit: units::Unit
+    sales_price: Money
+    active: Bool
+}
+
+table articles {
+    id: Id primary auto
+    article_number: String(50) required unique
+    name: String(180) required
+    description: String(2000)?
+    group: groups::ArticleGroup required
+    unit: units::Unit required
+    purchase_price: Money required
+    sales_price: Money required
+    tax_rate: Decimal required
+    minimum_stock: Decimal required
+    reorder_point: Decimal required
+    barcode: String(80)?
+    active: Bool default true
+    archived_at: Timestamp?
+}
+
+crud Article -> articles {
+    requires auth
+    permits "articles.view"
+    permits create "articles.create"
+    permits edit "articles.edit"
+    permits delete "articles.archive"
+    soft_delete {
+        column: archived_at
+    }
+    layout: MiniErpShell
+    title: "Artikel"
+    view {
+        fields { article_number name group unit purchase_price sales_price tax_rate minimum_stock reorder_point barcode active }
+        list { mode: cards }
+        detail { mode: cards }
+        form { mode: cards }
+    }
+    list { article_number name group unit sales_price minimum_stock active }
+    search { article_number name barcode }
+    filter { group active }
+}

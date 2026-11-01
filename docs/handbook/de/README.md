@@ -1521,16 +1521,22 @@ Benutzer sich nicht anmelden; ihre persistenten Sessions werden beim
 Deaktivieren entfernt. Passwort-Resets entfernen ebenfalls alle persistenten
 Sessions des betroffenen Benutzers. Die letzte Zuweisung der konfigurierten
 Administrationsrolle und der letzte aktive Administrator sind geschützt.
-Benutzerlöschung und Self-Service-Kontoverwaltung folgen später.
+Unter `/account/profile` können angemeldete Benutzer ihre E-Mail-Adresse und,
+falls die Benutzertabelle `display_name` enthält, ihren Anzeigenamen nach
+Bestätigung des aktuellen Passworts ändern. Dieselbe Seite ermöglicht einen
+Passwortwechsel mit mindestens zwölf Zeichen; dabei werden andere persistente
+Sitzungen widerrufen. `/account/profile` und `/account/sessions` sind für
+Projektrouten reserviert, sobald ein `auth`-Block vorhanden ist.
 
 Die Routing-Übersicht `zelyra routes app.zyl` zeigt die erzeugten
 HTTP-Methoden einzeln. Ein `auth`-Block aktiviert `GET` und `POST` für
-`/login`, `POST /logout` sowie `GET` und `POST` für `/account/sessions`.
+`/login`, `POST /logout` sowie `GET` und `POST` für `/account/profile` und
+`/account/sessions`.
 Mit `reset_tokens` kommen `GET` und `POST` auf `/forgot-password` und
 `/reset-password` hinzu. Sind außerdem `admin_path`, `admin_permission` und
 `admin_role` vollständig konfiguriert, zeigt die Übersicht `GET` und `POST`
-für den Admin-Pfad. Damit sind bei aktivierter Reset- und Admin-Funktion elf
-Methoden-/Pfad-Routen vorhanden; ohne die optionalen Tabellen und Optionen
+für den Admin-Pfad. Damit sind bei aktivierter Profil-, Sitzungs-, Reset- und
+Admin-Funktion dreizehn Methoden-/Pfad-Routen vorhanden; ohne die optionalen Tabellen und Optionen
 werden die betreffenden Handler nicht als verfügbar ausgewiesen.
 
 CRUD-Berechtigungen werden an Listen-, Formular- und POST-Aktionen

@@ -1,0 +1,106 @@
+fn contains_character(characters: String[], candidate: String) -> Bool {
+    for character in characters {
+        if character == candidate {
+            return true
+        }
+    }
+    return false
+}
+
+pub fn generate_password(length: Int, character_set: String) -> String uses Random {
+    if length < 8 || length > 64 {
+        return ""
+    }
+
+    lowercase = ["a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k", "l", "m", "n", "o", "p", "q", "r", "s", "t", "u", "v", "w", "x", "y", "z"]
+    uppercase = ["A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L", "M", "N", "O", "P", "Q", "R", "S", "T", "U", "V", "W", "X", "Y", "Z"]
+    digits = ["0", "1", "2", "3", "4", "5", "6", "7", "8", "9"]
+    symbols = ["!", "@", "#", "$", "%", "^", "&", "*", "-", "_", "+", "=", "?"]
+
+    mutable require_lowercase = false
+    mutable require_uppercase = false
+    mutable require_digits = false
+    mutable require_symbols = false
+
+    if character_set == "Nur Kleinbuchstaben" {
+        require_lowercase = true
+    } else if character_set == "Nur Ziffern" {
+        require_digits = true
+    } else if character_set == "Buchstaben" {
+        require_lowercase = true
+        require_uppercase = true
+    } else if character_set == "Buchstaben und Ziffern" {
+        require_lowercase = true
+        require_uppercase = true
+        require_digits = true
+    } else if character_set == "Alle Zeichen" {
+        require_lowercase = true
+        require_uppercase = true
+        require_digits = true
+        require_symbols = true
+    } else {
+        return ""
+    }
+
+    mutable pool: String[] = []
+    if require_lowercase {
+        for character in lowercase {
+            pool = append(pool, character)
+        }
+    }
+    if require_uppercase {
+        for character in uppercase {
+            pool = append(pool, character)
+        }
+    }
+    if require_digits {
+        for character in digits {
+            pool = append(pool, character)
+        }
+    }
+    if require_symbols {
+        for character in symbols {
+            pool = append(pool, character)
+        }
+    }
+
+    mutable generated: String[] = []
+    mutable accepted = false
+    while accepted == false {
+        generated = []
+        mutable cursor = 0
+        while cursor < length {
+            generated = append(generated, pool[random_int(0, len(pool) - 1)])
+            cursor = cursor + 1
+        }
+
+        mutable has_lowercase = false
+        mutable has_uppercase = false
+        mutable has_digits = false
+        mutable has_symbols = false
+        for character in generated {
+            if contains_character(lowercase, character) {
+                has_lowercase = true
+            }
+            if contains_character(uppercase, character) {
+                has_uppercase = true
+            }
+            if contains_character(digits, character) {
+                has_digits = true
+            }
+            if contains_character(symbols, character) {
+                has_symbols = true
+            }
+        }
+        accepted = (require_lowercase == false || has_lowercase)
+            && (require_uppercase == false || has_uppercase)
+            && (require_digits == false || has_digits)
+            && (require_symbols == false || has_symbols)
+    }
+
+    mutable password = ""
+    for character in generated {
+        password = password + character
+    }
+    return password
+}

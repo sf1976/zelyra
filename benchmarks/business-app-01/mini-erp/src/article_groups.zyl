@@ -1,0 +1,41 @@
+import "src/database.zyl" as db
+import "src/auth.zyl" as identity
+import "src/shell.zyl" as shell
+
+pub struct ArticleGroup {
+    id: Id
+    code: String
+    name: String
+    active: Bool
+}
+
+table article_groups {
+    id: Id primary auto
+    code: String(30) required unique
+    name: String(120) required
+    description: String(500)?
+    active: Bool default true
+    archived_at: Timestamp?
+}
+
+crud ArticleGroup -> article_groups {
+    requires auth
+    permits "articles.view"
+    permits create "articles.create"
+    permits edit "articles.edit"
+    permits delete "articles.archive"
+    soft_delete {
+        column: archived_at
+    }
+    layout: MiniErpShell
+    title: "Warengruppen"
+    view {
+        fields { code name description active }
+        list { mode: cards }
+        detail { mode: cards }
+        form { mode: cards }
+    }
+    list { code name description active }
+    search { code name }
+    filter { active }
+}

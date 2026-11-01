@@ -571,6 +571,17 @@ fn semantic_references(
 
     for form in &program.forms {
         for action in &form.actions {
+            if let Some(handler) = &action.handler {
+                if function_names.contains(handler.as_str()) {
+                    add_reference(
+                        &mut references,
+                        format!("form:{} action:{}", form.name, action.name),
+                        format!("function:{handler}"),
+                        "handler",
+                        span_value(action.span, sources),
+                    );
+                }
+            }
             let calls = called_functions(&action.statements, &function_names)
                 .into_iter()
                 .chain(

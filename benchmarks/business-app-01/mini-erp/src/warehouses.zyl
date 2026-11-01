@@ -1,0 +1,83 @@
+import "src/database.zyl" as db
+import "src/auth.zyl" as identity
+import "src/shell.zyl" as shell
+
+pub struct Warehouse {
+    id: Id
+    code: String
+    name: String
+    active: Bool
+}
+
+pub struct WarehouseLocation {
+    id: Id
+    warehouse: Warehouse
+    code: String
+    label: String?
+    active: Bool
+}
+
+table warehouses {
+    id: Id primary auto
+    code: String(30) required unique
+    name: String(120) required
+    street: String(180)?
+    postal_code: String(20)?
+    city: String(100)?
+    country: String(2) default "DE"
+    active: Bool default true
+    archived_at: Timestamp?
+}
+
+crud Warehouse -> warehouses {
+    requires auth
+    permits "warehouses.view"
+    permits create "warehouses.create"
+    permits edit "warehouses.edit"
+    permits delete "warehouses.archive"
+    soft_delete {
+        column: archived_at
+    }
+    layout: MiniErpShell
+    title: "Lager"
+    view {
+        fields { code name street postal_code city country active }
+        list { mode: cards }
+        detail { mode: cards }
+        form { mode: cards }
+    }
+    list { code name city country active }
+    search { code name city }
+    filter { active }
+}
+
+table warehouse_locations {
+    id: Id primary auto
+    warehouse: Warehouse required
+    code: String(40) required unique
+    label: String(120)?
+    active: Bool default true
+    archived_at: Timestamp?
+}
+
+crud WarehouseLocation -> warehouse_locations {
+    requires auth
+    permits "warehouses.view"
+    permits create "warehouses.create"
+    permits edit "warehouses.edit"
+    permits delete "warehouses.archive"
+    soft_delete {
+        column: archived_at
+    }
+    layout: MiniErpShell
+    title: "Lagerplätze"
+    view {
+        fields { warehouse code label active }
+        list { mode: cards }
+        detail { mode: cards }
+        form { mode: cards }
+    }
+    list { warehouse code label active }
+    search { code label }
+    filter { warehouse active }
+}
