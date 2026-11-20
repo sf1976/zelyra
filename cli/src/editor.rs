@@ -4316,22 +4316,19 @@ pub(super) fn zelyra_executable() -> Result<PathBuf, (u16, String)> {
     if let Ok(current) = env::current_exe() {
         if let Some(name) = current.file_name().and_then(|n| n.to_str()) {
             if name.starts_with("zelyra-") {
-                if let Some(bin) = current
-                    .parent()
-                    .and_then(|p| p.parent())
-                    .map(|p| p.join("zelyra"))
-                {
+                if let Some(bin) = env::var_os("ZELYRA_BIN").map(PathBuf::from) {
                     if bin.is_file() {
                         return Ok(bin);
                     }
                 }
-                if let Some(bin) = current
-                    .parent()
-                    .and_then(|p| p.parent())
-                    .map(|p| p.join("release").join("zelyra"))
-                {
+                for ancestor in current.ancestors().skip(1).take(6) {
+                    let bin = ancestor.join("zelyra");
                     if bin.is_file() {
                         return Ok(bin);
+                    }
+                    let release_bin = ancestor.join("release").join("zelyra");
+                    if release_bin.is_file() {
+                        return Ok(release_bin);
                     }
                 }
                 if let Some(paths) = env::var_os("PATH") {
