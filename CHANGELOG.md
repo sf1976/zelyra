@@ -1,5 +1,23 @@
 ## Unreleased
 
+## 1.3.1 — Strict architecture test entry and snake_case SQL result mapping
+
+- Allow root `tests.zyl` as a valid entry module when `strict_architecture = true`
+  is enabled while continuing to reject arbitrary root-level modules with
+  `E-ARCH-001`. / `tests.zyl` im Projektroot bei aktiviertem
+  `strict_architecture = true` als gültigen Testeinstieg zulassen, während
+  sonstige Root-Module weiterhin mit `E-ARCH-001` abgewiesen werden.
+- Map PascalCase SQL result record names such as `StockLevel`, `SalesOrder`,
+  `SalesOrderItem`, and `SalesInvoice` to snake_case table names (`stock_levels`,
+  `sales_orders`, `sales_order_items`, `sales_invoices`) in `table_for_type`. /
+  PascalCase-SQL-Ergebnistypen wie `StockLevel`, `SalesOrder`,
+  `SalesOrderItem` und `SalesInvoice` in `table_for_type` auf
+  snake_case-Tabellennamen abbilden.
+- Require `rustc >= 1.95.0` in `install.sh` and automatically install or update
+  user-local `rustup` `stable` when an older system Rust toolchain is found. /
+  In `install.sh` `rustc >= 1.95.0` prüfen und bei älterer System-Installation
+  automatisch `rustup` `stable` benutzerlokal installieren oder aktualisieren.
+
 ## 1.3.0 — Compiler and Studio foundations
 
 - Add the opt-in standard project layout with compiler-checked MariaDB
