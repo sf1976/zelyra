@@ -305,7 +305,7 @@ ensure_cargo() {
     if usable_cargo >/dev/null; then
         return 0
     fi
-    ((auto_rustup)) || die "cargo with rustc >= ${MIN_RUSTC_VERSION} is missing; install/update Rust or remove --no-rustup"
+    ((auto_rustup)) || die "cargo is missing or rustc < ${MIN_RUSTC_VERSION}; install/update Rust or remove --no-rustup"
     ((dry_run)) && {
         printf '+ install or update user-local Rust (>= %s) with rustup\n' "$MIN_RUSTC_VERSION"
         return 0
