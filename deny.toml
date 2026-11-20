@@ -7,6 +7,8 @@ yanked = "deny"
 unmaintained = "all"
 ignore = [
     { id = "RUSTSEC-2025-0134", reason = "mysql 28.0.3 requires rustls-pemfile 2.2.0; Rustls reports it as an unmaintained compatibility wrapper around rustls-pki-types. Keep this exception visible and revisit when mysql removes the dependency." },
+    { id = "RUSTSEC-2026-0543", reason = "chrono 0.4.45 is marked unmaintained (all versions affected); keep visible and plan migration to jiff in a future release." },
+    { id = "RUSTSEC-2026-0555", reason = "chrono-tz 0.10.4 is marked unmaintained (all versions affected); keep visible and plan migration to jiff in a future release." },
 ]
 
 [licenses]

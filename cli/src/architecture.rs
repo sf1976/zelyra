@@ -87,7 +87,11 @@ pub(super) fn validate_project_modules(
     let mut issues = Vec::new();
     for module in modules {
         let path = module.path.replace('\\', "/");
-        if path == "main.zyl" || path.starts_with("<zelyra-") || path.starts_with("packages/") {
+        if path == "main.zyl"
+            || path == "tests.zyl"
+            || path.starts_with("<zelyra-")
+            || path.starts_with("packages/")
+        {
             continue;
         }
         let mut components = Path::new(&path).components();
@@ -1895,5 +1899,40 @@ mod tests {
             .unwrap_err()
             .contains("symlink"));
         fs::remove_file(external).unwrap();
+    }
+
+    #[test]
+    fn strict_architecture_allows_root_tests_entry_but_rejects_other_root_modules() {
+        let project = TempProject::new();
+        fs::write(
+            project.0.join("zelyra.toml"),
+            "[project]\nlayout = \"standard\"\nstrict_architecture = true\n",
+        )
+        .unwrap();
+        let module = |path: &str, declarations: &[&str]| crate::project::ProjectModule {
+            path: path.into(),
+            imports: Vec::new(),
+            exports: Vec::new(),
+            declarations: declarations.iter().map(|value| (*value).into()).collect(),
+        };
+        let allowed = vec![module("tests.zyl", &["function:main"])];
+        assert!(validate_project_modules(
+            project.0.join("main.zyl").to_str().unwrap(),
+            &allowed,
+            &empty_program(),
+            &[],
+        )
+        .is_ok());
+
+        let rejected = vec![module("helpers.zyl", &["function:helper"])];
+        let issues = validate_project_modules(
+            project.0.join("main.zyl").to_str().unwrap(),
+            &rejected,
+            &empty_program(),
+            &[],
+        )
+        .unwrap_err();
+        assert_eq!(issues.len(), 1);
+        assert_eq!(issues[0].code, "E-ARCH-001");
     }
 }

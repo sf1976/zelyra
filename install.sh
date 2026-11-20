@@ -6,6 +6,7 @@ umask 022
 readonly INSTALLER_VERSION="1"
 readonly SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 readonly DEFAULT_INSTALL_ROOT="${HOME}/.local"
+readonly MIN_RUSTC_VERSION="1.95.0"
 
 install_root="${ZELYRA_INSTALL_ROOT:-${DEFAULT_INSTALL_ROOT}}"
 release_tag=""
@@ -16,11 +17,41 @@ offline=0
 uninstall=0
 check_only=0
 
+version_ge() {
+    local current="$1"
+    local minimum="$2"
+    local cur_maj cur_min cur_pat min_maj min_min min_pat
+    IFS='.' read -r cur_maj cur_min cur_pat <<<"${current%%-*}"
+    IFS='.' read -r min_maj min_min min_pat <<<"${minimum%%-*}"
+    cur_maj="${cur_maj:-0}"
+    cur_min="${cur_min:-0}"
+    cur_pat="${cur_pat:-0}"
+    min_maj="${min_maj:-0}"
+    min_min="${min_min:-0}"
+    min_pat="${min_pat:-0}"
+    if ((cur_maj != min_maj)); then
+        ((cur_maj > min_maj))
+        return
+    fi
+    if ((cur_min != min_min)); then
+        ((cur_min > min_min))
+        return
+    fi
+    ((cur_pat >= min_pat))
+}
+
 usable_cargo() {
-    local candidate
+    local candidate sibling_rustc rustc_line rustc_ver
     hash -r 2>/dev/null || true
     candidate="$(command -v cargo 2>/dev/null || true)"
     [[ -n "$candidate" && -x "$candidate" ]] || return 1
+    sibling_rustc="$(dirname -- "$candidate")/rustc"
+    if [[ -x "$sibling_rustc" ]]; then
+        rustc_line="$("$sibling_rustc" --version 2>/dev/null || true)"
+        rustc_ver="${rustc_line#rustc }"
+        rustc_ver="${rustc_ver%% *}"
+        [[ -n "$rustc_ver" ]] && version_ge "$rustc_ver" "$MIN_RUSTC_VERSION" || return 1
+    fi
     printf '%s\n' "$candidate"
 }
 
@@ -274,26 +305,31 @@ ensure_cargo() {
     if usable_cargo >/dev/null; then
         return 0
     fi
-    ((auto_rustup)) || die "cargo is missing; install Rust or remove --no-rustup"
+    ((auto_rustup)) || die "cargo is missing or rustc < ${MIN_RUSTC_VERSION}; install/update Rust or remove --no-rustup"
     ((dry_run)) && {
-        printf '+ install user-local Rust with rustup\n'
+        printf '+ install or update user-local Rust (>= %s) with rustup\n' "$MIN_RUSTC_VERSION"
         return 0
     }
-    command -v curl >/dev/null 2>&1 || die "curl is required to install Rust automatically"
-    local rustup_script
-    rustup_script="$(mktemp)"
-    trap 'rm -f -- "${rustup_script:-}"' EXIT
-    curl --fail --silent --show-error --location \
-        --proto '=https' --tlsv1.2 \
-        https://sh.rustup.rs --output "$rustup_script"
-    sh "$rustup_script" -y --profile minimal
-    rm -f -- "$rustup_script"
-    trap - EXIT
+    if command -v rustup >/dev/null 2>&1; then
+        run rustup toolchain install stable --profile minimal
+        run rustup default stable
+    else
+        command -v curl >/dev/null 2>&1 || die "curl is required to install Rust automatically"
+        local rustup_script
+        rustup_script="$(mktemp)"
+        trap 'rm -f -- "${rustup_script:-}"' EXIT
+        curl --fail --silent --show-error --location \
+            --proto '=https' --tlsv1.2 \
+            https://sh.rustup.rs --output "$rustup_script"
+        sh "$rustup_script" -y --profile minimal
+        rm -f -- "$rustup_script"
+        trap - EXIT
+    fi
     if [[ -f "${CARGO_HOME:-${HOME}/.cargo}/env" ]]; then
         # shellcheck disable=SC1091
         . "${CARGO_HOME:-${HOME}/.cargo}/env"
     fi
-    usable_cargo >/dev/null || die "cargo is still unavailable after Rust installation; check PATH and ~/.cargo/bin"
+    usable_cargo >/dev/null || die "cargo with rustc >= ${MIN_RUSTC_VERSION} is still unavailable after Rust installation; check PATH and ~/.cargo/bin"
 }
 
 install_binary() {

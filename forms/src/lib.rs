@@ -1329,18 +1329,14 @@ fn type_error(ty: &Type, value: &str) -> Option<&'static str> {
 
 fn valid_uuid(value: &str) -> bool {
     let bytes = value.as_bytes();
-    if bytes.len() != 36
-        || ![8, 13, 18, 23]
+    bytes.len() == 36
+        && [8, 13, 18, 23]
             .into_iter()
             .all(|index| bytes[index] == b'-')
-        || !bytes
+        && bytes
             .iter()
             .enumerate()
             .all(|(index, byte)| [8, 13, 18, 23].contains(&index) || byte.is_ascii_hexdigit())
-    {
-        return false;
-    }
-    true
 }
 
 #[cfg(test)]

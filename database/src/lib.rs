@@ -1260,18 +1260,37 @@ fn contains_applied_type(ty: &Type) -> bool {
     }
 }
 
+fn camel_to_snake(name: &str) -> String {
+    let mut out = String::with_capacity(name.len() + 4);
+    for (index, ch) in name.chars().enumerate() {
+        if ch.is_ascii_uppercase() {
+            if index > 0 && !out.ends_with('_') {
+                out.push('_');
+            }
+            out.push(ch.to_ascii_lowercase());
+        } else {
+            out.push(ch);
+        }
+    }
+    out
+}
+
 fn table_for_type(name: &str, table_names: &HashSet<String>) -> Option<String> {
     let name = name.rsplit("::").next().unwrap_or(name);
-    let snake = name.to_ascii_lowercase();
-    if table_names.contains(&snake) {
-        return Some(snake);
+    for candidate in [name.to_ascii_lowercase(), camel_to_snake(name)] {
+        if table_names.contains(&candidate) {
+            return Some(candidate);
+        }
+        let plural = if candidate.ends_with('y') {
+            format!("{}ies", &candidate[..candidate.len() - 1])
+        } else {
+            format!("{candidate}s")
+        };
+        if table_names.contains(&plural) {
+            return Some(plural);
+        }
     }
-    let plural = if snake.ends_with('y') {
-        format!("{}ies", &snake[..snake.len() - 1])
-    } else {
-        format!("{snake}s")
-    };
-    table_names.contains(&plural).then_some(plural)
+    None
 }
 
 fn default_sql(value: &DefaultValue) -> String {
@@ -7645,6 +7664,28 @@ mod tests {
         assert_eq!(
             table_for_type("src/models.zyl::Customer", &table_names),
             Some("customers".to_owned())
+        );
+    }
+
+    #[test]
+    fn table_result_types_accept_pascal_case_snake_table_names() {
+        let table_names = HashSet::from([
+            "stock_levels".to_owned(),
+            "sales_order_items".to_owned(),
+            "sales_invoices".to_owned(),
+        ]);
+
+        assert_eq!(
+            table_for_type("domain/inventory/actions.zyl::StockLevel", &table_names),
+            Some("stock_levels".to_owned())
+        );
+        assert_eq!(
+            table_for_type("SalesOrderItem", &table_names),
+            Some("sales_order_items".to_owned())
+        );
+        assert_eq!(
+            table_for_type("SalesInvoice", &table_names),
+            Some("sales_invoices".to_owned())
         );
     }
 
