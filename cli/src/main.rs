@@ -235,7 +235,7 @@ fn usage() {
     eprintln!("  setup supports `--database`, `--schema`, `--all`, `--host-port`, `--db-host-port`, and `--web [--port <port>]`");
     eprintln!("  outbox: `setup [file.zyl]`, `list [file.zyl] [--limit <1..200>] [--format text|json]`, `requeue <event-id> [file.zyl]`, or `run [file.zyl] --handler <event.type=function_name> [--once] [--lease-seconds <5..3600>]");
     eprintln!("  Detailhilfe / detailed help: `zelyra fmt --help`, `zelyra init --help`, or `zelyra db plan --help` shows options and examples");
-    eprintln!("{}", terminal::help(&format!("Zelyra {}\n\nUsage:\n  zelyra --help\n  zelyra --version\n  zelyra version\n  zelyra update [--check]\n  zelyra uninstall [--yes] [--dry-run]\n  zelyra --tutorial invoice [directory] [--no-start]\n  zelyra new <directory> [--layout standard] [--mariadb] [--template minimal|mariadb-crud|mariadb-auth|mariadb-business] [--web-port <port>] [--host-port <port>] [--db-host-port <port>]\n  zelyra init [directory] [--mariadb] [--template minimal|mariadb-crud|mariadb-auth|mariadb-business] [--web-port <port>] [--host-port <port>] [--db-host-port <port>]\n  zelyra setup [directory] [--database|--schema|--all] [--host-port <port>] [--db-host-port <port>]\n  zelyra setup [directory] --web [--port <port>]\n  zelyra check <file.zyl> [--format human|json]\n  zelyra fmt <file.zyl> [--check]\n  zelyra impact <file.zyl> [--format human|json]\n  zelyra edit --format=json [--apply] <change.json>\n  zelyra context <file.zyl> [--format human|json]\n  zelyra config <file.zyl> [--format human|json]\n  zelyra build <file.zyl>\n  zelyra run <file.zyl> [--entry <function> [--entry-args <JSON-array>]] [--backend ast|mir|bytecode] [--optimize-mir] [--max-steps <n>]\n  zelyra serve <file.zyl> [address]\n  zelyra routes <entry.zyl> [--format human|json]\n  zelyra reflect <entry.zyl> [--format=json|human]\n  zelyra editor [directory] [--port <port>] [--no-open]\n  zelyra import laravel analyze <project> --report <file> [--inspect-database]\n  zelyra import laravel generate <project> --output <new-directory> (--table <name>... | --all-supported)\n  zelyra module init <directory> --name <package-name> [--version <semver>]\n  zelyra module plan <entry.zyl> <module.zyl|resource-id>\n  zelyra module bundle <entry.zyl> <module.zyl|resource-id> --output <dir> [--docker --compiler-ref <40-character-commit>]\n  zelyra package lock [entry.zyl] [--check|--update]\n  zelyra doctor [file.zyl] [--port <port>] [--json]\n  zelyra verify <file.zyl> [--json]\n  zelyra doc <file.zyl> [--openapi|--typescript]\n  zelyra auth hash-password [--stdin]\n  zelyra auth role <grant|revoke> <file.zyl> <user-id> <role>\n  zelyra auth role-permission <grant|revoke> <file.zyl> <role> <permission>\n  zelyra audit inspect <file.zyl> [--limit <n>]\n  zelyra audit export <file.zyl> [--limit <n>] [--format json|csv]\n  zelyra audit verify <file.zyl>\n  zelyra audit prune <file.zyl> --before <timestamp> [--confirm]\n  zelyra form validate <file.zyl> <FormName> [field=value ...]\n  zelyra outbox <setup|list|requeue|run> [file.zyl] [options]\n  zelyra task <list|run> <main.zyl> [command] [options]\n  zelyra schedule <list|export> <main.zyl> [options]\n  zelyra service <install|change|status|restart|remove> [--port <port>]\n  zelyra db <create|setup|bootstrap|inspect|map|plan|apply|history> <file.zyl>\n  zelyra files cleanup|backup|restore [main.zyl] [options]\n\nSchnelleinstieg\n  Geführtes Rechnungstutorial:\n    zelyra --tutorial invoice                 Erstellt Projekt, Datenbank und Schema, startet die Anwendung und öffnet den Browser.\n    Die ausgegebene Anwendungsadresse manuell öffnen, falls kein Browser startet.\n    zelyra editor invoice-tutorial            Öffnet Studio für das Tutorialprojekt.\n  Kleines eigenes Projekt:\n    zelyra init ./mein-projekt                Erstellt ein minimales Projekt ohne Datenbank.\n    cd mein-projekt && zelyra run main.zyl    Startet das Programm direkt.\n    zelyra editor                              Startet Studio im aktuellen Ordner und öffnet den Standardbrowser.\n\nWichtige Befehle\n  init/new  Projektgerüst erstellen; init ist der kurze Einstieg, new bietet Vorlagen und Optionen.\n  check     Datei oder Projekt auf Syntax- und Compilerfehler prüfen.\n  run       Ein Zelyra-Programm direkt ausführen.\n  serve     Eine Webanwendung lokal starten.\n  setup     MariaDB-Projekt vorbereiten; `--all` startet Stack und Schema sichtbar. `.` bedeutet aktuelles Verzeichnis, `./test_a` einen Unterordner.\n  db plan   Schemaänderungen zuerst nur anzeigen; db apply setzt einen geprüften Plan um.\n  db create Gibt CREATE-SQL aus; `db setup` richtet das MariaDB-Schema ein.\n  files     Alte, nicht referenzierte Uploads standardmäßig nur vorschauen; Löschen erfordert Wartungsfenster-Bestätigung.\n  files     Alte, nicht referenzierte Uploads standardmäßig nur vorschauen; Löschen erfordert Wartungsfenster-Bestätigung.\n  outbox    Transaktionale Ereignisse einrichten, prüfen und mit Handlern verarbeiten.\n  task      Native Command-Definitionen anzeigen und compilergeprüft ausführen.\n  schedule  Native Zeitpläne anzeigen oder als Cron-Vorschau ausgeben.\n  service   Linux-systemd-Benutzerdienst mit festem Port installieren und verwalten.\n  routes    `zelyra routes main.zyl` listet deklarierte Seiten, APIs und erzeugte Ressourcenrouten; `--format json` liefert maschinenlesbare Ausgabe.\n  reflect   Prüft das Projekt und exportiert Symbole, Schema, Routen, APIs, Forms und Contracts als versioniertes JSON.\n  editor    Startet den lokalen Studio-Server und öffnet den Standardbrowser; ohne Argument gilt der aktuelle Ordner. `--no-open` überspringt den Browserstart.\n  module init Erstellt ein lokales, offline nutzbares Paketgerüst.\n  uninstall Entfernt nach Bestätigung die aktive Binärdatei; paketverwaltete Installationen werden mit dem Paketmanager entfernt.\n\nGetting started\n  Guided invoice tutorial:\n    zelyra --tutorial invoice                 Creates the project, database, and schema, starts the app, and opens the browser.\n    Open the printed application URL manually if no browser starts.\n    zelyra editor invoice-tutorial            Opens Studio for the tutorial project.\n  Small project of your own:\n    zelyra init ./my-project                  Creates a minimal project without a database.\n    cd my-project && zelyra run main.zyl      Runs the program directly.\n    zelyra editor                              Starts Studio in the current folder and opens the default browser.\n\nKey commands\n  init/new  Create a project; init is the short path, new offers templates and options.\n  check     Check a file or project for syntax and compiler errors.\n  run       Execute a Zelyra program directly.\n  console   Evaluate Zelyra expressions interactively; database writes roll back by default.\n  serve     Start a web application locally.\n  setup     Prepare a MariaDB project; `--all` visibly starts the stack and applies the schema. `.` is the current folder, `./test_a` a subfolder.\n  db plan   Preview schema changes; db apply applies a reviewed plan.\n  db create Emit CREATE SQL; `db setup` initializes the MariaDB database and schema.\n  files     Preview old unreferenced uploads by default; deletion requires maintenance-window acknowledgement.\n  outbox    Set up, inspect, and process transactional events with explicit handlers.\n  task      List and run native, compiler-checked command declarations.\n  schedule  List native schedules or print a cron preview.\n  service   Install and manage a Linux systemd user service with a fixed port.\n  routes    `zelyra routes main.zyl` lists declared pages, APIs, and generated resource routes; use `--format json` for machine-readable output.\n  editor    Start the local Studio server and open the default browser; defaults to the current folder. Use `--no-open` to skip browser launch.\n  module init Create a local package starter without network or build scripts.\n  uninstall Remove the active executable after confirmation; use its package manager for managed installs.\n\nColor: set ZELYRA_COLOR=always|never|auto; NO_COLOR disables automatic ANSI output. Key help headings and commands use a terminal-safe palette.", env!("CARGO_PKG_VERSION"))));
+    eprintln!("{}", terminal::help(&format!("Zelyra {}\n\nUsage:\n  zelyra --help\n  zelyra --version\n  zelyra version\n  zelyra update [--check]\n  zelyra uninstall [--yes] [--dry-run]\n  zelyra --tutorial invoice [directory] [--no-start]\n  zelyra new <directory> [--layout standard [--strict]] [--mariadb] [--template minimal|mariadb-crud|mariadb-auth|mariadb-business] [--web-port <port>] [--host-port <port>] [--db-host-port <port>]\n  zelyra init [directory] [--mariadb] [--template minimal|mariadb-crud|mariadb-auth|mariadb-business] [--web-port <port>] [--host-port <port>] [--db-host-port <port>]\n  zelyra setup [directory] [--database|--schema|--all] [--host-port <port>] [--db-host-port <port>]\n  zelyra setup [directory] --web [--port <port>]\n  zelyra check <file.zyl> [--format human|json]\n  zelyra fmt <file.zyl> [--check]\n  zelyra impact <file.zyl> [--format human|json]\n  zelyra edit --format=json [--apply] <change.json>\n  zelyra context <file.zyl> [--format human|json]\n  zelyra config <file.zyl> [--format human|json]\n  zelyra build <file.zyl>\n  zelyra run <file.zyl> [--entry <function> [--entry-args <JSON-array>]] [--backend ast|mir|bytecode] [--optimize-mir] [--max-steps <n>]\n  zelyra serve <file.zyl> [address]\n  zelyra routes <entry.zyl> [--format human|json]\n  zelyra reflect <entry.zyl> [--format=json|human]\n  zelyra editor [directory] [--port <port>] [--no-open]\n  zelyra import laravel analyze <project> --report <file> [--inspect-database]\n  zelyra import laravel generate <project> --output <new-directory> (--table <name>... | --all-supported)\n  zelyra module init <directory> --name <package-name> [--version <semver>]\n  zelyra module plan <entry.zyl> <module.zyl|resource-id>\n  zelyra module bundle <entry.zyl> <module.zyl|resource-id> --output <dir> [--docker --compiler-ref <40-character-commit>]\n  zelyra package lock [entry.zyl] [--check|--update]\n  zelyra doctor [file.zyl] [--port <port>] [--json]\n  zelyra verify <file.zyl> [--json]\n  zelyra doc <file.zyl> [--openapi|--typescript|--states]\n  zelyra auth hash-password [--stdin]\n  zelyra auth role <grant|revoke> <file.zyl> <user-id> <role>\n  zelyra auth role-permission <grant|revoke> <file.zyl> <role> <permission>\n  zelyra audit inspect <file.zyl> [--limit <n>]\n  zelyra audit export <file.zyl> [--limit <n>] [--format json|csv]\n  zelyra audit verify <file.zyl>\n  zelyra audit prune <file.zyl> --before <timestamp> [--confirm]\n  zelyra form validate <file.zyl> <FormName> [field=value ...]\n  zelyra outbox <setup|list|requeue|run> [file.zyl] [options]\n  zelyra task <list|run> <main.zyl> [command] [options]\n  zelyra schedule <list|export> <main.zyl> [options]\n  zelyra service <install|change|status|restart|remove> [--port <port>]\n  zelyra db <create|setup|bootstrap|inspect|map|plan|apply|history> <file.zyl>\n  zelyra files cleanup|backup|restore [main.zyl] [options]\n\nSchnelleinstieg\n  Geführtes Rechnungstutorial:\n    zelyra --tutorial invoice                 Erstellt Projekt, Datenbank und Schema, startet die Anwendung und öffnet den Browser.\n    Die ausgegebene Anwendungsadresse manuell öffnen, falls kein Browser startet.\n    zelyra editor invoice-tutorial            Öffnet Studio für das Tutorialprojekt.\n  Kleines eigenes Projekt:\n    zelyra init ./mein-projekt                Erstellt ein minimales Projekt ohne Datenbank.\n    cd mein-projekt && zelyra run main.zyl    Startet das Programm direkt.\n    zelyra editor                              Startet Studio im aktuellen Ordner und öffnet den Standardbrowser.\n\nWichtige Befehle\n  init/new  Projektgerüst erstellen; init ist der kurze Einstieg, new bietet Vorlagen und Optionen.\n  check     Datei oder Projekt auf Syntax- und Compilerfehler prüfen.\n  run       Ein Zelyra-Programm direkt ausführen.\n  serve     Eine Webanwendung lokal starten.\n  setup     MariaDB-Projekt vorbereiten; `--all` startet Stack und Schema sichtbar. `.` bedeutet aktuelles Verzeichnis, `./test_a` einen Unterordner.\n  db plan   Schemaänderungen zuerst nur anzeigen; db apply setzt einen geprüften Plan um.\n  db create Gibt CREATE-SQL aus; `db setup` richtet das MariaDB-Schema ein.\n  files     Alte, nicht referenzierte Uploads standardmäßig nur vorschauen; Löschen erfordert Wartungsfenster-Bestätigung.\n  outbox    Transaktionale Ereignisse einrichten, prüfen und mit Handlern verarbeiten.\n  task      Native Command-Definitionen anzeigen und compilergeprüft ausführen.\n  schedule  Native Zeitpläne anzeigen oder als Cron-Vorschau ausgeben.\n  service   Linux-systemd-Benutzerdienst mit festem Port installieren und verwalten.\n  routes    `zelyra routes main.zyl` listet deklarierte Seiten, APIs und erzeugte Ressourcenrouten; `--format json` liefert maschinenlesbare Ausgabe.\n  reflect   Prüft das Projekt und exportiert Symbole, Schema, Routen, APIs, Forms und Contracts als versioniertes JSON.\n  editor    Startet den lokalen Studio-Server und öffnet den Standardbrowser; ohne Argument gilt der aktuelle Ordner. `--no-open` überspringt den Browserstart.\n  module init Erstellt ein lokales, offline nutzbares Paketgerüst.\n  uninstall Entfernt nach Bestätigung die aktive Binärdatei; paketverwaltete Installationen werden mit dem Paketmanager entfernt.\n\nGetting started\n  Guided invoice tutorial:\n    zelyra --tutorial invoice                 Creates the project, database, and schema, starts the app, and opens the browser.\n    Open the printed application URL manually if no browser starts.\n    zelyra editor invoice-tutorial            Opens Studio for the tutorial project.\n  Small project of your own:\n    zelyra init ./my-project                  Creates a minimal project without a database.\n    cd my-project && zelyra run main.zyl      Runs the program directly.\n    zelyra editor                              Starts Studio in the current folder and opens the default browser.\n\nKey commands\n  init/new  Create a project; init is the short path, new offers templates and options.\n  check     Check a file or project for syntax and compiler errors.\n  run       Execute a Zelyra program directly.\n  console   Evaluate Zelyra expressions interactively; database writes roll back by default.\n  serve     Start a web application locally.\n  setup     Prepare a MariaDB project; `--all` visibly starts the stack and applies the schema. `.` is the current folder, `./test_a` a subfolder.\n  db plan   Preview schema changes; db apply applies a reviewed plan.\n  db create Emit CREATE SQL; `db setup` initializes the MariaDB database and schema.\n  files     Preview old unreferenced uploads by default; deletion requires maintenance-window acknowledgement.\n  outbox    Set up, inspect, and process transactional events with explicit handlers.\n  task      List and run native, compiler-checked command declarations.\n  schedule  List native schedules or print a cron preview.\n  service   Install and manage a Linux systemd user service with a fixed port.\n  routes    `zelyra routes main.zyl` lists declared pages, APIs, and generated resource routes; use `--format json` for machine-readable output.\n  editor    Start the local Studio server and open the default browser; defaults to the current folder. Use `--no-open` to skip browser launch.\n  module init Create a local package starter without network or build scripts.\n  uninstall Remove the active executable after confirmation; use its package manager for managed installs.\n\nColor: set ZELYRA_COLOR=always|never|auto; NO_COLOR disables automatic ANSI output. Key help headings and commands use a terminal-safe palette.", env!("CARGO_PKG_VERSION"))));
 }
 
 fn version_command() -> ExitCode {
@@ -282,6 +282,7 @@ struct ProjectOptions {
     auth_template: bool,
     business_template: bool,
     canonical_layout: bool,
+    strict_architecture: bool,
     web_port: u16,
     host_port: u16,
     database_host_port: u16,
@@ -839,7 +840,9 @@ console = false
 "#,
         version = env!("CARGO_PKG_VERSION"),
         database_section = database_section,
-        layout_line = if options.canonical_layout {
+        layout_line = if options.canonical_layout && options.strict_architecture {
+            "layout = \"standard\"\nstrict_architecture = true"
+        } else if options.canonical_layout {
             "layout = \"standard\""
         } else {
             ""
@@ -883,9 +886,11 @@ console = false
         ("locales/en.json", "{}\n".to_owned()),
     ];
     if options.canonical_layout {
-        let (schema_source, route_source) = if options.with_mariadb && !preserve_existing_main {
+        let (schema_source, route_source, domain_actions) = if options.with_mariadb
+            && !preserve_existing_main
+        {
             match canonical_template_modules(main_template) {
-                Ok(modules) => modules,
+                Ok(modules) => (modules.schema, modules.routes, modules.domain_actions),
                 Err(message) => {
                     eprintln!("error[E-INIT-007]: cannot prepare canonical template: {message}");
                     return ExitCode::from(2);
@@ -895,6 +900,7 @@ console = false
             (
                 "// Declarative table definitions for this project.\n".to_owned(),
                 "page \"/\" {\n    html {\n        <main class=\"z-container\">\n            <h1>Welcome to your Zelyra project</h1>\n            <p>Start building a business application with typed Zelyra modules.</p>\n        </main>\n    }\n}\n".to_owned(),
+                None,
             )
         };
         files.extend([
@@ -903,6 +909,9 @@ console = false
             ("routes/web.zyl", route_source),
             ("assets/.keep", String::new()),
         ]);
+        if let Some(actions_source) = domain_actions {
+            files.push(("domain/actions.zyl", actions_source));
+        }
     }
     if options.with_mariadb && !options.canonical_layout && !preserve_existing_main {
         files.push(("src/database.zyl", MARIADB_DATABASE_MODULE.to_owned()));
@@ -1126,13 +1135,87 @@ CMD ["zelyra", "serve", "main.zyl", "0.0.0.0:__WEB_PORT__"]
     ExitCode::SUCCESS
 }
 
-/// Split a bundled database template into the canonical schema and route
-/// modules using parser source spans. This keeps the template source itself
-/// as the only source of truth and avoids hand-maintained string surgery.
-fn canonical_template_modules(source: &str) -> Result<(String, String), String> {
+struct CanonicalTemplateModules {
+    schema: String,
+    routes: String,
+    domain_actions: Option<String>,
+}
+
+fn template_camel_to_snake(name: &str) -> String {
+    let mut output = String::with_capacity(name.len() + 4);
+    for (index, ch) in name.chars().enumerate() {
+        if ch.is_ascii_uppercase() {
+            if index > 0 {
+                output.push('_');
+            }
+            output.push(ch.to_ascii_lowercase());
+        } else {
+            output.push(ch);
+        }
+    }
+    output
+}
+
+fn format_template_type(ty: &zelyra_ast::Type) -> String {
+    match ty {
+        zelyra_ast::Type::Option(inner) => format!("{}?", format_template_type(inner)),
+        other => other.to_string(),
+    }
+}
+
+fn qualify_schema_types(
+    module_source: &mut String,
+    schema_type_names: &HashSet<String>,
+) -> Result<(), String> {
+    if schema_type_names.is_empty() {
+        return Ok(());
+    }
+    let tokens = lex(module_source).map_err(|error| error.message)?;
+    let mut edits = tokens
+        .iter()
+        .enumerate()
+        .filter_map(|(index, token)| {
+            let TokenKind::Ident(name) = &token.kind else {
+                return None;
+            };
+            if !schema_type_names.contains(name)
+                || tokens
+                    .get(index + 1)
+                    .is_some_and(|next| next.kind == TokenKind::DoubleColon)
+            {
+                return None;
+            }
+            Some((token.span.start, token.span.end, format!("schema::{name}")))
+        })
+        .collect::<Vec<_>>();
+    edits.sort_by_key(|edit| std::cmp::Reverse(edit.0));
+    for (start, end, replacement) in edits {
+        if start > end
+            || end > module_source.len()
+            || !module_source.is_char_boundary(start)
+            || !module_source.is_char_boundary(end)
+        {
+            return Err("template parser returned an invalid type reference span".to_owned());
+        }
+        module_source.replace_range(start..end, &replacement);
+    }
+    Ok(())
+}
+
+/// Split a bundled database template into canonical schema, domain, and route
+/// modules using parser source spans. Direct-SQL write actions inside forms
+/// and CRUD declarations are lifted into `domain/actions.zyl` and called from
+/// `routes/web.zyl` via typed `execute { ... }` blocks so every canonical
+/// starter satisfies `strict_architecture = true` out of the box.
+fn canonical_template_modules(source: &str) -> Result<CanonicalTemplateModules, String> {
     let tokens = lex(source).map_err(|error| error.message)?;
     let program = parse(&tokens).map_err(|error| error.message)?;
     let needs_database = program.databases.is_empty();
+    let known_tables = program
+        .tables
+        .iter()
+        .map(|table| table.name.clone())
+        .collect::<Vec<_>>();
     let schema_type_names = program
         .types
         .iter()
@@ -1202,19 +1285,172 @@ fn canonical_template_modules(source: &str) -> Result<(String, String), String> 
     collect!(program.components, false);
     collect!(program.pages, false);
     collect!(program.tableviews, false);
-    collect!(program.forms, false);
-    collect!(program.cruds, false);
+    collect!(&program.forms, false);
+    collect!(&program.cruds, false);
     collect!(program.auth, false);
     collect!(program.apis, false);
     collect!(program.commands, false);
     collect!(program.schedules, false);
     collect!(program.functions, false);
 
+    // Lift direct-SQL write actions from `form` and `crud` declarations into
+    // `domain/actions.zyl` and rewrite the route action body to `execute { ... }`.
+    let mut domain_functions = Vec::new();
+    let mut route_rewrites: Vec<(usize, usize, String)> = Vec::new();
+    let action_has_write_sql = |action: &zelyra_ast::FormAction| -> bool {
+        if action.execute_body.is_some() || action.statements.is_empty() {
+            return false;
+        }
+        action.statements.iter().any(|statement| {
+            let zelyra_ast::Stmt::Expr(expression) = statement else {
+                return false;
+            };
+            let zelyra_ast::ExprKind::Sql { query, .. } = &expression.kind else {
+                return false;
+            };
+            let (command, _) = zelyra_database::sql::analyze_table_access(query, &known_tables);
+            command.is_some() && command != Some("SELECT")
+        })
+    };
+    let resolve_field_type =
+        |table: Option<&zelyra_ast::TableDef>, field: &zelyra_ast::FormField| -> zelyra_ast::Type {
+            field
+                .ty
+                .clone()
+                .or_else(|| {
+                    table.and_then(|table| {
+                        table
+                            .columns
+                            .iter()
+                            .find(|column| column.name == field.name)
+                            .map(|column| column.ty.clone())
+                    })
+                })
+                .unwrap_or(zelyra_ast::Type::String)
+        };
+
+    for form in &program.forms {
+        let table = form
+            .table
+            .as_deref()
+            .and_then(|name| program.tables.iter().find(|table| table.name == name));
+        for action in &form.actions {
+            if !action_has_write_sql(action) {
+                continue;
+            }
+            let Some((first_start, last_end)) = action
+                .statements
+                .first()
+                .zip(action.statements.last())
+                .map(|(first, last)| (first.span().start, last.span().end))
+            else {
+                continue;
+            };
+            if first_start > last_end
+                || last_end > source.len()
+                || !source.is_char_boundary(first_start)
+                || !source.is_char_boundary(last_end)
+            {
+                return Err("template parser returned an invalid form action span".to_owned());
+            }
+            let fn_name = format!(
+                "{}_{}",
+                template_camel_to_snake(&form.name),
+                template_camel_to_snake(&action.name)
+            );
+            let mut param_defs = Vec::new();
+            let mut call_args = Vec::new();
+            let mut seen = HashSet::new();
+            for field in form.fields.iter().chain(action.fields.iter()) {
+                if !seen.insert(field.name.clone()) {
+                    continue;
+                }
+                let ty = format_template_type(&resolve_field_type(table, field));
+                param_defs.push(format!("{}: {ty}", field.name));
+                call_args.push(field.name.clone());
+            }
+            let raw_body = source[first_start..last_end].trim();
+            domain_functions.push(format!(
+                "pub fn {fn_name}({}) uses Database(write) {{\n    {raw_body}\n}}\n",
+                param_defs.join(", ")
+            ));
+            route_rewrites.push((
+                first_start,
+                last_end,
+                format!(
+                    "uses Database(write)\n\n        execute {{\n            actions::{fn_name}({})\n        }}",
+                    call_args.join(", ")
+                ),
+            ));
+        }
+    }
+
+    for crud in &program.cruds {
+        let table = program.tables.iter().find(|table| table.name == crud.table);
+        let id_type = table
+            .and_then(|table| table.columns.iter().find(|column| column.name == "id"))
+            .map(|column| format_template_type(&column.ty))
+            .unwrap_or_else(|| "Id".into());
+        for action in &crud.actions {
+            if !action_has_write_sql(action) {
+                continue;
+            }
+            let Some((first_start, last_end)) = action
+                .statements
+                .first()
+                .zip(action.statements.last())
+                .map(|(first, last)| (first.span().start, last.span().end))
+            else {
+                continue;
+            };
+            if first_start > last_end
+                || last_end > source.len()
+                || !source.is_char_boundary(first_start)
+                || !source.is_char_boundary(last_end)
+            {
+                return Err("template parser returned an invalid CRUD action span".to_owned());
+            }
+            let fn_name = format!(
+                "{}_{}",
+                template_camel_to_snake(&crud.name),
+                template_camel_to_snake(&action.name)
+            );
+            let mut param_defs = vec![format!("id: {id_type}")];
+            let mut call_args = vec!["row.id".to_owned()];
+            let mut seen = HashSet::from(["id".to_owned()]);
+            for field in &action.fields {
+                if !seen.insert(field.name.clone()) {
+                    continue;
+                }
+                let ty = format_template_type(&resolve_field_type(table, field));
+                param_defs.push(format!("{}: {ty}", field.name));
+                call_args.push(field.name.clone());
+            }
+            let raw_body = source[first_start..last_end].trim();
+            domain_functions.push(format!(
+                "pub fn {fn_name}({}) uses Database(write) {{\n    {raw_body}\n}}\n",
+                param_defs.join(", ")
+            ));
+            route_rewrites.push((
+                first_start,
+                last_end,
+                format!(
+                    "uses Database(write)\n\n        execute {{\n            actions::{fn_name}({})\n        }}",
+                    call_args.join(", ")
+                ),
+            ));
+        }
+    }
+
+    let has_domain_actions = !domain_functions.is_empty();
+
     fn emit(
         source: &str,
         spans: &mut [zelyra_ast::Span],
         table_starts: &HashSet<usize>,
         public_starts: &HashSet<usize>,
+        has_domain_actions: bool,
+        rewrites: &[(usize, usize, String)],
     ) -> Result<String, String> {
         spans.sort_by_key(|span| span.start);
         let mut output = String::new();
@@ -1228,7 +1464,17 @@ fn canonical_template_modules(source: &str) -> Result<(String, String), String> 
             {
                 return Err("template parser returned an invalid source span".to_owned());
             }
-            let mut declaration = source[start..end].trim().to_owned();
+            let mut declaration = source[start..end].to_owned();
+            let mut local_rewrites = rewrites
+                .iter()
+                .filter(|(r_start, r_end, _)| *r_start >= start && *r_end <= end)
+                .map(|(r_start, r_end, text)| (r_start - start, r_end - start, text))
+                .collect::<Vec<_>>();
+            local_rewrites.sort_by_key(|(r_start, _, _)| std::cmp::Reverse(*r_start));
+            for (r_start, r_end, text) in local_rewrites {
+                declaration.replace_range(r_start..r_end, text);
+            }
+            let mut declaration = declaration.trim().to_owned();
             if public_starts.contains(&span.start) {
                 declaration.insert_str(0, "pub ");
             }
@@ -1236,9 +1482,14 @@ fn canonical_template_modules(source: &str) -> Result<(String, String), String> 
                 let closing = declaration
                     .rfind('}')
                     .ok_or_else(|| "table declaration has no closing brace".to_owned())?;
+                let access_modules = if has_domain_actions {
+                    "\"domain/actions.zyl\", \"routes/web.zyl\""
+                } else {
+                    "\"routes/web.zyl\""
+                };
                 declaration.insert_str(
                     closing,
-                    "\n    access {\n        read_write: [\"routes/web.zyl\"]\n    }\n",
+                    &format!("\n    access {{\n        read_write: [{access_modules}]\n    }}\n"),
                 );
             }
             if !declaration.is_empty() {
@@ -1254,6 +1505,8 @@ fn canonical_template_modules(source: &str) -> Result<(String, String), String> 
         &mut schema_spans,
         &table_starts,
         &public_schema_starts,
+        has_domain_actions,
+        &[],
     )?;
     if needs_database {
         schema.insert_str(0, "database main {\n    engine: mariadb\n}\n\n");
@@ -1262,6 +1515,9 @@ fn canonical_template_modules(source: &str) -> Result<(String, String), String> 
         schema.push_str("// No table declarations in this starter yet.\n");
     }
     let mut routes = String::from("import \"schema::tables\" as schema\n");
+    if has_domain_actions {
+        routes.push_str("import \"domain::actions\" as actions\n");
+    }
     for import in program.imports {
         let start = import.span.start;
         let end = import.span.end;
@@ -1283,44 +1539,30 @@ fn canonical_template_modules(source: &str) -> Result<(String, String), String> 
         &mut route_spans,
         &table_starts,
         &public_schema_starts,
+        has_domain_actions,
+        &route_rewrites,
     )?;
     if route_declarations.trim().is_empty() {
         return Err("template contains no route or application declarations".to_owned());
     }
     routes.push('\n');
     routes.push_str(&route_declarations);
-    if !schema_type_names.is_empty() {
-        let route_tokens = lex(&routes).map_err(|error| error.message)?;
-        let mut edits = route_tokens
-            .iter()
-            .enumerate()
-            .filter_map(|(index, token)| {
-                let TokenKind::Ident(name) = &token.kind else {
-                    return None;
-                };
-                if !schema_type_names.contains(name)
-                    || route_tokens
-                        .get(index + 1)
-                        .is_some_and(|next| next.kind == TokenKind::DoubleColon)
-                {
-                    return None;
-                }
-                Some((token.span.start, token.span.end, format!("schema::{name}")))
-            })
-            .collect::<Vec<_>>();
-        edits.sort_by_key(|edit| std::cmp::Reverse(edit.0));
-        for (start, end, replacement) in edits {
-            if start > end
-                || end > routes.len()
-                || !routes.is_char_boundary(start)
-                || !routes.is_char_boundary(end)
-            {
-                return Err("template parser returned an invalid type reference span".to_owned());
-            }
-            routes.replace_range(start..end, &replacement);
-        }
-    }
-    Ok((schema, routes))
+    qualify_schema_types(&mut routes, &schema_type_names)?;
+
+    let domain_actions = if has_domain_actions {
+        let mut actions_source = String::from("import \"schema::tables\" as schema\n\n");
+        actions_source.push_str(&domain_functions.join("\n"));
+        qualify_schema_types(&mut actions_source, &schema_type_names)?;
+        Some(actions_source)
+    } else {
+        None
+    };
+
+    Ok(CanonicalTemplateModules {
+        schema,
+        routes,
+        domain_actions,
+    })
 }
 
 fn begin_json_diagnostics(path: &str, source: &str) {
@@ -2013,14 +2255,20 @@ fn validate_program(
 fn validate_typed_crud_actions(path: &str, program: &zelyra_ast::Program) -> bool {
     let mut valid = true;
     for action in program.forms.iter().flat_map(|form| form.actions.iter()) {
-        if action.execute_body.is_some()
-            || action.guard.is_some()
-            || !action.capabilities.is_empty()
-        {
+        if action.guard.is_some() {
             diagnostic_with_span(
                 path,
                 "E-FORM-002",
-                "typed execution blocks, guards, and action capabilities are supported only inside CRUD actions",
+                "action guards are supported only inside CRUD actions",
+                action.span,
+            );
+            valid = false;
+        }
+        if action.execute_body.is_none() && !action.capabilities.is_empty() {
+            diagnostic_with_span(
+                path,
+                "E-FORM-002",
+                "`uses` is only valid on a form action with an `execute` block",
                 action.span,
             );
             valid = false;
@@ -2047,9 +2295,11 @@ fn validate_typed_crud_actions(path: &str, program: &zelyra_ast::Program) -> boo
     // lowering so collision resolution yields identical wrapper names.
     let (checked_program, _) = zelyra_ast::lower_table_validation_functions_owned(program.clone());
     let (checked_program, _) = zelyra_ast::lower_crud_policy_functions_owned(checked_program);
-    let (checked_program, mappings) =
+    let (checked_program, crud_mappings) =
         zelyra_ast::lower_crud_action_functions_owned(checked_program);
-    if mappings.is_empty() {
+    let (checked_program, form_mappings) =
+        zelyra_ast::lower_form_action_functions_owned(checked_program);
+    if crud_mappings.is_empty() && form_mappings.is_empty() {
         return valid;
     }
     if let Err(errors) = check(&checked_program) {
@@ -7427,6 +7677,7 @@ fn doc_command(mut args: impl Iterator<Item = String>) -> ExitCode {
         None => "openapi",
         Some(flag) if flag == "--openapi" => "openapi",
         Some(flag) if flag == "--typescript" => "typescript",
+        Some(flag) if flag == "--states" => "states",
         Some(_) => {
             usage();
             return ExitCode::from(2);
@@ -7442,6 +7693,8 @@ fn doc_command(mut args: impl Iterator<Item = String>) -> ExitCode {
     };
     if format == "typescript" {
         println!("{}", docs::format_typescript_client(&program));
+    } else if format == "states" {
+        println!("{}", docs::format_state_diagrams(&program));
     } else {
         println!("{}", docs::format_openapi(&program));
     }

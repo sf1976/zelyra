@@ -6753,3 +6753,78 @@ fn main() uses Random, FileSystem {
         ]
     );
 }
+
+#[test]
+fn verifier_proves_sound_state_machines_and_rejects_unreachable_or_trapped_states() {
+    let sound = parse(
+        &lex(r#"
+            table orders {
+                id: Id primary auto
+                status: String(24) default "draft"
+                states status {
+                    draft -> confirmed, cancelled
+                    confirmed -> paid
+                    paid -> final
+                    cancelled -> final
+                }
+            }
+            fn main() {}
+        "#)
+        .unwrap(),
+    )
+    .unwrap();
+    let results = verify(&sound);
+    assert!(results
+        .iter()
+        .any(|result| result.kind == ContractKind::StateMachine
+            && result.status == VerificationStatus::Proven));
+
+    let unreachable = parse(
+        &lex(r#"
+            table orders {
+                id: Id primary auto
+                status: String(24) default "draft"
+                states status {
+                    draft -> paid
+                    orphan -> paid
+                    paid -> final
+                }
+            }
+            fn main() {}
+        "#)
+        .unwrap(),
+    )
+    .unwrap();
+    let results = verify(&unreachable);
+    assert!(results.iter().any(|result| {
+        result.kind == ContractKind::StateMachine
+            && result.status == VerificationStatus::Failed
+            && result.message.contains("unreachable")
+            && result.message.contains("orphan")
+    }));
+
+    let trapped = parse(
+        &lex(r#"
+            table orders {
+                id: Id primary auto
+                status: String(24) default "draft"
+                states status {
+                    draft -> loop_a, paid
+                    loop_a -> loop_b
+                    loop_b -> loop_a
+                    paid -> final
+                }
+            }
+            fn main() {}
+        "#)
+        .unwrap(),
+    )
+    .unwrap();
+    let results = verify(&trapped);
+    assert!(results.iter().any(|result| {
+        result.kind == ContractKind::StateMachine
+            && result.status == VerificationStatus::Failed
+            && result.message.contains("never reach a `final` state")
+            && result.message.contains("loop_a")
+    }));
+}

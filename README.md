@@ -11,19 +11,19 @@ for database-backed business and web applications. It brings schema-aware SQL,
 forms, CRUD, views, and application logic together while keeping ordinary code
 and native SQL available.
 
-> **Release 1.3.0 · language compatibility line: 0.1** · [GitHub release](https://github.com/sf1976/zelyra/releases/tag/v1.3.0)
+> **Release 1.3.5 · language compatibility line: 0.1** · [GitHub release](https://github.com/sf1976/zelyra/releases/tag/v1.3.5)
 >
 > Compiler checks and the verifier cover defined scopes. They do not prove arbitrary applications correct. Review the documented support and limits for each workflow before deployment.
 
-Zelyra 1.3.0 adds an opt-in standard project layout with compiler-checked
-MariaDB starters for minimal projects, CRUD, authentication, and business
-workflows. Studio now suggests suitable CRUD and form scaffolds from declared
-table metadata, while architecture checks follow statically resolved route
-calls and the migration preview reports source-mapped, declaration-level
-findings. Source installers persist Cargo's binary path, and interactive
-MariaDB setup can offer Compose v2 installation. AST remains the default;
-experimental MIR and Bytecode remain opt-in and reject unsupported programs.
-The business starter is not a completed ERP. See the
+Zelyra 1.3.5 adds first-class declarative table state machines (`states`),
+control-flow decision transactions (`transaction { ... }`) across AST and MIR
+with automatic rollback on runtime errors or `return Err(...)`, schema-checked
+SQL upserts and row-locking clauses with typo hints, typed `execute { ... }`
+blocks on standalone `form` actions, and `--layout standard --strict` starters
+that satisfy `strict_architecture = true` out of the box. AST remains the
+default; experimental MIR and Bytecode remain opt-in and fail closed for
+unsupported constructs. The business starter is not a completed ERP. See the
+[1.3.5 release notes](docs/release-notes/1.3.5.en.md),
 [1.3.0 release notes](docs/release-notes/1.3.0.en.md),
 [1.2.56 release notes](docs/release-notes/1.2.56.en.md),
 [1.2.55 release notes](docs/release-notes/1.2.55.en.md),

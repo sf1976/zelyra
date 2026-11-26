@@ -11,8 +11,8 @@ use zelyra_ast::temporal::{
 use zelyra_ast::*;
 
 pub use host::{
-    HostFileMetadata, HostHttpResponse, HostProcessResult, HostServices, SystemHostServices,
-    HOST_SERVICES_API_VERSION,
+    DatabaseTransactionOperation, DatabaseTransactionQueryFn, HostFileMetadata, HostHttpResponse,
+    HostProcessResult, HostServices, SystemHostServices, HOST_SERVICES_API_VERSION,
 };
 
 const BASE64_CHARS: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";

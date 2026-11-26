@@ -903,11 +903,27 @@ pub struct CrudActionFunction {
     pub session_type_name: String,
     pub execute_function: Option<String>,
     pub guard_function: Option<String>,
+    pub field_params: Vec<(String, Type)>,
+}
+
+/// Names and synthetic session type used to typecheck and execute one typed
+/// standalone `form` action. Both the CLI validator and web runtime use this
+/// mapping so wrapper names and parameter lists cannot drift apart.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct FormActionFunction {
+    pub form_index: usize,
+    pub action_index: usize,
+    pub session_type_name: String,
+    pub execute_function: String,
+    pub field_params: Vec<(String, Type)>,
+    pub path_params: Vec<(String, Type)>,
+    pub has_session_param: bool,
 }
 
 /// Builds compiler-checkable wrappers for typed CRUD action bodies.
 /// `row` has exactly the columns in the CRUD table. Session identity fields
 /// are nominal IDs, optional when no corresponding context is available.
+/// Any declared action `field` inputs are passed as additional typed parameters.
 pub fn build_crud_action_functions(program: &Program) -> (Vec<Function>, Vec<CrudActionFunction>) {
     let mut names = program
         .functions
@@ -919,9 +935,9 @@ pub fn build_crud_action_functions(program: &Program) -> (Vec<Function>, Vec<Cru
     let mut mappings = Vec::new();
 
     for (crud_index, crud) in program.cruds.iter().enumerate() {
-        if !program.tables.iter().any(|table| table.name == crud.table) {
+        let Some(table) = program.tables.iter().find(|table| table.name == crud.table) else {
             continue;
-        }
+        };
         for (action_index, action) in crud.actions.iter().enumerate() {
             if action.execute_body.is_none() && action.guard.is_none() {
                 continue;
@@ -936,7 +952,7 @@ pub fn build_crud_action_functions(program: &Program) -> (Vec<Function>, Vec<Cru
             );
             let row_type = Type::Named(row_type_name.clone());
             let session_type = Type::Named(session_type_name.clone());
-            let params = vec![
+            let mut params = vec![
                 Param {
                     name: "row".into(),
                     ty: row_type,
@@ -948,6 +964,20 @@ pub fn build_crud_action_functions(program: &Program) -> (Vec<Function>, Vec<Cru
                     span: action.span,
                 },
             ];
+            let mut field_params = Vec::new();
+            let mut seen_params = std::collections::HashSet::from(["row", "session"]);
+            for field in &action.fields {
+                if !seen_params.insert(field.name.as_str()) {
+                    continue;
+                }
+                let ty = resolve_form_action_field_type(Some(table), field);
+                params.push(Param {
+                    name: field.name.clone(),
+                    ty: ty.clone(),
+                    span: field.span,
+                });
+                field_params.push((field.name.clone(), ty));
+            }
             let execute_function = action.execute_body.as_ref().map(|body| {
                 let name = unique_crud_internal_name(
                     format!("__zelyra_crud_action_{crud_index}_{action_index}"),
@@ -999,10 +1029,195 @@ pub fn build_crud_action_functions(program: &Program) -> (Vec<Function>, Vec<Cru
                 session_type_name,
                 execute_function,
                 guard_function,
+                field_params,
             });
         }
     }
     (functions, mappings)
+}
+
+fn resolve_form_action_field_type(table: Option<&TableDef>, field: &FormField) -> Type {
+    field
+        .ty
+        .clone()
+        .or_else(|| {
+            table.and_then(|table| {
+                table
+                    .columns
+                    .iter()
+                    .find(|column| column.name == field.name)
+                    .map(|column| column.ty.clone())
+            })
+        })
+        .unwrap_or(Type::String)
+}
+
+fn extract_form_route_params(route: &str) -> Vec<String> {
+    let mut params = Vec::new();
+    let mut rest = route;
+    while let Some((_, after_open)) = rest.split_once('{') {
+        let Some((name, after_close)) = after_open.split_once('}') else {
+            break;
+        };
+        if !name.is_empty()
+            && name
+                .bytes()
+                .all(|byte| byte.is_ascii_alphanumeric() || byte == b'_')
+        {
+            params.push(name.to_owned());
+        }
+        rest = after_close;
+    }
+    params
+}
+
+/// Builds compiler-checkable wrappers for typed standalone `form` action bodies.
+/// Form fields, action fields, route parameters, and `session` are passed as
+/// typed parameters so route forms can delegate writes cleanly to domain logic.
+pub fn build_form_action_functions(program: &Program) -> (Vec<Function>, Vec<FormActionFunction>) {
+    let mut names = program
+        .functions
+        .iter()
+        .map(|function| function.name.clone())
+        .chain(program.records.iter().map(|record| record.name.clone()))
+        .collect::<std::collections::HashSet<_>>();
+    let mut functions = Vec::new();
+    let mut mappings = Vec::new();
+
+    for (form_index, form) in program.forms.iter().enumerate() {
+        let table = form
+            .table
+            .as_deref()
+            .and_then(|name| program.tables.iter().find(|table| table.name == name));
+        let route_param_names = form
+            .path
+            .as_deref()
+            .map(extract_form_route_params)
+            .unwrap_or_default();
+        for (action_index, action) in form.actions.iter().enumerate() {
+            let Some(body) = &action.execute_body else {
+                continue;
+            };
+            let mut params = Vec::new();
+            let mut field_params = Vec::new();
+            let mut path_params = Vec::new();
+            let mut seen_params = std::collections::HashSet::new();
+
+            for field in form.fields.iter().chain(action.fields.iter()) {
+                if !seen_params.insert(field.name.clone()) {
+                    continue;
+                }
+                let ty = resolve_form_action_field_type(table, field);
+                params.push(Param {
+                    name: field.name.clone(),
+                    ty: ty.clone(),
+                    span: field.span,
+                });
+                field_params.push((field.name.clone(), ty));
+            }
+            for param_name in &route_param_names {
+                if !seen_params.insert(param_name.clone()) {
+                    continue;
+                }
+                let ty = table
+                    .and_then(|table| {
+                        table
+                            .columns
+                            .iter()
+                            .find(|column| column.name == *param_name)
+                            .map(|column| column.ty.clone())
+                    })
+                    .unwrap_or(Type::String);
+                params.push(Param {
+                    name: param_name.clone(),
+                    ty: ty.clone(),
+                    span: action.span,
+                });
+                path_params.push((param_name.clone(), ty));
+            }
+            let session_type_name = unique_crud_internal_name(
+                format!("__ZelyraFormActionSession_{form_index}_{action_index}"),
+                &mut names,
+            );
+            let has_session_param = seen_params.insert("session".into());
+            if has_session_param {
+                params.push(Param {
+                    name: "session".into(),
+                    ty: Type::Named(session_type_name.clone()),
+                    span: action.span,
+                });
+            }
+            let execute_function = unique_crud_internal_name(
+                format!("__zelyra_form_action_{form_index}_{action_index}"),
+                &mut names,
+            );
+            functions.push(Function {
+                name: execute_function.clone(),
+                is_public: false,
+                type_params: Vec::new(),
+                params,
+                return_type: Some(Type::Unit),
+                capabilities: action.capabilities.clone(),
+                requires: Vec::new(),
+                ensures: Vec::new(),
+                body: body.clone(),
+                span: action.span,
+            });
+            mappings.push(FormActionFunction {
+                form_index,
+                action_index,
+                session_type_name,
+                execute_function,
+                field_params,
+                path_params,
+                has_session_param,
+            });
+        }
+    }
+    (functions, mappings)
+}
+
+/// Lowers typed standalone `form` action signatures into ordinary private
+/// language declarations.
+pub fn lower_form_action_functions_owned(
+    mut program: Program,
+) -> (Program, Vec<FormActionFunction>) {
+    let (functions, mappings) = build_form_action_functions(&program);
+    for mapping in &mappings {
+        if !mapping.has_session_param {
+            continue;
+        }
+        let form = &program.forms[mapping.form_index];
+        let action = &form.actions[mapping.action_index];
+        let tenant_type = form
+            .table
+            .as_deref()
+            .and_then(|name| program.tables.iter().find(|table| table.name == name))
+            .and_then(|table| table.tenant_scope.as_ref())
+            .map(|scope| scope.tenant_type.clone())
+            .unwrap_or_else(|| Type::Named("Id".into()));
+        program.records.push(RecordDef {
+            name: mapping.session_type_name.clone(),
+            is_public: false,
+            is_class: false,
+            type_params: Vec::new(),
+            fields: vec![
+                RecordField {
+                    name: "tenant_id".into(),
+                    ty: Type::Option(Box::new(tenant_type)),
+                    span: action.span,
+                },
+                RecordField {
+                    name: "user_id".into(),
+                    ty: Type::Option(Box::new(Type::Named("Id".into()))),
+                    span: action.span,
+                },
+            ],
+            span: action.span,
+        });
+    }
+    program.functions.extend(functions);
+    (program, mappings)
 }
 
 fn unique_crud_internal_name(
@@ -1391,6 +1606,7 @@ pub struct TableDef {
     pub name: String,
     pub columns: Vec<ColumnDef>,
     pub validations: Vec<TableValidationDef>,
+    pub state_machines: Vec<TableStateMachineDef>,
     pub indexes: Vec<IndexDef>,
     pub uniques: Vec<IndexDef>,
     pub access: TableAccessDef,
@@ -1398,6 +1614,71 @@ pub struct TableDef {
     /// query expressions are available, raw SQL access to this table is denied.
     pub tenant_scope: Option<TenantScopeDef>,
     pub span: Span,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct TableStateMachineDef {
+    pub column: String,
+    pub transitions: Vec<TableStateTransitionDef>,
+    pub span: Span,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct TableStateTransitionDef {
+    pub from: String,
+    pub to: Vec<String>,
+    pub is_final: bool,
+    pub span: Span,
+}
+
+impl TableStateMachineDef {
+    pub fn states(&self) -> Vec<&str> {
+        self.transitions
+            .iter()
+            .map(|rule| rule.from.as_str())
+            .collect()
+    }
+
+    pub fn final_states(&self) -> Vec<&str> {
+        self.transitions
+            .iter()
+            .filter(|rule| rule.is_final)
+            .map(|rule| rule.from.as_str())
+            .collect()
+    }
+
+    pub fn initial_state<'a>(&'a self, table: &'a TableDef) -> Option<&'a str> {
+        if let Some(DefaultValue::String(default)) = table
+            .columns
+            .iter()
+            .find(|column| column.name == self.column)
+            .and_then(|column| column.default.as_ref())
+        {
+            if self.is_valid_state(default) {
+                return Some(default.as_str());
+            }
+        }
+        self.transitions.first().map(|rule| rule.from.as_str())
+    }
+
+    pub fn is_valid_state(&self, value: &str) -> bool {
+        self.transitions.iter().any(|rule| rule.from == value)
+    }
+
+    pub fn allowed_next(&self, current: &str) -> Option<&[String]> {
+        self.transitions
+            .iter()
+            .find(|rule| rule.from == current)
+            .map(|rule| rule.to.as_slice())
+    }
+
+    pub fn can_transition(&self, from: &str, to: &str) -> bool {
+        if from == to {
+            return self.is_valid_state(from);
+        }
+        self.allowed_next(from)
+            .is_some_and(|targets| targets.iter().any(|target| target == to))
+    }
 }
 
 #[derive(Clone, Debug)]

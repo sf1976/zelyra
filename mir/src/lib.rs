@@ -321,6 +321,14 @@ pub enum MirInstruction {
         operations: Vec<ExpressionId>,
         span: Span,
     },
+    /// Executes a control-flow decision transaction subgraph (`entry..exit`) on
+    /// one pinned database connection. Returning `Err(...)` or raising a runtime
+    /// error rolls back automatically; normal exit or non-Err return commits.
+    DecisionTransaction {
+        entry: BlockId,
+        exit: BlockId,
+        span: Span,
+    },
     /// Evaluate each checked `await` expression against the same lexical
     /// snapshot, then bind all results after every branch has completed.
     Parallel {
@@ -831,6 +839,19 @@ pub fn verify(program: &MirProgram) -> Result<(), Vec<MirError>> {
                                     span: *span,
                                 });
                             }
+                        }
+                        None
+                    }
+                    MirInstruction::DecisionTransaction { entry, exit, span } => {
+                        if entry.0 >= function.blocks.len() || exit.0 >= function.blocks.len() {
+                            errors.push(MirError {
+                                code: "E-MIR-VERIFY-001",
+                                message: format!(
+                                    "function `{}` decision transaction references an invalid block",
+                                    function.name
+                                ),
+                                span: *span,
+                            });
                         }
                         None
                     }
@@ -1698,6 +1719,7 @@ fn verify_instruction_types(
         }
         MirInstruction::IteratorInit { .. }
         | MirInstruction::MatchInit { .. }
+        | MirInstruction::DecisionTransaction { .. }
         | MirInstruction::Evaluate(_)
         | MirInstruction::SourceStep { .. } => {}
     }
@@ -2044,7 +2066,7 @@ fn compute_dominators(function: &MirFunction) -> Dominators {
 }
 
 fn cfg_successors(block: &MirBasicBlock) -> Vec<BlockId> {
-    match &block.terminator {
+    let mut successors = match &block.terminator {
         Some(MirTerminator::Goto(target)) => vec![*target],
         Some(MirTerminator::Branch {
             then_block,
@@ -2068,7 +2090,13 @@ fn cfg_successors(block: &MirBasicBlock) -> Vec<BlockId> {
             | MirTerminator::Unreachable,
         )
         | None => Vec::new(),
+    };
+    for instruction in &block.instructions {
+        if let MirInstruction::DecisionTransaction { entry, .. } = instruction {
+            successors.push(*entry);
+        }
     }
+    successors
 }
 
 struct ProgramBuilder {
@@ -2490,60 +2518,76 @@ impl FunctionBuilder<'_> {
                 Some(block)
             }
             HirStmt::Transaction { body, span } => {
-                let mut operations = Vec::with_capacity(body.statements.len());
-                for statement in &body.statements {
-                    let (expression, allow_mail_queue) = match statement {
-                        HirStmt::Expr(expression) => (Some(expression), true),
-                        HirStmt::Let { value, .. } => (Some(value), false),
-                        _ => (None, false),
-                    };
-                    let Some(expression) = expression else {
-                        self.program.errors.push(MirError {
-                            code: "E-MIR-UNSUPPORTED-001",
-                            message: "MIR transactions currently support only direct SQL statements and SQL let-expressions".into(),
-                            span: stmt_span(statement),
-                        });
-                        return Some(block);
-                    };
-                    let direct_sql = matches!(expression.kind, HirExprKind::Sql { .. });
-                    let standalone_mail_queue = allow_mail_queue
-                        && matches!(
-                            &expression.kind,
-                            HirExprKind::Call { name, args, .. }
-                                if name == "mail_queue"
-                                    && matches!(args.len(), 3..=6)
-                                    && args.iter().all(is_pure_mail_expression)
-                        );
-                    if !direct_sql && !standalone_mail_queue {
-                        self.program.errors.push(MirError {
-                            code: "E-MIR-UNSUPPORTED-001",
-                            message: "MIR transactions currently support direct SQL statements, SQL let-expressions, and pure standalone mail_queue calls with optional render_pdf attachments".into(),
-                            span: expression.span,
-                        });
-                        return Some(block);
-                    }
-                    if let Some(expression) = self.program.expression(expression) {
-                        operations.push(expression);
-                    }
-                }
-                if operations.is_empty() {
+                if body.statements.is_empty() {
                     self.program.errors.push(MirError {
                         code: "E-MIR-UNSUPPORTED-001",
-                        message:
-                            "MIR transactions require at least one SQL or mail_queue operation"
-                                .into(),
+                        message: "MIR transactions require at least one statement".into(),
                         span: *span,
                     });
                     return Some(block);
                 }
+                let simple_batch = body.statements.iter().all(|statement| match statement {
+                    HirStmt::Expr(expression) => {
+                        matches!(expression.kind, HirExprKind::Sql { .. })
+                            || matches!(
+                                &expression.kind,
+                                HirExprKind::Call { name, args, .. }
+                                    if name == "mail_queue"
+                                        && matches!(args.len(), 3..=6)
+                                        && args.iter().all(is_pure_mail_expression)
+                            )
+                    }
+                    HirStmt::Let { value, .. } => matches!(
+                        value.kind,
+                        HirExprKind::Sql {
+                            result_type: Type::Unit,
+                            ..
+                        }
+                    ),
+                    _ => false,
+                });
+                if simple_batch {
+                    let mut operations = Vec::with_capacity(body.statements.len());
+                    for statement in &body.statements {
+                        let expression = match statement {
+                            HirStmt::Expr(expression) => expression,
+                            HirStmt::Let { value, .. } => value,
+                            _ => unreachable!("filtered by simple_batch"),
+                        };
+                        if let Some(expression) = self.program.expression(expression) {
+                            operations.push(expression);
+                        }
+                    }
+                    self.emit(
+                        block,
+                        MirInstruction::Transaction {
+                            operations,
+                            span: *span,
+                        },
+                    );
+                    return Some(block);
+                }
+
+                // Decision transaction with full control flow (`let`, `if`,
+                // `match`, loops, helper calls, `sql_decode`, `mail_queue`,
+                // and early `return`).
+                let entry_block = self.block(*span);
+                let exit_block = self.block(*span);
                 self.emit(
                     block,
-                    MirInstruction::Transaction {
-                        operations,
+                    MirInstruction::DecisionTransaction {
+                        entry: entry_block,
+                        exit: exit_block,
                         span: *span,
                     },
                 );
-                Some(block)
+                self.terminate(block, MirTerminator::Goto(exit_block));
+                let saved_loops = std::mem::take(&mut self.loop_targets);
+                if let Some(body_end) = self.lower_block(body, Some(entry_block)) {
+                    self.terminate(body_end, MirTerminator::Goto(exit_block));
+                }
+                self.loop_targets = saved_loops;
+                Some(exit_block)
             }
             HirStmt::Parallel { body, span } => {
                 let mut bindings = Vec::with_capacity(body.statements.len());
@@ -3509,11 +3553,46 @@ fn main() {
 
     #[test]
     fn refuses_statements_without_a_defined_mir_lowering() {
-        let source = "fn main() { transaction { print(1) } }";
-        let errors = lower(&parse_program(source)).expect_err("unsupported semantics fail closed");
+        let source = "fn main() { transaction {} }";
+        let errors = lower(&parse_program(source)).expect_err("empty transactions fail closed");
         assert!(errors
             .iter()
             .any(|error| error.code == "E-MIR-UNSUPPORTED-001"));
+    }
+
+    #[test]
+    fn lowers_and_verifies_decision_transactions_with_control_flow() {
+        let source = r#"
+database main { engine: mariadb database: "test" }
+table accounts { id: Id primary auto balance: Int required }
+pub struct Account { id: Id balance: Int }
+fn withdraw(account_id: Int, amount: Int) -> Result<Int, String> uses Database {
+    transaction {
+        rows = sql_decode<Account[]>(sql<Account[]> {
+            SELECT id, balance FROM accounts WHERE id = :account_id FOR UPDATE
+        })
+        if len(rows) == 0 {
+            return Err("not found")
+        }
+        next_balance = rows[0].balance - amount
+        if next_balance < 0 {
+            return Err("insufficient funds")
+        }
+        sql { UPDATE accounts SET balance = :next_balance WHERE id = :account_id }
+    }
+    return Ok(1)
+}
+fn main() {}
+"#;
+        let mir = lower(&parse_program(source)).expect("decision transaction lowers");
+        verify(&mir).expect("decision transaction verifies");
+        assert!(mir.functions.iter().any(|function| {
+            function.blocks.iter().any(|block| {
+                block.instructions.iter().any(|instruction| {
+                    matches!(instruction, MirInstruction::DecisionTransaction { .. })
+                })
+            })
+        }));
     }
 
     #[test]

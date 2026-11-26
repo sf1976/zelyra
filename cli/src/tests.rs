@@ -123,7 +123,16 @@ fn typed_crud_action_bodies_are_checked_in_row_and_session_scope() {
             .unwrap(),
     )
     .unwrap();
-    assert!(!validate_typed_crud_actions(&entry, &standalone));
+    assert!(validate_typed_crud_actions(&entry, &standalone));
+
+    let standalone_guard = zelyra_parser::parse(
+        &zelyra_lexer::lex(
+            "form Example { action run { guard when true { error: \"blocked\" } execute { value = 1 } } } fn main() {}",
+        )
+        .unwrap(),
+    )
+    .unwrap();
+    assert!(!validate_typed_crud_actions(&entry, &standalone_guard));
     fs::remove_dir_all(directory).unwrap();
 }
 
@@ -5228,6 +5237,7 @@ fn generates_project_with_target_release_version() {
             auth_template: false,
             business_template: false,
             canonical_layout: false,
+            strict_architecture: false,
             web_port: DEFAULT_WEB_PORT,
             host_port: DEFAULT_WEB_PORT,
             database_host_port: DEFAULT_DATABASE_HOST_PORT,
@@ -5298,6 +5308,7 @@ fn mariadb_crud_scaffold_includes_the_fictional_demo_fixture() {
             auth_template: false,
             business_template: false,
             canonical_layout: false,
+            strict_architecture: false,
             web_port: DEFAULT_WEB_PORT,
             host_port: DEFAULT_WEB_PORT,
             database_host_port: DEFAULT_DATABASE_HOST_PORT,
@@ -5342,6 +5353,7 @@ fn canonical_layout_generates_checkable_database_templates() {
                 auth_template,
                 business_template,
                 canonical_layout: true,
+                strict_architecture: true,
                 web_port: DEFAULT_WEB_PORT,
                 host_port: DEFAULT_WEB_PORT,
                 database_host_port: DEFAULT_DATABASE_HOST_PORT,
@@ -5395,6 +5407,7 @@ fn generated_mariadb_template_uses_selected_web_port() {
                 auth_template: false,
                 business_template: false,
                 canonical_layout: false,
+                strict_architecture: false,
                 web_port: 8080,
                 host_port,
                 database_host_port,

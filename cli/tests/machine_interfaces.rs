@@ -5111,3 +5111,322 @@ fn typed_view_bindings_are_checked_as_machine_diagnostics() {
     assert!(codes.contains(&"E-VIEW-010"));
     assert!(codes.contains(&"E-VIEW-015"));
 }
+
+#[test]
+fn mir_and_runtime_diagnostics_report_imported_module_paths() {
+    let directory = temporary_directory("multi-file-backend-diagnostics");
+    fs::create_dir_all(&directory).unwrap();
+    fs::write(
+        directory.join("helper.zyl"),
+        "pub fn broken_tx() {\n    transaction {}\n}\n\npub fn divide_by_zero() -> Int {\n    return 10 / 0\n}\n",
+    )
+    .unwrap();
+    fs::write(
+        directory.join("main.zyl"),
+        "import \"helper.zyl\" as helper\n\nfn main() {\n    print(helper::divide_by_zero())\n}\n",
+    )
+    .unwrap();
+
+    for backend in ["mir", "bytecode"] {
+        let output = run(&[
+            "run",
+            directory.join("main.zyl").to_str().unwrap(),
+            "--backend",
+            backend,
+        ]);
+        assert_eq!(output.status.code(), Some(1));
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        assert!(
+            stderr.contains("E-MIR-UNSUPPORTED-001"),
+            "backend={backend} stderr={stderr}"
+        );
+        assert!(
+            stderr.contains("helper.zyl:2:5"),
+            "expected imported module path for backend={backend}, got stderr={stderr}"
+        );
+    }
+
+    fs::write(
+        directory.join("helper.zyl"),
+        "pub fn divide_by_zero() -> Int {\n    return 10 / 0\n}\n",
+    )
+    .unwrap();
+    for backend in ["ast", "mir", "bytecode"] {
+        let output = run(&[
+            "run",
+            directory.join("main.zyl").to_str().unwrap(),
+            "--backend",
+            backend,
+        ]);
+        assert_eq!(output.status.code(), Some(1));
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        assert!(
+            stderr.contains("E-RUNTIME-001"),
+            "backend={backend} stderr={stderr}"
+        );
+        assert!(
+            stderr.contains("helper.zyl:2:"),
+            "expected imported module path for runtime error on backend={backend}, got stderr={stderr}"
+        );
+    }
+    fs::remove_dir_all(directory).unwrap();
+}
+
+#[test]
+fn table_state_machines_support_verify_reflect_docs_and_formatting() {
+    let directory = temporary_directory("table-state-machines");
+    fs::create_dir_all(&directory).unwrap();
+    let file = directory.join("main.zyl");
+    let source = r#"database main {
+    engine: mariadb
+}
+
+table sales_orders {
+    id: Id primary auto
+    order_number: String(40) required unique
+    status: String(24) default "draft"
+
+    states status {
+        draft -> confirmed, cancelled
+        confirmed -> invoiced, cancelled
+        invoiced -> paid
+        paid -> final
+        cancelled -> final
+    }
+}
+
+fn main() {
+}
+"#;
+    fs::write(&file, source).unwrap();
+
+    let check = run(&["check", file.to_str().unwrap(), "--format=json"]);
+    assert!(
+        check.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&check.stderr)
+    );
+
+    let verify = run(&["verify", file.to_str().unwrap(), "--json"]);
+    assert!(
+        verify.status.success(),
+        "stdout: {}\nstderr: {}",
+        String::from_utf8_lossy(&verify.stdout),
+        String::from_utf8_lossy(&verify.stderr)
+    );
+    let verify_doc: serde_json::Value = serde_json::from_slice(&verify.stdout).unwrap();
+    assert!(
+        verify_doc
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|item| item["kind"] == "state_machine" && item["status"] == "PROVEN"),
+        "verify_doc: {verify_doc}"
+    );
+
+    let reflect = run(&["reflect", file.to_str().unwrap(), "--format=json"]);
+    assert!(reflect.status.success());
+    let reflect_doc: serde_json::Value = serde_json::from_slice(&reflect.stdout).unwrap();
+    let machines = reflect_doc["tables"][0]["state_machines"]
+        .as_array()
+        .unwrap();
+    assert_eq!(machines.len(), 1);
+    assert_eq!(machines[0]["column"], "status");
+    assert_eq!(machines[0]["initial"], "draft");
+
+    let states_doc = run(&["doc", file.to_str().unwrap(), "--states"]);
+    assert!(states_doc.status.success());
+    let mermaid = String::from_utf8_lossy(&states_doc.stdout);
+    assert!(mermaid.contains("stateDiagram-v2"));
+    assert!(mermaid.contains("[*] --> draft"));
+    assert!(mermaid.contains("draft --> confirmed"));
+    assert!(mermaid.contains("paid --> [*]"));
+
+    let openapi = run(&["doc", file.to_str().unwrap(), "--openapi"]);
+    assert!(openapi.status.success());
+    let openapi_doc: serde_json::Value = serde_json::from_slice(&openapi.stdout).unwrap();
+    assert_eq!(
+        openapi_doc["components"]["schemas"]["sales_orders"]["properties"]["status"]["enum"],
+        serde_json::json!(["draft", "confirmed", "invoiced", "paid", "cancelled"])
+    );
+
+    let fmt_apply = run(&["fmt", file.to_str().unwrap()]);
+    assert!(fmt_apply.status.success());
+    let fmt_check = run(&["fmt", file.to_str().unwrap(), "--check"]);
+    assert!(fmt_check.status.success());
+
+    fs::remove_dir_all(directory).unwrap();
+}
+
+#[test]
+fn new_standard_strict_templates_pass_check_and_allow_tests_subdir() {
+    let invalid_dir = temporary_directory("new-strict-without-standard");
+    let invalid = Command::new(binary())
+        .args(["new", invalid_dir.to_str().unwrap(), "--strict"])
+        .output()
+        .unwrap();
+    assert!(!invalid.status.success());
+    assert!(
+        String::from_utf8_lossy(&invalid.stderr).contains("--strict requires --layout standard"),
+        "{}",
+        String::from_utf8_lossy(&invalid.stderr)
+    );
+
+    for (label, extra_args, expects_domain_actions) in [
+        ("minimal", vec![], false),
+        ("mariadb-crud", vec!["--template", "mariadb-crud"], true),
+        (
+            "mariadb-business",
+            vec!["--template", "mariadb-business"],
+            true,
+        ),
+    ] {
+        let directory = temporary_directory(&format!("new-standard-strict-{label}"));
+        let mut args = vec![
+            "new",
+            directory.to_str().unwrap(),
+            "--layout",
+            "standard",
+            "--strict",
+        ];
+        args.extend(extra_args);
+        let created = Command::new(binary()).args(&args).output().unwrap();
+        assert!(
+            created.status.success(),
+            "failed to create {label}: {}",
+            String::from_utf8_lossy(&created.stderr)
+        );
+        let manifest = fs::read_to_string(directory.join("zelyra.toml")).unwrap();
+        assert!(manifest.contains("layout = \"standard\""));
+        assert!(manifest.contains("strict_architecture = true"));
+        assert_eq!(
+            directory.join("domain/actions.zyl").is_file(),
+            expects_domain_actions,
+            "unexpected domain/actions.zyl state for {label}"
+        );
+
+        // Verify `tests/*.zyl` modules are accepted under strict_architecture = true.
+        fs::create_dir_all(directory.join("tests")).unwrap();
+        fs::write(
+            directory.join("tests/smoke.zyl"),
+            "pub fn ok() -> Bool { return true }\n",
+        )
+        .unwrap();
+        let entry = directory.join("main.zyl");
+        let original_main = fs::read_to_string(&entry).unwrap();
+        fs::write(
+            &entry,
+            format!("import \"tests/smoke.zyl\" as smoke\n{original_main}"),
+        )
+        .unwrap();
+
+        let checked = Command::new(binary())
+            .args(["check", entry.to_str().unwrap()])
+            .output()
+            .unwrap();
+        assert!(
+            checked.status.success(),
+            "strict check failed for {label}: {}",
+            String::from_utf8_lossy(&checked.stderr)
+        );
+        fs::remove_dir_all(directory).unwrap();
+    }
+}
+
+#[test]
+fn standalone_form_typed_execute_checks_capabilities_architecture_and_rejects_guards() {
+    let directory = temporary_directory("standalone-form-execute");
+    for subdir in ["schema", "domain", "routes", "assets", "public"] {
+        fs::create_dir_all(directory.join(subdir)).unwrap();
+    }
+    fs::write(
+        directory.join("zelyra.toml"),
+        "[project]\nname = \"form-exec\"\nlayout = \"standard\"\nstrict_architecture = true\n\n[capabilities]\ndatabase = true\n",
+    )
+    .unwrap();
+    fs::write(
+        directory.join("schema/tables.zyl"),
+        "database main { engine: mariadb }\n\ntable customers {\n    id: Id primary auto\n    name: String(100) required\n    access {\n        read_write: [\"domain/actions.zyl\", \"routes/web.zyl\"]\n    }\n}\n",
+    )
+    .unwrap();
+    fs::write(
+        directory.join("domain/actions.zyl"),
+        "import \"schema::tables\" as schema\n\npub fn create_customer(name: String) uses Database(write) {\n    sql { INSERT INTO customers (name) VALUES (:name) }\n}\n",
+    )
+    .unwrap();
+    fs::write(
+        directory.join("main.zyl"),
+        "import \"routes::web\" as web\nimport \"schema::tables\" as schema\n\nfn main() {}\n",
+    )
+    .unwrap();
+
+    // Positive: standalone form delegates write to domain module via typed execute block.
+    fs::write(
+        directory.join("routes/web.zyl"),
+        "import \"schema::tables\" as schema\nimport \"domain::actions\" as actions\n\nform CustomerQuickCreate -> customers {\n    fields { name }\n    action save {\n        uses Database(write)\n        execute {\n            actions::create_customer(name)\n        }\n        redirect \"/customers\"\n    }\n}\n",
+    )
+    .unwrap();
+    let entry = directory.join("main.zyl");
+    let ok = Command::new(binary())
+        .args(["check", entry.to_str().unwrap()])
+        .output()
+        .unwrap();
+    assert!(
+        ok.status.success(),
+        "{}",
+        String::from_utf8_lossy(&ok.stderr)
+    );
+
+    // Negative 1: missing `uses Database(write)` on standalone form execute fails with E-CAP-001.
+    fs::write(
+        directory.join("routes/web.zyl"),
+        "import \"schema::tables\" as schema\nimport \"domain::actions\" as actions\n\nform CustomerQuickCreate -> customers {\n    fields { name }\n    action save {\n        execute {\n            actions::create_customer(name)\n        }\n        redirect \"/customers\"\n    }\n}\n",
+    )
+    .unwrap();
+    let missing_cap = Command::new(binary())
+        .args(["check", entry.to_str().unwrap()])
+        .output()
+        .unwrap();
+    assert!(!missing_cap.status.success());
+    assert!(
+        String::from_utf8_lossy(&missing_cap.stderr).contains("E-CAP-001"),
+        "{}",
+        String::from_utf8_lossy(&missing_cap.stderr)
+    );
+
+    // Negative 2: direct write SQL inside route form execute is rejected by strict_architecture.
+    fs::write(
+        directory.join("routes/web.zyl"),
+        "import \"schema::tables\" as schema\n\nform CustomerQuickCreate -> customers {\n    fields { name }\n    action save {\n        uses Database(write)\n        execute {\n            sql { INSERT INTO customers (name) VALUES (:name) }\n        }\n        redirect \"/customers\"\n    }\n}\n",
+    )
+    .unwrap();
+    let direct_write = Command::new(binary())
+        .args(["check", entry.to_str().unwrap()])
+        .output()
+        .unwrap();
+    assert!(!direct_write.status.success());
+    assert!(
+        String::from_utf8_lossy(&direct_write.stderr).contains("E-ARCH-002"),
+        "{}",
+        String::from_utf8_lossy(&direct_write.stderr)
+    );
+
+    // Negative 3: `guard` remains rejected on standalone forms with E-FORM-002.
+    fs::write(
+        directory.join("routes/web.zyl"),
+        "import \"schema::tables\" as schema\nimport \"domain::actions\" as actions\n\nform CustomerQuickCreate -> customers {\n    fields { name }\n    action save {\n        guard when name == \"\" { error: \"name required\" }\n        uses Database(write)\n        execute {\n            actions::create_customer(name)\n        }\n        redirect \"/customers\"\n    }\n}\n",
+    )
+    .unwrap();
+    let guard_err = Command::new(binary())
+        .args(["check", entry.to_str().unwrap()])
+        .output()
+        .unwrap();
+    assert!(!guard_err.status.success());
+    assert!(
+        String::from_utf8_lossy(&guard_err.stderr).contains("E-FORM-002"),
+        "{}",
+        String::from_utf8_lossy(&guard_err.stderr)
+    );
+
+    fs::remove_dir_all(directory).unwrap();
+}

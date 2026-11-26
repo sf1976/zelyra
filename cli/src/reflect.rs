@@ -115,6 +115,19 @@ fn build(program: &zelyra_ast::Program, sources: &[project::ProjectSource]) -> V
             "storage_name": column.storage_name,
         })).collect::<Vec<_>>(),
         "tenant_scope": table.tenant_scope.as_ref().map(|scope| json!({ "column": scope.column, "type": scope.tenant_type.to_string() })),
+        "state_machines": table.state_machines.iter().map(|machine| json!({
+            "column": machine.column,
+            "initial": machine.initial_state(table),
+            "states": machine.states(),
+            "final_states": machine.final_states(),
+            "transitions": machine.transitions.iter().map(|rule| json!({
+                "from": rule.from,
+                "to": rule.to,
+                "final": rule.is_final,
+                "source": source_location(rule.span, sources),
+            })).collect::<Vec<_>>(),
+            "source": source_location(machine.span, sources),
+        })).collect::<Vec<_>>(),
         "source": source_location(table.span, sources),
     })).collect::<Vec<_>>();
     tables.sort_by(|a, b| a["name"].as_str().cmp(&b["name"].as_str()));

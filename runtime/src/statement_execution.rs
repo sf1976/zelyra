@@ -347,31 +347,106 @@ impl<'program, 'services> Interpreter<'program, 'services> {
                 Err(self.runtime_error(*span, "non-exhaustive match at runtime"))
             }
             Stmt::Transaction { body, span } => {
-                if self.transactional_query.is_some() {
-                    // A transaction block inside a caller-owned transaction is
-                    // a logical batch, not a second transaction. The outer
-                    // request owns commit/rollback and every queued query uses
-                    // its borrowed executor.
-                    let queries = transaction_queries(self, body, env, *span)?;
-                    self.ensure_database_storage(*span)?;
-                    for query in queries {
-                        let result = match self.transactional_query.as_deref_mut() {
-                            Some(query_executor) => query_executor(&query),
-                            None => {
+                if body.statements.is_empty() {
+                    return Err(self
+                        .runtime_error(*span, "transaction must contain at least one statement"));
+                }
+                let simple_batch = body.statements.iter().all(|statement| match statement {
+                    Stmt::Expr(Expr {
+                        kind: ExprKind::Sql { .. },
+                        ..
+                    }) => true,
+                    Stmt::Let {
+                        value:
+                            Expr {
+                                kind:
+                                    ExprKind::Sql {
+                                        result_type: Type::Unit,
+                                        ..
+                                    },
+                                ..
+                            },
+                        ..
+                    } => true,
+                    Stmt::Expr(Expr {
+                        kind: ExprKind::Call { name, .. },
+                        ..
+                    }) => name == "mail_queue",
+                    _ => false,
+                });
+                if simple_batch {
+                    if self.transactional_query.is_some() {
+                        // A transaction block inside a caller-owned transaction is
+                        // a logical batch, not a second transaction. The outer
+                        // request owns commit/rollback and every queued query uses
+                        // its borrowed executor.
+                        let queries = transaction_queries(self, body, env, *span)?;
+                        self.ensure_database_storage(*span)?;
+                        for query in queries {
+                            let result = match self.transactional_query.as_deref_mut() {
+                                Some(query_executor) => query_executor(&query),
+                                None => {
+                                    return Err(RuntimeError {
+                                        message: "borrowed database transaction is unavailable"
+                                            .into(),
+                                        span: *span,
+                                    });
+                                }
+                            };
+                            if let Err(error) = result {
                                 return Err(RuntimeError {
-                                    message: "borrowed database transaction is unavailable".into(),
+                                    message: format!("database transaction failed: {error}"),
                                     span: *span,
                                 });
                             }
-                        };
-                        if let Err(error) = result {
-                            return Err(RuntimeError {
-                                message: format!("database transaction failed: {error}"),
-                                span: *span,
-                            });
                         }
+                        return Ok(Flow::Continue);
+                    }
+                    let Some(database_url) = self.database_url.clone() else {
+                        return Err(self.runtime_error(
+                            *span,
+                            "transaction execution requires a database runtime",
+                        ));
+                    };
+                    let queries = transaction_queries(self, body, env, *span)?;
+                    self.ensure_database_storage(*span)?;
+                    if let Some(transaction) = &self.database_transaction {
+                        transaction
+                            .lock()
+                            .map_err(|_| {
+                                self.runtime_error(
+                                    *span,
+                                    "interactive database transaction is unavailable",
+                                )
+                            })?
+                            .execute_batch(&queries)
+                            .map_err(|error| {
+                                self.runtime_error(
+                                    *span,
+                                    format!("database transaction failed: {error}"),
+                                )
+                            })?;
+                    } else {
+                        self.execution_context
+                            .host_services
+                            .execute_database_batch(&database_url, &queries, true)
+                            .map_err(|error| {
+                                self.runtime_error(
+                                    *span,
+                                    format!("database transaction failed: {error}"),
+                                )
+                            })?;
                     }
                     return Ok(Flow::Continue);
+                }
+
+                // Decision transaction: allows control flow (`let`, `if`, loops,
+                // `match`, `sql_decode`, helper calls, `mail_queue`, and early
+                // `return`) on a single database transaction. Returning `Err(...)`
+                // or raising a runtime error rolls back automatically.
+                if self.transactional_query.is_some() || self.database_transaction.is_some() {
+                    self.ensure_database_storage(*span)?;
+                    return self.exec_block(body, env);
                 }
                 let Some(database_url) = self.database_url.clone() else {
                     return Err(self.runtime_error(
@@ -379,36 +454,76 @@ impl<'program, 'services> Interpreter<'program, 'services> {
                         "transaction execution requires a database runtime",
                     ));
                 };
-                let queries = transaction_queries(self, body, env, *span)?;
                 self.ensure_database_storage(*span)?;
-                if let Some(transaction) = &self.database_transaction {
-                    transaction
-                        .lock()
-                        .map_err(|_| {
-                            self.runtime_error(
-                                *span,
-                                "interactive database transaction is unavailable",
-                            )
-                        })?
-                        .execute_batch(&queries)
-                        .map_err(|error| {
-                            self.runtime_error(
+                let host_services = Arc::clone(&self.execution_context.host_services);
+                let mut outcome: Option<Result<Flow, RuntimeError>> = None;
+                let mut rolled_back_for_err_return = false;
+                let tx_result = host_services.run_database_transaction(&database_url, &mut |tx| {
+                    let mut child = AstInterpreter {
+                        program_context: Arc::clone(&self.program_context),
+                        output: std::mem::take(&mut self.output),
+                        next_class_object_id: Arc::clone(&self.next_class_object_id),
+                        parallel_worker: self.parallel_worker,
+                        step_budget: std::mem::replace(
+                            &mut self.step_budget,
+                            StepBudget::new(None),
+                        ),
+                        call_depth_limit: self.call_depth_limit,
+                        call_depth: self.call_depth,
+                        database_url: self.database_url.clone(),
+                        database_transaction: None,
+                        transactional_query: Some(tx),
+                        storage_checked: self.storage_checked,
+                        execution_context: self.execution_context.clone(),
+                        active_capabilities: std::mem::take(&mut self.active_capabilities),
+                        active_type_substitutions: std::mem::take(
+                            &mut self.active_type_substitutions,
+                        ),
+                    };
+                    let flow = child.exec_block(body, env);
+                    self.output = child.output;
+                    self.step_budget = child.step_budget;
+                    self.call_depth = child.call_depth;
+                    self.storage_checked = child.storage_checked;
+                    self.active_capabilities = child.active_capabilities;
+                    self.active_type_substitutions = child.active_type_substitutions;
+                    let should_rollback = match &flow {
+                        Err(_) => true,
+                        Ok(Flow::Return(Value::Result(Err(_)))) => {
+                            rolled_back_for_err_return = true;
+                            true
+                        }
+                        Ok(_) => false,
+                    };
+                    outcome = Some(flow);
+                    if should_rollback {
+                        Err("transaction rolled back".into())
+                    } else {
+                        Ok(())
+                    }
+                });
+                match outcome {
+                    Some(Err(error)) => Err(error),
+                    Some(Ok(flow)) if rolled_back_for_err_return => Ok(flow),
+                    Some(Ok(flow)) => {
+                        if let Err(error) = tx_result {
+                            return Err(self.runtime_error(
                                 *span,
                                 format!("database transaction failed: {error}"),
-                            )
-                        })?;
-                } else {
-                    self.execution_context
-                        .host_services
-                        .execute_database_batch(&database_url, &queries, true)
-                        .map_err(|error| {
-                            self.runtime_error(
-                                *span,
-                                format!("database transaction failed: {error}"),
-                            )
-                        })?;
+                            ));
+                        }
+                        Ok(flow)
+                    }
+                    None => Err(self.runtime_error(
+                        *span,
+                        format!(
+                            "database transaction failed: {}",
+                            tx_result
+                                .err()
+                                .unwrap_or_else(|| "transaction did not execute".into())
+                        ),
+                    )),
                 }
-                Ok(Flow::Continue)
             }
             Stmt::Parallel { body, span } => {
                 if self.transactional_query.is_some() {

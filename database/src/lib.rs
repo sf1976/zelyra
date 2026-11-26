@@ -677,6 +677,7 @@ pub fn build_schema(program: &Program) -> Result<Schema, Vec<SchemaError>> {
             indexes,
             uniques,
         });
+        validate_table_state_machines(table, &program.types, &mut errors);
     }
     let needs_number_sequences = program
         .tables
@@ -1275,19 +1276,151 @@ fn camel_to_snake(name: &str) -> String {
     out
 }
 
+fn validate_table_state_machines(
+    table: &TableDef,
+    type_defs: &[TypeDef],
+    errors: &mut Vec<SchemaError>,
+) {
+    let mut seen_columns = HashSet::new();
+    for machine in &table.state_machines {
+        if !seen_columns.insert(machine.column.clone()) {
+            errors.push(SchemaError {
+                message: format!(
+                    "table `{}` declares more than one `states` machine for column `{}`",
+                    table.name, machine.column
+                ),
+                span: machine.span,
+            });
+            continue;
+        }
+        let Some(column) = table
+            .columns
+            .iter()
+            .find(|column| column.name == machine.column)
+        else {
+            errors.push(SchemaError {
+                message: format!(
+                    "state machine column `{}` does not exist on table `{}`",
+                    machine.column, table.name
+                ),
+                span: machine.span,
+            });
+            continue;
+        };
+        let resolved = resolve_type(&column.ty, type_defs);
+        let inner = match &resolved {
+            Type::Option(inner) => inner.as_ref(),
+            other => other,
+        };
+        if inner != &Type::String {
+            errors.push(SchemaError {
+                message: format!(
+                    "state machine column `{}.{}` must have type `String` or `String?`, found `{}`",
+                    table.name, column.name, column.ty
+                ),
+                span: machine.span,
+            });
+            continue;
+        }
+        if machine.transitions.is_empty() {
+            errors.push(SchemaError {
+                message: format!(
+                    "state machine `{}.{}` must declare at least one state",
+                    table.name, machine.column
+                ),
+                span: machine.span,
+            });
+            continue;
+        }
+        let mut declared_states = HashSet::new();
+        for rule in &machine.transitions {
+            if !declared_states.insert(rule.from.as_str()) {
+                errors.push(SchemaError {
+                    message: format!(
+                        "state `{}` is declared more than once in `{}.{}`",
+                        rule.from, table.name, machine.column
+                    ),
+                    span: rule.span,
+                });
+            }
+            if let Some(limit) = column.length {
+                if rule.from.chars().count() > limit as usize {
+                    errors.push(SchemaError {
+                        message: format!(
+                            "state `{}` exceeds the `String({limit})` length of `{}.{}`",
+                            rule.from, table.name, column.name
+                        ),
+                        span: rule.span,
+                    });
+                }
+            }
+        }
+        for rule in &machine.transitions {
+            let mut seen_targets = HashSet::new();
+            for target in &rule.to {
+                if !seen_targets.insert(target.as_str()) {
+                    errors.push(SchemaError {
+                        message: format!(
+                            "duplicate transition target `{target}` from state `{}` in `{}.{}`",
+                            rule.from, table.name, machine.column
+                        ),
+                        span: rule.span,
+                    });
+                }
+                if !declared_states.contains(target.as_str()) {
+                    errors.push(SchemaError {
+                        message: format!(
+                            "transition target `{target}` from state `{}` is not declared in `{}.{}`",
+                            rule.from, table.name, machine.column
+                        ),
+                        span: rule.span,
+                    });
+                }
+            }
+        }
+        if let Some(DefaultValue::String(default)) = &column.default {
+            if !declared_states.contains(default.as_str()) {
+                errors.push(SchemaError {
+                    message: format!(
+                        "default value `{default}` of `{}.{}` is not a declared state",
+                        table.name, column.name
+                    ),
+                    span: column.span,
+                });
+            }
+        }
+    }
+}
+
 fn table_for_type(name: &str, table_names: &HashSet<String>) -> Option<String> {
     let name = name.rsplit("::").next().unwrap_or(name);
     for candidate in [name.to_ascii_lowercase(), camel_to_snake(name)] {
         if table_names.contains(&candidate) {
             return Some(candidate);
         }
-        let plural = if candidate.ends_with('y') {
+        let plural = if candidate.ends_with('y')
+            && !candidate.ends_with("ay")
+            && !candidate.ends_with("ey")
+            && !candidate.ends_with("oy")
+            && !candidate.ends_with("uy")
+        {
             format!("{}ies", &candidate[..candidate.len() - 1])
+        } else if candidate.ends_with('s')
+            || candidate.ends_with('x')
+            || candidate.ends_with('z')
+            || candidate.ends_with("ch")
+            || candidate.ends_with("sh")
+        {
+            format!("{candidate}es")
         } else {
             format!("{candidate}s")
         };
         if table_names.contains(&plural) {
             return Some(plural);
+        }
+        let simple_plural = format!("{candidate}s");
+        if simple_plural != plural && table_names.contains(&simple_plural) {
+            return Some(simple_plural);
         }
     }
     None
@@ -7686,6 +7819,34 @@ mod tests {
         assert_eq!(
             table_for_type("SalesInvoice", &table_names),
             Some("sales_invoices".to_owned())
+        );
+
+        let es_tables = HashSet::from([
+            "addresses".to_owned(),
+            "order_statuses".to_owned(),
+            "tax_batches".to_owned(),
+            "api_keys".to_owned(),
+            "categories".to_owned(),
+        ]);
+        assert_eq!(
+            table_for_type("Address", &es_tables),
+            Some("addresses".to_owned())
+        );
+        assert_eq!(
+            table_for_type("OrderStatus", &es_tables),
+            Some("order_statuses".to_owned())
+        );
+        assert_eq!(
+            table_for_type("TaxBatch", &es_tables),
+            Some("tax_batches".to_owned())
+        );
+        assert_eq!(
+            table_for_type("ApiKey", &es_tables),
+            Some("api_keys".to_owned())
+        );
+        assert_eq!(
+            table_for_type("Category", &es_tables),
+            Some("categories".to_owned())
         );
     }
 

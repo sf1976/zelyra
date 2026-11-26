@@ -9,6 +9,7 @@ pub enum ContractKind {
     Requires,
     Ensures,
     LoopInvariant,
+    StateMachine,
 }
 
 impl fmt::Display for ContractKind {
@@ -17,6 +18,7 @@ impl fmt::Display for ContractKind {
             Self::Requires => write!(f, "requires"),
             Self::Ensures => write!(f, "ensures"),
             Self::LoopInvariant => write!(f, "invariant"),
+            Self::StateMachine => write!(f, "state_machine"),
         }
     }
 }
@@ -167,7 +169,146 @@ pub fn verify(program: &Program) -> Vec<VerificationResult> {
             });
         }
     }
+    for table in &program.tables {
+        for (index, machine) in table.state_machines.iter().enumerate() {
+            results.push(verify_table_state_machine(table, machine, index));
+        }
+    }
     results
+}
+
+fn verify_table_state_machine(
+    table: &TableDef,
+    machine: &TableStateMachineDef,
+    index: usize,
+) -> VerificationResult {
+    let label = format!("{}.{}", table.name, machine.column);
+    let Some(initial) = machine.initial_state(table) else {
+        return VerificationResult {
+            function: label.clone(),
+            kind: ContractKind::StateMachine,
+            index,
+            status: VerificationStatus::Failed,
+            span: machine.span,
+            message: format!("State machine `{label}` declares no initial state."),
+            counterexample: None,
+        };
+    };
+
+    // 1. BFS reachability from initial state.
+    let mut reachable = std::collections::HashSet::new();
+    let mut queue = std::collections::VecDeque::new();
+    reachable.insert(initial);
+    queue.push_back(initial);
+    while let Some(state) = queue.pop_front() {
+        if let Some(targets) = machine.allowed_next(state) {
+            for target in targets {
+                if reachable.insert(target.as_str()) {
+                    queue.push_back(target.as_str());
+                }
+            }
+        }
+    }
+    let unreachable = machine
+        .transitions
+        .iter()
+        .filter(|rule| !reachable.contains(rule.from.as_str()))
+        .map(|rule| rule.from.as_str())
+        .collect::<Vec<_>>();
+    if !unreachable.is_empty() {
+        return VerificationResult {
+            function: label.clone(),
+            kind: ContractKind::StateMachine,
+            index,
+            status: VerificationStatus::Failed,
+            span: machine.span,
+            message: format!(
+                "State machine `{label}` has unreachable state(s) from `{initial}`: {}.",
+                unreachable.join(", ")
+            ),
+            counterexample: None,
+        };
+    }
+
+    // 2. Check for non-final states that have no path to any final state (if
+    //    terminal states exist) or have zero outgoing transitions.
+    let dead_ends = machine
+        .transitions
+        .iter()
+        .filter(|rule| !rule.is_final && rule.to.is_empty())
+        .map(|rule| rule.from.as_str())
+        .collect::<Vec<_>>();
+    if !dead_ends.is_empty() {
+        return VerificationResult {
+            function: label.clone(),
+            kind: ContractKind::StateMachine,
+            index,
+            status: VerificationStatus::Failed,
+            span: machine.span,
+            message: format!(
+                "State machine `{label}` has non-final dead-end state(s): {}.",
+                dead_ends.join(", ")
+            ),
+            counterexample: None,
+        };
+    }
+
+    let final_states = machine.final_states();
+    if !final_states.is_empty() {
+        let mut can_reach_final = final_states
+            .iter()
+            .copied()
+            .collect::<std::collections::HashSet<_>>();
+        let mut changed = true;
+        while changed {
+            changed = false;
+            for rule in &machine.transitions {
+                if !can_reach_final.contains(rule.from.as_str())
+                    && rule
+                        .to
+                        .iter()
+                        .any(|target| can_reach_final.contains(target.as_str()))
+                {
+                    can_reach_final.insert(rule.from.as_str());
+                    changed = true;
+                }
+            }
+        }
+        let trapped = machine
+            .transitions
+            .iter()
+            .filter(|rule| !can_reach_final.contains(rule.from.as_str()))
+            .map(|rule| rule.from.as_str())
+            .collect::<Vec<_>>();
+        if !trapped.is_empty() {
+            return VerificationResult {
+                function: label.clone(),
+                kind: ContractKind::StateMachine,
+                index,
+                status: VerificationStatus::Failed,
+                span: machine.span,
+                message: format!(
+                    "State machine `{label}` has state(s) that can never reach a `final` state: {}.",
+                    trapped.join(", ")
+                ),
+                counterexample: None,
+            };
+        }
+    }
+
+    VerificationResult {
+        function: label.clone(),
+        kind: ContractKind::StateMachine,
+        index,
+        status: VerificationStatus::Proven,
+        span: machine.span,
+        message: format!(
+            "State machine `{label}` verified: all {} state(s) are reachable from `{initial}` with {} terminal state(s) and no deadlocks.",
+            machine.transitions.len(),
+            final_states.len()
+        ),
+        counterexample: None,
+    }
 }
 
 fn verification_message(
@@ -205,6 +346,12 @@ fn verification_message(
         (ContractKind::LoopInvariant, VerificationStatus::Failed, _) => {
             "The loop invariant is false on a feasible path or is not preserved by the loop body."
                 .into()
+        }
+        (ContractKind::StateMachine, VerificationStatus::RuntimeCheck, _) => {
+            "The state machine requires runtime transition checks.".into()
+        }
+        (ContractKind::StateMachine, VerificationStatus::Failed, _) => {
+            "The state machine failed static reachability or deadlock verification.".into()
         }
         (_, VerificationStatus::Unproven, false) => {
             "No proof target was declared for this function.".into()

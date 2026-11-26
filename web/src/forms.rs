@@ -229,7 +229,56 @@ pub(super) fn render_form_with_language(
                 html.push_str("</option>");
             }
             html.push_str("</select>");
-        } else if !field.choices.is_empty() {
+        } else if !field.choices.is_empty()
+            || route.table.as_ref().is_some_and(|table| {
+                table
+                    .state_machines
+                    .iter()
+                    .any(|machine| machine.column == field.name)
+            })
+        {
+            let derived_choices = if !field.choices.is_empty() {
+                field.choices.clone()
+            } else if let Some(table) = route.table.as_ref() {
+                let machine = table
+                    .state_machines
+                    .iter()
+                    .find(|machine| machine.column == field.name)
+                    .expect("guarded above");
+                if route.form.name.ends_with("Edit")
+                    && !value.is_empty()
+                    && machine.is_valid_state(value)
+                {
+                    let mut allowed = vec![value.to_owned()];
+                    if let Some(next) = machine.allowed_next(value) {
+                        for target in next {
+                            if !allowed.iter().any(|existing| existing == target) {
+                                allowed.push(target.clone());
+                            }
+                        }
+                    }
+                    allowed
+                } else {
+                    machine.states().into_iter().map(str::to_owned).collect()
+                }
+            } else {
+                Vec::new()
+            };
+            let selected_value = if value.is_empty() {
+                route
+                    .table
+                    .as_ref()
+                    .and_then(|table| {
+                        table
+                            .state_machines
+                            .iter()
+                            .find(|machine| machine.column == field.name)
+                            .and_then(|machine| machine.initial_state(table))
+                    })
+                    .unwrap_or("")
+            } else {
+                value
+            };
             html.push_str("<select class=\"");
             html.push_str(&form_field_appearance_classes(field, "z-select"));
             html.push_str("\" id=\"");
@@ -252,11 +301,11 @@ pub(super) fn render_form_with_language(
                     tr(language, "action.select")
                 ));
             }
-            for choice in &field.choices {
+            for choice in &derived_choices {
                 html.push_str("<option value=\"");
                 html.push_str(&html_escape(choice));
                 html.push('"');
-                if choice == value {
+                if choice == selected_value {
                     html.push_str(" selected");
                 }
                 html.push('>');

@@ -678,6 +678,7 @@ fn mir_instruction_source_span(instruction: &MirInstruction, program: &MirProgra
         | MirInstruction::ArrayIndexAssign { span, .. }
         | MirInstruction::TupleBind { span, .. }
         | MirInstruction::Transaction { span, .. }
+        | MirInstruction::DecisionTransaction { span, .. }
         | MirInstruction::Parallel { span, .. }
         | MirInstruction::LoopInvariantCheck { span, .. } => *span,
         MirInstruction::Evaluate(expression) => program.expressions.get(expression.0)?.span,
@@ -1612,6 +1613,13 @@ impl FunctionCompiler<'_> {
             }
             MirInstruction::Parallel { bindings, span } => {
                 self.parallel_instruction(bindings, *span)?;
+            }
+            MirInstruction::DecisionTransaction { span, .. } => {
+                return Err(vec![MirError {
+                    code: "E-MIR-UNSUPPORTED-001",
+                    message: "bytecode backend does not yet support control-flow decision transactions; use --backend ast or --backend mir".into(),
+                    span: *span,
+                }]);
             }
             MirInstruction::Transaction { operations, span } => {
                 let mut transaction_operations = Vec::with_capacity(operations.len());

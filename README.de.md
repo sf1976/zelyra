@@ -11,20 +11,21 @@ Business-, Datenbank- und Webanwendungen. Schemaabhängiges SQL, Formulare,
 CRUD, Views und Geschäftslogik greifen ineinander; gewöhnlicher Programmcode
 und natives SQL bleiben jederzeit möglich.
 
-> **Release 1.3.0 · Sprachkompatibilitätslinie: 0.1** · [GitHub-Release](https://github.com/sf1976/zelyra/releases/tag/v1.3.0)
+> **Release 1.3.5 · Sprachkompatibilitätslinie: 0.1** · [GitHub-Release](https://github.com/sf1976/zelyra/releases/tag/v1.3.5)
 >
 > Die Compilerprüfung und der Verifier decken klar abgegrenzte Bereiche ab. Sie beweisen nicht die Korrektheit beliebiger Anwendungen. Prüfe vor dem Einsatz die unterstützten Abläufe und Grenzen in der jeweiligen Dokumentation.
 
-Zelyra 1.3.0 ergänzt ein optionales Standardlayout mit compilergeprüften
-MariaDB-Vorlagen für Minimalprojekte, CRUD, Authentifizierung und
-Geschäftsabläufe. Studio schlägt nun geeignete CRUD- und Formularstrukturen aus
-deklarierten Tabellendaten vor. Architekturprüfungen verfolgen statisch
-auflösbare Routenaufrufe; die Migrationsvorschau zeigt quellbezogene Befunde je
-Deklaration. Quellcode-Installer richten Cargo dauerhaft ein; bei interaktiver
-MariaDB-Einrichtung kann Compose v2 angeboten werden. AST bleibt Standard;
-experimentelles MIR und Bytecode bleiben opt-in und weisen nicht unterstützte
-Programme sicher zurück. Der Business-Starter ist noch kein fertiges ERP.
-Siehe die [Release-Notizen 1.3.0](docs/release-notes/1.3.0.de.md),
+Zelyra 1.3.5 ergänzt erstklassige deklarative Tabellen-Zustandsmaschinen
+(`states`), Entscheidungstransaktionen mit Kontrollfluss (`transaction { ... }`)
+in AST und MIR samt automatischem Rollback bei Laufzeitfehlern oder
+`return Err(...)`, schemageprüfte SQL-Upserts und Zeilensperren mit
+Tippfehlerhinweisen, typisierte `execute { ... }`-Blöcke für eigenständige
+`form`-Aktionen sowie `--layout standard --strict`-Starter, die ab Werk
+`strict_architecture = true` erfüllen. AST bleibt Standard; experimentelles MIR
+und Bytecode bleiben opt-in und weisen nicht unterstützte Konstrukte
+geschlossen ab. Der Business-Starter ist noch kein fertiges ERP. Siehe die
+[Release-Notizen 1.3.5](docs/release-notes/1.3.5.de.md),
+[Release-Notizen 1.3.0](docs/release-notes/1.3.0.de.md),
 [Release-Notizen 1.2.56](docs/release-notes/1.2.56.de.md),
 [Release-Notizen 1.2.55](docs/release-notes/1.2.55.de.md),
 [Release-Notizen 1.2.54](docs/release-notes/1.2.54.de.md),

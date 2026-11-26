@@ -3,7 +3,7 @@ members = ["ast", "lexer", "parser", "hir", "mir", "database", "mail", "runtime"
 resolver = "2"
 
 [workspace.package]
-version = "1.3.1"
+version = "1.3.5"
 edition = "2021"
 license = "MIT OR Apache-2.0"
 
@@ -39,7 +39,7 @@ ring = "0.17.14"
 subtle = "2.6.1"
 zeroize = "1.9.0"
 pulldown-cmark = "0.13.4"
-url = "2.5.8"
+url = "2.5.9"
 zelyra-ast = { path = "ast", version = "1.0" }
 zelyra-lexer = { path = "lexer", version = "1.0" }
 zelyra-parser = { path = "parser", version = "1.0" }
