@@ -965,6 +965,11 @@ fn insert_binds_computed_fields(tokens: &[SqlToken], computed_fields: &HashSet<S
     {
         return false;
     }
+    // Upserts can mutate existing rows without flowing through the checked
+    // computed-column update path; fail closed for tables with `compute(...)`.
+    if has_upsert_clause(tokens) {
+        return false;
+    }
     let Some(into_index) = tokens.iter().position(
         |token| matches!(token, SqlToken::Word(word) if word.eq_ignore_ascii_case("INTO")),
     ) else {
@@ -1428,11 +1433,16 @@ fn check_query(
     if command == "SELECT" {
         check_select_columns(&tokens, &tables, schema, span, &mut errors);
         check_result_mapping(result_type, &table_names, span, &mut errors);
-    } else if !matches!(result_type, Type::Unit) {
-        errors.push(sql_error(
-            span,
-            "non-SELECT SQL blocks must use the result type `Unit`",
-        ));
+    } else {
+        if command == "INSERT" {
+            check_upsert_clauses(&tokens, &tables, schema, span, &mut errors);
+        }
+        if !matches!(result_type, Type::Unit) {
+            errors.push(sql_error(
+                span,
+                "non-SELECT SQL blocks must use the result type `Unit`",
+            ));
+        }
     }
     errors
 }
@@ -1783,6 +1793,96 @@ fn result_types_compatible(expected: &Type, actual: &Type) -> bool {
     }
 }
 
+fn is_non_table_update_keyword(tokens: &[SqlToken], index: usize) -> bool {
+    let prev = index.checked_sub(1).and_then(|pos| tokens.get(pos));
+    let prev2 = index.checked_sub(2).and_then(|pos| tokens.get(pos));
+    // `SELECT ... FOR UPDATE`, `FOR NO KEY UPDATE`, `ON DUPLICATE KEY UPDATE`,
+    // `ON CONFLICT (...) DO UPDATE SET ...`.
+    match (prev2, prev) {
+        (_, Some(SqlToken::Word(word)))
+            if word.eq_ignore_ascii_case("FOR") || word.eq_ignore_ascii_case("DO") =>
+        {
+            true
+        }
+        (Some(SqlToken::Word(first)), Some(SqlToken::Word(second)))
+            if (first.eq_ignore_ascii_case("DUPLICATE") && second.eq_ignore_ascii_case("KEY"))
+                || (first.eq_ignore_ascii_case("NO") && second.eq_ignore_ascii_case("KEY")) =>
+        {
+            true
+        }
+        _ => false,
+    }
+}
+
+fn has_upsert_clause(tokens: &[SqlToken]) -> bool {
+    tokens.windows(2).any(|window| match window {
+        [SqlToken::Word(first), SqlToken::Word(second)] => {
+            (first.eq_ignore_ascii_case("ON") && second.eq_ignore_ascii_case("DUPLICATE"))
+                || (first.eq_ignore_ascii_case("ON") && second.eq_ignore_ascii_case("CONFLICT"))
+        }
+        _ => false,
+    })
+}
+
+fn suggest_closest_name<'a>(
+    input: &str,
+    candidates: impl IntoIterator<Item = &'a str>,
+) -> Option<&'a str> {
+    let needle = input.to_ascii_lowercase();
+    let max_distance = if needle.len() <= 3 { 1 } else { 2 };
+    let mut best: Option<(usize, &'a str)> = None;
+    for candidate in candidates {
+        let lower = candidate.to_ascii_lowercase();
+        if lower == needle {
+            continue;
+        }
+        let distance = levenshtein_distance(&needle, &lower);
+        if distance <= max_distance {
+            let replace = match best {
+                None => true,
+                Some((best_distance, best_name)) => {
+                    distance < best_distance || (distance == best_distance && candidate < best_name)
+                }
+            };
+            if replace {
+                best = Some((distance, candidate));
+            }
+        }
+    }
+    best.map(|(_, name)| name)
+}
+
+fn levenshtein_distance(left: &str, right: &str) -> usize {
+    let left_chars = left.chars().collect::<Vec<_>>();
+    let right_chars = right.chars().collect::<Vec<_>>();
+    if left_chars.is_empty() {
+        return right_chars.len();
+    }
+    if right_chars.is_empty() {
+        return left_chars.len();
+    }
+    let mut previous = (0..=right_chars.len()).collect::<Vec<_>>();
+    let mut current = vec![0; right_chars.len() + 1];
+    for (i, left_char) in left_chars.iter().enumerate() {
+        current[0] = i + 1;
+        for (j, right_char) in right_chars.iter().enumerate() {
+            let cost = usize::from(left_char != right_char);
+            current[j + 1] = (previous[j + 1] + 1)
+                .min(current[j] + 1)
+                .min(previous[j] + cost);
+        }
+        std::mem::swap(&mut previous, &mut current);
+    }
+    previous[right_chars.len()]
+}
+
+fn format_suggestion(suggestion: Option<&str>) -> String {
+    match suggestion {
+        Some(name) => format!(" (did you mean `{name}`?)"),
+        None => String::new(),
+    }
+}
+
 fn query_tables(
     tokens: &[SqlToken],
     schema: &Schema,
@@ -1795,10 +1895,11 @@ fn query_tables(
         let SqlToken::Word(keyword) = &tokens[index] else {
             continue;
         };
-        if !matches!(
-            keyword.to_ascii_uppercase().as_str(),
-            "FROM" | "JOIN" | "INTO" | "UPDATE"
-        ) {
+        let upper = keyword.to_ascii_uppercase();
+        if !matches!(upper.as_str(), "FROM" | "JOIN" | "INTO" | "UPDATE") {
+            continue;
+        }
+        if upper == "UPDATE" && is_non_table_update_keyword(tokens, index) {
             continue;
         }
         let Some(SqlToken::Word(table_name)) = tokens.get(index + 1) else {
@@ -1806,9 +1907,13 @@ fn query_tables(
         };
         let normalized = table_name.to_ascii_lowercase();
         if !table_names.contains(&normalized) {
+            let hint = format_suggestion(suggest_closest_name(
+                table_name,
+                table_names.iter().map(String::as_str),
+            ));
             errors.push(sql_error(
                 span,
-                format!("table `{table_name}` does not exist in the Zelyra schema"),
+                format!("table `{table_name}` does not exist in the Zelyra schema{hint}"),
             ));
             continue;
         }
@@ -1823,6 +1928,197 @@ fn query_tables(
         errors.push(sql_error(span, "SQL query does not reference a table"));
     }
     tables
+}
+
+fn check_upsert_clauses(
+    tokens: &[SqlToken],
+    tables: &HashMap<String, String>,
+    schema: &Schema,
+    span: Span,
+    errors: &mut Vec<SqlError>,
+) {
+    let target_table_name = tokens
+        .iter()
+        .enumerate()
+        .find_map(|(index, token)| match (token, tokens.get(index + 1)) {
+            (SqlToken::Word(word), Some(SqlToken::Word(name)))
+                if word.eq_ignore_ascii_case("INTO") =>
+            {
+                let lower = name.to_ascii_lowercase();
+                tables.get(&lower).cloned()
+            }
+            _ => None,
+        });
+    let Some(target_table_name) = target_table_name else {
+        return;
+    };
+    let Some(target_table) = schema
+        .tables
+        .iter()
+        .find(|table| table.name == target_table_name)
+    else {
+        return;
+    };
+    let known_columns = target_table
+        .columns
+        .iter()
+        .map(|column| column.name.as_str())
+        .collect::<Vec<_>>();
+    let check_column = |name: &str, context: &str, errors: &mut Vec<SqlError>| {
+        let lower = name.to_ascii_lowercase();
+        if !target_table
+            .columns
+            .iter()
+            .any(|column| column.name == lower)
+        {
+            let hint = format_suggestion(suggest_closest_name(name, known_columns.iter().copied()));
+            errors.push(sql_error(
+                span,
+                format!(
+                    "{context} column `{name}` does not exist on table `{}`{hint}",
+                    target_table.name
+                ),
+            ));
+        }
+    };
+
+    // MariaDB / MySQL: `ON DUPLICATE KEY UPDATE col = expr, ...`
+    if let Some(dup_start) = tokens.windows(4).position(|window| {
+        matches!(
+            window,
+            [
+                SqlToken::Word(on),
+                SqlToken::Word(duplicate),
+                SqlToken::Word(key),
+                SqlToken::Word(update),
+            ] if on.eq_ignore_ascii_case("ON")
+                && duplicate.eq_ignore_ascii_case("DUPLICATE")
+                && key.eq_ignore_ascii_case("KEY")
+                && update.eq_ignore_ascii_case("UPDATE")
+        )
+    }) {
+        check_upsert_assignments(&tokens[dup_start + 4..], &check_column, errors);
+        return;
+    }
+
+    // PostgreSQL / SQLite: `ON CONFLICT [(col, ...)] DO UPDATE SET col = expr, ...` or `DO NOTHING`
+    if let Some(conflict_start) = tokens.windows(2).position(|window| {
+        matches!(
+            window,
+            [SqlToken::Word(on), SqlToken::Word(conflict)]
+                if on.eq_ignore_ascii_case("ON") && conflict.eq_ignore_ascii_case("CONFLICT")
+        )
+    }) {
+        let mut cursor = conflict_start + 2;
+        if matches!(tokens.get(cursor), Some(SqlToken::OpenParen)) {
+            cursor += 1;
+            let mut depth = 1_u32;
+            while cursor < tokens.len() && depth > 0 {
+                match &tokens[cursor] {
+                    SqlToken::OpenParen => depth += 1,
+                    SqlToken::CloseParen => depth -= 1,
+                    SqlToken::Word(column)
+                        if depth == 1
+                            && !sql_keyword(column)
+                            && !matches!(tokens.get(cursor + 1), Some(SqlToken::OpenParen)) =>
+                    {
+                        check_column(column, "ON CONFLICT target", errors);
+                    }
+                    _ => {}
+                }
+                cursor += 1;
+            }
+        }
+        if let Some(set_rel) = tokens[cursor..].windows(3).position(|window| {
+            matches!(
+                window,
+                [
+                    SqlToken::Word(do_kw),
+                    SqlToken::Word(update_kw),
+                    SqlToken::Word(set_kw),
+                ] if do_kw.eq_ignore_ascii_case("DO")
+                    && update_kw.eq_ignore_ascii_case("UPDATE")
+                    && set_kw.eq_ignore_ascii_case("SET")
+            )
+        }) {
+            check_upsert_assignments(&tokens[cursor + set_rel + 3..], &check_column, errors);
+        }
+    }
+}
+
+fn check_upsert_assignments(
+    tokens: &[SqlToken],
+    check_column: &dyn Fn(&str, &str, &mut Vec<SqlError>),
+    errors: &mut Vec<SqlError>,
+) {
+    let mut segments = Vec::new();
+    let mut current = Vec::new();
+    let mut depth = 0_u32;
+    for token in tokens {
+        match token {
+            SqlToken::OpenParen => depth += 1,
+            SqlToken::CloseParen => depth = depth.saturating_sub(1),
+            SqlToken::Comma if depth == 0 => {
+                segments.push(std::mem::take(&mut current));
+                continue;
+            }
+            SqlToken::Word(word)
+                if depth == 0
+                    && (word.eq_ignore_ascii_case("WHERE")
+                        || word.eq_ignore_ascii_case("RETURNING")) =>
+            {
+                break;
+            }
+            _ => {}
+        }
+        current.push(token.clone());
+    }
+    if !current.is_empty() {
+        segments.push(current);
+    }
+
+    for segment in segments {
+        let Some(equal) = segment
+            .iter()
+            .position(|token| matches!(token, SqlToken::Operator))
+        else {
+            continue;
+        };
+        let target = &segment[..equal];
+        match target {
+            [SqlToken::Word(column)] => check_column(column, "upsert assignment", errors),
+            [SqlToken::Word(_table), SqlToken::Dot, SqlToken::Word(column)] => {
+                check_column(column, "upsert assignment", errors)
+            }
+            _ => {}
+        }
+        let rhs = &segment[equal + 1..];
+        // Validate `VALUES(col)` and `EXCLUDED.col` references on the RHS.
+        for index in 0..rhs.len() {
+            if let (
+                Some(SqlToken::Word(func)),
+                Some(SqlToken::OpenParen),
+                Some(SqlToken::Word(col)),
+                Some(SqlToken::CloseParen),
+            ) = (
+                rhs.get(index),
+                rhs.get(index + 1),
+                rhs.get(index + 2),
+                rhs.get(index + 3),
+            ) {
+                if func.eq_ignore_ascii_case("VALUES") {
+                    check_column(col, "VALUES()", errors);
+                }
+            }
+            if let (Some(SqlToken::Word(qualifier)), Some(SqlToken::Dot), Some(SqlToken::Word(col))) =
+                (rhs.get(index), rhs.get(index + 1), rhs.get(index + 2))
+            {
+                if qualifier.eq_ignore_ascii_case("EXCLUDED") {
+                    check_column(col, "EXCLUDED", errors);
+                }
+            }
+        }
+    }
 }
 
 fn check_select_columns(
@@ -1878,9 +2174,38 @@ fn check_select_columns(
             })
         };
         if !exists && !is_sql_alias(tokens, index) {
+            let candidate_columns = if let Some(table_name) = qualified_table {
+                schema
+                    .tables
+                    .iter()
+                    .find(|table| table.name == *table_name)
+                    .map(|table| {
+                        table
+                            .columns
+                            .iter()
+                            .map(|column| column.name.as_str())
+                            .collect::<Vec<_>>()
+                    })
+                    .unwrap_or_default()
+            } else {
+                tables
+                    .values()
+                    .flat_map(|table_name| {
+                        schema
+                            .tables
+                            .iter()
+                            .find(|table| table.name == *table_name)
+                            .into_iter()
+                            .flat_map(|table| {
+                                table.columns.iter().map(|column| column.name.as_str())
+                            })
+                    })
+                    .collect::<Vec<_>>()
+            };
+            let hint = format_suggestion(suggest_closest_name(word, candidate_columns));
             errors.push(sql_error(
                 span,
-                format!("column `{word}` does not exist in the referenced tables"),
+                format!("column `{word}` does not exist in the referenced tables{hint}"),
             ));
         }
     }
@@ -2078,6 +2403,36 @@ fn sql_keyword(value: &str) -> bool {
             | "THEN"
             | "ELSE"
             | "END"
+            | "FOR"
+            | "NOWAIT"
+            | "SKIP"
+            | "LOCKED"
+            | "SHARE"
+            | "LOCK"
+            | "MODE"
+            | "OF"
+            | "NO"
+            | "KEY"
+            | "DUPLICATE"
+            | "CONFLICT"
+            | "DO"
+            | "NOTHING"
+            | "EXCLUDED"
+            | "USING"
+            | "UNION"
+            | "ALL"
+            | "EXCEPT"
+            | "INTERSECT"
+            | "EXISTS"
+            | "ANY"
+            | "SOME"
+            | "NULLS"
+            | "FIRST"
+            | "LAST"
+            | "ILIKE"
+            | "COLLATE"
+            | "OVER"
+            | "PARTITION"
     )
 }
 
@@ -2662,5 +3017,182 @@ mod tests {
         assert!(errors.iter().any(|error| error
             .message
             .contains("tableview result field `orders` expects `String`, but SQL produces `Int`")));
+    }
+
+    #[test]
+    fn accepts_schema_checked_mariadb_and_postgres_upserts() {
+        let source = r#"
+            table stock_levels {
+                id: Id primary auto
+                item_id: Int required
+                warehouse_id: Int required
+                on_hand: Decimal(12, 3) required
+            }
+            fn upsert_mariadb(item_id: Int, warehouse_id: Int, qty: Decimal) uses Database {
+                sql {
+                    INSERT INTO stock_levels (item_id, warehouse_id, on_hand)
+                    VALUES (:item_id, :warehouse_id, :qty)
+                    ON DUPLICATE KEY UPDATE on_hand = on_hand + VALUES(on_hand)
+                }
+            }
+            fn upsert_postgres(item_id: Int, warehouse_id: Int, qty: Decimal) uses Database {
+                sql {
+                    INSERT INTO stock_levels (item_id, warehouse_id, on_hand)
+                    VALUES (:item_id, :warehouse_id, :qty)
+                    ON CONFLICT (item_id, warehouse_id) DO UPDATE SET on_hand = stock_levels.on_hand + EXCLUDED.on_hand
+                }
+            }
+            fn upsert_ignore(item_id: Int, warehouse_id: Int, qty: Decimal) uses Database {
+                sql {
+                    INSERT INTO stock_levels (item_id, warehouse_id, on_hand)
+                    VALUES (:item_id, :warehouse_id, :qty)
+                    ON CONFLICT (item_id, warehouse_id) DO NOTHING
+                }
+            }
+            fn main() {}
+        "#;
+        let program = parse(&lex(source).unwrap()).unwrap();
+        let schema = build_schema(&program).unwrap();
+        let result = check_program(&program, &schema);
+        assert!(result.is_ok(), "unexpected upsert errors: {result:?}");
+    }
+
+    #[test]
+    fn rejects_invalid_upsert_columns_with_suggestions_and_blocks_computed_upserts() {
+        let source = r#"
+            table stock_levels {
+                id: Id primary auto
+                item_id: Int required
+                warehouse_id: Int required
+                on_hand: Decimal(12, 3) required
+            }
+            fn bad_mariadb(item_id: Int, warehouse_id: Int, qty: Decimal) uses Database {
+                sql {
+                    INSERT INTO stock_levels (item_id, warehouse_id, on_hand)
+                    VALUES (:item_id, :warehouse_id, :qty)
+                    ON DUPLICATE KEY UPDATE on_hnd = on_hand + VALUES(on_hnd)
+                }
+            }
+            fn bad_postgres(item_id: Int, warehouse_id: Int, qty: Decimal) uses Database {
+                sql {
+                    INSERT INTO stock_levels (item_id, warehouse_id, on_hand)
+                    VALUES (:item_id, :warehouse_id, :qty)
+                    ON CONFLICT (item_id, warehuse_id) DO UPDATE SET on_hand = EXCLUDED.on_hnd
+                }
+            }
+            fn main() {}
+        "#;
+        let program = parse(&lex(source).unwrap()).unwrap();
+        let schema = build_schema(&program).unwrap();
+        let errors = check_program(&program, &schema).unwrap_err();
+        assert!(
+            errors.iter().any(|error| {
+                error.message.contains("upsert assignment column `on_hnd`")
+                    && error.message.contains("did you mean `on_hand`?")
+            }),
+            "errors: {errors:?}"
+        );
+        assert!(
+            errors.iter().any(|error| {
+                error.message.contains("VALUES() column `on_hnd`")
+                    && error.message.contains("did you mean `on_hand`?")
+            }),
+            "errors: {errors:?}"
+        );
+        assert!(
+            errors.iter().any(|error| {
+                error.message.contains("ON CONFLICT target column `warehuse_id`")
+                    && error.message.contains("did you mean `warehouse_id`?")
+            }),
+            "errors: {errors:?}"
+        );
+        assert!(
+            errors.iter().any(|error| {
+                error.message.contains("EXCLUDED column `on_hnd`")
+                    && error.message.contains("did you mean `on_hand`?")
+            }),
+            "errors: {errors:?}"
+        );
+
+        let computed = r#"
+            table invoice_items {
+                id: Id primary auto
+                quantity: Int required
+                unit_price: Int required
+                total: Int required compute(quantity * unit_price)
+            }
+            api POST "/invoice-items" {
+                handler create_item
+                input { quantity: Int unit_price: Int }
+                validates invoice_items
+                output Result<Int, String>
+            }
+            fn create_item(quantity: Int, unit_price: Int, total: Int) -> Result<Int, String> uses Database(write) {
+                sql {
+                    INSERT INTO invoice_items (quantity, unit_price, total)
+                    VALUES (:quantity, :unit_price, :total)
+                    ON DUPLICATE KEY UPDATE quantity = :quantity
+                }
+                return Ok(total)
+            }
+            fn main() {}
+        "#;
+        let program = parse(&lex(computed).unwrap()).unwrap();
+        let schema = build_schema(&program).unwrap();
+        let errors = check_program(&program, &schema)
+            .expect_err("upserts must not bypass computed-column protection");
+        assert!(errors
+            .iter()
+            .any(|error| error.message.contains("computed")));
+    }
+
+    #[test]
+    fn accepts_row_locking_select_clauses_and_suggests_close_table_and_column_typos() {
+        let source = r#"
+            table stock_levels {
+                id: Id primary auto
+                item_id: Int required
+                on_hand: Decimal(12, 3) required
+            }
+            fn lock_reads(item_id: Int) uses Database {
+                a = sql<StockLevel[]> { SELECT id, on_hand FROM stock_levels WHERE item_id = :item_id FOR UPDATE }
+                b = sql<StockLevel[]> { SELECT id, on_hand FROM stock_levels WHERE item_id = :item_id FOR UPDATE NOWAIT }
+                c = sql<StockLevel[]> { SELECT id, on_hand FROM stock_levels WHERE item_id = :item_id FOR UPDATE SKIP LOCKED }
+                d = sql<StockLevel[]> { SELECT id, on_hand FROM stock_levels WHERE item_id = :item_id FOR SHARE }
+                e = sql<StockLevel[]> { SELECT id, on_hand FROM stock_levels WHERE item_id = :item_id LOCK IN SHARE MODE }
+            }
+            fn main() {}
+        "#;
+        let program = parse(&lex(source).unwrap()).unwrap();
+        let schema = build_schema(&program).unwrap();
+        let result = check_program(&program, &schema);
+        assert!(result.is_ok(), "unexpected locking-read errors: {result:?}");
+
+        let typo_source = r#"
+            table stock_levels {
+                id: Id primary auto
+                on_hand: Decimal(12, 3) required
+            }
+            fn typos() uses Database {
+                a = sql<StockLevel[]> { SELECT id, on_hnd FROM stock_levels }
+                b = sql<StockLevel[]> { SELECT id FROM stock_leves }
+            }
+            fn main() {}
+        "#;
+        let program = parse(&lex(typo_source).unwrap()).unwrap();
+        let schema = build_schema(&program).unwrap();
+        let errors = check_program(&program, &schema).unwrap_err();
+        assert!(
+            errors
+                .iter()
+                .any(|error| error.message.contains("did you mean `on_hand`?")),
+            "errors: {errors:?}"
+        );
+        assert!(
+            errors
+                .iter()
+                .any(|error| error.message.contains("did you mean `stock_levels`?")),
+            "errors: {errors:?}"
+        );
     }
 }

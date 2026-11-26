@@ -1281,13 +1281,29 @@ fn table_for_type(name: &str, table_names: &HashSet<String>) -> Option<String> {
         if table_names.contains(&candidate) {
             return Some(candidate);
         }
-        let plural = if candidate.ends_with('y') {
+        let plural = if candidate.ends_with('y')
+            && !candidate.ends_with("ay")
+            && !candidate.ends_with("ey")
+            && !candidate.ends_with("oy")
+            && !candidate.ends_with("uy")
+        {
             format!("{}ies", &candidate[..candidate.len() - 1])
+        } else if candidate.ends_with('s')
+            || candidate.ends_with('x')
+            || candidate.ends_with('z')
+            || candidate.ends_with("ch")
+            || candidate.ends_with("sh")
+        {
+            format!("{candidate}es")
         } else {
             format!("{candidate}s")
         };
         if table_names.contains(&plural) {
             return Some(plural);
+        }
+        let simple_plural = format!("{candidate}s");
+        if simple_plural != plural && table_names.contains(&simple_plural) {
+            return Some(simple_plural);
         }
     }
     None
@@ -7686,6 +7702,34 @@ mod tests {
         assert_eq!(
             table_for_type("SalesInvoice", &table_names),
             Some("sales_invoices".to_owned())
+        );
+
+        let es_tables = HashSet::from([
+            "addresses".to_owned(),
+            "order_statuses".to_owned(),
+            "tax_batches".to_owned(),
+            "api_keys".to_owned(),
+            "categories".to_owned(),
+        ]);
+        assert_eq!(
+            table_for_type("Address", &es_tables),
+            Some("addresses".to_owned())
+        );
+        assert_eq!(
+            table_for_type("OrderStatus", &es_tables),
+            Some("order_statuses".to_owned())
+        );
+        assert_eq!(
+            table_for_type("TaxBatch", &es_tables),
+            Some("tax_batches".to_owned())
+        );
+        assert_eq!(
+            table_for_type("ApiKey", &es_tables),
+            Some("api_keys".to_owned())
+        );
+        assert_eq!(
+            table_for_type("Category", &es_tables),
+            Some("categories".to_owned())
         );
     }
 
