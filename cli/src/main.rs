@@ -2294,6 +2294,8 @@ fn validate_typed_crud_actions(path: &str, program: &zelyra_ast::Program) -> boo
     // Keep synthetic declarations in the same order as WebApp's runtime
     // lowering so collision resolution yields identical wrapper names.
     let (checked_program, _) = zelyra_ast::lower_table_validation_functions_owned(program.clone());
+    let (checked_program, _) =
+        zelyra_ast::lower_state_transition_guard_functions_owned(checked_program);
     let (checked_program, _) = zelyra_ast::lower_crud_policy_functions_owned(checked_program);
     let (checked_program, crud_mappings) =
         zelyra_ast::lower_crud_action_functions_owned(checked_program);

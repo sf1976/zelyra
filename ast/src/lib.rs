@@ -173,6 +173,14 @@ pub struct TableValidationFunction {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
+pub struct StateTransitionGuardFunction {
+    pub table_index: usize,
+    pub machine_index: usize,
+    pub transition_index: usize,
+    pub function_name: String,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ComputedColumnFunction {
     pub table_index: usize,
     pub column_index: usize,
@@ -463,6 +471,81 @@ pub fn build_table_validation_functions(
                 rule_index,
                 function_name,
             });
+        }
+    }
+    (functions, mappings)
+}
+
+/// Ownership-taking lowering for guarded `states` transition predicates.
+pub fn lower_state_transition_guard_functions_owned(
+    mut program: Program,
+) -> (Program, Vec<StateTransitionGuardFunction>) {
+    let (functions, mappings) = build_state_transition_guard_functions(&program);
+    program.functions.extend(functions);
+    (program, mappings)
+}
+
+/// Builds checked pure Boolean functions for guarded table state-machine
+/// transitions (`from -> to when <expr> : "message"`).
+pub fn build_state_transition_guard_functions(
+    program: &Program,
+) -> (Vec<Function>, Vec<StateTransitionGuardFunction>) {
+    let mut names = program
+        .functions
+        .iter()
+        .map(|function| function.name.clone())
+        .collect::<std::collections::HashSet<_>>();
+    let mut functions = Vec::new();
+    let mut mappings = Vec::new();
+    for (table_index, table) in program.tables.iter().enumerate() {
+        for (machine_index, machine) in table.state_machines.iter().enumerate() {
+            for (transition_index, transition) in machine.transitions.iter().enumerate() {
+                let Some(guard) = &transition.guard else {
+                    continue;
+                };
+                let base_name = format!(
+                    "__zelyra_state_guard_{table_index}_{machine_index}_{transition_index}"
+                );
+                let mut function_name = base_name.clone();
+                let mut suffix = 0usize;
+                while !names.insert(function_name.clone()) {
+                    suffix += 1;
+                    function_name = format!("{base_name}_{suffix}");
+                }
+                functions.push(Function {
+                    name: function_name.clone(),
+                    is_public: false,
+                    type_params: Vec::new(),
+                    params: table
+                        .columns
+                        .iter()
+                        .filter(|column| !column.auto)
+                        .map(|column| Param {
+                            name: column.name.clone(),
+                            ty: table_validation_storage_type(program, &column.ty),
+                            span: column.span,
+                        })
+                        .collect(),
+                    return_type: Some(Type::Bool),
+                    capabilities: Vec::new(),
+                    requires: Vec::new(),
+                    ensures: Vec::new(),
+                    body: Block {
+                        statements: vec![Stmt::Return {
+                            value: Some(guard.condition.clone()),
+                            span: guard.span,
+                        }],
+                        span: guard.span,
+                    },
+                    span: guard.span,
+                });
+                mappings.push(StateTransitionGuardFunction {
+                    table_index,
+                    machine_index,
+                    transition_index,
+                    function_name,
+                });
+            }
         }
     }
     (functions, mappings)
@@ -1618,35 +1701,50 @@ pub struct TableDef {
     pub span: Span,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug)]
 pub struct TableStateMachineDef {
     pub column: String,
     pub transitions: Vec<TableStateTransitionDef>,
     pub span: Span,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug)]
+pub struct TableStateTransitionGuardDef {
+    pub condition: Expr,
+    pub message: String,
+    pub span: Span,
+}
+
+#[derive(Clone, Debug)]
 pub struct TableStateTransitionDef {
     pub from: String,
     pub to: Vec<String>,
     pub is_final: bool,
+    pub guard: Option<TableStateTransitionGuardDef>,
     pub span: Span,
 }
 
 impl TableStateMachineDef {
     pub fn states(&self) -> Vec<&str> {
-        self.transitions
-            .iter()
-            .map(|rule| rule.from.as_str())
-            .collect()
+        let mut seen = std::collections::HashSet::new();
+        let mut states = Vec::new();
+        for rule in &self.transitions {
+            if seen.insert(rule.from.as_str()) {
+                states.push(rule.from.as_str());
+            }
+        }
+        states
     }
 
     pub fn final_states(&self) -> Vec<&str> {
-        self.transitions
-            .iter()
-            .filter(|rule| rule.is_final)
-            .map(|rule| rule.from.as_str())
-            .collect()
+        let mut seen = std::collections::HashSet::new();
+        let mut finals = Vec::new();
+        for rule in &self.transitions {
+            if rule.is_final && seen.insert(rule.from.as_str()) {
+                finals.push(rule.from.as_str());
+            }
+        }
+        finals
     }
 
     pub fn initial_state<'a>(&'a self, table: &'a TableDef) -> Option<&'a str> {
@@ -1667,11 +1765,20 @@ impl TableStateMachineDef {
         self.transitions.iter().any(|rule| rule.from == value)
     }
 
-    pub fn allowed_next(&self, current: &str) -> Option<&[String]> {
-        self.transitions
-            .iter()
-            .find(|rule| rule.from == current)
-            .map(|rule| rule.to.as_slice())
+    pub fn allowed_next(&self, current: &str) -> Option<Vec<&str>> {
+        if !self.is_valid_state(current) {
+            return None;
+        }
+        let mut seen = std::collections::HashSet::new();
+        let mut targets = Vec::new();
+        for rule in self.transitions.iter().filter(|rule| rule.from == current) {
+            for target in &rule.to {
+                if seen.insert(target.as_str()) {
+                    targets.push(target.as_str());
+                }
+            }
+        }
+        Some(targets)
     }
 
     pub fn can_transition(&self, from: &str, to: &str) -> bool {
@@ -1679,7 +1786,14 @@ impl TableStateMachineDef {
             return self.is_valid_state(from);
         }
         self.allowed_next(from)
-            .is_some_and(|targets| targets.iter().any(|target| target == to))
+            .is_some_and(|targets| targets.contains(&to))
+    }
+
+    pub fn transition_guard(&self, from: &str, to: &str) -> Option<&TableStateTransitionGuardDef> {
+        self.transitions
+            .iter()
+            .find(|rule| rule.from == from && rule.to.iter().any(|target| target == to))
+            .and_then(|rule| rule.guard.as_ref())
     }
 }
 

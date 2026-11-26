@@ -777,6 +777,7 @@ struct FormExecutionContext<'a> {
     tenant_context: Option<&'a TenantContext>,
     validation_program: Option<&'a Program>,
     table_validation_functions: &'a [zelyra_ast::TableValidationFunction],
+    state_transition_guard_functions: &'a [zelyra_ast::StateTransitionGuardFunction],
     crud_policy_functions: &'a [zelyra_ast::CrudPolicyFunction],
     crud_action_functions: &'a [zelyra_ast::CrudActionFunction],
     form_action_functions: &'a [zelyra_ast::FormActionFunction],
@@ -791,6 +792,7 @@ struct FormDispatchContext<'a> {
     language: UiLanguage,
     validation_program: Option<&'a Program>,
     table_validation_functions: &'a [zelyra_ast::TableValidationFunction],
+    state_transition_guard_functions: &'a [zelyra_ast::StateTransitionGuardFunction],
     computed_column_functions: &'a [zelyra_ast::ComputedColumnFunction],
     crud_policy_functions: &'a [zelyra_ast::CrudPolicyFunction],
     crud_action_functions: &'a [zelyra_ast::CrudActionFunction],
@@ -1232,6 +1234,7 @@ pub struct WebApp {
     pub forms: Vec<FormRoute>,
     validation_program: Option<Arc<Program>>,
     table_validation_functions: Vec<zelyra_ast::TableValidationFunction>,
+    state_transition_guard_functions: Vec<zelyra_ast::StateTransitionGuardFunction>,
     computed_column_functions: Vec<zelyra_ast::ComputedColumnFunction>,
     crud_policy_functions: Vec<zelyra_ast::CrudPolicyFunction>,
     crud_action_functions: Vec<zelyra_ast::CrudActionFunction>,
@@ -1272,6 +1275,7 @@ impl WebApp {
             forms,
             validation_program: None,
             table_validation_functions: Vec::new(),
+            state_transition_guard_functions: Vec::new(),
             computed_column_functions: Vec::new(),
             crud_policy_functions: Vec::new(),
             crud_action_functions: Vec::new(),
@@ -1378,6 +1382,7 @@ impl WebApp {
             forms,
             validation_program: None,
             table_validation_functions: Vec::new(),
+            state_transition_guard_functions: Vec::new(),
             computed_column_functions: Vec::new(),
             crud_policy_functions: Vec::new(),
             crud_action_functions: Vec::new(),
@@ -1418,7 +1423,9 @@ impl WebApp {
     /// Installs the compiler-lowered, statically checked table invariants used
     /// by generated and declarative form submissions.
     pub fn with_validation_program(mut self, program: Program) -> Self {
-        let (mut lowered, mappings) = zelyra_ast::lower_table_validation_functions_owned(program);
+        let (lowered, mappings) = zelyra_ast::lower_table_validation_functions_owned(program);
+        let (mut lowered, state_transition_guard_functions) =
+            zelyra_ast::lower_state_transition_guard_functions_owned(lowered);
         let (computed_functions, computed_mappings) =
             zelyra_ast::build_computed_column_functions(&lowered);
         lowered.functions.extend(computed_functions);
@@ -1430,6 +1437,7 @@ impl WebApp {
             zelyra_ast::lower_form_action_functions_owned(lowered);
         self.validation_program = Some(Arc::new(lowered));
         self.table_validation_functions = mappings;
+        self.state_transition_guard_functions = state_transition_guard_functions;
         self.computed_column_functions = computed_mappings;
         self.crud_policy_functions = crud_policy_functions;
         self.crud_action_functions = crud_action_functions;
@@ -2068,6 +2076,8 @@ impl WebApp {
                                 language: self.ui_language,
                                 validation_program: self.validation_program.as_deref(),
                                 table_validation_functions: &self.table_validation_functions,
+                                state_transition_guard_functions: &self
+                                    .state_transition_guard_functions,
                                 computed_column_functions: &self.computed_column_functions,
                                 crud_policy_functions: &self.crud_policy_functions,
                                 crud_action_functions: &[],
@@ -2193,6 +2203,8 @@ impl WebApp {
                                     language: self.ui_language,
                                     validation_program: self.validation_program.as_deref(),
                                     table_validation_functions: &self.table_validation_functions,
+                                    state_transition_guard_functions: &self
+                                        .state_transition_guard_functions,
                                     computed_column_functions: &self.computed_column_functions,
                                     crud_policy_functions: &self.crud_policy_functions,
                                     crud_action_functions: &self.crud_action_functions,
@@ -6531,6 +6543,7 @@ fn dispatch_form(
             language: UiLanguage::English,
             validation_program: None,
             table_validation_functions: &[],
+            state_transition_guard_functions: &[],
             computed_column_functions: &[],
             crud_policy_functions: &[],
             crud_action_functions: &[],
@@ -6557,6 +6570,7 @@ fn dispatch_form_with_language(
         language,
         validation_program,
         table_validation_functions,
+        state_transition_guard_functions,
         computed_column_functions,
         crud_policy_functions,
         crud_action_functions,
@@ -7381,6 +7395,7 @@ fn dispatch_form_with_language(
                 tenant_context,
                 validation_program,
                 table_validation_functions,
+                state_transition_guard_functions,
                 crud_policy_functions,
                 crud_action_functions,
                 form_action_functions,
@@ -13115,6 +13130,84 @@ pub fn validate_table_runtime_values(
     Ok(messages)
 }
 
+fn evaluate_state_transition_guard(
+    program: &Program,
+    mappings: &[zelyra_ast::StateTransitionGuardFunction],
+    table_name: &str,
+    column_name: &str,
+    from_state: &str,
+    to_state: &str,
+    row_values: &HashMap<String, String>,
+) -> Result<Option<String>, String> {
+    let Some(table_index) = program
+        .tables
+        .iter()
+        .position(|table| table.name == table_name)
+    else {
+        return Ok(None);
+    };
+    let table = &program.tables[table_index];
+    let Some(machine_index) = table
+        .state_machines
+        .iter()
+        .position(|machine| machine.column == column_name)
+    else {
+        return Ok(None);
+    };
+    let machine = &table.state_machines[machine_index];
+    let Some(transition_index) = machine.transitions.iter().position(|rule| {
+        rule.from == from_state
+            && rule.to.iter().any(|target| target == to_state)
+            && rule.guard.is_some()
+    }) else {
+        return Ok(None);
+    };
+    let Some(mapping) = mappings.iter().find(|mapping| {
+        mapping.table_index == table_index
+            && mapping.machine_index == machine_index
+            && mapping.transition_index == transition_index
+    }) else {
+        return Ok(None);
+    };
+    let mut args = Vec::new();
+    for column in table.columns.iter().filter(|column| !column.auto) {
+        let value = runtime_value_for_column(
+            program,
+            column,
+            row_values.get(&column.name).map(String::as_str),
+        )?;
+        args.push(value);
+    }
+    let policy = zelyra_runtime::RuntimePolicy {
+        step_budget: Some(10_000),
+        ..zelyra_runtime::RuntimePolicy::default()
+    };
+    let result = zelyra_runtime::execute_function_with_capabilities_and_policies(
+        program,
+        &mapping.function_name,
+        args,
+        None,
+        None,
+        Some(&policy),
+    )
+    .map_err(|error| error.message)?;
+    match result {
+        RuntimeValue::Bool(true) => Ok(None),
+        RuntimeValue::Bool(false) => Ok(Some(
+            machine.transitions[transition_index]
+                .guard
+                .as_ref()
+                .map(|guard| guard.message.clone())
+                .unwrap_or_else(|| "state transition guard rejected this change".into()),
+        )),
+        other => Err(format!(
+            "state transition guard `{}` must return Bool, got {}",
+            mapping.function_name,
+            other.ty()
+        )),
+    }
+}
+
 fn runtime_value_for_column(
     program: &Program,
     column: &zelyra_ast::ColumnDef,
@@ -13367,6 +13460,7 @@ fn execute_form_action_with_children(
         tenant_context,
         validation_program,
         table_validation_functions,
+        state_transition_guard_functions,
         crud_policy_functions,
         crud_action_functions,
         form_action_functions,
@@ -13776,26 +13870,50 @@ fn execute_form_action_with_children(
                         current_values.values.get(&machine.column),
                         values.get(&machine.column),
                     ) {
-                        if !current.is_empty()
-                            && !next.is_empty()
-                            && !machine.can_transition(current, next)
-                        {
-                            let allowed = machine
-                                .allowed_next(current)
-                                .map(|targets| {
-                                    if targets.is_empty() {
-                                        "none (final state)".to_owned()
-                                    } else {
-                                        targets.join(", ")
+                        if !current.is_empty() && !next.is_empty() {
+                            if !machine.can_transition(current, next) {
+                                let allowed = machine
+                                    .allowed_next(current)
+                                    .map(|targets| {
+                                        if targets.is_empty() {
+                                            "none (final state)".to_owned()
+                                        } else {
+                                            targets.join(", ")
+                                        }
+                                    })
+                                    .unwrap_or_else(|| "none".to_owned());
+                                return Err(zelyra_database::DatabaseError {
+                                    message: format!(
+                                        "ZELYRA_CHILD_VALIDATION: invalid state transition for `{}`: cannot move from `{current}` to `{next}` (allowed: {allowed})",
+                                        machine.column
+                                    ),
+                                });
+                            }
+                            if current != next {
+                                if let Some(program) = validation_program {
+                                    let mut merged = current_values.values.clone();
+                                    merged.extend(
+                                        values.iter().map(|(k, v)| (k.clone(), v.clone())),
+                                    );
+                                    if let Some(rejection) = evaluate_state_transition_guard(
+                                        program,
+                                        state_transition_guard_functions,
+                                        &table_def.name,
+                                        &machine.column,
+                                        current,
+                                        next,
+                                        &merged,
+                                    )
+                                    .map_err(|message| zelyra_database::DatabaseError { message })?
+                                    {
+                                        return Err(zelyra_database::DatabaseError {
+                                            message: format!(
+                                                "ZELYRA_CHILD_VALIDATION: {rejection}"
+                                            ),
+                                        });
                                     }
-                                })
-                                .unwrap_or_else(|| "none".to_owned());
-                            return Err(zelyra_database::DatabaseError {
-                                message: format!(
-                                    "ZELYRA_CHILD_VALIDATION: invalid state transition for `{}`: cannot move from `{current}` to `{next}` (allowed: {allowed})",
-                                    machine.column
-                                ),
-                            });
+                                }
+                            }
                         }
                     }
                 }

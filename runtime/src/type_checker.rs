@@ -567,6 +567,10 @@ fn inspect_program(
     for function in &validation_functions {
         checker.check_function(function);
     }
+    let (state_guard_functions, _) = zelyra_ast::build_state_transition_guard_functions(program);
+    for function in &state_guard_functions {
+        checker.check_function(function);
+    }
     let (computed_functions, _) = zelyra_ast::build_computed_column_functions(program);
     for function in &computed_functions {
         checker.check_function(function);

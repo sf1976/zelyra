@@ -2881,13 +2881,13 @@ impl<'a> Parser<'a> {
         while !self.at(&TokenKind::RBrace) && !self.at(&TokenKind::Eof) {
             let (from, from_span) = self.state_label("state name")?;
             self.expect(TokenKind::Arrow, "`->` after state name")?;
-            let (to, is_final, rule_end) = if self.at_word("final") {
+            let (to, is_final, guard, rule_end) = if self.at_word("final") {
                 let (_, final_span) = self.ident("`final`")?;
-                if self.at(&TokenKind::Comma) {
+                if self.at(&TokenKind::Comma) || self.at_word("when") {
                     return self
-                        .error("`final` cannot be combined with outgoing state transitions");
+                        .error("`final` cannot be combined with outgoing state transitions or guards");
                 }
-                (Vec::new(), true, final_span)
+                (Vec::new(), true, None, final_span)
             } else {
                 let mut targets = Vec::new();
                 let (first, mut last_span) = self.state_label("target state name")?;
@@ -2895,23 +2895,44 @@ impl<'a> Parser<'a> {
                     return self.error("`final` cannot be used as a transition target");
                 }
                 targets.push(first);
-                while self.at(&TokenKind::Comma) {
-                    self.advance();
-                    self.skip_newlines();
-                    let (target, target_span) = self.state_label("target state name")?;
-                    if target == "final" {
-                        return self
-                            .error("`final` cannot be combined with outgoing state transitions");
+                if self.at_word("when") {
+                    let (_, when_span) = self.ident("`when`")?;
+                    let condition = self.expression()?;
+                    self.expect(TokenKind::Colon, "`:` after transition guard condition")?;
+                    let message_span = self.current().span;
+                    let message = self.string_value("transition guard message")?;
+                    last_span = message_span;
+                    let guard = zelyra_ast::TableStateTransitionGuardDef {
+                        condition,
+                        message,
+                        span: when_span.join(message_span),
+                    };
+                    (targets, false, Some(guard), last_span)
+                } else {
+                    while self.at(&TokenKind::Comma) {
+                        self.advance();
+                        self.skip_newlines();
+                        let (target, target_span) = self.state_label("target state name")?;
+                        if target == "final" {
+                            return self
+                                .error("`final` cannot be combined with outgoing state transitions");
+                        }
+                        last_span = target_span;
+                        targets.push(target);
                     }
-                    last_span = target_span;
-                    targets.push(target);
+                    if self.at_word("when") {
+                        return self.error(
+                            "guarded transitions (`when ...`) must specify a single target state per line",
+                        );
+                    }
+                    (targets, false, None, last_span)
                 }
-                (targets, false, last_span)
             };
             transitions.push(zelyra_ast::TableStateTransitionDef {
                 from,
                 to,
                 is_final,
+                guard,
                 span: from_span.join(rule_end),
             });
             self.skip_newlines();

@@ -5430,3 +5430,138 @@ fn standalone_form_typed_execute_checks_capabilities_architecture_and_rejects_gu
 
     fs::remove_dir_all(directory).unwrap();
 }
+
+#[test]
+fn guarded_state_machines_support_verify_reflect_mermaid_and_reject_impure_or_non_bool_guards() {
+    let directory = temporary_directory("guarded-state-machines");
+    fs::create_dir_all(&directory).unwrap();
+    let file = directory.join("main.zyl");
+    fs::write(
+        &file,
+        r#"
+database main { engine: mariadb }
+
+table sales_orders {
+    id: Id primary auto
+    total_amount: Decimal(12, 2) required
+    status: String(24) default "draft"
+
+    states status {
+        draft -> confirmed when total_amount > decimal("0") : "Order total must be positive."
+        draft -> cancelled
+        confirmed -> paid
+        paid -> final
+        cancelled -> final
+    }
+}
+
+fn main() {}
+"#,
+    )
+    .unwrap();
+    let run = |args: &[&str]| Command::new(binary()).args(args).output().unwrap();
+
+    let checked = run(&["check", file.to_str().unwrap()]);
+    assert!(
+        checked.status.success(),
+        "{}",
+        String::from_utf8_lossy(&checked.stderr)
+    );
+
+    let verified = run(&["verify", file.to_str().unwrap(), "--json"]);
+    assert!(verified.status.success());
+    let verify_doc: serde_json::Value = serde_json::from_slice(&verified.stdout).unwrap();
+    let entry = verify_doc
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|item| item["kind"] == "state_machine")
+        .unwrap();
+    assert_eq!(entry["status"], "PROVEN");
+    assert!(
+        entry["message"]
+            .as_str()
+            .unwrap()
+            .contains("1 guarded transition(s) enforced at runtime"),
+        "{}",
+        entry["message"]
+    );
+
+    let mermaid = run(&["doc", file.to_str().unwrap(), "--states"]);
+    assert!(mermaid.status.success());
+    let mermaid_text = String::from_utf8_lossy(&mermaid.stdout);
+    assert!(
+        mermaid_text.contains("draft --> confirmed : [guarded] Order total must be positive."),
+        "{mermaid_text}"
+    );
+
+    let reflect = run(&["reflect", file.to_str().unwrap(), "--format=json"]);
+    assert!(reflect.status.success());
+    let reflect_doc: serde_json::Value = serde_json::from_slice(&reflect.stdout).unwrap();
+    let transitions = reflect_doc["tables"][0]["state_machines"][0]["transitions"]
+        .as_array()
+        .unwrap();
+    assert_eq!(transitions[0]["guarded"], true);
+    assert_eq!(transitions[1]["guarded"], false);
+
+    // Negative: non-Bool guard expression is rejected by the type checker.
+    let bad_file = directory.join("bad_guard.zyl");
+    fs::write(
+        &bad_file,
+        r#"
+database main { engine: mariadb }
+
+table sales_orders {
+    id: Id primary auto
+    total_amount: Int required
+    status: String(24) default "draft"
+
+    states status {
+        draft -> confirmed when total_amount : "Must be Bool."
+        confirmed -> final
+    }
+}
+
+fn main() {}
+"#,
+    )
+    .unwrap();
+    let bad_check = run(&["check", bad_file.to_str().unwrap()]);
+    assert!(!bad_check.status.success());
+    assert!(
+        String::from_utf8_lossy(&bad_check.stderr).contains("E-TYPE-001"),
+        "{}",
+        String::from_utf8_lossy(&bad_check.stderr)
+    );
+
+    // Negative: impure (Clock) guard expression is rejected by capability checking.
+    let impure_file = directory.join("impure_guard.zyl");
+    fs::write(
+        &impure_file,
+        r#"
+database main { engine: mariadb }
+
+table sales_orders {
+    id: Id primary auto
+    status: String(24) default "draft"
+
+    states status {
+        draft -> confirmed when now() == now() : "Impure guard."
+        confirmed -> final
+    }
+}
+
+fn main() {}
+"#,
+    )
+    .unwrap();
+    let impure_check = run(&["check", impure_file.to_str().unwrap()]);
+    assert!(!impure_check.status.success());
+    assert!(
+        String::from_utf8_lossy(&impure_check.stderr).contains("E-CAP-001"),
+        "{}",
+        String::from_utf8_lossy(&impure_check.stderr)
+    );
+
+    fs::remove_dir_all(directory).unwrap();
+}

@@ -140,6 +140,7 @@ fn number_series_allocator_is_atomic_and_scoped_per_tenant() {
             tenant_context: None,
             validation_program: None,
             table_validation_functions: &[],
+            state_transition_guard_functions: &[],
             crud_policy_functions: &[],
             crud_action_functions: &[],
             form_action_functions: &[],
@@ -559,6 +560,7 @@ fn computed_field_invalid_input_returns_form_error_before_database_access() {
             language: UiLanguage::English,
             validation_program: Some(&lowered),
             table_validation_functions: &[],
+            state_transition_guard_functions: &[],
             computed_column_functions: &mappings,
             crud_policy_functions: &[],
             crud_action_functions: &[],
@@ -727,6 +729,7 @@ fn computed_decimal_crud_post_persists_the_server_recalculated_value() {
             language: UiLanguage::English,
             validation_program: Some(&lowered),
             table_validation_functions: &table_validation_functions,
+            state_transition_guard_functions: &[],
             computed_column_functions: &computed_column_functions,
             crud_policy_functions: &[],
             crud_action_functions: &[],
@@ -780,6 +783,7 @@ fn computed_decimal_crud_post_persists_the_server_recalculated_value() {
         language: UiLanguage::English,
         validation_program: Some(&lowered),
         table_validation_functions: &table_validation_functions,
+        state_transition_guard_functions: &[],
         computed_column_functions: &computed_column_functions,
         crud_policy_functions: &[],
         crud_action_functions: &[],
@@ -1613,6 +1617,7 @@ fn table_validation_rejects_invalid_form_before_action_execution() {
             language: UiLanguage::English,
             validation_program: Some(&lowered),
             table_validation_functions: &mappings,
+            state_transition_guard_functions: &[],
             computed_column_functions: &[],
             crud_policy_functions: &[],
             crud_action_functions: &[],
@@ -1645,6 +1650,7 @@ fn table_validation_rejects_invalid_form_before_action_execution() {
             language: UiLanguage::English,
             validation_program: Some(&lowered),
             table_validation_functions: &mappings,
+            state_transition_guard_functions: &[],
             computed_column_functions: &[],
             crud_policy_functions: &[],
             crud_action_functions: &[],
@@ -7636,6 +7642,7 @@ fn execute_form_action_rejects_postgres_chained_audit() {
         tenant_context: None,
         validation_program: None,
         table_validation_functions: &[],
+        state_transition_guard_functions: &[],
         crud_policy_functions: &[],
         crud_action_functions: &[],
         form_action_functions: &[],
@@ -7944,4 +7951,82 @@ fn typed_form_and_crud_action_lowering_binds_fields_route_params_and_session() {
         .unwrap(),
         RuntimeValue::String("Press 01".into())
     );
+}
+
+#[test]
+fn guarded_state_machine_transition_enforces_predicate_and_reports_business_message() {
+    let source = r#"
+        table sales_orders {
+            id: Id primary auto
+            total_amount: Decimal(12, 2) required
+            status: String(20) default "draft"
+
+            states status {
+                draft -> confirmed when total_amount > decimal("0") : "Order total must be positive before confirmation."
+                draft -> cancelled
+                confirmed -> paid
+                paid -> final
+                cancelled -> final
+            }
+        }
+        fn main() {}
+    "#;
+    let program = zelyra_parser::parse(&zelyra_lexer::lex(source).unwrap()).unwrap();
+    zelyra_runtime::check(&program).expect("guarded state machine should type check");
+    zelyra_runtime::check_capabilities(&program)
+        .expect("pure transition guard should pass capability check");
+    let app = WebApp::new(Vec::new(), Vec::new()).with_validation_program(program);
+    let lowered = app.validation_program.as_deref().unwrap();
+    assert_eq!(app.state_transition_guard_functions.len(), 1);
+
+    // Guard blocks draft -> confirmed when total_amount <= 0.
+    let blocked = evaluate_state_transition_guard(
+        lowered,
+        &app.state_transition_guard_functions,
+        "sales_orders",
+        "status",
+        "draft",
+        "confirmed",
+        &HashMap::from([
+            ("total_amount".into(), "0.00".into()),
+            ("status".into(), "confirmed".into()),
+        ]),
+    )
+    .unwrap();
+    assert_eq!(
+        blocked.as_deref(),
+        Some("Order total must be positive before confirmation.")
+    );
+
+    // Guard allows draft -> confirmed when total_amount > 0.
+    let allowed = evaluate_state_transition_guard(
+        lowered,
+        &app.state_transition_guard_functions,
+        "sales_orders",
+        "status",
+        "draft",
+        "confirmed",
+        &HashMap::from([
+            ("total_amount".into(), "149.90".into()),
+            ("status".into(), "confirmed".into()),
+        ]),
+    )
+    .unwrap();
+    assert_eq!(allowed, None);
+
+    // Unguarded transition draft -> cancelled passes regardless of total_amount.
+    let cancelled = evaluate_state_transition_guard(
+        lowered,
+        &app.state_transition_guard_functions,
+        "sales_orders",
+        "status",
+        "draft",
+        "cancelled",
+        &HashMap::from([
+            ("total_amount".into(), "0.00".into()),
+            ("status".into(), "cancelled".into()),
+        ]),
+    )
+    .unwrap();
+    assert_eq!(cancelled, None);
 }
