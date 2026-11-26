@@ -1274,7 +1274,7 @@ fn add_expression_type_references(
                 sources,
             );
         }
-        ExprKind::Field { target, .. } | ExprKind::Await(target) => {
+        ExprKind::Field { target, .. } | ExprKind::Await(target) | ExprKind::Try(target) => {
             add_expression_type_references(
                 references,
                 owner,
@@ -1607,7 +1607,7 @@ fn collect_expression_calls(
             collect_expression_calls(target, function_names, calls);
             collect_expression_calls(index, function_names, calls);
         }
-        ExprKind::Field { target, .. } | ExprKind::Await(target) => {
+        ExprKind::Field { target, .. } | ExprKind::Await(target) | ExprKind::Try(target) => {
             collect_expression_calls(target, function_names, calls);
         }
         ExprKind::Call { name, args, .. } => {
@@ -1992,7 +1992,7 @@ fn collect_expr_sql(
             collect_expr_sql(target, owner, kind, table_names, sources, entries);
             collect_expr_sql(index, owner, kind, table_names, sources, entries);
         }
-        ExprKind::Field { target, .. } | ExprKind::Await(target) => {
+        ExprKind::Field { target, .. } | ExprKind::Await(target) | ExprKind::Try(target) => {
             collect_expr_sql(target, owner, kind, table_names, sources, entries)
         }
         ExprKind::Call { args, .. } => args.iter().for_each(|argument| {

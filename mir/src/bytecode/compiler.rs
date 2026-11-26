@@ -119,6 +119,7 @@ fn compile_function(
         next_generated_index,
         generated_functions,
         pending_source_step: None,
+        current_block_start: 0,
     };
     for contract in &function.requires {
         let span = program
@@ -134,6 +135,7 @@ fn compile_function(
         );
     }
     for block in &function.blocks {
+        compiler.current_block_start = compiler.code.len();
         compiler.blocks.insert(block.id, compiler.code.len());
         if let Some(loop_span) = block.loop_span {
             compiler.emit(BytecodeOp::Step, loop_span);
@@ -572,7 +574,7 @@ fn capture_locals_with_bound(
                     }
                 }
             }
-            K::Await(value) => children.push(*value),
+            K::Await(value) | K::Try(value) => children.push(*value),
             K::Match { value, arms } => {
                 children.push(*value);
                 for arm in arms {
@@ -666,6 +668,116 @@ struct FunctionCompiler<'a> {
     next_generated_index: &'a mut usize,
     generated_functions: &'a mut Vec<BytecodeFunction>,
     pending_source_step: Option<Span>,
+    current_block_start: usize,
+}
+
+fn block_stack_height_at(
+    code: &[BytecodeInstruction],
+    start_pc: usize,
+    target_pc: usize,
+    span: Span,
+) -> Result<usize, Vec<MirError>> {
+    use std::collections::VecDeque;
+    let mut heights: HashMap<usize, usize> = HashMap::new();
+    let mut queue = VecDeque::new();
+    heights.insert(start_pc, 0);
+    queue.push_back(start_pc);
+
+    while let Some(pc) = queue.pop_front() {
+        if pc == target_pc {
+            return Ok(heights[&pc]);
+        }
+        let Some(instruction) = code.get(pc) else {
+            continue;
+        };
+        let height = heights[&pc];
+        let (next_height, successors): (usize, Vec<usize>) = match &instruction.operation {
+            BytecodeOp::Constant(_)
+            | BytecodeOp::LoadLocal(_)
+            | BytecodeOp::FunctionRef { .. }
+            | BytecodeOp::MakeClosure { .. }
+            | BytecodeOp::OptionNone { .. }
+            | BytecodeOp::ArrayPopMut { .. }
+            | BytecodeOp::Sql { .. } => (height + 1, vec![pc + 1]),
+            BytecodeOp::StoreLocal(_)
+            | BytecodeOp::Pop
+            | BytecodeOp::ArrayAppend { .. }
+            | BytecodeOp::TupleBind { .. }
+            | BytecodeOp::MatchInit { .. }
+            | BytecodeOp::ContractCheck { .. }
+            | BytecodeOp::LoopInvariantCheck { .. }
+            | BytecodeOp::CollectionInit { .. }
+            | BytecodeOp::ArrayIndexAddInt { .. } => (height.saturating_sub(1), vec![pc + 1]),
+            BytecodeOp::RangeInit { .. } => (height.saturating_sub(3), vec![pc + 1]),
+            BytecodeOp::Unary(_)
+            | BytecodeOp::GetField { .. }
+            | BytecodeOp::OptionSome { .. }
+            | BytecodeOp::RenderPdf
+            | BytecodeOp::Step
+            | BytecodeOp::HostCallPreflight { .. }
+            | BytecodeOp::ArrayIndexCheck { .. }
+            | BytecodeOp::Parallel { .. } => (height, vec![pc + 1]),
+            BytecodeOp::Binary(_) | BytecodeOp::Index => (height.saturating_sub(1), vec![pc + 1]),
+            BytecodeOp::ArrayIndexAssign { .. } => (height.saturating_sub(2), vec![pc + 1]),
+            BytecodeOp::BuildArray { items } | BytecodeOp::BuildTuple { items } => {
+                (height.saturating_sub(*items) + 1, vec![pc + 1])
+            }
+            BytecodeOp::BuildMap { entries, .. } => {
+                (height.saturating_sub(entries.saturating_mul(2)) + 1, vec![pc + 1])
+            }
+            BytecodeOp::BuildRecord { fields, .. } => {
+                (height.saturating_sub(fields.len()) + 1, vec![pc + 1])
+            }
+            BytecodeOp::RecordUpdate { fields, .. } => (
+                height.saturating_sub(fields.len().saturating_add(1)) + 1,
+                vec![pc + 1],
+            ),
+            BytecodeOp::BuildEnum { payload_types, .. } => {
+                (height.saturating_sub(payload_types.len()) + 1, vec![pc + 1])
+            }
+            BytecodeOp::Call { arguments, .. } | BytecodeOp::Builtin { arguments, .. } => {
+                (height.saturating_sub(*arguments) + 1, vec![pc + 1])
+            }
+            BytecodeOp::CallValue { arguments } => {
+                (height.saturating_sub(arguments + 1) + 1, vec![pc + 1])
+            }
+            BytecodeOp::SqlTransaction { operations } => {
+                let pops: usize = operations
+                    .iter()
+                    .map(|op| match op {
+                        crate::bytecode::BytecodeTransactionOperation::Sql(_) => 0,
+                        crate::bytecode::BytecodeTransactionOperation::MailQueue {
+                            arguments,
+                            ..
+                        } => *arguments,
+                    })
+                    .sum();
+                (height.saturating_sub(pops), vec![pc + 1])
+            }
+            BytecodeOp::Jump(target) => (height, vec![*target]),
+            BytecodeOp::JumpIfFalse(target) | BytecodeOp::JumpIfTrue(target) => {
+                (height.saturating_sub(1), vec![pc + 1, *target])
+            }
+            BytecodeOp::RangeNext { body, exit, .. }
+            | BytecodeOp::CollectionNext { body, exit, .. } => (height, vec![*body, *exit]),
+            BytecodeOp::MatchTest {
+                matched, unmatched, ..
+            } => (height, vec![*matched, *unmatched]),
+            BytecodeOp::Return | BytecodeOp::MatchFailure | BytecodeOp::Trap => {
+                (height, Vec::new())
+            }
+        };
+        for next in successors {
+            if next <= target_pc && !heights.contains_key(&next) {
+                heights.insert(next, next_height);
+                queue.push_back(next);
+            }
+        }
+    }
+    Err(vec![bytecode_error(
+        "could not determine bytecode operand stack height for `?`",
+        span,
+    )])
 }
 
 fn mir_instruction_source_span(instruction: &MirInstruction, program: &MirProgram) -> Option<Span> {
@@ -857,6 +969,7 @@ impl FunctionCompiler<'_> {
                 next_generated_index: self.next_generated_index,
                 generated_functions: self.generated_functions,
                 pending_source_step: None,
+                current_block_start: 0,
             };
             compiler.expression(*body, &mut HashSet::new())?;
             compiler.emit(BytecodeOp::Return, binding.span);
@@ -1408,6 +1521,157 @@ impl FunctionCompiler<'_> {
             )]
         })?;
         Ok(IteratorId(id))
+    }
+
+    fn try_expression(
+        &mut self,
+        value: ExpressionId,
+        span: Span,
+        active: &mut HashSet<ExpressionId>,
+    ) -> Result<(), Vec<MirError>> {
+        let match_id = self.next_match_id;
+        self.next_match_id.0 = self
+            .next_match_id
+            .0
+            .checked_add(1)
+            .ok_or_else(|| vec![bytecode_error("bytecode match identifier overflow", span)])?;
+        let ok_local = LocalId(self.next_local_id);
+        self.next_local_id = self
+            .next_local_id
+            .checked_add(1)
+            .ok_or_else(|| vec![bytecode_error("bytecode local identifier overflow", span)])?;
+        let err_local = LocalId(self.next_local_id);
+        self.next_local_id = self
+            .next_local_id
+            .checked_add(1)
+            .ok_or_else(|| vec![bytecode_error("bytecode local identifier overflow", span)])?;
+        self.generated_locals.push(ok_local);
+        self.generated_locals.push(err_local);
+
+        self.expression(value, active)?;
+        self.emit(BytecodeOp::MatchInit { match_id }, span);
+
+        let ok_pattern = crate::MirPattern {
+            kind: crate::MirPatternKind::Constructor {
+                name: "Ok".into(),
+                inner: Some(Box::new(crate::MirPattern {
+                    kind: crate::MirPatternKind::Binding {
+                        local: ok_local,
+                        name: "__try_ok".into(),
+                    },
+                    span,
+                })),
+            },
+            span,
+        };
+        let some_pattern = crate::MirPattern {
+            kind: crate::MirPatternKind::Constructor {
+                name: "Some".into(),
+                inner: Some(Box::new(crate::MirPattern {
+                    kind: crate::MirPatternKind::Binding {
+                        local: ok_local,
+                        name: "__try_some".into(),
+                    },
+                    span,
+                })),
+            },
+            span,
+        };
+        let err_pattern = crate::MirPattern {
+            kind: crate::MirPatternKind::Binding {
+                local: err_local,
+                name: "__try_err".into(),
+            },
+            span,
+        };
+
+        let ok_test = self.emit(
+            BytecodeOp::MatchTest {
+                match_id,
+                pattern: ok_pattern,
+                matched: usize::MAX,
+                unmatched: usize::MAX,
+            },
+            span,
+        );
+        self.initialization_writes.push((ok_test, ok_local));
+
+        let some_test = self.emit(
+            BytecodeOp::MatchTest {
+                match_id,
+                pattern: some_pattern,
+                matched: usize::MAX,
+                unmatched: usize::MAX,
+            },
+            span,
+        );
+        self.initialization_writes.push((some_test, ok_local));
+
+        let ok_load = self.emit(BytecodeOp::LoadLocal(ok_local), span);
+        let ok_jump = self.emit(BytecodeOp::Jump(usize::MAX), span);
+
+        let err_test = self.emit(
+            BytecodeOp::MatchTest {
+                match_id,
+                pattern: err_pattern,
+                matched: usize::MAX,
+                unmatched: usize::MAX,
+            },
+            span,
+        );
+        self.initialization_writes.push((err_test, err_local));
+
+        let pending_operands =
+            block_stack_height_at(&self.code, self.current_block_start, ok_test, span)?;
+        let ret_start = self.code.len();
+        for _ in 0..pending_operands {
+            self.emit(BytecodeOp::Pop, span);
+        }
+        self.emit(BytecodeOp::LoadLocal(err_local), span);
+        self.emit(BytecodeOp::StoreLocal(self.contract_result_local), span);
+        for contract in self.ensures.clone() {
+            let contract_span = self
+                .program
+                .expressions
+                .get(contract.0)
+                .map_or(span, |item| item.span);
+            self.expression(contract, active)?;
+            self.emit(
+                BytecodeOp::ContractCheck {
+                    postcondition: true,
+                },
+                contract_span,
+            );
+        }
+        self.emit(BytecodeOp::LoadLocal(self.contract_result_local), span);
+        self.emit(BytecodeOp::Return, span);
+
+        let failure = self.emit(BytecodeOp::MatchFailure, span);
+        let end = self.code.len();
+
+        if let BytecodeOp::MatchTest {
+            matched, unmatched, ..
+        } = &mut self.code[ok_test].operation
+        {
+            *matched = ok_load;
+            *unmatched = some_test;
+        }
+        if let BytecodeOp::MatchTest {
+            matched, unmatched, ..
+        } = &mut self.code[some_test].operation
+        {
+            *matched = ok_load;
+            *unmatched = err_test;
+        }
+        self.code[ok_jump].operation = BytecodeOp::Jump(end);
+        if let BytecodeOp::MatchTest {
+            matched, unmatched, ..
+        } = &mut self.code[err_test].operation
+        {
+            *matched = ret_start;
+            *unmatched = failure;
+        }
+        Ok(())
     }
 
     fn match_expression(
@@ -2333,6 +2597,10 @@ impl FunctionCompiler<'_> {
             }
             MirExpressionKind::Match { value, arms } => {
                 self.match_expression(value, &arms, span, active)?;
+                self.code.len()
+            }
+            MirExpressionKind::Try(value) => {
+                self.try_expression(value, span, active)?;
                 self.code.len()
             }
             MirExpressionKind::Call {

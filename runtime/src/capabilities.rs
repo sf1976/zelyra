@@ -410,7 +410,9 @@ fn check_indirect_capability_expr(
                 }
                 pending.extend(args);
             }
-            ExprKind::Unary { expr, .. } | ExprKind::Await(expr) => pending.push(expr),
+            ExprKind::Unary { expr, .. } | ExprKind::Await(expr) | ExprKind::Try(expr) => {
+                pending.push(expr)
+            }
             ExprKind::Binary { left, right, .. } => {
                 pending.push(left);
                 pending.push(right);
@@ -625,7 +627,7 @@ fn check_capability_expr(
                 pending.push(target);
             }
             ExprKind::Lambda { body, .. } => pending.push(body),
-            ExprKind::Await(inner) => {
+            ExprKind::Await(inner) | ExprKind::Try(inner) => {
                 pending.push(inner);
             }
             ExprKind::Match { value, arms } => {

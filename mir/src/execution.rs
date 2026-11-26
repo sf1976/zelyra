@@ -298,6 +298,7 @@ fn execute_function_captured_with_host_services_and_database_url(
                         .and_then(|policy| policy.package_settings.clone()),
                     host_services: execution_host.host_services,
                     transactional_query: None,
+                    early_return: None,
                     output: Arc::new(Mutex::new(Vec::new())),
                 };
                 match machine.call(function.id, arguments, 1, function.span) {
@@ -369,6 +370,7 @@ struct Machine<'program, 'tx> {
     package_settings: Option<PackageSettings>,
     host_services: Arc<dyn HostServices>,
     transactional_query: Option<&'tx mut MirTransactionalQuery<'tx>>,
+    early_return: Option<Value>,
     output: Arc<Mutex<Vec<String>>>,
 }
 
@@ -454,7 +456,9 @@ fn capture_locals(
                 referenced.extend(callee_local);
                 children.extend(args.iter().copied());
             }
-            MirExpressionKind::Unary { expr, .. } | MirExpressionKind::Await(expr) => {
+            MirExpressionKind::Unary { expr, .. }
+            | MirExpressionKind::Await(expr)
+            | MirExpressionKind::Try(expr) => {
                 children.push(*expr);
             }
             MirExpressionKind::Binary { left, right, .. } => children.extend([*left, *right]),
@@ -689,6 +693,7 @@ impl<'program, 'tx> Machine<'program, 'tx> {
             package_settings: self.package_settings.clone(),
             host_services: Arc::clone(&self.host_services),
             transactional_query: None,
+            early_return: None,
             output: Arc::clone(&self.output),
         }
     }
@@ -840,6 +845,26 @@ impl<'program, 'tx> Machine<'program, 'tx> {
     }
 
     fn execute_blocks(
+        &mut self,
+        function: &'program crate::MirFunction,
+        entry: BlockId,
+        stop_at: Option<BlockId>,
+        locals: &mut HashMap<LocalId, Value>,
+        depth: usize,
+    ) -> Result<BlockExit, RuntimeError> {
+        match self.execute_blocks_inner(function, entry, stop_at, locals, depth) {
+            Ok(exit) => Ok(exit),
+            Err(error) => {
+                if let Some(value) = self.early_return.take() {
+                    Ok(BlockExit::Returned(value))
+                } else {
+                    Err(error)
+                }
+            }
+        }
+    }
+
+    fn execute_blocks_inner(
         &mut self,
         function: &'program crate::MirFunction,
         entry: BlockId,
@@ -1227,6 +1252,7 @@ impl<'program, 'tx> Machine<'program, 'tx> {
                 package_settings: self.package_settings.clone(),
                 host_services: Arc::clone(&self.host_services),
                 transactional_query: Some(tx),
+                early_return: None,
                 output: Arc::clone(&self.output),
             };
             let block_result = child.execute_blocks(function, entry, Some(exit), locals, depth);
@@ -1921,6 +1947,22 @@ impl<'program, 'tx> Machine<'program, 'tx> {
                 evaluate_unary(op, value, span)
             }
             MirExpressionKind::Await(expr) => self.expression(expr, locals, depth, span),
+            MirExpressionKind::Try(expr) => match self.expression(expr, locals, depth, span)? {
+                Value::Result(Ok(value)) => Ok(*value),
+                Value::Result(Err(error)) => {
+                    self.early_return = Some(Value::Result(Err(error)));
+                    Err(runtime_error(span, "early return from `?`"))
+                }
+                Value::Option(Some(value)) => Ok(*value),
+                Value::Option(None) => {
+                    self.early_return = Some(Value::Option(None));
+                    Err(runtime_error(span, "early return from `?`"))
+                }
+                other => Err(runtime_error(
+                    span,
+                    format!("`?` requires Result or Option, got `{}`", other.ty()),
+                )),
+            },
             MirExpressionKind::Call {
                 function: Some(function),
                 args,
@@ -3710,6 +3752,7 @@ fn expression_name(expression: &MirExpressionKind) -> &'static str {
         MirExpressionKind::BinaryChain { .. } => "binary chain",
         MirExpressionKind::Sql { .. } => "SQL",
         MirExpressionKind::Await(_) => "await",
+        MirExpressionKind::Try(_) => "try (`?`)",
         MirExpressionKind::Match { .. } => "match expression",
     }
 }
@@ -7369,5 +7412,230 @@ fn main() -> Int {
                 expected_rollbacks
             );
         }
+    }
+
+    #[test]
+    fn try_operator_propagates_result_and_option_identically_across_ast_mir_and_bytecode() {
+        let source = r#"
+            fn parse_positive(x: Int) -> Result<Int, String> {
+                if x <= 0 {
+                    return Err("must be positive")
+                }
+                return Ok(x)
+            }
+
+            fn double_sum(a: Int, b: Int) -> Result<Int, String> {
+                first = parse_positive(a)?
+                second = parse_positive(b)?
+                return Ok((first + second) * 2)
+            }
+
+            fn maybe_add(a: Option<Int>, b: Option<Int>) -> Option<Int> {
+                return Some(a? + b?)
+            }
+
+            fn main() {}
+        "#;
+        let ast = zelyra_parser::parse(&zelyra_lexer::lex(source).unwrap()).unwrap();
+        zelyra_runtime::check(&ast).unwrap();
+        let mir = crate::lower(&ast).unwrap();
+        crate::verify(&mir).unwrap();
+
+        for (func, args, expected) in [
+            (
+                "double_sum",
+                vec![Value::Int(3), Value::Int(4)],
+                Value::Result(Ok(Box::new(Value::Int(14)))),
+            ),
+            (
+                "double_sum",
+                vec![Value::Int(-1), Value::Int(4)],
+                Value::Result(Err(Box::new(Value::String("must be positive".into())))),
+            ),
+            (
+                "double_sum",
+                vec![Value::Int(3), Value::Int(0)],
+                Value::Result(Err(Box::new(Value::String("must be positive".into())))),
+            ),
+            (
+                "maybe_add",
+                vec![
+                    Value::Option(Some(Box::new(Value::Int(10)))),
+                    Value::Option(Some(Box::new(Value::Int(5)))),
+                ],
+                Value::Option(Some(Box::new(Value::Int(15)))),
+            ),
+            (
+                "maybe_add",
+                vec![
+                    Value::Option(Some(Box::new(Value::Int(10)))),
+                    Value::Option(None),
+                ],
+                Value::Option(None),
+            ),
+        ] {
+            let bytecode = crate::bytecode::compile(&mir, func).unwrap();
+            crate::bytecode::verify_bytecode(&bytecode).unwrap();
+            let ast_val =
+                zelyra_runtime::execute_function(&ast, func, args.clone(), None).unwrap();
+            let mir_val = execute_function(&mir, func, args.clone(), ExecutionLimits::default())
+                .unwrap()
+                .value;
+            let bc_val =
+                crate::bytecode::execute(&bytecode, args, ExecutionLimits::default())
+                    .unwrap()
+                    .value;
+            assert_eq!(ast_val, expected, "AST mismatch for {func}");
+            assert_eq!(mir_val, expected, "MIR mismatch for {func}");
+            assert_eq!(bc_val, expected, "Bytecode mismatch for {func}");
+        }
+    }
+
+    #[test]
+    fn try_operator_inside_decision_transaction_auto_rolls_back_on_err_across_ast_and_mir() {
+        use std::sync::atomic::{AtomicI64, AtomicUsize, Ordering};
+        use std::sync::Mutex;
+
+        struct TxHost {
+            balance: Mutex<i64>,
+            commits: AtomicUsize,
+            rollbacks: AtomicUsize,
+            seen: AtomicI64,
+        }
+
+        impl zelyra_runtime::HostServices for TxHost {
+            fn unix_time_millis(&self) -> Result<i64, String> {
+                Ok(0)
+            }
+            fn environment_variable(&self, _name: &str) -> Result<Option<String>, String> {
+                Ok(None)
+            }
+            fn fill_random(&self, output: &mut [u8]) -> Result<(), String> {
+                output.fill(0);
+                Ok(())
+            }
+            fn validate_database_storage(
+                &self,
+                _database_url: &str,
+                _schema: &zelyra_database::Schema,
+            ) -> Result<(), String> {
+                Ok(())
+            }
+            fn run_database_transaction(
+                &self,
+                _database_url: &str,
+                operation: &mut zelyra_runtime::DatabaseTransactionOperation<'_>,
+            ) -> Result<(), String> {
+                let mut staged = *self.balance.lock().unwrap();
+                let mut exec = |query: &zelyra_database::Query| -> Result<zelyra_database::QueryResult, String> {
+                    if query.sql.contains("UPDATE") {
+                        let next = query
+                            .params
+                            .iter()
+                            .find_map(|(k, v)| match (k.as_str(), v) {
+                                ("next", zelyra_database::QueryValue::Int(n)) => Some(*n),
+                                _ => None,
+                            })
+                            .unwrap();
+                        staged = next;
+                        self.seen.store(staged, Ordering::SeqCst);
+                    }
+                    Ok(zelyra_database::QueryResult::default())
+                };
+                match operation(&mut exec) {
+                    Ok(()) => {
+                        *self.balance.lock().unwrap() = staged;
+                        self.commits.fetch_add(1, Ordering::SeqCst);
+                        Ok(())
+                    }
+                    Err(error) => {
+                        self.rollbacks.fetch_add(1, Ordering::SeqCst);
+                        Err(error)
+                    }
+                }
+            }
+        }
+
+        let source = r#"
+            database main { engine: mariadb }
+            table accounts {
+                id: Id primary auto
+                balance: Int required
+            }
+            fn check_limit(next: Int) -> Result<Int, String> {
+                if next < 0 {
+                    return Err("overdraft")
+                }
+                return Ok(next)
+            }
+            fn debit(current: Int, amount: Int) -> Result<Int, String> uses Database(write) {
+                transaction {
+                    next = current - amount
+                    sql { UPDATE accounts SET balance = :next WHERE id = 1 }
+                    verified = check_limit(next)?
+                    return Ok(verified)
+                }
+                return Err("unreachable")
+            }
+            fn main() {}
+        "#;
+        let ast = zelyra_parser::parse(&zelyra_lexer::lex(source).unwrap()).unwrap();
+        zelyra_runtime::check(&ast).unwrap();
+        let mir = crate::lower(&ast).unwrap();
+        crate::verify(&mir).unwrap();
+        let grants = HashSet::from(["Database(write)".to_owned()]);
+        let url = "mariadb://user:pass@127.0.0.1:3306/app";
+
+        let ast_host = Arc::new(TxHost {
+            balance: Mutex::new(100),
+            commits: AtomicUsize::new(0),
+            rollbacks: AtomicUsize::new(0),
+            seen: AtomicI64::new(100),
+        });
+        let mir_host = Arc::new(TxHost {
+            balance: Mutex::new(100),
+            commits: AtomicUsize::new(0),
+            rollbacks: AtomicUsize::new(0),
+            seen: AtomicI64::new(100),
+        });
+
+        let args = vec![Value::Int(100), Value::Int(150)];
+        let ast_val =
+            zelyra_runtime::execute_function_with_host_services_and_capabilities_and_policies(
+                &ast,
+                "debit",
+                args.clone(),
+                Some(url),
+                Some(&grants),
+                None,
+                ast_host.clone(),
+            )
+            .unwrap();
+        let mir_val = execute_function_with_database_and_host_services_and_policy(
+            &mir,
+            "debit",
+            args,
+            ExecutionLimits::default(),
+            Some(&grants),
+            None,
+            DatabaseExecution {
+                url,
+                host_services: mir_host.clone(),
+            },
+        )
+        .unwrap()
+        .value;
+
+        assert_eq!(
+            ast_val,
+            Value::Result(Err(Box::new(Value::String("overdraft".into()))))
+        );
+        assert_eq!(mir_val, ast_val);
+        assert_eq!(*ast_host.balance.lock().unwrap(), 100);
+        assert_eq!(*mir_host.balance.lock().unwrap(), 100);
+        assert_eq!(ast_host.rollbacks.load(Ordering::SeqCst), 1);
+        assert_eq!(mir_host.rollbacks.load(Ordering::SeqCst), 1);
+        assert_eq!(ast_host.commits.load(Ordering::SeqCst), 0);
+        assert_eq!(mir_host.commits.load(Ordering::SeqCst), 0);
     }
 }

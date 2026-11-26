@@ -432,6 +432,7 @@ impl Collector {
             ExprKind::Await(inner) => {
                 self.expression(inner, expected_type, scope, capabilities, contract_spans)
             }
+            ExprKind::Try(inner) => self.expression(inner, None, scope, capabilities, contract_spans),
             ExprKind::Match { value, arms } => {
                 self.expression(value, None, scope, capabilities, contract_spans);
                 for arm in arms {

@@ -283,6 +283,7 @@ pub enum HirExprKind {
         plan: HirSqlQuery,
     },
     Await(Box<HirExpr>),
+    Try(Box<HirExpr>),
     Match {
         value: Box<HirExpr>,
         arms: Vec<HirMatchExprArm>,
@@ -1080,6 +1081,7 @@ impl<'a> Resolver<'a> {
                 }
             }
             ExprKind::Await(inner) => HirExprKind::Await(Box::new(self.expr(inner))),
+            ExprKind::Try(inner) => HirExprKind::Try(Box::new(self.expr(inner))),
             ExprKind::Match { value, arms } => HirExprKind::Match {
                 value: Box::new(self.expr(value)),
                 arms: arms

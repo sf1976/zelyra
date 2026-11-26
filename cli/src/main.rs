@@ -10789,7 +10789,8 @@ fn visit_expression_sql<'a>(
         }
         ExprKind::Field { target, .. }
         | ExprKind::Unary { expr: target, .. }
-        | ExprKind::Await(target) => visit_expression_sql(target, visitor),
+        | ExprKind::Await(target)
+        | ExprKind::Try(target) => visit_expression_sql(target, visitor),
         ExprKind::Call { args, .. } => {
             for argument in args {
                 visit_expression_sql(argument, visitor);

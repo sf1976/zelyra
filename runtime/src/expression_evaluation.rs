@@ -235,6 +235,22 @@ impl<'program, 'services> Interpreter<'program, 'services> {
                 })
             }
             ExprKind::Await(inner) => self.eval(inner, env),
+            ExprKind::Try(inner) => match self.eval(inner, env)? {
+                Value::Result(Ok(value)) => Ok(*value),
+                Value::Result(Err(error)) => {
+                    self.early_return = Some(Value::Result(Err(error)));
+                    Err(self.runtime_error(expr.span, "early return from `?`"))
+                }
+                Value::Option(Some(value)) => Ok(*value),
+                Value::Option(None) => {
+                    self.early_return = Some(Value::Option(None));
+                    Err(self.runtime_error(expr.span, "early return from `?`"))
+                }
+                other => Err(self.runtime_error(
+                    expr.span,
+                    format!("`?` requires Result or Option, found {}", other.ty()),
+                )),
+            },
             ExprKind::Match { value, arms } => {
                 let scrutinee = self.eval(value, env)?;
                 for arm in arms {

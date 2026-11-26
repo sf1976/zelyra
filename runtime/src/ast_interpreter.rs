@@ -64,6 +64,7 @@ pub(super) struct AstInterpreter<'program, 'services> {
     pub(super) execution_context: ExecutionContext,
     pub(super) active_capabilities: Vec<HashSet<String>>,
     pub(super) active_type_substitutions: Vec<HashMap<String, Type>>,
+    pub(super) early_return: Option<Value>,
 }
 
 pub(super) type TransactionalQuery<'services> = dyn FnMut(&zelyra_database::Query) -> Result<zelyra_database::QueryResult, String>
@@ -262,6 +263,7 @@ impl<'program, 'services> AstInterpreter<'program, 'services> {
             },
             active_capabilities: Vec::new(),
             active_type_substitutions: Vec::new(),
+            early_return: None,
         }
     }
 

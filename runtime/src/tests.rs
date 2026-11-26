@@ -6828,3 +6828,75 @@ fn verifier_proves_sound_state_machines_and_rejects_unreachable_or_trapped_state
             && result.message.contains("loop_a")
     }));
 }
+
+#[test]
+fn try_operator_type_checks_result_option_and_rejects_mismatched_return_types() {
+    let valid = parse(
+        &lex(r#"
+            fn half(n: Int) -> Result<Int, String> {
+                if n < 0 { return Err("neg") }
+                return Ok(n / 2)
+            }
+            fn quad_half(a: Int, b: Int) -> Result<Int, String> {
+                return Ok(half(a)? + half(b)?)
+            }
+            fn main() {}
+        "#)
+        .unwrap(),
+    )
+    .unwrap();
+    check(&valid).unwrap();
+
+    let wrong_return = parse(
+        &lex(r#"
+            fn half(n: Int) -> Result<Int, String> { return Ok(n) }
+            fn bad(n: Int) -> Int {
+                x = half(n)?
+                return x
+            }
+            fn main() {}
+        "#)
+        .unwrap(),
+    )
+    .unwrap();
+    let errors = check(&wrong_return).unwrap_err();
+    assert!(
+        errors
+            .iter()
+            .any(|err| err.message.contains("requires the enclosing function to return `Result`")),
+        "{errors:?}"
+    );
+
+    let wrong_error_type = parse(
+        &lex(r#"
+            fn fail_int() -> Result<Int, Int> { return Err(42) }
+            fn bad() -> Result<Int, String> {
+                x = fail_int()?
+                return Ok(x)
+            }
+            fn main() {}
+        "#)
+        .unwrap(),
+    )
+    .unwrap();
+    assert!(check(&wrong_error_type).is_err());
+
+    let non_result = parse(
+        &lex(r#"
+            fn bad() -> Result<Int, String> {
+                x = 10?
+                return Ok(x)
+            }
+            fn main() {}
+        "#)
+        .unwrap(),
+    )
+    .unwrap();
+    let errors = check(&non_result).unwrap_err();
+    assert!(
+        errors
+            .iter()
+            .any(|err| err.message.contains("`?` operator requires `Result` or `Option`")),
+        "{errors:?}"
+    );
+}

@@ -586,7 +586,8 @@ fn find_computed_api_handler_reference(
             ExprKind::Lambda { body, .. }
             | ExprKind::Field { target: body, .. }
             | ExprKind::Unary { expr: body, .. }
-            | ExprKind::Await(body) => expression(body, handlers),
+            | ExprKind::Await(body)
+            | ExprKind::Try(body) => expression(body, handlers),
             ExprKind::Index { target, index } => {
                 expression(target, handlers).or_else(|| expression(index, handlers))
             }

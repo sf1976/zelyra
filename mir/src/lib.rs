@@ -148,6 +148,7 @@ pub enum MirExpressionKind {
         query_plan: zelyra_hir::HirSqlQuery,
     },
     Await(ExpressionId),
+    Try(ExpressionId),
     Match {
         value: ExpressionId,
         arms: Vec<MirMatchExpressionArm>,
@@ -1797,7 +1798,9 @@ fn verify_expression_kind(
         MirExpressionKind::Index { target, index } => references.extend([*target, *index]),
         MirExpressionKind::Field { target, .. } => references.push(*target),
         MirExpressionKind::Call { args, .. } => references.extend(args.iter().copied()),
-        MirExpressionKind::Unary { expr, .. } | MirExpressionKind::Await(expr) => {
+        MirExpressionKind::Unary { expr, .. }
+        | MirExpressionKind::Await(expr)
+        | MirExpressionKind::Try(expr) => {
             references.push(*expr);
         }
         MirExpressionKind::Binary { left, right, .. } => references.extend([*left, *right]),
@@ -2251,6 +2254,7 @@ impl ProgramBuilder {
                 query_plan: plan.clone(),
             },
             HirExprKind::Await(value) => MirExpressionKind::Await(self.expression_id(value)),
+            HirExprKind::Try(value) => MirExpressionKind::Try(self.expression_id(value)),
             HirExprKind::Match { value, arms } => MirExpressionKind::Match {
                 value: self.expression_id(value),
                 arms: arms

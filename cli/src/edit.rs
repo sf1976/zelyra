@@ -1006,7 +1006,9 @@ fn collect_function_expression(
                 collect_function_expression(argument, name, spans);
             }
         }
-        zelyra_ast::ExprKind::Unary { expr, .. } | zelyra_ast::ExprKind::Await(expr) => {
+        zelyra_ast::ExprKind::Unary { expr, .. }
+        | zelyra_ast::ExprKind::Await(expr)
+        | zelyra_ast::ExprKind::Try(expr) => {
             collect_function_expression(expr, name, spans);
         }
         zelyra_ast::ExprKind::Binary { left, right, .. } => {

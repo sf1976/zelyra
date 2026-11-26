@@ -4993,7 +4993,7 @@ fn called_functions(program: &MirProgram, function: &crate::MirFunction) -> Vec<
                 }
             }
             K::Record { fields, .. } => roots.extend(fields.iter().map(|(_, value)| *value)),
-            K::Lambda { body, .. } | K::Await(body) => roots.push(*body),
+            K::Lambda { body, .. } | K::Await(body) | K::Try(body) => roots.push(*body),
             K::Index { target, index } => roots.extend([*target, *index]),
             K::Field { target, .. } => roots.push(*target),
             K::Unary { expr, .. } => roots.push(*expr),
@@ -5059,6 +5059,7 @@ fn mir_expression_name(expression: &MirExpressionKind) -> &'static str {
         MirExpressionKind::BinaryChain { .. } => "binary chain",
         MirExpressionKind::Sql { .. } => "SQL",
         MirExpressionKind::Await(_) => "await",
+        MirExpressionKind::Try(_) => "try (`?`)",
         MirExpressionKind::Match { .. } => "match expression",
     }
 }

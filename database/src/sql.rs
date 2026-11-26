@@ -626,7 +626,8 @@ fn check_computed_column_sql_writes(program: &zelyra_ast::Program, errors: &mut 
             }
             ExprKind::Field { target, .. }
             | ExprKind::Unary { expr: target, .. }
-            | ExprKind::Await(target) => visit_expr(
+            | ExprKind::Await(target)
+            | ExprKind::Try(target) => visit_expr(
                 target,
                 known_tables,
                 dependencies,
@@ -1217,7 +1218,7 @@ fn check_state_machine_sql_literals(program: &zelyra_ast::Program, errors: &mut 
                     visit_expr(value, machines, errors);
                 }
             }
-            ExprKind::Lambda { body, .. } | ExprKind::Await(body) => {
+            ExprKind::Lambda { body, .. } | ExprKind::Await(body) | ExprKind::Try(body) => {
                 visit_expr(body, machines, errors)
             }
             ExprKind::Index { target, index } => {
@@ -1685,7 +1686,9 @@ fn check_expr(
         }
         ExprKind::Field { target, .. } => check_expr(target, schema, environment, aliases, errors),
         ExprKind::Lambda { body, .. } => check_expr(body, schema, environment, aliases, errors),
-        ExprKind::Await(inner) => check_expr(inner, schema, environment, aliases, errors),
+        ExprKind::Await(inner) | ExprKind::Try(inner) => {
+            check_expr(inner, schema, environment, aliases, errors)
+        }
         ExprKind::Match { value, arms } => {
             check_expr(value, schema, environment, aliases, errors);
             for arm in arms {
@@ -1743,6 +1746,10 @@ fn expr_type(expression: &Expr) -> Type {
         | ExprKind::Unary { .. }
         | ExprKind::Binary { .. } => Type::Unknown,
         ExprKind::Await(inner) => expr_type(inner),
+        ExprKind::Try(inner) => match expr_type(inner) {
+            Type::Result(ok, _) | Type::Option(ok) => *ok,
+            _ => Type::Unknown,
+        },
         ExprKind::Match { arms, .. } => arms
             .first()
             .map(|arm| expr_type(&arm.value))

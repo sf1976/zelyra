@@ -4639,6 +4639,13 @@ impl<'a> Parser<'a> {
                     },
                     span,
                 };
+            } else if self.at(&TokenKind::Question) {
+                let end = self.advance().span;
+                let span = expression.span.join(end);
+                expression = Expr {
+                    kind: ExprKind::Try(Box::new(expression)),
+                    span,
+                };
             } else {
                 break;
             }

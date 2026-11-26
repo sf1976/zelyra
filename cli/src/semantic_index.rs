@@ -1143,6 +1143,7 @@ fn collect_visible_expression_bindings(expression: &Expr, offset: usize, output:
         }
         ExprKind::Field { target, .. }
         | ExprKind::Await(target)
+        | ExprKind::Try(target)
         | ExprKind::Unary { expr: target, .. } => {
             collect_visible_expression_bindings(target, offset, output);
         }
@@ -1514,6 +1515,7 @@ fn index_local_expr_types(
         }
         ExprKind::Field { target, .. }
         | ExprKind::Await(target)
+        | ExprKind::Try(target)
         | ExprKind::Unary { expr: target, .. } => {
             index_local_expr_types(target, bindings, program, source, tokens, index)
         }
@@ -2079,6 +2081,7 @@ fn visit_local_expression(
         }
         ExprKind::Field { target, .. }
         | ExprKind::Await(target)
+        | ExprKind::Try(target)
         | ExprKind::Unary { expr: target, .. } => {
             visit_local_expression(target, scopes, source, tokens, index);
         }
@@ -2527,7 +2530,9 @@ fn visit_record_field_expr(
             );
             visit_record_field_expr(body, &mut nested, program, sources, tokens, output);
         }
-        ExprKind::Await(inner) | ExprKind::Unary { expr: inner, .. } => visit_child!(inner),
+        ExprKind::Await(inner) | ExprKind::Try(inner) | ExprKind::Unary { expr: inner, .. } => {
+            visit_child!(inner)
+        }
         ExprKind::Index { target, index } => {
             visit_child!(target);
             visit_child!(index);
@@ -2723,6 +2728,7 @@ fn visit_expression(
         }
         ExprKind::Lambda { body, .. }
         | ExprKind::Await(body)
+        | ExprKind::Try(body)
         | ExprKind::Unary { expr: body, .. } => {
             visit_expression(body, known, sources, tokens, output);
         }
@@ -2900,6 +2906,7 @@ fn index_pattern_fields_in_expr(
         }
         ExprKind::Lambda { body, .. }
         | ExprKind::Await(body)
+        | ExprKind::Try(body)
         | ExprKind::Unary { expr: body, .. } => {
             index_pattern_fields_in_expr(body, program, sources, tokens, output)
         }

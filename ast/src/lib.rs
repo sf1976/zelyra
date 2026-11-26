@@ -355,7 +355,9 @@ fn computed_expression_names(expression: &Expr) -> std::collections::HashSet<&st
                     visit(argument, names);
                 }
             }
-            ExprKind::Unary { expr, .. } | ExprKind::Await(expr) => visit(expr, names),
+            ExprKind::Unary { expr, .. } | ExprKind::Await(expr) | ExprKind::Try(expr) => {
+                visit(expr, names)
+            }
             ExprKind::Binary { left, right, .. } => {
                 visit(left, names);
                 visit(right, names);
@@ -2031,6 +2033,7 @@ pub enum ExprKind {
         query: String,
     },
     Await(Box<Expr>),
+    Try(Box<Expr>),
     Match {
         value: Box<Expr>,
         arms: Vec<MatchExprArm>,

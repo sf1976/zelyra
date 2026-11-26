@@ -1355,7 +1355,7 @@ fn expression_contains_variable(expression: &Expr, name: &str) -> bool {
             expression_contains_variable(target, name) || expression_contains_variable(index, name)
         }
         ExprKind::Field { target, .. } => expression_contains_variable(target, name),
-        ExprKind::Await(inner) => expression_contains_variable(inner, name),
+        ExprKind::Await(inner) | ExprKind::Try(inner) => expression_contains_variable(inner, name),
         ExprKind::Match { value, arms } => {
             expression_contains_variable(value, name)
                 || arms
@@ -2745,6 +2745,7 @@ fn constant_value(expression: &Expr) -> Option<ConstantValue> {
         | ExprKind::Call { .. }
         | ExprKind::Sql { .. }
         | ExprKind::Await(_)
+        | ExprKind::Try(_)
         | ExprKind::Match { .. } => None,
     }
 }

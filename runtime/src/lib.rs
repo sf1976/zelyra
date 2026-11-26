@@ -1023,6 +1023,7 @@ fn json_codec_interpreter<'program>(
         },
         active_capabilities: Vec::new(),
         active_type_substitutions: Vec::new(),
+        early_return: None,
     }
 }
 
