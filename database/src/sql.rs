@@ -19,7 +19,7 @@ impl std::fmt::Display for SqlError {
 enum SqlToken {
     Word(String),
     Parameter(String),
-    String,
+    String(String),
     Number,
     Star,
     Comma,
@@ -106,7 +106,7 @@ pub fn analyze_table_access(
                 name
             }
             (Some(SqlToken::Word(name)), _, _) => name,
-            (Some(SqlToken::String), _, _) => {
+            (Some(SqlToken::String(_)), _, _) => {
                 modes
                     .entry(String::new())
                     .and_modify(|existing| {
@@ -421,6 +421,7 @@ pub fn check_program(program: &zelyra_ast::Program, schema: &Schema) -> Result<(
         ));
     }
     check_computed_column_sql_writes(program, &mut errors);
+    check_state_machine_sql_literals(program, &mut errors);
     if errors.is_empty() {
         Ok(())
     } else {
@@ -955,6 +956,384 @@ fn check_computed_column_sql_writes(program: &zelyra_ast::Program, errors: &mut 
                 None,
                 errors,
             );
+        }
+    }
+}
+
+fn check_state_machine_sql_literals(program: &zelyra_ast::Program, errors: &mut Vec<SqlError>) {
+    let machines_by_table = program
+        .tables
+        .iter()
+        .filter(|table| !table.state_machines.is_empty())
+        .map(|table| {
+            let by_column = table
+                .state_machines
+                .iter()
+                .map(|machine| (machine.column.to_ascii_lowercase(), machine))
+                .collect::<HashMap<_, _>>();
+            (table.name.to_ascii_lowercase(), by_column)
+        })
+        .collect::<HashMap<_, _>>();
+    if machines_by_table.is_empty() {
+        return;
+    }
+
+    fn validate_literal(
+        table: &str,
+        machine: &zelyra_ast::TableStateMachineDef,
+        literal: &str,
+        span: Span,
+        errors: &mut Vec<SqlError>,
+    ) {
+        if !machine.is_valid_state(literal) {
+            let valid = machine.states();
+            let hint = format_suggestion(suggest_closest_name(literal, valid.iter().copied()));
+            errors.push(sql_error(
+                span,
+                format!(
+                    "SQL literal `{literal}` is not a declared state for `{table}.{}` (valid states: {}){hint}",
+                    machine.column,
+                    valid.join(", ")
+                ),
+            ));
+        }
+    }
+
+    fn check_query_states(
+        query: &str,
+        span: Span,
+        machines_by_table: &HashMap<String, HashMap<String, &zelyra_ast::TableStateMachineDef>>,
+        errors: &mut Vec<SqlError>,
+    ) {
+        let tokens = tokenize(query);
+        let Some(SqlToken::Word(command)) = tokens.first() else {
+            return;
+        };
+        let command = command.to_ascii_uppercase();
+        if command == "INSERT" {
+            let Some(into_idx) = tokens.iter().position(
+                |token| matches!(token, SqlToken::Word(word) if word.eq_ignore_ascii_case("INTO")),
+            ) else {
+                return;
+            };
+            let Some(SqlToken::Word(table_name)) = tokens.get(into_idx + 1) else {
+                return;
+            };
+            let table_key = table_name.to_ascii_lowercase();
+            let Some(machines) = machines_by_table.get(&table_key) else {
+                return;
+            };
+            let Some(open_cols) = tokens[into_idx + 1..]
+                .iter()
+                .position(|token| matches!(token, SqlToken::OpenParen))
+                .map(|rel| into_idx + 1 + rel)
+            else {
+                return;
+            };
+            let Some(close_cols) = tokens[open_cols + 1..]
+                .iter()
+                .position(|token| matches!(token, SqlToken::CloseParen))
+                .map(|rel| open_cols + 1 + rel)
+            else {
+                return;
+            };
+            let columns = tokens[open_cols + 1..close_cols]
+                .iter()
+                .filter_map(|token| match token {
+                    SqlToken::Word(name) => Some(name.to_ascii_lowercase()),
+                    _ => None,
+                })
+                .collect::<Vec<_>>();
+            if let Some(values_idx) = tokens[close_cols + 1..]
+                .iter()
+                .position(
+                    |token| matches!(token, SqlToken::Word(word) if word.eq_ignore_ascii_case("VALUES")),
+                )
+                .map(|rel| close_cols + 1 + rel)
+            {
+                if matches!(tokens.get(values_idx + 1), Some(SqlToken::OpenParen)) {
+                    let mut values = Vec::<Vec<SqlToken>>::new();
+                    let mut current = Vec::new();
+                    let mut depth = 0_i32;
+                    for token in &tokens[values_idx + 2..] {
+                        match token {
+                            SqlToken::OpenParen => {
+                                depth += 1;
+                                current.push(token.clone());
+                            }
+                            SqlToken::CloseParen if depth == 0 => {
+                                values.push(std::mem::take(&mut current));
+                                break;
+                            }
+                            SqlToken::CloseParen => {
+                                depth -= 1;
+                                current.push(token.clone());
+                            }
+                            SqlToken::Comma if depth == 0 => {
+                                values.push(std::mem::take(&mut current));
+                            }
+                            _ => current.push(token.clone()),
+                        }
+                    }
+                    if values.len() == columns.len() {
+                        for (col, val) in columns.iter().zip(&values) {
+                            if let (Some(machine), [SqlToken::String(literal)]) =
+                                (machines.get(col), val.as_slice())
+                            {
+                                validate_literal(&table_key, machine, literal, span, errors);
+                            }
+                        }
+                    }
+                }
+            }
+            // Also check `ON DUPLICATE KEY UPDATE col = 'lit'` / `ON CONFLICT ... DO UPDATE SET col = 'lit'`
+            let upsert_start = tokens
+                .windows(4)
+                .position(|window| {
+                    matches!(
+                        window,
+                        [
+                            SqlToken::Word(on),
+                            SqlToken::Word(dup),
+                            SqlToken::Word(key),
+                            SqlToken::Word(upd)
+                        ] if on.eq_ignore_ascii_case("ON")
+                            && dup.eq_ignore_ascii_case("DUPLICATE")
+                            && key.eq_ignore_ascii_case("KEY")
+                            && upd.eq_ignore_ascii_case("UPDATE")
+                    )
+                })
+                .map(|pos| pos + 4)
+                .or_else(|| {
+                    tokens
+                        .windows(3)
+                        .position(|window| {
+                            matches!(
+                                window,
+                                [
+                                    SqlToken::Word(do_kw),
+                                    SqlToken::Word(upd),
+                                    SqlToken::Word(set)
+                                ] if do_kw.eq_ignore_ascii_case("DO")
+                                    && upd.eq_ignore_ascii_case("UPDATE")
+                                    && set.eq_ignore_ascii_case("SET")
+                            )
+                        })
+                        .map(|pos| pos + 3)
+                });
+            if let Some(start) = upsert_start {
+                check_assignment_literals(&tokens[start..], &table_key, machines, span, errors);
+            }
+        } else if command == "UPDATE" {
+            let Some(SqlToken::Word(table_name)) = tokens.get(1) else {
+                return;
+            };
+            let table_key = table_name.to_ascii_lowercase();
+            let Some(machines) = machines_by_table.get(&table_key) else {
+                return;
+            };
+            let Some(set_idx) = tokens.iter().position(
+                |token| matches!(token, SqlToken::Word(word) if word.eq_ignore_ascii_case("SET")),
+            ) else {
+                return;
+            };
+            check_assignment_literals(&tokens[set_idx + 1..], &table_key, machines, span, errors);
+        }
+    }
+
+    fn check_assignment_literals(
+        tokens: &[SqlToken],
+        table_key: &str,
+        machines: &HashMap<String, &zelyra_ast::TableStateMachineDef>,
+        span: Span,
+        errors: &mut Vec<SqlError>,
+    ) {
+        let mut segments = Vec::new();
+        let mut current = Vec::new();
+        let mut depth = 0_i32;
+        for token in tokens {
+            match token {
+                SqlToken::OpenParen => depth += 1,
+                SqlToken::CloseParen => depth -= 1,
+                SqlToken::Comma if depth == 0 => {
+                    segments.push(std::mem::take(&mut current));
+                    continue;
+                }
+                SqlToken::Word(word)
+                    if depth == 0
+                        && ["WHERE", "RETURNING", "ORDER", "LIMIT"]
+                            .iter()
+                            .any(|term| word.eq_ignore_ascii_case(term)) =>
+                {
+                    break;
+                }
+                _ => {}
+            }
+            current.push(token.clone());
+        }
+        if !current.is_empty() {
+            segments.push(current);
+        }
+        for segment in segments {
+            let Some(equal) = segment
+                .iter()
+                .position(|token| matches!(token, SqlToken::Operator))
+            else {
+                continue;
+            };
+            let column_name = match &segment[..equal] {
+                [SqlToken::Word(col)] => col.to_ascii_lowercase(),
+                [SqlToken::Word(_), SqlToken::Dot, SqlToken::Word(col)] => col.to_ascii_lowercase(),
+                _ => continue,
+            };
+            if let (Some(machine), [SqlToken::String(literal)]) =
+                (machines.get(&column_name), &segment[equal + 1..])
+            {
+                validate_literal(table_key, machine, literal, span, errors);
+            }
+        }
+    }
+
+    fn visit_expr(
+        expr: &Expr,
+        machines: &HashMap<String, HashMap<String, &zelyra_ast::TableStateMachineDef>>,
+        errors: &mut Vec<SqlError>,
+    ) {
+        match &expr.kind {
+            ExprKind::Sql { query, .. } => check_query_states(query, expr.span, machines, errors),
+            ExprKind::Array(values) => {
+                for value in values {
+                    visit_expr(value, machines, errors);
+                }
+            }
+            ExprKind::Map(entries) => {
+                for (key, value) in entries {
+                    visit_expr(key, machines, errors);
+                    visit_expr(value, machines, errors);
+                }
+            }
+            ExprKind::Record { fields, .. } => {
+                for (_, value) in fields {
+                    visit_expr(value, machines, errors);
+                }
+            }
+            ExprKind::Lambda { body, .. } | ExprKind::Await(body) => {
+                visit_expr(body, machines, errors)
+            }
+            ExprKind::Index { target, index } => {
+                visit_expr(target, machines, errors);
+                visit_expr(index, machines, errors);
+            }
+            ExprKind::Field { target, .. } | ExprKind::Unary { expr: target, .. } => {
+                visit_expr(target, machines, errors);
+            }
+            ExprKind::Call { args, .. } => {
+                for arg in args {
+                    visit_expr(arg, machines, errors);
+                }
+            }
+            ExprKind::Binary { left, right, .. } => {
+                visit_expr(left, machines, errors);
+                visit_expr(right, machines, errors);
+            }
+            ExprKind::Match { value, arms } => {
+                visit_expr(value, machines, errors);
+                for arm in arms {
+                    if let Some(guard) = &arm.guard {
+                        visit_expr(guard, machines, errors);
+                    }
+                    visit_expr(&arm.value, machines, errors);
+                }
+            }
+            _ => {}
+        }
+    }
+
+    fn visit_block(
+        block: &Block,
+        machines: &HashMap<String, HashMap<String, &zelyra_ast::TableStateMachineDef>>,
+        errors: &mut Vec<SqlError>,
+    ) {
+        for statement in &block.statements {
+            match statement {
+                Stmt::Let { value, .. }
+                | Stmt::BindOrAssign { value, .. }
+                | Stmt::TupleBindOrAssign { value, .. }
+                | Stmt::Expr(value) => visit_expr(value, machines, errors),
+                Stmt::ArrayIndexAssign { index, value, .. } => {
+                    visit_expr(index, machines, errors);
+                    visit_expr(value, machines, errors);
+                }
+                Stmt::Return {
+                    value: Some(value), ..
+                } => visit_expr(value, machines, errors),
+                Stmt::If {
+                    condition,
+                    then_block,
+                    else_block,
+                    ..
+                } => {
+                    visit_expr(condition, machines, errors);
+                    visit_block(then_block, machines, errors);
+                    if let Some(block) = else_block {
+                        visit_block(block, machines, errors);
+                    }
+                }
+                Stmt::While {
+                    condition, body, ..
+                } => {
+                    visit_expr(condition, machines, errors);
+                    visit_block(body, machines, errors);
+                }
+                Stmt::For { iterable, body, .. } => {
+                    visit_expr(iterable, machines, errors);
+                    visit_block(body, machines, errors);
+                }
+                Stmt::Loop { body, .. }
+                | Stmt::Transaction { body, .. }
+                | Stmt::Parallel { body, .. } => visit_block(body, machines, errors),
+                Stmt::Match { value, arms, .. } => {
+                    visit_expr(value, machines, errors);
+                    for arm in arms {
+                        visit_block(&arm.body, machines, errors);
+                    }
+                }
+                Stmt::Return { value: None, .. } | Stmt::Break { .. } | Stmt::Continue { .. } => {}
+            }
+        }
+    }
+
+    for function in &program.functions {
+        visit_block(&function.body, &machines_by_table, errors);
+    }
+    for form in &program.forms {
+        for action in &form.actions {
+            visit_block(
+                &Block {
+                    statements: action.statements.clone(),
+                    span: action.span,
+                },
+                &machines_by_table,
+                errors,
+            );
+            if let Some(body) = &action.execute_body {
+                visit_block(body, &machines_by_table, errors);
+            }
+        }
+    }
+    for crud in &program.cruds {
+        for action in &crud.actions {
+            visit_block(
+                &Block {
+                    statements: action.statements.clone(),
+                    span: action.span,
+                },
+                &machines_by_table,
+                errors,
+            );
+            if let Some(body) = &action.execute_body {
+                visit_block(body, &machines_by_table, errors);
+            }
         }
     }
 }
@@ -1750,7 +2129,7 @@ fn projection_type(
     }
     match expression.first() {
         Some(SqlToken::Number) => (Type::Int, false),
-        Some(SqlToken::String) => (Type::String, false),
+        Some(SqlToken::String(_)) => (Type::String, false),
         _ => (Type::Unknown, true),
     }
 }
@@ -2502,19 +2881,23 @@ fn tokenize(query: &str) -> Vec<SqlToken> {
         if byte == b'\'' || byte == b'"' {
             let quote = byte;
             index += 1;
+            let mut literal = String::new();
             while index < bytes.len() {
                 if bytes[index] == quote {
                     if bytes.get(index + 1) == Some(&quote) {
+                        literal.push(quote as char);
                         index += 2;
                     } else {
                         index += 1;
                         break;
                     }
                 } else {
-                    index += 1;
+                    let ch = query[index..].chars().next().unwrap();
+                    literal.push(ch);
+                    index += ch.len_utf8();
                 }
             }
-            tokens.push(SqlToken::String);
+            tokens.push(SqlToken::String(literal));
             continue;
         }
         let token = match byte {
@@ -3192,6 +3575,73 @@ mod tests {
             errors
                 .iter()
                 .any(|error| error.message.contains("did you mean `stock_levels`?")),
+            "errors: {errors:?}"
+        );
+    }
+
+    #[test]
+    fn checks_table_state_machines_and_rejects_invalid_sql_state_literals() {
+        let source = r#"
+            table sales_orders {
+                id: Id primary auto
+                status: String(24) default "draft"
+                states status {
+                    draft -> confirmed, cancelled
+                    confirmed -> invoiced, cancelled
+                    invoiced -> paid
+                    paid -> final
+                    cancelled -> final
+                }
+            }
+            fn valid_transitions(id: Int) uses Database {
+                sql { INSERT INTO sales_orders (status) VALUES ('draft') }
+                sql { UPDATE sales_orders SET status = 'confirmed' WHERE id = :id }
+                sql {
+                    INSERT INTO sales_orders (id, status) VALUES (:id, 'draft')
+                    ON DUPLICATE KEY UPDATE status = 'confirmed'
+                }
+            }
+            fn main() {}
+        "#;
+        let program = parse(&lex(source).unwrap()).unwrap();
+        let schema = build_schema(&program).unwrap();
+        assert!(check_program(&program, &schema).is_ok());
+
+        let invalid_sql = source.replace("'confirmed'", "'confrmed'");
+        let program = parse(&lex(&invalid_sql).unwrap()).unwrap();
+        let schema = build_schema(&program).unwrap();
+        let errors = check_program(&program, &schema).unwrap_err();
+        assert!(
+            errors.iter().any(|error| {
+                error.message.contains("not a declared state for `sales_orders.status`")
+                    && error.message.contains("did you mean `confirmed`?")
+            }),
+            "errors: {errors:?}"
+        );
+
+        let invalid_schema = r#"
+            table sales_orders {
+                id: Id primary auto
+                status: String(24) default "unknown"
+                states status {
+                    draft -> ghost
+                }
+            }
+            fn main() {}
+        "#;
+        let program = parse(&lex(invalid_schema).unwrap()).unwrap();
+        let errors = build_schema(&program).unwrap_err();
+        assert!(
+            errors
+                .iter()
+                .any(|error| error.message.contains("transition target `ghost` is not declared")
+                    || error.message.contains("transition target `ghost`")),
+            "errors: {errors:?}"
+        );
+        assert!(
+            errors
+                .iter()
+                .any(|error| error.message.contains("default value `unknown`")),
             "errors: {errors:?}"
         );
     }

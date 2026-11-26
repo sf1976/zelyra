@@ -1391,6 +1391,7 @@ pub struct TableDef {
     pub name: String,
     pub columns: Vec<ColumnDef>,
     pub validations: Vec<TableValidationDef>,
+    pub state_machines: Vec<TableStateMachineDef>,
     pub indexes: Vec<IndexDef>,
     pub uniques: Vec<IndexDef>,
     pub access: TableAccessDef,
@@ -1398,6 +1399,71 @@ pub struct TableDef {
     /// query expressions are available, raw SQL access to this table is denied.
     pub tenant_scope: Option<TenantScopeDef>,
     pub span: Span,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct TableStateMachineDef {
+    pub column: String,
+    pub transitions: Vec<TableStateTransitionDef>,
+    pub span: Span,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct TableStateTransitionDef {
+    pub from: String,
+    pub to: Vec<String>,
+    pub is_final: bool,
+    pub span: Span,
+}
+
+impl TableStateMachineDef {
+    pub fn states(&self) -> Vec<&str> {
+        self.transitions
+            .iter()
+            .map(|rule| rule.from.as_str())
+            .collect()
+    }
+
+    pub fn final_states(&self) -> Vec<&str> {
+        self.transitions
+            .iter()
+            .filter(|rule| rule.is_final)
+            .map(|rule| rule.from.as_str())
+            .collect()
+    }
+
+    pub fn initial_state<'a>(&'a self, table: &'a TableDef) -> Option<&'a str> {
+        if let Some(DefaultValue::String(default)) = table
+            .columns
+            .iter()
+            .find(|column| column.name == self.column)
+            .and_then(|column| column.default.as_ref())
+        {
+            if self.is_valid_state(default) {
+                return Some(default.as_str());
+            }
+        }
+        self.transitions.first().map(|rule| rule.from.as_str())
+    }
+
+    pub fn is_valid_state(&self, value: &str) -> bool {
+        self.transitions.iter().any(|rule| rule.from == value)
+    }
+
+    pub fn allowed_next(&self, current: &str) -> Option<&[String]> {
+        self.transitions
+            .iter()
+            .find(|rule| rule.from == current)
+            .map(|rule| rule.to.as_slice())
+    }
+
+    pub fn can_transition(&self, from: &str, to: &str) -> bool {
+        if from == to {
+            return self.is_valid_state(from);
+        }
+        self.allowed_next(from)
+            .is_some_and(|targets| targets.iter().any(|target| target == to))
+    }
 }
 
 #[derive(Clone, Debug)]

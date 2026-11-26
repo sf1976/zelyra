@@ -7255,6 +7255,24 @@ fn dispatch_form_with_language(
         }
     }
     if errors.is_empty() {
+        if let Some(table) = form.table.as_ref() {
+            for machine in &table.state_machines {
+                if let Some(submitted) = values.get(&machine.column) {
+                    if !submitted.is_empty() && !machine.is_valid_state(submitted) {
+                        errors.push(FieldError {
+                            field: machine.column.clone(),
+                            message: format!(
+                                "invalid state `{submitted}` for `{}` (valid states: {})",
+                                machine.column,
+                                machine.states().join(", ")
+                            ),
+                        });
+                    }
+                }
+            }
+        }
+    }
+    if errors.is_empty() {
         if let (Some(program), Some(table_name)) = (validation_program, form.form.table.as_deref())
         {
             let mut validation_values = values.clone();
@@ -13025,6 +13043,28 @@ pub fn validate_table_runtime_values(
         args.push(value);
     }
     let mut messages = Vec::new();
+    for machine in &table.state_machines {
+        if let Some(value) = submitted.get(&machine.column) {
+            let state = match value {
+                RuntimeValue::String(text) => Some(text.as_str()),
+                RuntimeValue::Option(Some(inner)) => match inner.as_ref() {
+                    RuntimeValue::String(text) => Some(text.as_str()),
+                    _ => None,
+                },
+                _ => None,
+            };
+            if let Some(state) = state {
+                if !machine.is_valid_state(state) {
+                    messages.push(format!(
+                        "invalid state `{state}` for `{}.{}` (valid states: {})",
+                        table.name,
+                        machine.column,
+                        machine.states().join(", ")
+                    ));
+                }
+            }
+        }
+    }
     let policy = zelyra_runtime::RuntimePolicy {
         step_budget: Some(10_000),
         ..zelyra_runtime::RuntimePolicy::default()
@@ -13681,6 +13721,36 @@ fn execute_form_action_with_children(
                     message: "ZELYRA_CONFLICT: edited record changed after the form was loaded"
                         .into(),
                 });
+            }
+            if let Some(table_def) = form.table.as_ref() {
+                for machine in &table_def.state_machines {
+                    if let (Some(current), Some(next)) = (
+                        current_values.values.get(&machine.column),
+                        values.get(&machine.column),
+                    ) {
+                        if !current.is_empty()
+                            && !next.is_empty()
+                            && !machine.can_transition(current, next)
+                        {
+                            let allowed = machine
+                                .allowed_next(current)
+                                .map(|targets| {
+                                    if targets.is_empty() {
+                                        "none (final state)".to_owned()
+                                    } else {
+                                        targets.join(", ")
+                                    }
+                                })
+                                .unwrap_or_else(|| "none".to_owned());
+                            return Err(zelyra_database::DatabaseError {
+                                message: format!(
+                                    "ZELYRA_CHILD_VALIDATION: invalid state transition for `{}`: cannot move from `{current}` to `{next}` (allowed: {allowed})",
+                                    machine.column
+                                ),
+                            });
+                        }
+                    }
+                }
             }
             Some(current_values.values)
         } else {

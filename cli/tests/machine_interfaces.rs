@@ -5171,3 +5171,89 @@ fn mir_and_runtime_diagnostics_report_imported_module_paths() {
     }
     fs::remove_dir_all(directory).unwrap();
 }
+
+#[test]
+fn table_state_machines_support_verify_reflect_docs_and_formatting() {
+    let directory = temporary_directory("table-state-machines");
+    fs::create_dir_all(&directory).unwrap();
+    let file = directory.join("main.zyl");
+    let source = r#"database main {
+    engine: mariadb
+}
+
+table sales_orders {
+    id: Id primary auto
+    order_number: String(40) required unique
+    status: String(24) default "draft"
+
+    states status {
+        draft -> confirmed, cancelled
+        confirmed -> invoiced, cancelled
+        invoiced -> paid
+        paid -> final
+        cancelled -> final
+    }
+}
+
+fn main() {
+}
+"#;
+    fs::write(&file, source).unwrap();
+
+    let check = run(&["check", file.to_str().unwrap(), "--format=json"]);
+    assert!(
+        check.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&check.stderr)
+    );
+
+    let verify = run(&["verify", file.to_str().unwrap(), "--json"]);
+    assert!(
+        verify.status.success(),
+        "stdout: {}\nstderr: {}",
+        String::from_utf8_lossy(&verify.stdout),
+        String::from_utf8_lossy(&verify.stderr)
+    );
+    let verify_doc: serde_json::Value = serde_json::from_slice(&verify.stdout).unwrap();
+    assert!(
+        verify_doc
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|item| item["kind"] == "state_machine" && item["status"] == "PROVEN"),
+        "verify_doc: {verify_doc}"
+    );
+
+    let reflect = run(&["reflect", file.to_str().unwrap(), "--format=json"]);
+    assert!(reflect.status.success());
+    let reflect_doc: serde_json::Value = serde_json::from_slice(&reflect.stdout).unwrap();
+    let machines = reflect_doc["tables"][0]["state_machines"]
+        .as_array()
+        .unwrap();
+    assert_eq!(machines.len(), 1);
+    assert_eq!(machines[0]["column"], "status");
+    assert_eq!(machines[0]["initial"], "draft");
+
+    let states_doc = run(&["doc", file.to_str().unwrap(), "--states"]);
+    assert!(states_doc.status.success());
+    let mermaid = String::from_utf8_lossy(&states_doc.stdout);
+    assert!(mermaid.contains("stateDiagram-v2"));
+    assert!(mermaid.contains("[*] --> draft"));
+    assert!(mermaid.contains("draft --> confirmed"));
+    assert!(mermaid.contains("paid --> [*]"));
+
+    let openapi = run(&["doc", file.to_str().unwrap(), "--openapi"]);
+    assert!(openapi.status.success());
+    let openapi_doc: serde_json::Value = serde_json::from_slice(&openapi.stdout).unwrap();
+    assert_eq!(
+        openapi_doc["components"]["schemas"]["sales_orders"]["properties"]["status"]["enum"],
+        serde_json::json!(["draft", "confirmed", "invoiced", "paid", "cancelled"])
+    );
+
+    let fmt_apply = run(&["fmt", file.to_str().unwrap()]);
+    assert!(fmt_apply.status.success());
+    let fmt_check = run(&["fmt", file.to_str().unwrap(), "--check"]);
+    assert!(fmt_check.status.success());
+
+    fs::remove_dir_all(directory).unwrap();
+}

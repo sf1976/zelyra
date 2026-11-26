@@ -2817,6 +2817,7 @@ impl<'a> Parser<'a> {
         self.expect(TokenKind::LBrace, "`{` after table name")?;
         let mut columns = Vec::new();
         let mut validations = Vec::new();
+        let mut state_machines = Vec::new();
         let mut indexes = Vec::new();
         let mut uniques = Vec::new();
         let mut access = zelyra_ast::TableAccessDef::default();
@@ -2833,6 +2834,8 @@ impl<'a> Parser<'a> {
                 access = self.table_access_definition()?;
             } else if self.at_word_followed_by("validate", &TokenKind::LBrace) {
                 validations.extend(self.table_validation_block()?);
+            } else if self.at_table_states_block() {
+                state_machines.push(self.table_state_machine_block()?);
             } else {
                 columns.push(self.column_definition()?);
             }
@@ -2843,12 +2846,94 @@ impl<'a> Parser<'a> {
             name,
             columns,
             validations,
+            state_machines,
             indexes,
             uniques,
             access,
             tenant_scope,
             span: start.join(end),
         })
+    }
+
+    fn at_table_states_block(&self) -> bool {
+        if !self.at_word("states") {
+            return false;
+        }
+        let Some(column_token) = self.tokens.get(self.pos + 1) else {
+            return false;
+        };
+        if !matches!(column_token.kind, TokenKind::Ident(_)) {
+            return false;
+        }
+        self.tokens
+            .get(self.pos + 2)
+            .is_some_and(|token| token.kind == TokenKind::LBrace)
+    }
+
+    fn table_state_machine_block(&mut self) -> Result<zelyra_ast::TableStateMachineDef, ParseError> {
+        let (_, start) = self.ident("`states`")?;
+        let (column, _) = self.field_ident("state column name")?;
+        self.expect(TokenKind::LBrace, "`{` after state column name")?;
+        let mut transitions = Vec::new();
+        self.skip_newlines();
+        while !self.at(&TokenKind::RBrace) && !self.at(&TokenKind::Eof) {
+            let (from, from_span) = self.state_label("state name")?;
+            self.expect(TokenKind::Arrow, "`->` after state name")?;
+            let (to, is_final, rule_end) = if self.at_word("final") {
+                let (_, final_span) = self.ident("`final`")?;
+                if self.at(&TokenKind::Comma) {
+                    return self.error("`final` cannot be combined with outgoing state transitions");
+                }
+                (Vec::new(), true, final_span)
+            } else {
+                let mut targets = Vec::new();
+                let (first, mut last_span) = self.state_label("target state name")?;
+                if first == "final" {
+                    return self.error("`final` cannot be used as a transition target");
+                }
+                targets.push(first);
+                while self.at(&TokenKind::Comma) {
+                    self.advance();
+                    self.skip_newlines();
+                    let (target, target_span) = self.state_label("target state name")?;
+                    if target == "final" {
+                        return self.error("`final` cannot be combined with outgoing state transitions");
+                    }
+                    last_span = target_span;
+                    targets.push(target);
+                }
+                (targets, false, last_span)
+            };
+            transitions.push(zelyra_ast::TableStateTransitionDef {
+                from,
+                to,
+                is_final,
+                span: from_span.join(rule_end),
+            });
+            self.skip_newlines();
+        }
+        let end = self.expect(TokenKind::RBrace, "`}` after states block")?;
+        Ok(zelyra_ast::TableStateMachineDef {
+            column,
+            transitions,
+            span: start.join(end),
+        })
+    }
+
+    fn state_label(&mut self, label: &str) -> Result<(String, Span), ParseError> {
+        match self.current().kind.clone() {
+            TokenKind::Ident(name) => {
+                let span = self.current().span;
+                self.advance();
+                Ok((name, span))
+            }
+            TokenKind::String(value) if !value.trim().is_empty() => {
+                let span = self.current().span;
+                self.advance();
+                Ok((value, span))
+            }
+            _ => self.error(format!("expected {label}")),
+        }
     }
 
     fn table_validation_block(

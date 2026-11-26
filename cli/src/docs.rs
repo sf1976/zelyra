@@ -6,6 +6,51 @@ use zelyra_ast::Type;
 
 use super::json_escape;
 
+pub(super) fn format_state_diagrams(program: &zelyra_ast::Program) -> String {
+    let mut output = String::new();
+    let mut count = 0usize;
+    for table in &program.tables {
+        for machine in &table.state_machines {
+            count += 1;
+            writeln!(output, "## {}.{}\n", table.name, machine.column)
+                .expect("writing to String cannot fail");
+            output.push_str("```mermaid\nstateDiagram-v2\n");
+            if let Some(initial) = machine.initial_state(table) {
+                writeln!(output, "    [*] --> {}", mermaid_state_id(initial))
+                    .expect("writing to String cannot fail");
+            }
+            for rule in &machine.transitions {
+                let from_id = mermaid_state_id(&rule.from);
+                if rule.is_final {
+                    writeln!(output, "    {from_id} --> [*]")
+                        .expect("writing to String cannot fail");
+                } else {
+                    for target in &rule.to {
+                        writeln!(output, "    {from_id} --> {}", mermaid_state_id(target))
+                            .expect("writing to String cannot fail");
+                    }
+                }
+            }
+            output.push_str("```\n\n");
+        }
+    }
+    if count == 0 {
+        output.push_str("No declarative table state machines (`states`) declared.\n");
+    }
+    output
+}
+
+fn mermaid_state_id(state: &str) -> String {
+    if state
+        .chars()
+        .all(|ch| ch.is_ascii_alphanumeric() || ch == '_')
+    {
+        state.to_owned()
+    } else {
+        format!("\"{}\"", state.replace('"', "\\\""))
+    }
+}
+
 pub(super) fn format_openapi(program: &zelyra_ast::Program) -> String {
     let paths = program
         .apis
@@ -207,11 +252,23 @@ fn format_openapi_components(program: &zelyra_ast::Program) -> String {
             .columns
             .iter()
             .map(|column| {
-                format!(
-                    "\"{}\":{}",
-                    json_escape(&column.name),
-                    openapi_schema(&column.ty)
-                )
+                let mut schema = openapi_schema(&column.ty);
+                if let Some(machine) = table
+                    .state_machines
+                    .iter()
+                    .find(|machine| machine.column == column.name)
+                {
+                    if let Some(prefix) = schema.strip_suffix('}') {
+                        let states = machine
+                            .states()
+                            .into_iter()
+                            .map(|state| format!("\"{}\"", json_escape(state)))
+                            .collect::<Vec<_>>()
+                            .join(",");
+                        schema = format!("{prefix},\"enum\":[{states}]}}");
+                    }
+                }
+                format!("\"{}\":{}", json_escape(&column.name), schema)
             })
             .collect::<Vec<_>>();
         let required = table

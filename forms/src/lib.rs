@@ -1690,6 +1690,7 @@ mod tests {
             tables: vec![TableDef {
                 name: "documents".into(),
                 validations: Vec::new(),
+                state_machines: Vec::new(),
                 indexes: Vec::new(),
                 uniques: Vec::new(),
                 access: zelyra_ast::TableAccessDef::default(),
@@ -2334,6 +2335,7 @@ mod tests {
         let table = TableDef {
             name: "customers".into(),
             validations: Vec::new(),
+            state_machines: Vec::new(),
             tenant_scope: None,
             columns: vec![ColumnDef {
                 name: "name".into(),

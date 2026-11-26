@@ -89,6 +89,7 @@ fn number_series_allocator_is_atomic_and_scoped_per_tenant() {
             span: zelyra_ast::Span::default(),
         }],
         validations: Vec::new(),
+        state_machines: Vec::new(),
         indexes: Vec::new(),
         uniques: Vec::new(),
         access: zelyra_ast::TableAccessDef::default(),
@@ -1218,6 +1219,7 @@ fn child_collection_form_route() -> FormRoute {
             name: "invoice_items".into(),
             columns: Vec::new(),
             validations: Vec::new(),
+            state_machines: Vec::new(),
             indexes: Vec::new(),
             uniques: Vec::new(),
             access: Default::default(),
@@ -1351,6 +1353,7 @@ fn legacy_invoice_number_generation_remains_for_fields_without_a_sequence() {
             span: zelyra_ast::Span::default(),
         }],
         validations: Vec::new(),
+        state_machines: Vec::new(),
         indexes: Vec::new(),
         uniques: Vec::new(),
         access: zelyra_ast::TableAccessDef::default(),
@@ -2389,6 +2392,7 @@ fn relation_form_route() -> FormRoute {
     route.table = Some(zelyra_ast::TableDef {
         name: "customers".into(),
         validations: Vec::new(),
+        state_machines: Vec::new(),
         tenant_scope: None,
         columns: vec![zelyra_ast::ColumnDef {
             name: "department".into(),
@@ -2455,6 +2459,7 @@ fn formats_crud_audit_changes_without_exposing_sensitive_values() {
     route.table = Some(zelyra_ast::TableDef {
         name: "customers".into(),
         validations: Vec::new(),
+        state_machines: Vec::new(),
         tenant_scope: None,
         columns: Vec::new(),
         indexes: Vec::new(),
@@ -7765,4 +7770,88 @@ fn crud_row_policy_evaluation_distinguishes_guard_and_conditional_permission() {
     let locked_html = render_policy_row("draft", true);
     assert!(!locked_html.contains("/invoices/7/edit"));
     assert!(!locked_html.contains(">Delete</button>"));
+}
+
+#[test]
+fn table_state_machine_renders_legal_next_states_and_rejects_invalid_values() {
+    let source = r#"
+        database main { engine: mariadb }
+        table sales_orders {
+            id: Id primary auto
+            order_number: String(40) required
+            status: String(24) default "draft"
+            states status {
+                draft -> confirmed, cancelled
+                confirmed -> paid
+                paid -> final
+                cancelled -> final
+            }
+        }
+        crud SalesOrder -> sales_orders {
+            view { fields { order_number status } }
+        }
+        fn main() {}
+    "#;
+    let program = zelyra_parser::parse(&zelyra_lexer::lex(source).unwrap()).unwrap();
+    let table = program.tables[0].clone();
+
+    let mut create_route = form_route();
+    create_route.form.name = "SalesOrderCreate".into();
+    create_route.form.table = Some("sales_orders".into());
+    create_route.form.fields = vec![zelyra_ast::FormField {
+        name: "status".into(),
+        label: Some("Status".into()),
+        ty: Some(Type::String),
+        required: true,
+        min_length: None,
+        max: Some(24),
+        min_value: None,
+        max_value: None,
+        choices: Vec::new(),
+        file_upload: None,
+        readonly: false,
+        placeholder: None,
+        widget: None,
+        appearance: None,
+        span: zelyra_ast::Span::default(),
+    }];
+    create_route.table = Some(table.clone());
+
+    let create_html = render_form(&create_route, &HashMap::new(), &[], None);
+    assert!(create_html.contains("<select"));
+    assert!(create_html.contains("<option value=\"draft\" selected>draft</option>"));
+    assert!(create_html.contains("<option value=\"confirmed\">confirmed</option>"));
+
+    let mut edit_route = create_route.clone();
+    edit_route.form.name = "SalesOrderEdit".into();
+    let confirmed_values = HashMap::from([("status".into(), "confirmed".into())]);
+    let edit_html = render_form(&edit_route, &confirmed_values, &[], None);
+    assert!(edit_html.contains("<option value=\"confirmed\" selected>confirmed</option>"));
+    assert!(edit_html.contains("<option value=\"paid\">paid</option>"));
+    assert!(
+        !edit_html.contains("<option value=\"draft\""),
+        "edit form must not offer illegal transition back to draft: {edit_html}"
+    );
+
+    let paid_values = HashMap::from([("status".into(), "paid".into())]);
+    let final_html = render_form(&edit_route, &paid_values, &[], None);
+    assert!(final_html.contains("<option value=\"paid\" selected>paid</option>"));
+    assert!(!final_html.contains("<option value=\"confirmed\""));
+
+    let api_errors = validate_table_runtime_values(
+        &program,
+        &[],
+        "sales_orders",
+        &HashMap::from([
+            ("order_number".into(), RuntimeValue::String("SO-1".into())),
+            ("status".into(), RuntimeValue::String("bogus".into())),
+        ]),
+    )
+    .unwrap();
+    assert!(
+        api_errors
+            .iter()
+            .any(|message| message.contains("invalid state `bogus`")),
+        "api_errors: {api_errors:?}"
+    );
 }
