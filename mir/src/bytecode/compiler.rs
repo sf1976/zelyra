@@ -722,9 +722,10 @@ fn block_stack_height_at(
             BytecodeOp::BuildArray { items } | BytecodeOp::BuildTuple { items } => {
                 (height.saturating_sub(*items) + 1, vec![pc + 1])
             }
-            BytecodeOp::BuildMap { entries, .. } => {
-                (height.saturating_sub(entries.saturating_mul(2)) + 1, vec![pc + 1])
-            }
+            BytecodeOp::BuildMap { entries, .. } => (
+                height.saturating_sub(entries.saturating_mul(2)) + 1,
+                vec![pc + 1],
+            ),
             BytecodeOp::BuildRecord { fields, .. } => {
                 (height.saturating_sub(fields.len()) + 1, vec![pc + 1])
             }

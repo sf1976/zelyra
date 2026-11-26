@@ -2884,8 +2884,9 @@ impl<'a> Parser<'a> {
             let (to, is_final, guard, rule_end) = if self.at_word("final") {
                 let (_, final_span) = self.ident("`final`")?;
                 if self.at(&TokenKind::Comma) || self.at_word("when") {
-                    return self
-                        .error("`final` cannot be combined with outgoing state transitions or guards");
+                    return self.error(
+                        "`final` cannot be combined with outgoing state transitions or guards",
+                    );
                 }
                 (Vec::new(), true, None, final_span)
             } else {
@@ -2914,8 +2915,9 @@ impl<'a> Parser<'a> {
                         self.skip_newlines();
                         let (target, target_span) = self.state_label("target state name")?;
                         if target == "final" {
-                            return self
-                                .error("`final` cannot be combined with outgoing state transitions");
+                            return self.error(
+                                "`final` cannot be combined with outgoing state transitions",
+                            );
                         }
                         last_span = target_span;
                         targets.push(target);

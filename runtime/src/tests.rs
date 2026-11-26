@@ -6861,9 +6861,9 @@ fn try_operator_type_checks_result_option_and_rejects_mismatched_return_types() 
     .unwrap();
     let errors = check(&wrong_return).unwrap_err();
     assert!(
-        errors
-            .iter()
-            .any(|err| err.message.contains("requires the enclosing function to return `Result`")),
+        errors.iter().any(|err| err
+            .message
+            .contains("requires the enclosing function to return `Result`")),
         "{errors:?}"
     );
 
@@ -6894,9 +6894,9 @@ fn try_operator_type_checks_result_option_and_rejects_mismatched_return_types() 
     .unwrap();
     let errors = check(&non_result).unwrap_err();
     assert!(
-        errors
-            .iter()
-            .any(|err| err.message.contains("`?` operator requires `Result` or `Option`")),
+        errors.iter().any(|err| err
+            .message
+            .contains("`?` operator requires `Result` or `Option`")),
         "{errors:?}"
     );
 }

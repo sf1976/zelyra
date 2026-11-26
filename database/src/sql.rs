@@ -3253,8 +3253,10 @@ pub fn verify_tenant_scoped_select(
         }
     }
 
-    let single_table_qualifier = (table_refs.len() == 1).then_some(table_refs[0].qualifier.as_str());
-    let where_equalities = extract_conjunctive_tenant_equalities(&where_tokens, single_table_qualifier);
+    let single_table_qualifier =
+        (table_refs.len() == 1).then_some(table_refs[0].qualifier.as_str());
+    let where_equalities =
+        extract_conjunctive_tenant_equalities(&where_tokens, single_table_qualifier);
 
     let mut bound_param: Option<String> = None;
     for table_ref in &table_refs {
@@ -3264,8 +3266,7 @@ pub fn verify_tenant_scoped_select(
         else {
             continue;
         };
-        let on_equalities =
-            extract_conjunctive_tenant_equalities(&table_ref.on_tokens, None);
+        let on_equalities = extract_conjunctive_tenant_equalities(&table_ref.on_tokens, None);
         let candidate_equalities: Vec<&(String, String, String)> = match table_ref.join_kind {
             TenantJoinKind::Left => on_equalities.iter().collect(),
             TenantJoinKind::From | TenantJoinKind::Inner => where_equalities

@@ -379,11 +379,12 @@ impl Checker<'_> {
             }
             ExprKind::Try(inner) => {
                 let inner_type = self.check_expr(inner, scopes);
-                let expanded_inner = expand_type_aliases(&inner_type, &self.type_aliases)
-                    .unwrap_or(inner_type);
-                let enclosing_return = self.current_return_type.clone().map(|ty| {
-                    expand_type_aliases(&ty, &self.type_aliases).unwrap_or(ty)
-                });
+                let expanded_inner =
+                    expand_type_aliases(&inner_type, &self.type_aliases).unwrap_or(inner_type);
+                let enclosing_return = self
+                    .current_return_type
+                    .clone()
+                    .map(|ty| expand_type_aliases(&ty, &self.type_aliases).unwrap_or(ty));
                 match expanded_inner {
                     Type::Result(ok, err) => {
                         match enclosing_return {

@@ -7493,15 +7493,13 @@ fn main() -> Int {
         ] {
             let bytecode = crate::bytecode::compile(&mir, func).unwrap();
             crate::bytecode::verify_bytecode(&bytecode).unwrap();
-            let ast_val =
-                zelyra_runtime::execute_function(&ast, func, args.clone(), None).unwrap();
+            let ast_val = zelyra_runtime::execute_function(&ast, func, args.clone(), None).unwrap();
             let mir_val = execute_function(&mir, func, args.clone(), ExecutionLimits::default())
                 .unwrap()
                 .value;
-            let bc_val =
-                crate::bytecode::execute(&bytecode, args, ExecutionLimits::default())
-                    .unwrap()
-                    .value;
+            let bc_val = crate::bytecode::execute(&bytecode, args, ExecutionLimits::default())
+                .unwrap()
+                .value;
             assert_eq!(ast_val, expected, "AST mismatch for {func}");
             assert_eq!(mir_val, expected, "MIR mismatch for {func}");
             assert_eq!(bc_val, expected, "Bytecode mismatch for {func}");
