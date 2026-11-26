@@ -7913,10 +7913,7 @@ fn typed_form_and_crud_action_lowering_binds_fields_route_params_and_session() {
     let form_mapping = &app.form_action_functions[0];
     assert_eq!(
         form_mapping.field_params,
-        vec![
-            ("name".into(), Type::String),
-            ("active".into(), Type::Bool),
-        ]
+        vec![("name".into(), Type::String), ("active".into(), Type::Bool),]
     );
     assert_eq!(form_mapping.path_params, vec![("org".into(), Type::String)]);
     assert!(form_mapping.has_session_param);

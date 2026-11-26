@@ -348,10 +348,8 @@ impl<'program, 'services> Interpreter<'program, 'services> {
             }
             Stmt::Transaction { body, span } => {
                 if body.statements.is_empty() {
-                    return Err(self.runtime_error(
-                        *span,
-                        "transaction must contain at least one statement",
-                    ));
+                    return Err(self
+                        .runtime_error(*span, "transaction must contain at least one statement"));
                 }
                 let simple_batch = body.statements.iter().all(|statement| match statement {
                     Stmt::Expr(Expr {
@@ -466,7 +464,10 @@ impl<'program, 'services> Interpreter<'program, 'services> {
                         output: std::mem::take(&mut self.output),
                         next_class_object_id: Arc::clone(&self.next_class_object_id),
                         parallel_worker: self.parallel_worker,
-                        step_budget: std::mem::replace(&mut self.step_budget, StepBudget::new(None)),
+                        step_budget: std::mem::replace(
+                            &mut self.step_budget,
+                            StepBudget::new(None),
+                        ),
                         call_depth_limit: self.call_depth_limit,
                         call_depth: self.call_depth,
                         database_url: self.database_url.clone(),
@@ -517,7 +518,9 @@ impl<'program, 'services> Interpreter<'program, 'services> {
                         *span,
                         format!(
                             "database transaction failed: {}",
-                            tx_result.err().unwrap_or_else(|| "transaction did not execute".into())
+                            tx_result
+                                .err()
+                                .unwrap_or_else(|| "transaction did not execute".into())
                         ),
                     )),
                 }

@@ -13377,20 +13377,22 @@ fn execute_form_action_with_children(
     if action.execute_body.is_some() || action.guard.is_some() {
         if action.guard.is_none()
             && validation_program.is_some_and(|program| {
-                program.forms.iter().enumerate().any(|(form_index, candidate)| {
-                    candidate.name == form.form.name
-                        && candidate
-                            .actions
-                            .iter()
-                            .enumerate()
-                            .any(|(action_index, candidate_action)| {
-                                candidate_action.name == action.name
-                                    && form_action_functions.iter().any(|mapping| {
-                                        mapping.form_index == form_index
-                                            && mapping.action_index == action_index
-                                    })
-                            })
-                })
+                program
+                    .forms
+                    .iter()
+                    .enumerate()
+                    .any(|(form_index, candidate)| {
+                        candidate.name == form.form.name
+                            && candidate.actions.iter().enumerate().any(
+                                |(action_index, candidate_action)| {
+                                    candidate_action.name == action.name
+                                        && form_action_functions.iter().any(|mapping| {
+                                            mapping.form_index == form_index
+                                                && mapping.action_index == action_index
+                                        })
+                                },
+                            )
+                    })
             })
         {
             return execute_typed_form_action(
@@ -14344,9 +14346,12 @@ fn runtime_value_for_form_field(
     field_ty: &Type,
     submitted: Option<&str>,
 ) -> Result<RuntimeValue, String> {
-    if let Some(column) =
-        table.and_then(|table| table.columns.iter().find(|column| column.name == field_name))
-    {
+    if let Some(column) = table.and_then(|table| {
+        table
+            .columns
+            .iter()
+            .find(|column| column.name == field_name)
+    }) {
         if column.ty == *field_ty {
             if submitted.is_none() && matches!(field_ty, Type::Bool) && column.default.is_none() {
                 return Ok(RuntimeValue::Bool(false));
@@ -14414,9 +14419,9 @@ fn execute_typed_form_action(
         )?);
     }
     for (param_name, param_ty) in &mapping.path_params {
-        let raw = path_params
-            .get(param_name)
-            .ok_or_else(|| format!("missing route parameter `{param_name}` for typed form action"))?;
+        let raw = path_params.get(param_name).ok_or_else(|| {
+            format!("missing route parameter `{param_name}` for typed form action")
+        })?;
         args.push(runtime_value_for_type(program, param_ty, raw)?);
     }
     if mapping.has_session_param {
@@ -14443,7 +14448,8 @@ fn execute_typed_form_action(
     zelyra_database::with_decision_transaction(database_url, |transaction| {
         if let Some(context) = tenant_context {
             let mut authorized = false;
-            for query in tenant_access_queries(context, is_postgres, Some(context.tenant_id), true) {
+            for query in tenant_access_queries(context, is_postgres, Some(context.tenant_id), true)
+            {
                 if !transaction.execute(&query)?.rows.is_empty() {
                     authorized = true;
                     break;
@@ -14451,12 +14457,16 @@ fn execute_typed_form_action(
             }
             if !authorized {
                 return Err(zelyra_database::DatabaseError {
-                    message: "ZELYRA_TENANT_DENIED: tenant ownership or membership is no longer valid".into(),
+                    message:
+                        "ZELYRA_TENANT_DENIED: tenant ownership or membership is no longer valid"
+                            .into(),
                 });
             }
         }
         let mut query = |query: &zelyra_database::Query| {
-            transaction.execute(query).map_err(|error| error.to_string())
+            transaction
+                .execute(query)
+                .map_err(|error| error.to_string())
         };
         let outcome = zelyra_runtime::execute_function_captured_with_transactional_query(
             program,

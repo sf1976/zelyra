@@ -1163,7 +1163,10 @@ fn format_template_type(ty: &zelyra_ast::Type) -> String {
     }
 }
 
-fn qualify_schema_types(module_source: &mut String, schema_type_names: &HashSet<String>) -> Result<(), String> {
+fn qualify_schema_types(
+    module_source: &mut String,
+    schema_type_names: &HashSet<String>,
+) -> Result<(), String> {
     if schema_type_names.is_empty() {
         return Ok(());
     }
@@ -1309,23 +1312,22 @@ fn canonical_template_modules(source: &str) -> Result<CanonicalTemplateModules, 
             command.is_some() && command != Some("SELECT")
         })
     };
-    let resolve_field_type = |table: Option<&zelyra_ast::TableDef>,
-                              field: &zelyra_ast::FormField|
-     -> zelyra_ast::Type {
-        field
-            .ty
-            .clone()
-            .or_else(|| {
-                table.and_then(|table| {
-                    table
-                        .columns
-                        .iter()
-                        .find(|column| column.name == field.name)
-                        .map(|column| column.ty.clone())
+    let resolve_field_type =
+        |table: Option<&zelyra_ast::TableDef>, field: &zelyra_ast::FormField| -> zelyra_ast::Type {
+            field
+                .ty
+                .clone()
+                .or_else(|| {
+                    table.and_then(|table| {
+                        table
+                            .columns
+                            .iter()
+                            .find(|column| column.name == field.name)
+                            .map(|column| column.ty.clone())
+                    })
                 })
-            })
-            .unwrap_or(zelyra_ast::Type::String)
-    };
+                .unwrap_or(zelyra_ast::Type::String)
+        };
 
     for form in &program.forms {
         let table = form

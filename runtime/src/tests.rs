@@ -6757,8 +6757,7 @@ fn main() uses Random, FileSystem {
 #[test]
 fn verifier_proves_sound_state_machines_and_rejects_unreachable_or_trapped_states() {
     let sound = parse(
-        &lex(
-            r#"
+        &lex(r#"
             table orders {
                 id: Id primary auto
                 status: String(24) default "draft"
@@ -6770,8 +6769,7 @@ fn verifier_proves_sound_state_machines_and_rejects_unreachable_or_trapped_state
                 }
             }
             fn main() {}
-        "#,
-        )
+        "#)
         .unwrap(),
     )
     .unwrap();
@@ -6782,8 +6780,7 @@ fn verifier_proves_sound_state_machines_and_rejects_unreachable_or_trapped_state
             && result.status == VerificationStatus::Proven));
 
     let unreachable = parse(
-        &lex(
-            r#"
+        &lex(r#"
             table orders {
                 id: Id primary auto
                 status: String(24) default "draft"
@@ -6794,8 +6791,7 @@ fn verifier_proves_sound_state_machines_and_rejects_unreachable_or_trapped_state
                 }
             }
             fn main() {}
-        "#,
-        )
+        "#)
         .unwrap(),
     )
     .unwrap();
@@ -6808,8 +6804,7 @@ fn verifier_proves_sound_state_machines_and_rejects_unreachable_or_trapped_state
     }));
 
     let trapped = parse(
-        &lex(
-            r#"
+        &lex(r#"
             table orders {
                 id: Id primary auto
                 status: String(24) default "draft"
@@ -6821,8 +6816,7 @@ fn verifier_proves_sound_state_machines_and_rejects_unreachable_or_trapped_state
                 }
             }
             fn main() {}
-        "#,
-        )
+        "#)
         .unwrap(),
     )
     .unwrap();

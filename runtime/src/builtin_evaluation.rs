@@ -1494,7 +1494,9 @@ impl<'program, 'services> Interpreter<'program, 'services> {
             self.http_request(&method, &url, &header_strings, body.as_deref(), span)
         } else if name == "mail_queue" {
             if self.transactional_query.is_none() && self.database_transaction.is_none() {
-                return Err(self.runtime_error(span, "mail_queue is only allowed inside a transaction"));
+                return Err(
+                    self.runtime_error(span, "mail_queue is only allowed inside a transaction")
+                );
             }
             if !matches!(args.len(), 3..=6) {
                 return Err(self.runtime_error(
@@ -1502,7 +1504,10 @@ impl<'program, 'services> Interpreter<'program, 'services> {
                     "mail_queue expects recipient, subject, text body, optional HTML body, and optional PDF filename and Bytes",
                 ));
             }
-            if args.iter().any(|argument| !is_pure_mail_expression(argument)) {
+            if args
+                .iter()
+                .any(|argument| !is_pure_mail_expression(argument))
+            {
                 return Err(self.runtime_error(
                     span,
                     "mail_queue arguments must be values or pure expressions; PDF attachments must use render_pdf",
@@ -1530,7 +1535,10 @@ impl<'program, 'services> Interpreter<'program, 'services> {
             for argument in args {
                 evaluated.push(self.eval(argument, env)?);
             }
-            let argument_spans = args.iter().map(|argument| argument.span).collect::<Vec<_>>();
+            let argument_spans = args
+                .iter()
+                .map(|argument| argument.span)
+                .collect::<Vec<_>>();
             let query = prepare_mail_queue_query(
                 &evaluated,
                 &argument_spans,

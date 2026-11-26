@@ -4676,8 +4676,8 @@ fn deeply_nested_module_calls_stop_at_the_controlled_runtime_limit() {
         "{stderr}"
     );
     assert!(
-        stderr.contains("main.zyl"),
-        "diagnostic should include a source location: {stderr}"
+        stderr.contains("src/m18.zyl:2:"),
+        "diagnostic should include the failing module source location: {stderr}"
     );
     fs::remove_dir_all(directory).unwrap();
 }

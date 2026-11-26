@@ -3588,10 +3588,9 @@ fn main() {}
         verify(&mir).expect("decision transaction verifies");
         assert!(mir.functions.iter().any(|function| {
             function.blocks.iter().any(|block| {
-                block
-                    .instructions
-                    .iter()
-                    .any(|instruction| matches!(instruction, MirInstruction::DecisionTransaction { .. }))
+                block.instructions.iter().any(|instruction| {
+                    matches!(instruction, MirInstruction::DecisionTransaction { .. })
+                })
             })
         }));
     }

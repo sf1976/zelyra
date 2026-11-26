@@ -5275,10 +5275,20 @@ fn new_standard_strict_templates_pass_check_and_allow_tests_subdir() {
     for (label, extra_args, expects_domain_actions) in [
         ("minimal", vec![], false),
         ("mariadb-crud", vec!["--template", "mariadb-crud"], true),
-        ("mariadb-business", vec!["--template", "mariadb-business"], true),
+        (
+            "mariadb-business",
+            vec!["--template", "mariadb-business"],
+            true,
+        ),
     ] {
         let directory = temporary_directory(&format!("new-standard-strict-{label}"));
-        let mut args = vec!["new", directory.to_str().unwrap(), "--layout", "standard", "--strict"];
+        let mut args = vec![
+            "new",
+            directory.to_str().unwrap(),
+            "--layout",
+            "standard",
+            "--strict",
+        ];
         args.extend(extra_args);
         let created = Command::new(binary()).args(&args).output().unwrap();
         assert!(
@@ -5361,7 +5371,11 @@ fn standalone_form_typed_execute_checks_capabilities_architecture_and_rejects_gu
         .args(["check", entry.to_str().unwrap()])
         .output()
         .unwrap();
-    assert!(ok.status.success(), "{}", String::from_utf8_lossy(&ok.stderr));
+    assert!(
+        ok.status.success(),
+        "{}",
+        String::from_utf8_lossy(&ok.stderr)
+    );
 
     // Negative 1: missing `uses Database(write)` on standalone form execute fails with E-CAP-001.
     fs::write(

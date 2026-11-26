@@ -340,9 +340,8 @@ fn failed_outcome(error: RuntimeError) -> ExecutionOutcome {
     }
 }
 
-type MirTransactionalQuery<'tx> = dyn FnMut(&zelyra_database::Query) -> Result<zelyra_database::QueryResult, String>
-    + Send
-    + 'tx;
+type MirTransactionalQuery<'tx> =
+    dyn FnMut(&zelyra_database::Query) -> Result<zelyra_database::QueryResult, String> + Send + 'tx;
 
 enum BlockExit {
     ReachedStop,
@@ -818,11 +817,11 @@ impl<'program, 'tx> Machine<'program, 'tx> {
             }
         }
 
-        let result = match self.execute_blocks(function, function.entry, None, &mut locals, depth)?
-        {
-            BlockExit::Returned(value) => value,
-            BlockExit::ReachedStop => Value::Unit,
-        };
+        let result =
+            match self.execute_blocks(function, function.entry, None, &mut locals, depth)? {
+                BlockExit::Returned(value) => value,
+                BlockExit::ReachedStop => Value::Unit,
+            };
 
         if !function.ensures.is_empty() {
             locals.insert(function.contract_result_local, result.clone());
@@ -909,7 +908,10 @@ impl<'program, 'tx> Machine<'program, 'tx> {
                             Some(other) => {
                                 return Err(runtime_error(
                                     *span,
-                                    format!("indexed assignment requires Array, got `{}`", other.ty()),
+                                    format!(
+                                        "indexed assignment requires Array, got `{}`",
+                                        other.ty()
+                                    ),
                                 ));
                             }
                             None => {
@@ -2181,9 +2183,13 @@ impl<'program, 'tx> Machine<'program, 'tx> {
                     span,
                     self.host_services.as_ref(),
                 )?;
-                let tx = self.transactional_query.as_deref_mut().expect("checked above");
-                tx(&query)
-                    .map_err(|error| runtime_error(span, format!("database transaction failed: {error}")))?;
+                let tx = self
+                    .transactional_query
+                    .as_deref_mut()
+                    .expect("checked above");
+                tx(&query).map_err(|error| {
+                    runtime_error(span, format!("database transaction failed: {error}"))
+                })?;
                 Ok(Value::Unit)
             }
             "mail_deliver" => {
@@ -7239,12 +7245,7 @@ fn main() -> Int {
             fn run_database_transaction(
                 &self,
                 _database_url: &str,
-                operation: &mut dyn FnMut(
-                    &mut (dyn FnMut(
-                        &zelyra_database::Query,
-                    ) -> Result<zelyra_database::QueryResult, String>
-                              + Send),
-                ) -> Result<(), String>,
+                operation: &mut zelyra_runtime::DatabaseTransactionOperation<'_>,
             ) -> Result<(), String> {
                 let mut staged = *self.committed_balance.lock().unwrap();
                 let mut exec = |query: &zelyra_database::Query| -> Result<zelyra_database::QueryResult, String> {
@@ -7307,9 +7308,10 @@ fn main() -> Int {
         let grants = HashSet::from(["Database".to_owned()]);
         let url = "mariadb://user:secret@127.0.0.1:3306/decision_test";
 
-        for (amount, expect_ok, expected_balance, expected_commits, expected_rollbacks) in
-            [(40_i64, true, 60_i64, 1_usize, 0_usize), (150, false, 100, 0, 1)]
-        {
+        for (amount, expect_ok, expected_balance, expected_commits, expected_rollbacks) in [
+            (40_i64, true, 60_i64, 1_usize, 0_usize),
+            (150, false, 100, 0, 1),
+        ] {
             let ast_host = Arc::new(InMemoryDecisionHost {
                 committed_balance: Mutex::new(100),
                 commits: AtomicUsize::new(0),
@@ -7348,12 +7350,24 @@ fn main() -> Int {
             .value;
             assert_eq!(mir_val, ast_val);
             assert_eq!(matches!(ast_val, Value::Result(Ok(_))), expect_ok);
-            assert_eq!(*ast_host.committed_balance.lock().unwrap(), expected_balance);
-            assert_eq!(*mir_host.committed_balance.lock().unwrap(), expected_balance);
+            assert_eq!(
+                *ast_host.committed_balance.lock().unwrap(),
+                expected_balance
+            );
+            assert_eq!(
+                *mir_host.committed_balance.lock().unwrap(),
+                expected_balance
+            );
             assert_eq!(ast_host.commits.load(Ordering::SeqCst), expected_commits);
             assert_eq!(mir_host.commits.load(Ordering::SeqCst), expected_commits);
-            assert_eq!(ast_host.rollbacks.load(Ordering::SeqCst), expected_rollbacks);
-            assert_eq!(mir_host.rollbacks.load(Ordering::SeqCst), expected_rollbacks);
+            assert_eq!(
+                ast_host.rollbacks.load(Ordering::SeqCst),
+                expected_rollbacks
+            );
+            assert_eq!(
+                mir_host.rollbacks.load(Ordering::SeqCst),
+                expected_rollbacks
+            );
         }
     }
 }

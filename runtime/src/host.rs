@@ -199,10 +199,7 @@ pub trait HostServices: Send + Sync {
     fn run_database_transaction(
         &self,
         _database_url: &str,
-        _operation: &mut dyn FnMut(
-            &mut (dyn FnMut(&zelyra_database::Query) -> Result<zelyra_database::QueryResult, String>
-                      + Send),
-        ) -> Result<(), String>,
+        _operation: &mut DatabaseTransactionOperation<'_>,
     ) -> Result<(), String> {
         Err("interactive decision transactions are unavailable in this host".into())
     }
@@ -224,6 +221,14 @@ pub trait HostServices: Send + Sync {
         }
     }
 }
+
+/// Query callback passed to a decision transaction body.
+pub type DatabaseTransactionQueryFn<'a> =
+    dyn FnMut(&zelyra_database::Query) -> Result<zelyra_database::QueryResult, String> + Send + 'a;
+
+/// Callback executed inside a host-managed decision transaction.
+pub type DatabaseTransactionOperation<'a> =
+    dyn FnMut(&mut DatabaseTransactionQueryFn<'_>) -> Result<(), String> + 'a;
 
 /// Host implementation used by existing Zelyra APIs.
 #[derive(Clone, Copy, Debug, Default)]
@@ -470,14 +475,13 @@ impl HostServices for SystemHostServices {
     fn run_database_transaction(
         &self,
         database_url: &str,
-        operation: &mut dyn FnMut(
-            &mut (dyn FnMut(&zelyra_database::Query) -> Result<zelyra_database::QueryResult, String>
-                      + Send),
-        ) -> Result<(), String>,
+        operation: &mut DatabaseTransactionOperation<'_>,
     ) -> Result<(), String> {
         zelyra_database::with_decision_transaction(database_url, |transaction| {
             let mut execute = |query: &zelyra_database::Query| {
-                transaction.execute(query).map_err(|error| error.to_string())
+                transaction
+                    .execute(query)
+                    .map_err(|error| error.to_string())
             };
             operation(&mut execute).map_err(|message| zelyra_database::DatabaseError { message })
         })

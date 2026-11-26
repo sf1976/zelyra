@@ -2870,7 +2870,9 @@ impl<'a> Parser<'a> {
             .is_some_and(|token| token.kind == TokenKind::LBrace)
     }
 
-    fn table_state_machine_block(&mut self) -> Result<zelyra_ast::TableStateMachineDef, ParseError> {
+    fn table_state_machine_block(
+        &mut self,
+    ) -> Result<zelyra_ast::TableStateMachineDef, ParseError> {
         let (_, start) = self.ident("`states`")?;
         let (column, _) = self.field_ident("state column name")?;
         self.expect(TokenKind::LBrace, "`{` after state column name")?;
@@ -2882,7 +2884,8 @@ impl<'a> Parser<'a> {
             let (to, is_final, rule_end) = if self.at_word("final") {
                 let (_, final_span) = self.ident("`final`")?;
                 if self.at(&TokenKind::Comma) {
-                    return self.error("`final` cannot be combined with outgoing state transitions");
+                    return self
+                        .error("`final` cannot be combined with outgoing state transitions");
                 }
                 (Vec::new(), true, final_span)
             } else {
@@ -2897,7 +2900,8 @@ impl<'a> Parser<'a> {
                     self.skip_newlines();
                     let (target, target_span) = self.state_label("target state name")?;
                     if target == "final" {
-                        return self.error("`final` cannot be combined with outgoing state transitions");
+                        return self
+                            .error("`final` cannot be combined with outgoing state transitions");
                     }
                     last_span = target_span;
                     targets.push(target);

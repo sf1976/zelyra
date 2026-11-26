@@ -123,7 +123,16 @@ fn typed_crud_action_bodies_are_checked_in_row_and_session_scope() {
             .unwrap(),
     )
     .unwrap();
-    assert!(!validate_typed_crud_actions(&entry, &standalone));
+    assert!(validate_typed_crud_actions(&entry, &standalone));
+
+    let standalone_guard = zelyra_parser::parse(
+        &zelyra_lexer::lex(
+            "form Example { action run { guard when true { error: \"blocked\" } execute { value = 1 } } } fn main() {}",
+        )
+        .unwrap(),
+    )
+    .unwrap();
+    assert!(!validate_typed_crud_actions(&entry, &standalone_guard));
     fs::remove_dir_all(directory).unwrap();
 }
 

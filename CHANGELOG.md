@@ -1,5 +1,79 @@
 ## Unreleased
 
+## 1.3.5 — Control-flow decision transactions, declarative table state machines, and strict-architecture forms
+
+- Add first-class declarative table state machines (`states <column> { ... }`)
+  inside `table` declarations: schema validation of state sets, defaults, and
+  `String(N)` bounds; static SQL literal checks with typo suggestions; static
+  graph verification in `zelyra verify` (reachability from initial state,
+  no non-final dead ends, reachable `final` states); state-aware `<select>`
+  rendering on create and edit forms; server-side enforcement under row lock
+  with HTTP 422 on illegal transitions; JSON metadata in `zelyra reflect`;
+  OpenAPI `enum` schemas; and Mermaid `stateDiagram-v2` export via
+  `zelyra doc <file.zyl> --states`. / Erstklassige deklarative
+  Tabellen-Zustandsmaschinen (`states <spalte> { ... }`) in `table`-
+  Deklarationen ergänzen: Schemaprüfung von Zuständen, Standardwerten und
+  `String(N)`-Grenzen; statische Prüfung von SQL-Zustandsliteralen samt
+  Tippfehlervorschlägen; statische Graphverifikation in `zelyra verify`
+  (Erreichbarkeit ab Startzustand, keine nicht-finalen Sackgassen,
+  erreichbare `final`-Zustände); zustandsbewusste `<select>`-Ausgabe in
+  Create- und Edit-Formularen; serverseitige Durchsetzung unter Zeilensperre
+  mit HTTP 422 bei unzulässigen Übergängen; JSON-Metadaten in `zelyra reflect`;
+  OpenAPI-`enum`-Schemas und Mermaid-`stateDiagram-v2`-Export über
+  `zelyra doc <file.zyl> --states`.
+- Upgrade `transaction { ... }` blocks to full control-flow decision
+  transactions across the AST and MIR runtimes (`let`, `if`, `match`, `for`,
+  `while`, `loop`, `sql_decode`, helper calls, `mail_queue`, and early
+  `return`) on one pinned database connection with automatic rollback on
+  runtime errors or `return Err(...)`; simple bare-SQL transactions keep their
+  single-batch fast path, and the experimental Bytecode backend fails closed
+  with `E-MIR-UNSUPPORTED-001` for control-flow decision transactions. /
+  `transaction { ... }`-Blöcke im AST- und MIR-Laufzeitpfad zu vollwertigen
+  Entscheidungstransaktionen mit Kontrollfluss (`let`, `if`, `match`, `for`,
+  `while`, `loop`, `sql_decode`, Hilfsfunktionen, `mail_queue` und frühem
+  `return`) auf einer gebundenen Datenbankverbindung samt automatischem
+  Rollback bei Laufzeitfehlern oder `return Err(...)` ausbauen; einfache
+  SQL-Batches behalten ihren bisherigen Pfad, und das experimentelle
+  Bytecode-Backend lehnt Kontrollfluss-Transaktionen geschlossen mit
+  `E-MIR-UNSUPPORTED-001` ab.
+- Support schema-checked SQL upserts (`ON DUPLICATE KEY UPDATE`,
+  `ON CONFLICT (...) DO UPDATE SET`, `VALUES(col)`, `EXCLUDED.col`), row locks
+  (`FOR UPDATE [NOWAIT | SKIP LOCKED]`, `FOR NO KEY UPDATE`), improved English
+  table pluralization (`Address` -> `addresses`, `OrderStatus` ->
+  `order_statuses`, `TaxBatch` -> `tax_batches`, `ApiKey` -> `api_keys`), and
+  deterministic Levenshtein typo hints (`did you mean ...?`) for unknown tables
+  and columns while keeping computed-column upsert safety fail-closed. /
+  Schemageprüfte SQL-Upserts (`ON DUPLICATE KEY UPDATE`,
+  `ON CONFLICT (...) DO UPDATE SET`, `VALUES(col)`, `EXCLUDED.col`),
+  Zeilensperren (`FOR UPDATE [NOWAIT | SKIP LOCKED]`, `FOR NO KEY UPDATE`),
+  verbesserte englische Tabellenpluralisierung (`Address` -> `addresses`,
+  `OrderStatus` -> `order_statuses`, `TaxBatch` -> `tax_batches`,
+  `ApiKey` -> `api_keys`) sowie deterministische Levenshtein-Tippfehlerhinweise
+  (`did you mean ...?`) für unbekannte Tabellen und Spalten ergänzen; die
+  Schutzprüfung für berechnete Spalten bleibt bei Upserts fail-closed.
+- Enable typed `execute { ... }` and `uses` blocks on standalone `form` actions
+  (with form fields, action fields, route parameters, and `session` in scope)
+  and expose declared action `field` inputs inside typed CRUD action blocks;
+  add `zelyra new --layout standard --strict` and lift direct-SQL write actions
+  in canonical database templates into `domain/actions.zyl` so all standard
+  starters pass `strict_architecture = true` out of the box; allow `tests/*.zyl`
+  and built-in `zelyra/ui.zyl` modules under `strict_architecture = true`. /
+  Typisierte `execute { ... }`- und `uses`-Blöcke für eigenständige
+  `form`-Aktionen (mit Formularfeldern, Aktionsfeldern, Routenparametern und
+  `session` im Scope) freischalten und deklarierte Aktionsfelder auch in
+  typisierten CRUD-Aktionen bereitstellen; `zelyra new --layout standard --strict`
+  ergänzen und direkte Schreib-SQL-Aktionen in kanonischen Datenbankvorlagen
+  nach `domain/actions.zyl` auslagern, sodass alle Standard-Starter ab Werk
+  `strict_architecture = true` bestehen; `tests/*.zyl` sowie das eingebaute
+  `zelyra/ui.zyl`-Modul unter `strict_architecture = true` zulassen.
+- Report imported module file paths accurately in MIR, Bytecode, and runtime
+  diagnostics (`diagnostic_with_span`) instead of attributing imported-module
+  errors to the entry file, and remove a duplicate `files` line in the German
+  CLI usage text. / Importierte Modulpfade in MIR-, Bytecode- und
+  Laufzeitdiagnosen korrekt über `diagnostic_with_span` melden statt Fehler
+  importierter Module der Einstiegsdatei zuzuschreiben, und eine doppelte
+  `files`-Zeile in der deutschen CLI-Kurzübersicht entfernen.
+
 ## 1.3.1 — Strict architecture test entry and snake_case SQL result mapping
 
 - Allow root `tests.zyl` as a valid entry module when `strict_architecture = true`

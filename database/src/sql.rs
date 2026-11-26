@@ -2316,18 +2316,19 @@ fn check_upsert_clauses(
     span: Span,
     errors: &mut Vec<SqlError>,
 ) {
-    let target_table_name = tokens
-        .iter()
-        .enumerate()
-        .find_map(|(index, token)| match (token, tokens.get(index + 1)) {
-            (SqlToken::Word(word), Some(SqlToken::Word(name)))
-                if word.eq_ignore_ascii_case("INTO") =>
-            {
-                let lower = name.to_ascii_lowercase();
-                tables.get(&lower).cloned()
-            }
-            _ => None,
-        });
+    let target_table_name =
+        tokens
+            .iter()
+            .enumerate()
+            .find_map(|(index, token)| match (token, tokens.get(index + 1)) {
+                (SqlToken::Word(word), Some(SqlToken::Word(name)))
+                    if word.eq_ignore_ascii_case("INTO") =>
+                {
+                    let lower = name.to_ascii_lowercase();
+                    tables.get(&lower).cloned()
+                }
+                _ => None,
+            });
     let Some(target_table_name) = target_table_name else {
         return;
     };
@@ -2489,8 +2490,11 @@ fn check_upsert_assignments(
                     check_column(col, "VALUES()", errors);
                 }
             }
-            if let (Some(SqlToken::Word(qualifier)), Some(SqlToken::Dot), Some(SqlToken::Word(col))) =
-                (rhs.get(index), rhs.get(index + 1), rhs.get(index + 2))
+            if let (
+                Some(SqlToken::Word(qualifier)),
+                Some(SqlToken::Dot),
+                Some(SqlToken::Word(col)),
+            ) = (rhs.get(index), rhs.get(index + 1), rhs.get(index + 2))
             {
                 if qualifier.eq_ignore_ascii_case("EXCLUDED") {
                     check_column(col, "EXCLUDED", errors);
@@ -3484,7 +3488,9 @@ mod tests {
         );
         assert!(
             errors.iter().any(|error| {
-                error.message.contains("ON CONFLICT target column `warehuse_id`")
+                error
+                    .message
+                    .contains("ON CONFLICT target column `warehuse_id`")
                     && error.message.contains("did you mean `warehouse_id`?")
             }),
             "errors: {errors:?}"
@@ -3613,7 +3619,9 @@ mod tests {
         let errors = check_program(&program, &schema).unwrap_err();
         assert!(
             errors.iter().any(|error| {
-                error.message.contains("not a declared state for `sales_orders.status`")
+                error
+                    .message
+                    .contains("not a declared state for `sales_orders.status`")
                     && error.message.contains("did you mean `confirmed`?")
             }),
             "errors: {errors:?}"
@@ -3632,10 +3640,10 @@ mod tests {
         let program = parse(&lex(invalid_schema).unwrap()).unwrap();
         let errors = build_schema(&program).unwrap_err();
         assert!(
-            errors
-                .iter()
-                .any(|error| error.message.contains("transition target `ghost` is not declared")
-                    || error.message.contains("transition target `ghost`")),
+            errors.iter().any(|error| error
+                .message
+                .contains("transition target `ghost` is not declared")
+                || error.message.contains("transition target `ghost`")),
             "errors: {errors:?}"
         );
         assert!(
