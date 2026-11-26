@@ -1,5 +1,69 @@
 ## Unreleased
 
+## 1.3.6 — `?` error propagation, guarded state transitions, and verified multi-table tenant SQL
+
+- Add the postfix `?` error-propagation operator for `Result<T, E>` and
+  `Option<T>` across the parser, type checker, formatter, AST interpreter, MIR
+  interpreter, and Bytecode VM (compatible with Bytecode v30 without changing
+  the wire format). Using `?` inside `transaction { ... }` on a `Result::Err`
+  triggers an early `Err` return and automatically rolls back the pinned
+  database transaction across AST and MIR. / Den Postfix-Operator `?` zur
+  Fehlerpropagierung für `Result<T, E>` und `Option<T>` in Parser,
+  Typechecker, Formatter, AST-Interpreter, MIR-Interpreter und Bytecode-VM
+  (kompatibel mit Bytecode v30 ohne Formatbruch) ergänzen. Bei `Result::Err`
+  innerhalb von `transaction { ... }` führt `?` zu einem frühen `Err`-Return
+  und rollt die gebundene Datenbanktransaktion in AST und MIR automatisch
+  zurück.
+- Extend declarative table state machines (`states`) with guarded transitions
+  (`from -> to when <expr> : "message"`) and multi-line rules per source state.
+  Guard predicates are statically type-checked (`Bool`) and capability-checked
+  as pure expressions, enforced at runtime under the `SELECT ... FOR UPDATE`
+  row lock with HTTP 422 and the declared business message, exported in
+  `zelyra reflect --format=json` (`"guarded": true`), labeled on Mermaid
+  arrows in `zelyra doc --states`, and reported honestly in `zelyra verify`. /
+  Deklarative Tabellen-Zustandsmaschinen (`states`) um bewachte Übergänge
+  (`from -> to when <expr> : "Meldung"`) und mehrzeilige Regeln je
+  Quellzustand erweitern. Guard-Prädikate werden statisch typgeprüft (`Bool`)
+  und als reine Ausdrücke ohne Effekte geprüft, zur Laufzeit unter
+  `SELECT ... FOR UPDATE` mit HTTP 422 und der deklarierten Fachmeldung
+  durchgesetzt, in `zelyra reflect --format=json` (`"guarded": true`)
+  exportiert, in `zelyra doc --states` auf Mermaid-Pfeilen beschriftet und in
+  `zelyra verify` klar ausgewiesen.
+- Add compiler-verified, fail-closed multi-table tenant-scoped `SELECT` queries
+  (`verify_tenant_scoped_select`) across CLI validation, AST runtime, and MIR
+  verification/execution. Read-only `SELECT` queries joining `tenant_scope`
+  tables via `INNER JOIN` or `LEFT [OUTER] JOIN` (such as campaign-recipient
+  exclusion queries) are permitted when every referenced tenant-scoped table
+  is constrained by a top-level conjunctive equality predicate
+  `<alias>.<tenant_col> = :<param>` (in `LEFT JOIN ... ON` for outer joins)
+  bound to one shared function parameter with the exact nominal `tenant_type`.
+  Writes, subqueries, CTEs, set operations (`UNION`/`INTERSECT`/`EXCEPT`),
+  `RIGHT`/`FULL`/`CROSS` joins, top-level `OR`/`NOT`, non-equality operators,
+  mismatched tenant parameters, raw `Int` parameters, quoted/schema-qualified
+  tables, membership tables, and recipient-scoped tables continue to fail
+  closed with `E-TENANT-003` / `E-CRUD-008`. / Compilergeprüfte, fail-closed
+  mandantengefilterte Mehrtabellen-`SELECT`-Abfragen
+  (`verify_tenant_scoped_select`) über CLI-Prüfung, AST-Laufzeit und
+  MIR-Verifikation/-Ausführung ergänzen. Reine `SELECT`-Abfragen über
+  `tenant_scope`-Tabellen mit `INNER JOIN` oder `LEFT [OUTER] JOIN` (z. B.
+  Kampagnen-Ausschlussabfragen) sind zulässig, wenn jede referenzierte
+  Mandantentabelle über eine konjunktive Gleichheitsbedingung auf oberster
+  Ebene (`<alias>.<tenant_col> = :<param>`, bei `LEFT JOIN` direkt in der
+  `ON`-Klausel) an denselben Funktionsparameter mit exakt dem nominalen
+  `tenant_type` gebunden ist. Schreibabfragen, Subqueries, CTEs,
+  Mengenoperationen, `RIGHT`/`FULL`/`CROSS`-Joins, `OR`/`NOT` auf oberster
+  Ebene, Nicht-Gleichheitsoperatoren, gemischte Mandantenparameter, rohes
+  `Int`, quotierte/schemaqualifizierte Tabellen sowie Membership- und
+  Recipient-Tabellen scheitern weiterhin geschlossen mit `E-TENANT-003` /
+  `E-CRUD-008`.
+- Modularize hot paths out of `cli/src/main.rs` and `web/src/lib.rs` into
+  dedicated modules (`cli/src/canonical_templates.rs`,
+  `cli/src/tenant_boundary.rs`, `web/src/state_guards.rs`) without behavioral
+  changes. / Zentrale Bereiche ohne Verhaltensänderung aus `cli/src/main.rs`
+  und `web/src/lib.rs` in eigenständige Module
+  (`cli/src/canonical_templates.rs`, `cli/src/tenant_boundary.rs`,
+  `web/src/state_guards.rs`) auslagern.
+
 ## 1.3.5 — Control-flow decision transactions, declarative table state machines, and strict-architecture forms
 
 - Add first-class declarative table state machines (`states <column> { ... }`)
