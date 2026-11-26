@@ -26,8 +26,18 @@ pub(super) fn format_state_diagrams(program: &zelyra_ast::Program) -> String {
                         .expect("writing to String cannot fail");
                 } else {
                     for target in &rule.to {
-                        writeln!(output, "    {from_id} --> {}", mermaid_state_id(target))
+                        if let Some(guard) = &rule.guard {
+                            let label = guard.message.replace('\n', " ").replace(':', " -");
+                            writeln!(
+                                output,
+                                "    {from_id} --> {} : [guarded] {label}",
+                                mermaid_state_id(target)
+                            )
                             .expect("writing to String cannot fail");
+                        } else {
+                            writeln!(output, "    {from_id} --> {}", mermaid_state_id(target))
+                                .expect("writing to String cannot fail");
+                        }
                     }
                 }
             }

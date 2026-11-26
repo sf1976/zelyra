@@ -202,7 +202,9 @@ fn visit_expression(
                 pending.push(index);
                 pending.push(target);
             }
-            ExprKind::Field { target, .. } | ExprKind::Await(target) => pending.push(target),
+            ExprKind::Field { target, .. } | ExprKind::Await(target) | ExprKind::Try(target) => {
+                pending.push(target)
+            }
             ExprKind::Call { args, .. } => pending.extend(args.iter().rev()),
             ExprKind::Unary { expr, .. } => pending.push(expr),
             ExprKind::Binary { left, right, .. } => {

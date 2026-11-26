@@ -11,19 +11,20 @@ Business-, Datenbank- und Webanwendungen. Schemaabhängiges SQL, Formulare,
 CRUD, Views und Geschäftslogik greifen ineinander; gewöhnlicher Programmcode
 und natives SQL bleiben jederzeit möglich.
 
-> **Release 1.3.5 · Sprachkompatibilitätslinie: 0.1** · [GitHub-Release](https://github.com/sf1976/zelyra/releases/tag/v1.3.5)
+> **Release 1.3.6 · Sprachkompatibilitätslinie: 0.1** · [GitHub-Release](https://github.com/sf1976/zelyra/releases/tag/v1.3.6)
 >
 > Die Compilerprüfung und der Verifier decken klar abgegrenzte Bereiche ab. Sie beweisen nicht die Korrektheit beliebiger Anwendungen. Prüfe vor dem Einsatz die unterstützten Abläufe und Grenzen in der jeweiligen Dokumentation.
 
-Zelyra 1.3.5 ergänzt erstklassige deklarative Tabellen-Zustandsmaschinen
-(`states`), Entscheidungstransaktionen mit Kontrollfluss (`transaction { ... }`)
-in AST und MIR samt automatischem Rollback bei Laufzeitfehlern oder
-`return Err(...)`, schemageprüfte SQL-Upserts und Zeilensperren mit
-Tippfehlerhinweisen, typisierte `execute { ... }`-Blöcke für eigenständige
-`form`-Aktionen sowie `--layout standard --strict`-Starter, die ab Werk
-`strict_architecture = true` erfüllen. AST bleibt Standard; experimentelles MIR
-und Bytecode bleiben opt-in und weisen nicht unterstützte Konstrukte
-geschlossen ab. Der Business-Starter ist noch kein fertiges ERP. Siehe die
+Zelyra 1.3.6 ergänzt den `?`-Operator zur Fehlerpropagierung über AST, MIR und
+Bytecode v30 (samt automatischem Rollback in `transaction { ... }`), bewachte
+Übergänge (`when <expr> : "Meldung"`) für deklarative Tabellen-Zustandsmaschinen
+(`states`), compilergeprüfte mandantengefilterte Mehrtabellen-`SELECT`-Abfragen
+(`INNER JOIN` und `LEFT JOIN` mit nominaler `TenantId`-Prüfung) sowie die
+interne Modularisierung zentraler `cli`- und `web`-Bereiche. AST bleibt
+Standard; experimentelles MIR und Bytecode bleiben opt-in und weisen nicht
+unterstützte Konstrukte geschlossen ab. Der Business-Starter ist noch kein
+fertiges ERP. Siehe die
+[Release-Notizen 1.3.6](docs/release-notes/1.3.6.de.md),
 [Release-Notizen 1.3.5](docs/release-notes/1.3.5.de.md),
 [Release-Notizen 1.3.0](docs/release-notes/1.3.0.de.md),
 [Release-Notizen 1.2.56](docs/release-notes/1.2.56.de.md),

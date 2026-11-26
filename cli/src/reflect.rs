@@ -124,6 +124,7 @@ fn build(program: &zelyra_ast::Program, sources: &[project::ProjectSource]) -> V
                 "from": rule.from,
                 "to": rule.to,
                 "final": rule.is_final,
+                "guarded": rule.guard.is_some(),
                 "source": source_location(rule.span, sources),
             })).collect::<Vec<_>>(),
             "source": source_location(machine.span, sources),

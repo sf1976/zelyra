@@ -89,6 +89,7 @@ pub(super) struct Checker<'a> {
     loop_depth: usize,
     parallel_depth: usize,
     transaction_depth: usize,
+    current_return_type: Option<Type>,
     _program: &'a Program,
 }
 
@@ -556,6 +557,7 @@ fn inspect_program(
         loop_depth: 0,
         parallel_depth: 0,
         transaction_depth: 0,
+        current_return_type: None,
         _program: program,
     };
     for function in &program.functions {
@@ -563,6 +565,10 @@ fn inspect_program(
     }
     let (validation_functions, _) = zelyra_ast::build_table_validation_functions(program);
     for function in &validation_functions {
+        checker.check_function(function);
+    }
+    let (state_guard_functions, _) = zelyra_ast::build_state_transition_guard_functions(program);
+    for function in &state_guard_functions {
         checker.check_function(function);
     }
     let (computed_functions, _) = zelyra_ast::build_computed_column_functions(program);
@@ -728,11 +734,14 @@ impl<'a> Checker<'a> {
             }
         }
         let expected = function.return_type.clone().unwrap_or(Type::Unknown);
+        let previous_return_type = self.current_return_type.take();
         for contract in &function.requires {
             let actual = self.check_expr(contract, &scopes);
             self.expect_type(&Type::Bool, &actual, contract.span);
         }
+        self.current_return_type = Some(function.return_type.clone().unwrap_or(Type::Unit));
         self.check_block(&function.body, &mut scopes, &expected);
+        self.current_return_type = None;
         if !function.ensures.is_empty() {
             scopes[0].insert(
                 "result".into(),
@@ -746,6 +755,7 @@ impl<'a> Checker<'a> {
                 self.expect_type(&Type::Bool, &actual, contract.span);
             }
         }
+        self.current_return_type = previous_return_type;
         if function
             .return_type
             .as_ref()

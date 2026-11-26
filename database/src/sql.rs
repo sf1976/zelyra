@@ -26,7 +26,7 @@ enum SqlToken {
     Dot,
     OpenParen,
     CloseParen,
-    Operator,
+    Operator(String),
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -626,7 +626,8 @@ fn check_computed_column_sql_writes(program: &zelyra_ast::Program, errors: &mut 
             }
             ExprKind::Field { target, .. }
             | ExprKind::Unary { expr: target, .. }
-            | ExprKind::Await(target) => visit_expr(
+            | ExprKind::Await(target)
+            | ExprKind::Try(target) => visit_expr(
                 target,
                 known_tables,
                 dependencies,
@@ -1177,7 +1178,7 @@ fn check_state_machine_sql_literals(program: &zelyra_ast::Program, errors: &mut 
         for segment in segments {
             let Some(equal) = segment
                 .iter()
-                .position(|token| matches!(token, SqlToken::Operator))
+                .position(|token| matches!(token, SqlToken::Operator(_)))
             else {
                 continue;
             };
@@ -1217,7 +1218,7 @@ fn check_state_machine_sql_literals(program: &zelyra_ast::Program, errors: &mut 
                     visit_expr(value, machines, errors);
                 }
             }
-            ExprKind::Lambda { body, .. } | ExprKind::Await(body) => {
+            ExprKind::Lambda { body, .. } | ExprKind::Await(body) | ExprKind::Try(body) => {
                 visit_expr(body, machines, errors)
             }
             ExprKind::Index { target, index } => {
@@ -1473,7 +1474,7 @@ fn update_binds_computed_dependencies(
     for segment in segments {
         let Some(equal) = segment
             .iter()
-            .position(|token| matches!(token, SqlToken::Operator))
+            .position(|token| matches!(token, SqlToken::Operator(_)))
         else {
             return false;
         };
@@ -1531,7 +1532,7 @@ fn update_assignment_columns(tokens: &[SqlToken]) -> Option<HashSet<String>> {
     for segment in segments {
         let equal = segment
             .iter()
-            .position(|token| matches!(token, SqlToken::Operator))?;
+            .position(|token| matches!(token, SqlToken::Operator(_)))?;
         let target = &segment[..equal];
         let name = match target {
             [SqlToken::Word(column)] => column,
@@ -1685,7 +1686,9 @@ fn check_expr(
         }
         ExprKind::Field { target, .. } => check_expr(target, schema, environment, aliases, errors),
         ExprKind::Lambda { body, .. } => check_expr(body, schema, environment, aliases, errors),
-        ExprKind::Await(inner) => check_expr(inner, schema, environment, aliases, errors),
+        ExprKind::Await(inner) | ExprKind::Try(inner) => {
+            check_expr(inner, schema, environment, aliases, errors)
+        }
         ExprKind::Match { value, arms } => {
             check_expr(value, schema, environment, aliases, errors);
             for arm in arms {
@@ -1743,6 +1746,10 @@ fn expr_type(expression: &Expr) -> Type {
         | ExprKind::Unary { .. }
         | ExprKind::Binary { .. } => Type::Unknown,
         ExprKind::Await(inner) => expr_type(inner),
+        ExprKind::Try(inner) => match expr_type(inner) {
+            Type::Result(ok, _) | Type::Option(ok) => *ok,
+            _ => Type::Unknown,
+        },
         ExprKind::Match { arms, .. } => arms
             .first()
             .map(|arm| expr_type(&arm.value))
@@ -2088,7 +2095,7 @@ fn projection_type(
     }
     if expression
         .iter()
-        .any(|token| matches!(token, SqlToken::Operator | SqlToken::Star))
+        .any(|token| matches!(token, SqlToken::Operator(_) | SqlToken::Star))
     {
         let mut inferred = Type::Unknown;
         for pair in expression.windows(3) {
@@ -2460,7 +2467,7 @@ fn check_upsert_assignments(
     for segment in segments {
         let Some(equal) = segment
             .iter()
-            .position(|token| matches!(token, SqlToken::Operator))
+            .position(|token| matches!(token, SqlToken::Operator(_)))
         else {
             continue;
         };
@@ -2623,7 +2630,9 @@ fn parameter_column_type(
     tables: &HashMap<String, String>,
     schema: &Schema,
 ) -> Option<(String, Type)> {
-    if parameter_index < 2 || !matches!(tokens.get(parameter_index - 1), Some(SqlToken::Operator)) {
+    if parameter_index < 2
+        || !matches!(tokens.get(parameter_index - 1), Some(SqlToken::Operator(_)))
+    {
         return None;
     }
     let column_index = parameter_index - 2;
@@ -2904,18 +2913,563 @@ fn tokenize(query: &str) -> Vec<SqlToken> {
             tokens.push(SqlToken::String(literal));
             continue;
         }
+        if matches!(byte, b'!' | b'<' | b'>' | b'|') {
+            if byte == b'<'
+                && bytes.get(index + 1) == Some(&b'=')
+                && bytes.get(index + 2) == Some(&b'>')
+            {
+                tokens.push(SqlToken::Operator("<=>".into()));
+                index += 3;
+                continue;
+            }
+            if let Some(&next) = bytes.get(index + 1) {
+                let two = match (byte, next) {
+                    (b'!', b'=') => Some("!="),
+                    (b'<', b'>') => Some("<>"),
+                    (b'<', b'=') => Some("<="),
+                    (b'>', b'=') => Some(">="),
+                    (b'|', b'|') => Some("||"),
+                    _ => None,
+                };
+                if let Some(op) = two {
+                    tokens.push(SqlToken::Operator(op.into()));
+                    index += 2;
+                    continue;
+                }
+            }
+        }
         let token = match byte {
             b'*' => SqlToken::Star,
             b',' => SqlToken::Comma,
             b'.' => SqlToken::Dot,
             b'(' => SqlToken::OpenParen,
             b')' => SqlToken::CloseParen,
-            _ => SqlToken::Operator,
+            _ => SqlToken::Operator((byte as char).to_string()),
         };
         tokens.push(token);
         index += 1;
     }
     tokens
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct TenantScopeRequirement {
+    pub table: String,
+    pub column: String,
+    pub tenant_type: Type,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum TenantJoinKind {
+    From,
+    Inner,
+    Left,
+}
+
+struct TenantTableRef {
+    table: String,
+    qualifier: String,
+    join_kind: TenantJoinKind,
+    on_tokens: Vec<SqlToken>,
+}
+
+/// Verifies that a read-only SQL `SELECT` touching one or more `tenant_scope`
+/// tables enforces conjunctive (top-level `AND`, never `OR`/`NOT`) equality
+/// filters `<qualifier>.<tenant_col> = :<param>` on EVERY referenced
+/// tenant-scoped table occurrence, bound to one shared parameter whose nominal
+/// type matches every table's declared `tenant_scope` type.
+///
+/// Returns:
+/// - `Ok(None)` if the query does not reference any table in `tenant_tables`.
+/// - `Ok(Some(param_name))` if the query is a verified tenant-isolated `SELECT`.
+/// - `Err(reason)` fail-closed on any write, subquery, CTE, set operation,
+///   quoted/schema-qualified table, unsupported join, missing/`OR`-weakened
+///   predicate, multi-tenant parameter mismatch, or wrong nominal type.
+pub fn verify_tenant_scoped_select(
+    query: &str,
+    tenant_tables: &[TenantScopeRequirement],
+    param_types: Option<&HashMap<String, Type>>,
+) -> Result<Option<String>, String> {
+    if tenant_tables.is_empty() {
+        return Ok(None);
+    }
+    let known = tenant_tables
+        .iter()
+        .map(|req| req.table.clone())
+        .collect::<Vec<_>>();
+    let (operation, accesses) = analyze_table_access(query, &known);
+    if operation.is_none() {
+        return Err("SQL form cannot be verified against declared tenant scopes".into());
+    }
+    if accesses.iter().any(|access| access.table.is_empty()) {
+        return Err("quoted SQL table references cannot be verified against tenant scopes".into());
+    }
+    let touches_scoped = accesses.iter().any(|access| {
+        tenant_tables
+            .iter()
+            .any(|req| req.table.eq_ignore_ascii_case(&access.table))
+    });
+    if !touches_scoped {
+        return Ok(None);
+    }
+    if has_quoted_identifier_outside_strings(query) {
+        return Err("quoted SQL identifiers cannot be verified in tenant-scoped queries".into());
+    }
+    let tokens = tokenize(query);
+    let Some(SqlToken::Word(first)) = tokens.first() else {
+        return Err("only `SELECT` queries may access tenant-scoped tables in custom SQL".into());
+    };
+    if !first.eq_ignore_ascii_case("SELECT") {
+        return Err(
+            "only read-only `SELECT` queries may access tenant-scoped tables in custom SQL; use generated tenant CRUD routes for writes".into(),
+        );
+    }
+    // Fail closed on subqueries, CTEs, set operations, multi-statements, and unbalanced parens.
+    let mut depth = 0isize;
+    for (idx, token) in tokens.iter().enumerate() {
+        match token {
+            SqlToken::OpenParen => depth += 1,
+            SqlToken::CloseParen => {
+                depth -= 1;
+                if depth < 0 {
+                    return Err("unbalanced parentheses in tenant-scoped SQL query".into());
+                }
+            }
+            SqlToken::Operator(op) if op == ";" => {
+                return Err("multi-statement SQL is not allowed in tenant-scoped queries".into());
+            }
+            SqlToken::Word(word) => {
+                let upper = word.to_ascii_uppercase();
+                if idx > 0 && upper == "SELECT" {
+                    return Err("subqueries are not allowed in verified tenant-scoped SQL".into());
+                }
+                if matches!(
+                    upper.as_str(),
+                    "UNION" | "INTERSECT" | "EXCEPT" | "WITH" | "INTO" | "NATURAL" | "USING"
+                ) {
+                    return Err(format!(
+                        "`{upper}` is not supported in verified tenant-scoped SQL"
+                    ));
+                }
+            }
+            _ => {}
+        }
+    }
+    if depth != 0 {
+        return Err("unbalanced parentheses in tenant-scoped SQL query".into());
+    }
+
+    // Locate top-level FROM clause.
+    let mut from_pos = None;
+    depth = 0;
+    for (idx, token) in tokens.iter().enumerate() {
+        match token {
+            SqlToken::OpenParen => depth += 1,
+            SqlToken::CloseParen => depth -= 1,
+            SqlToken::Word(word) if depth == 0 && word.eq_ignore_ascii_case("FROM") => {
+                from_pos = Some(idx);
+                break;
+            }
+            _ => {}
+        }
+    }
+    let Some(from_idx) = from_pos else {
+        return Err("tenant-scoped `SELECT` must contain a top-level `FROM` clause".into());
+    };
+
+    let is_post_from_clause = |word: &str| {
+        matches!(
+            word.to_ascii_uppercase().as_str(),
+            "WHERE" | "GROUP" | "HAVING" | "ORDER" | "LIMIT" | "OFFSET" | "FOR" | "LOCK"
+        )
+    };
+    let is_join_starter = |word: &str| {
+        matches!(
+            word.to_ascii_uppercase().as_str(),
+            "JOIN" | "INNER" | "LEFT" | "RIGHT" | "FULL" | "CROSS" | "OUTER" | "STRAIGHT_JOIN"
+        )
+    };
+    let is_non_alias_keyword = |word: &str| {
+        is_post_from_clause(word)
+            || is_join_starter(word)
+            || word.eq_ignore_ascii_case("ON")
+            || word.eq_ignore_ascii_case("SET")
+    };
+
+    let parse_table_and_alias = |pos: &mut usize| -> Result<(String, String), String> {
+        let Some(SqlToken::Word(table_name)) = tokens.get(*pos) else {
+            return Err("expected table name in tenant-scoped `FROM`/`JOIN` clause".into());
+        };
+        *pos += 1;
+        if matches!(tokens.get(*pos), Some(SqlToken::Dot)) {
+            return Err(
+                "schema-qualified table names are not allowed in verified tenant-scoped SQL".into(),
+            );
+        }
+        let mut qualifier = table_name.clone();
+        if let Some(SqlToken::Word(next)) = tokens.get(*pos) {
+            if next.eq_ignore_ascii_case("AS") {
+                *pos += 1;
+                let Some(SqlToken::Word(alias)) = tokens.get(*pos) else {
+                    return Err("expected table alias after `AS`".into());
+                };
+                qualifier = alias.clone();
+                *pos += 1;
+            } else if !is_non_alias_keyword(next.as_str()) {
+                qualifier = next.clone();
+                *pos += 1;
+            }
+        }
+        Ok((table_name.clone(), qualifier))
+    };
+
+    let mut pos = from_idx + 1;
+    let mut table_refs = Vec::new();
+    let (first_table, first_qualifier) = parse_table_and_alias(&mut pos)?;
+    table_refs.push(TenantTableRef {
+        table: first_table,
+        qualifier: first_qualifier,
+        join_kind: TenantJoinKind::From,
+        on_tokens: Vec::new(),
+    });
+
+    while pos < tokens.len() {
+        match &tokens[pos] {
+            SqlToken::Comma => {
+                return Err(
+                    "implicit comma joins are not allowed in verified tenant-scoped SQL; use explicit `INNER JOIN ... ON` or `LEFT JOIN ... ON`".into(),
+                );
+            }
+            SqlToken::Word(word) if is_post_from_clause(word.as_str()) => break,
+            SqlToken::Word(word) if is_join_starter(word.as_str()) => {
+                let upper = word.to_ascii_uppercase();
+                let join_kind = match upper.as_str() {
+                    "JOIN" => {
+                        pos += 1;
+                        TenantJoinKind::Inner
+                    }
+                    "INNER" => {
+                        pos += 1;
+                        if !matches!(tokens.get(pos), Some(SqlToken::Word(w)) if w.eq_ignore_ascii_case("JOIN"))
+                        {
+                            return Err("expected `JOIN` after `INNER`".into());
+                        }
+                        pos += 1;
+                        TenantJoinKind::Inner
+                    }
+                    "LEFT" => {
+                        pos += 1;
+                        if matches!(tokens.get(pos), Some(SqlToken::Word(w)) if w.eq_ignore_ascii_case("OUTER"))
+                        {
+                            pos += 1;
+                        }
+                        if !matches!(tokens.get(pos), Some(SqlToken::Word(w)) if w.eq_ignore_ascii_case("JOIN"))
+                        {
+                            return Err("expected `JOIN` after `LEFT`".into());
+                        }
+                        pos += 1;
+                        TenantJoinKind::Left
+                    }
+                    other => {
+                        return Err(format!(
+                            "`{other}` joins are not allowed in verified tenant-scoped SQL; use `INNER JOIN` or `LEFT JOIN`"
+                        ));
+                    }
+                };
+                let (table_name, qualifier) = parse_table_and_alias(&mut pos)?;
+                if !matches!(tokens.get(pos), Some(SqlToken::Word(w)) if w.eq_ignore_ascii_case("ON"))
+                {
+                    return Err(format!(
+                        "`JOIN {table_name}` must specify an explicit `ON` predicate in verified tenant-scoped SQL"
+                    ));
+                }
+                pos += 1;
+                let on_start = pos;
+                let mut on_depth = 0isize;
+                while pos < tokens.len() {
+                    match &tokens[pos] {
+                        SqlToken::OpenParen => on_depth += 1,
+                        SqlToken::CloseParen => on_depth -= 1,
+                        SqlToken::Word(w)
+                            if on_depth == 0
+                                && (is_join_starter(w.as_str())
+                                    || is_post_from_clause(w.as_str())) =>
+                        {
+                            break;
+                        }
+                        _ => {}
+                    }
+                    pos += 1;
+                }
+                table_refs.push(TenantTableRef {
+                    table: table_name,
+                    qualifier,
+                    join_kind,
+                    on_tokens: tokens[on_start..pos].to_vec(),
+                });
+            }
+            _ => {
+                return Err(
+                    "unexpected token in `FROM`/`JOIN` clause of tenant-scoped SQL query".into(),
+                );
+            }
+        }
+    }
+
+    // Collect top-level WHERE clause tokens if present.
+    let mut where_tokens = Vec::new();
+    if matches!(tokens.get(pos), Some(SqlToken::Word(w)) if w.eq_ignore_ascii_case("WHERE")) {
+        pos += 1;
+        let where_start = pos;
+        let mut w_depth = 0isize;
+        while pos < tokens.len() {
+            match &tokens[pos] {
+                SqlToken::OpenParen => w_depth += 1,
+                SqlToken::CloseParen => w_depth -= 1,
+                SqlToken::Word(w)
+                    if w_depth == 0
+                        && matches!(
+                            w.to_ascii_uppercase().as_str(),
+                            "GROUP" | "HAVING" | "ORDER" | "LIMIT" | "OFFSET" | "FOR" | "LOCK"
+                        ) =>
+                {
+                    break;
+                }
+                _ => {}
+            }
+            pos += 1;
+        }
+        where_tokens = tokens[where_start..pos].to_vec();
+    }
+
+    // Ensure every table qualifier is unique to avoid ambiguous column resolution.
+    let mut seen_qualifiers = HashSet::new();
+    for table_ref in &table_refs {
+        if !seen_qualifiers.insert(table_ref.qualifier.to_ascii_lowercase()) {
+            return Err(format!(
+                "duplicate table qualifier `{}` in tenant-scoped SQL query; assign distinct aliases",
+                table_ref.qualifier
+            ));
+        }
+    }
+
+    let single_table_qualifier =
+        (table_refs.len() == 1).then_some(table_refs[0].qualifier.as_str());
+    let where_equalities =
+        extract_conjunctive_tenant_equalities(&where_tokens, single_table_qualifier);
+
+    let mut bound_param: Option<String> = None;
+    for table_ref in &table_refs {
+        let Some(requirement) = tenant_tables
+            .iter()
+            .find(|req| req.table.eq_ignore_ascii_case(&table_ref.table))
+        else {
+            continue;
+        };
+        let on_equalities = extract_conjunctive_tenant_equalities(&table_ref.on_tokens, None);
+        let candidate_equalities: Vec<&(String, String, String)> = match table_ref.join_kind {
+            TenantJoinKind::Left => on_equalities.iter().collect(),
+            TenantJoinKind::From | TenantJoinKind::Inner => where_equalities
+                .iter()
+                .chain(on_equalities.iter())
+                .collect(),
+        };
+        let matching_params: Vec<&str> = candidate_equalities
+            .into_iter()
+            .filter(|(qualifier, column, _)| {
+                qualifier.eq_ignore_ascii_case(&table_ref.qualifier)
+                    && column.eq_ignore_ascii_case(&requirement.column)
+            })
+            .map(|(_, _, param)| param.as_str())
+            .collect();
+        if matching_params.is_empty() {
+            let location = match table_ref.join_kind {
+                TenantJoinKind::Left => "in its `LEFT JOIN ... ON` clause",
+                TenantJoinKind::From | TenantJoinKind::Inner => {
+                    "in a top-level conjunctive `WHERE` or `INNER JOIN ... ON` clause"
+                }
+            };
+            return Err(format!(
+                "tenant-scoped table `{}` (as `{}`) is missing required conjunctive `{}.{} = :<tenant_param>` filter {location}",
+                table_ref.table, table_ref.qualifier, table_ref.qualifier, requirement.column
+            ));
+        }
+        let chosen = matching_params[0];
+        if let Some(params) = param_types {
+            let Some(actual_ty) = params.get(chosen) else {
+                return Err(format!(
+                    "tenant parameter `:{chosen}` used for `{}` must be a function parameter of nominal type `{}`",
+                    table_ref.table, requirement.tenant_type
+                ));
+            };
+            if actual_ty != &requirement.tenant_type {
+                return Err(format!(
+                    "tenant parameter `:{chosen}` for `{}` must have nominal type `{}`, found `{actual_ty}`",
+                    table_ref.table, requirement.tenant_type
+                ));
+            }
+        }
+        if let Some(previous) = &bound_param {
+            if previous != chosen {
+                return Err(format!(
+                    "all tenant-scoped tables in one SQL query must bind the same tenant parameter (found `:{previous}` and `:{chosen}`)"
+                ));
+            }
+        } else {
+            bound_param = Some(chosen.to_owned());
+        }
+    }
+
+    Ok(bound_param)
+}
+
+fn has_quoted_identifier_outside_strings(query: &str) -> bool {
+    let bytes = query.as_bytes();
+    let mut i = 0usize;
+    let mut in_single = false;
+    while i < bytes.len() {
+        if !in_single && bytes[i] == b'-' && bytes.get(i + 1) == Some(&b'-') {
+            while i < bytes.len() && bytes[i] != b'\n' {
+                i += 1;
+            }
+            continue;
+        }
+        if !in_single && bytes[i] == b'/' && bytes.get(i + 1) == Some(&b'*') {
+            i += 2;
+            while i + 1 < bytes.len() && !(bytes[i] == b'*' && bytes[i + 1] == b'/') {
+                i += 1;
+            }
+            i = (i + 2).min(bytes.len());
+            continue;
+        }
+        if bytes[i] == b'\'' {
+            if in_single && bytes.get(i + 1) == Some(&b'\'') {
+                i += 2;
+                continue;
+            }
+            in_single = !in_single;
+            i += 1;
+            continue;
+        }
+        if !in_single && matches!(bytes[i], b'"' | b'`') {
+            return true;
+        }
+        i += 1;
+    }
+    false
+}
+
+fn peel_outer_parens(mut tokens: &[SqlToken]) -> &[SqlToken] {
+    while tokens.len() >= 2
+        && matches!(tokens.first(), Some(SqlToken::OpenParen))
+        && matches!(tokens.last(), Some(SqlToken::CloseParen))
+    {
+        let mut depth = 0isize;
+        let mut wraps_entire = true;
+        for (idx, token) in tokens.iter().enumerate() {
+            match token {
+                SqlToken::OpenParen => depth += 1,
+                SqlToken::CloseParen => {
+                    depth -= 1;
+                    if depth == 0 && idx + 1 < tokens.len() {
+                        wraps_entire = false;
+                        break;
+                    }
+                }
+                _ => {}
+            }
+        }
+        if wraps_entire && depth == 0 {
+            tokens = &tokens[1..tokens.len() - 1];
+        } else {
+            break;
+        }
+    }
+    tokens
+}
+
+fn extract_conjunctive_tenant_equalities(
+    tokens: &[SqlToken],
+    single_table_qualifier: Option<&str>,
+) -> Vec<(String, String, String)> {
+    let tokens = peel_outer_parens(tokens);
+    if tokens.is_empty() {
+        return Vec::new();
+    }
+    // Fail closed if any top-level OR exists in this condition slice.
+    let mut depth = 0isize;
+    let mut and_splits = Vec::new();
+    for (idx, token) in tokens.iter().enumerate() {
+        match token {
+            SqlToken::OpenParen => depth += 1,
+            SqlToken::CloseParen => depth -= 1,
+            SqlToken::Word(word) if depth == 0 && word.eq_ignore_ascii_case("OR") => {
+                return Vec::new();
+            }
+            SqlToken::Word(word) if depth == 0 && word.eq_ignore_ascii_case("AND") => {
+                and_splits.push(idx);
+            }
+            _ => {}
+        }
+    }
+    let mut results = Vec::new();
+    let mut start = 0usize;
+    for split in and_splits.into_iter().chain(std::iter::once(tokens.len())) {
+        let conjunct = peel_outer_parens(&tokens[start..split]);
+        start = split + 1;
+        if conjunct.is_empty() {
+            continue;
+        }
+        // Reject negated predicates (`NOT ...`).
+        if matches!(conjunct.first(), Some(SqlToken::Word(w)) if w.eq_ignore_ascii_case("NOT")) {
+            continue;
+        }
+        // Recurse if a parenthesized conjunct itself contains top-level ANDs.
+        let mut inner_depth = 0isize;
+        let mut has_nested_and = false;
+        let mut has_nested_or = false;
+        for token in conjunct {
+            match token {
+                SqlToken::OpenParen => inner_depth += 1,
+                SqlToken::CloseParen => inner_depth -= 1,
+                SqlToken::Word(w) if inner_depth == 0 && w.eq_ignore_ascii_case("AND") => {
+                    has_nested_and = true;
+                }
+                SqlToken::Word(w) if inner_depth == 0 && w.eq_ignore_ascii_case("OR") => {
+                    has_nested_or = true;
+                }
+                _ => {}
+            }
+        }
+        if has_nested_or {
+            continue;
+        }
+        if has_nested_and {
+            results.extend(extract_conjunctive_tenant_equalities(
+                conjunct,
+                single_table_qualifier,
+            ));
+            continue;
+        }
+        match conjunct {
+            [SqlToken::Word(q), SqlToken::Dot, SqlToken::Word(col), SqlToken::Operator(op), SqlToken::Parameter(param)]
+            | [SqlToken::Parameter(param), SqlToken::Operator(op), SqlToken::Word(q), SqlToken::Dot, SqlToken::Word(col)]
+                if op == "=" =>
+            {
+                results.push((q.clone(), col.clone(), param.clone()));
+            }
+            [SqlToken::Word(col), SqlToken::Operator(op), SqlToken::Parameter(param)]
+            | [SqlToken::Parameter(param), SqlToken::Operator(op), SqlToken::Word(col)]
+                if op == "=" =>
+            {
+                if let Some(q) = single_table_qualifier {
+                    results.push((q.to_owned(), col.clone(), param.clone()));
+                }
+            }
+            _ => {}
+        }
+    }
+    results
 }
 
 fn sql_error(span: Span, message: impl Into<String>) -> SqlError {
@@ -3652,5 +4206,118 @@ mod tests {
                 .any(|error| error.message.contains("default value `unknown`")),
             "errors: {errors:?}"
         );
+    }
+
+    #[test]
+    fn verifies_multi_table_tenant_scoped_selects_and_fails_closed_on_bypasses() {
+        let tenant_type = Type::Named("TenantId".into());
+        let requirements = vec![
+            TenantScopeRequirement {
+                table: "customers".into(),
+                column: "tenant_id".into(),
+                tenant_type: tenant_type.clone(),
+            },
+            TenantScopeRequirement {
+                table: "unsubscriptions".into(),
+                column: "tenant_id".into(),
+                tenant_type: tenant_type.clone(),
+            },
+            TenantScopeRequirement {
+                table: "campaign_exclusions".into(),
+                column: "tenant_id".into(),
+                tenant_type: tenant_type.clone(),
+            },
+        ];
+        let params = HashMap::from([
+            ("tenant_id".into(), tenant_type.clone()),
+            ("other_tenant".into(), tenant_type.clone()),
+            ("raw_tenant".into(), Type::Int),
+            ("campaign_id".into(), Type::Int),
+        ]);
+
+        // Positive: campaign recipients with LEFT JOIN exclusions (exact roadmap workflow).
+        let campaign_sql = r#"
+            SELECT c.id, c.email
+            FROM customers c
+            LEFT JOIN unsubscriptions u
+                ON u.customer_id = c.id AND u.tenant_id = :tenant_id
+            LEFT JOIN campaign_exclusions e
+                ON e.customer_id = c.id AND e.campaign_id = :campaign_id AND e.tenant_id = :tenant_id
+            WHERE c.tenant_id = :tenant_id
+              AND (c.active = 1 OR c.vip = 1)
+              AND u.id IS NULL
+              AND e.id IS NULL
+        "#;
+        assert_eq!(
+            verify_tenant_scoped_select(campaign_sql, &requirements, Some(&params)),
+            Ok(Some("tenant_id".into()))
+        );
+
+        // Positive: single-table unqualified filter.
+        assert_eq!(
+            verify_tenant_scoped_select(
+                "SELECT id FROM customers WHERE tenant_id = :tenant_id",
+                &requirements,
+                Some(&params),
+            ),
+            Ok(Some("tenant_id".into()))
+        );
+
+        // Negative: every bypass vector fails closed.
+        for (label, sql) in [
+            (
+                "missing left join tenant filter",
+                "SELECT c.id FROM customers c LEFT JOIN unsubscriptions u ON u.customer_id = c.id WHERE c.tenant_id = :tenant_id AND u.id IS NULL",
+            ),
+            (
+                "left join filter placed only in WHERE",
+                "SELECT c.id FROM customers c LEFT JOIN unsubscriptions u ON u.customer_id = c.id WHERE c.tenant_id = :tenant_id AND u.tenant_id = :tenant_id",
+            ),
+            (
+                "top-level OR bypass",
+                "SELECT c.id FROM customers c WHERE c.tenant_id = :tenant_id OR 1 = 1",
+            ),
+            (
+                "not-equal operator instead of equality",
+                "SELECT c.id FROM customers c WHERE c.tenant_id != :tenant_id",
+            ),
+            (
+                "negated tenant filter",
+                "SELECT c.id FROM customers c WHERE NOT c.tenant_id = :tenant_id",
+            ),
+            (
+                "raw Int instead of nominal TenantId",
+                "SELECT c.id FROM customers c WHERE c.tenant_id = :raw_tenant",
+            ),
+            (
+                "mismatched tenant parameters across joined tables",
+                "SELECT c.id FROM customers c INNER JOIN unsubscriptions u ON u.customer_id = c.id AND u.tenant_id = :other_tenant WHERE c.tenant_id = :tenant_id",
+            ),
+            (
+                "subquery bypass",
+                "SELECT c.id FROM customers c WHERE c.tenant_id = :tenant_id AND c.id IN (SELECT customer_id FROM unsubscriptions)",
+            ),
+            (
+                "UNION bypass",
+                "SELECT id FROM customers WHERE tenant_id = :tenant_id UNION SELECT id FROM customers",
+            ),
+            (
+                "write query",
+                "UPDATE customers SET email = 'x@example.com' WHERE tenant_id = :tenant_id",
+            ),
+            (
+                "RIGHT JOIN rejected",
+                "SELECT c.id FROM customers c RIGHT JOIN unsubscriptions u ON u.customer_id = c.id AND u.tenant_id = :tenant_id WHERE c.tenant_id = :tenant_id",
+            ),
+            (
+                "quoted identifier rejected",
+                "SELECT c.id FROM `customers` c WHERE c.tenant_id = :tenant_id",
+            ),
+        ] {
+            assert!(
+                verify_tenant_scoped_select(sql, &requirements, Some(&params)).is_err(),
+                "expected fail-closed rejection for case `{label}`: {sql}"
+            );
+        }
     }
 }

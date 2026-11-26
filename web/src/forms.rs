@@ -253,7 +253,7 @@ pub(super) fn render_form_with_language(
                     if let Some(next) = machine.allowed_next(value) {
                         for target in next {
                             if !allowed.iter().any(|existing| existing == target) {
-                                allowed.push(target.clone());
+                                allowed.push(target.to_owned());
                             }
                         }
                     }

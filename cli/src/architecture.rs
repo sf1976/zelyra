@@ -1039,7 +1039,8 @@ fn inspect_expr(expression: &Expr, calls: &mut Vec<RouteCall>, sql: &mut Vec<(St
         }
         ExprKind::Field { target, .. }
         | ExprKind::Unary { expr: target, .. }
-        | ExprKind::Await(target) => inspect_expr(target, calls, sql),
+        | ExprKind::Await(target)
+        | ExprKind::Try(target) => inspect_expr(target, calls, sql),
         ExprKind::Call { name, args, .. } => {
             calls.push(RouteCall::new(name.clone(), args.clone(), expression.span));
             for argument in args {

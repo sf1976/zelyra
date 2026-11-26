@@ -5430,3 +5430,276 @@ fn standalone_form_typed_execute_checks_capabilities_architecture_and_rejects_gu
 
     fs::remove_dir_all(directory).unwrap();
 }
+
+#[test]
+fn guarded_state_machines_support_verify_reflect_mermaid_and_reject_impure_or_non_bool_guards() {
+    let directory = temporary_directory("guarded-state-machines");
+    fs::create_dir_all(&directory).unwrap();
+    let file = directory.join("main.zyl");
+    fs::write(
+        &file,
+        r#"
+database main { engine: mariadb }
+
+table sales_orders {
+    id: Id primary auto
+    total_amount: Decimal(12, 2) required
+    status: String(24) default "draft"
+
+    states status {
+        draft -> confirmed when total_amount > decimal("0") : "Order total must be positive."
+        draft -> cancelled
+        confirmed -> paid
+        paid -> final
+        cancelled -> final
+    }
+}
+
+fn main() {}
+"#,
+    )
+    .unwrap();
+    let run = |args: &[&str]| Command::new(binary()).args(args).output().unwrap();
+
+    let checked = run(&["check", file.to_str().unwrap()]);
+    assert!(
+        checked.status.success(),
+        "{}",
+        String::from_utf8_lossy(&checked.stderr)
+    );
+
+    let verified = run(&["verify", file.to_str().unwrap(), "--json"]);
+    assert!(verified.status.success());
+    let verify_doc: serde_json::Value = serde_json::from_slice(&verified.stdout).unwrap();
+    let entry = verify_doc
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|item| item["kind"] == "state_machine")
+        .unwrap();
+    assert_eq!(entry["status"], "PROVEN");
+    assert!(
+        entry["message"]
+            .as_str()
+            .unwrap()
+            .contains("1 guarded transition(s) enforced at runtime"),
+        "{}",
+        entry["message"]
+    );
+
+    let mermaid = run(&["doc", file.to_str().unwrap(), "--states"]);
+    assert!(mermaid.status.success());
+    let mermaid_text = String::from_utf8_lossy(&mermaid.stdout);
+    assert!(
+        mermaid_text.contains("draft --> confirmed : [guarded] Order total must be positive."),
+        "{mermaid_text}"
+    );
+
+    let reflect = run(&["reflect", file.to_str().unwrap(), "--format=json"]);
+    assert!(reflect.status.success());
+    let reflect_doc: serde_json::Value = serde_json::from_slice(&reflect.stdout).unwrap();
+    let transitions = reflect_doc["tables"][0]["state_machines"][0]["transitions"]
+        .as_array()
+        .unwrap();
+    assert_eq!(transitions[0]["guarded"], true);
+    assert_eq!(transitions[1]["guarded"], false);
+
+    // Negative: non-Bool guard expression is rejected by the type checker.
+    let bad_file = directory.join("bad_guard.zyl");
+    fs::write(
+        &bad_file,
+        r#"
+database main { engine: mariadb }
+
+table sales_orders {
+    id: Id primary auto
+    total_amount: Int required
+    status: String(24) default "draft"
+
+    states status {
+        draft -> confirmed when total_amount : "Must be Bool."
+        confirmed -> final
+    }
+}
+
+fn main() {}
+"#,
+    )
+    .unwrap();
+    let bad_check = run(&["check", bad_file.to_str().unwrap()]);
+    assert!(!bad_check.status.success());
+    assert!(
+        String::from_utf8_lossy(&bad_check.stderr).contains("E-TYPE-001"),
+        "{}",
+        String::from_utf8_lossy(&bad_check.stderr)
+    );
+
+    // Negative: impure (Clock) guard expression is rejected by capability checking.
+    let impure_file = directory.join("impure_guard.zyl");
+    fs::write(
+        &impure_file,
+        r#"
+database main { engine: mariadb }
+
+table sales_orders {
+    id: Id primary auto
+    status: String(24) default "draft"
+
+    states status {
+        draft -> confirmed when now() == now() : "Impure guard."
+        confirmed -> final
+    }
+}
+
+fn main() {}
+"#,
+    )
+    .unwrap();
+    let impure_check = run(&["check", impure_file.to_str().unwrap()]);
+    assert!(!impure_check.status.success());
+    assert!(
+        String::from_utf8_lossy(&impure_check.stderr).contains("E-CAP-001"),
+        "{}",
+        String::from_utf8_lossy(&impure_check.stderr)
+    );
+
+    fs::remove_dir_all(directory).unwrap();
+}
+
+#[test]
+fn compiler_verifies_multi_table_tenant_scoped_select_queries_and_rejects_leaks() {
+    let directory = temporary_directory("tenant-multi-table-select");
+    fs::create_dir_all(&directory).unwrap();
+    let run = |args: &[&str]| Command::new(binary()).args(args).output().unwrap();
+
+    let base_schema = r#"
+database main { engine: mariadb }
+
+type TenantId = Id
+
+table customers scoped by tenant_id: TenantId {
+    id: Id primary auto
+    tenant_id: TenantId required
+    email: Email required
+}
+
+table unsubscriptions scoped by tenant_id: TenantId {
+    id: Id primary auto
+    tenant_id: TenantId required
+    customer_id: Id required references customers
+}
+"#;
+
+    // Positive: verified multi-table LEFT JOIN exclusion query with nominal TenantId.
+    let valid_file = directory.join("valid.zyl");
+    fs::write(
+        &valid_file,
+        format!(
+            r#"{base_schema}
+fn campaign_recipients(tenant_id: TenantId) -> Customer[] uses Database(read) {{
+    return sql<Customer[]> {{
+        SELECT c.id, c.tenant_id, c.email
+        FROM customers c
+        LEFT JOIN unsubscriptions u
+            ON u.customer_id = c.id AND u.tenant_id = :tenant_id
+        WHERE c.tenant_id = :tenant_id
+          AND u.id IS NULL
+    }}
+}}
+
+fn main() {{}}
+"#
+        ),
+    )
+    .unwrap();
+    let ok = run(&["check", valid_file.to_str().unwrap()]);
+    assert!(
+        ok.status.success(),
+        "verified multi-table tenant query should pass: {}",
+        String::from_utf8_lossy(&ok.stderr)
+    );
+
+    // Negative 1: missing tenant filter on LEFT JOIN table fails with E-TENANT-003.
+    let leak_join = directory.join("leak_join.zyl");
+    fs::write(
+        &leak_join,
+        format!(
+            r#"{base_schema}
+fn leaky_recipients(tenant_id: TenantId) -> Customer[] uses Database(read) {{
+    return sql<Customer[]> {{
+        SELECT c.id, c.tenant_id, c.email
+        FROM customers c
+        LEFT JOIN unsubscriptions u ON u.customer_id = c.id
+        WHERE c.tenant_id = :tenant_id AND u.id IS NULL
+    }}
+}}
+
+fn main() {{}}
+"#
+        ),
+    )
+    .unwrap();
+    let leak_res = run(&["check", leak_join.to_str().unwrap()]);
+    assert!(!leak_res.status.success());
+    assert!(
+        String::from_utf8_lossy(&leak_res.stderr).contains("E-TENANT-003"),
+        "{}",
+        String::from_utf8_lossy(&leak_res.stderr)
+    );
+
+    // Negative 2: top-level OR bypass fails with E-TENANT-003.
+    let or_bypass = directory.join("or_bypass.zyl");
+    fs::write(
+        &or_bypass,
+        format!(
+            r#"{base_schema}
+fn bypass(tenant_id: TenantId) -> Customer[] uses Database(read) {{
+    return sql<Customer[]> {{
+        SELECT c.id, c.tenant_id, c.email
+        FROM customers c
+        WHERE c.tenant_id = :tenant_id OR c.id > 0
+    }}
+}}
+
+fn main() {{}}
+"#
+        ),
+    )
+    .unwrap();
+    let or_res = run(&["check", or_bypass.to_str().unwrap()]);
+    assert!(!or_res.status.success());
+    assert!(
+        String::from_utf8_lossy(&or_res.stderr).contains("E-TENANT-003"),
+        "{}",
+        String::from_utf8_lossy(&or_res.stderr)
+    );
+
+    // Negative 3: raw Int instead of nominal TenantId fails with E-TENANT-003.
+    let raw_int = directory.join("raw_int.zyl");
+    fs::write(
+        &raw_int,
+        format!(
+            r#"{base_schema}
+fn untyped(tenant_id: Int) -> Customer[] uses Database(read) {{
+    return sql<Customer[]> {{
+        SELECT c.id, c.tenant_id, c.email
+        FROM customers c
+        WHERE c.tenant_id = :tenant_id
+    }}
+}}
+
+fn main() {{}}
+"#
+        ),
+    )
+    .unwrap();
+    let raw_res = run(&["check", raw_int.to_str().unwrap()]);
+    assert!(!raw_res.status.success());
+    assert!(
+        String::from_utf8_lossy(&raw_res.stderr).contains("E-TENANT-003"),
+        "{}",
+        String::from_utf8_lossy(&raw_res.stderr)
+    );
+
+    fs::remove_dir_all(directory).unwrap();
+}

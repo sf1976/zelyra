@@ -64,6 +64,7 @@ pub(super) struct AstInterpreter<'program, 'services> {
     pub(super) execution_context: ExecutionContext,
     pub(super) active_capabilities: Vec<HashSet<String>>,
     pub(super) active_type_substitutions: Vec<HashMap<String, Type>>,
+    pub(super) early_return: Option<Value>,
 }
 
 pub(super) type TransactionalQuery<'services> = dyn FnMut(&zelyra_database::Query) -> Result<zelyra_database::QueryResult, String>
@@ -77,6 +78,7 @@ pub(super) struct ProgramContext<'program> {
     pub(super) view_definitions: HashMap<String, &'program ViewDef>,
     pub(super) storage_schema: Result<zelyra_database::Schema, Vec<zelyra_database::SchemaError>>,
     pub(super) scoped_tables: Vec<String>,
+    pub(super) tenant_requirements: Vec<zelyra_database::sql::TenantScopeRequirement>,
     pub(super) record_definitions: HashMap<String, &'program RecordDef>,
     pub(super) sql_record_definitions: HashMap<String, RecordDef>,
     pub(super) type_aliases: HashMap<String, Type>,
@@ -121,6 +123,19 @@ impl<'program> ProgramContext<'program> {
                 .filter(|table| table.tenant_scope.is_some())
                 .map(|table| table.name.clone())
                 .collect(),
+            tenant_requirements: program
+                .tables
+                .iter()
+                .filter_map(|table| {
+                    table.tenant_scope.as_ref().map(|scope| {
+                        zelyra_database::sql::TenantScopeRequirement {
+                            table: table.name.clone(),
+                            column: scope.column.clone(),
+                            tenant_type: scope.tenant_type.clone(),
+                        }
+                    })
+                })
+                .collect(),
             sql_record_definitions: sql_results::definitions(program),
             record_definitions,
             type_aliases,
@@ -156,6 +171,7 @@ impl<'program> ProgramContext<'program> {
                 tables: Vec::new(),
             }),
             scoped_tables: Vec::new(),
+            tenant_requirements: Vec::new(),
             record_definitions,
             sql_record_definitions: HashMap::new(),
             type_aliases,
@@ -262,6 +278,7 @@ impl<'program, 'services> AstInterpreter<'program, 'services> {
             },
             active_capabilities: Vec::new(),
             active_type_substitutions: Vec::new(),
+            early_return: None,
         }
     }
 

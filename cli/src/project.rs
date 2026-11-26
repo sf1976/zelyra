@@ -1916,7 +1916,7 @@ impl TypeLinker<'_> {
                 self.rewrite_expression_types(target)?;
                 self.rewrite_expression_types(index)?;
             }
-            ExprKind::Field { target, .. } | ExprKind::Await(target) => {
+            ExprKind::Field { target, .. } | ExprKind::Await(target) | ExprKind::Try(target) => {
                 self.rewrite_expression_types(target)?;
             }
             ExprKind::Call {
@@ -2391,18 +2391,20 @@ fn rewrite_expr(
                 is_root,
             )?;
         }
-        ExprKind::Field { target, .. } | ExprKind::Await(target) => rewrite_expr(
-            target,
-            module_path,
-            module_name,
-            imports,
-            local_functions,
-            function_sets,
-            module_names,
-            root_functions,
-            display_path,
-            is_root,
-        )?,
+        ExprKind::Field { target, .. } | ExprKind::Await(target) | ExprKind::Try(target) => {
+            rewrite_expr(
+                target,
+                module_path,
+                module_name,
+                imports,
+                local_functions,
+                function_sets,
+                module_names,
+                root_functions,
+                display_path,
+                is_root,
+            )?
+        }
         ExprKind::Unary {
             op: UnaryOp::Negate | UnaryOp::Not,
             expr,

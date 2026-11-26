@@ -213,6 +213,16 @@ pub fn check_scoped_sql(query: &str, scoped_tables: &[String]) -> Result<(), Str
     }
     Ok(())
 }
+
+/// Fail-closed SQL tenant-scope verification supporting compiler-verified
+/// multi-table read-only `SELECT` queries over `tenant_scope` tables.
+pub fn check_scoped_sql_with_requirements(
+    query: &str,
+    requirements: &[zelyra_database::sql::TenantScopeRequirement],
+    param_types: Option<&HashMap<String, Type>>,
+) -> Result<Option<String>, String> {
+    zelyra_database::sql::verify_tenant_scoped_select(query, requirements, param_types)
+}
 mod ast_interpreter;
 pub use ast_interpreter::execution_api::{
     execute, execute_captured_with_capabilities_and_policies,
@@ -1023,6 +1033,7 @@ fn json_codec_interpreter<'program>(
         },
         active_capabilities: Vec::new(),
         active_type_substitutions: Vec::new(),
+        early_return: None,
     }
 }
 

@@ -184,8 +184,12 @@ impl<'program, 'services> Interpreter<'program, 'services> {
                 Ok(value)
             }
             ExprKind::Sql { query, result_type } => {
-                check_scoped_sql(query, &self.program_context.scoped_tables)
-                    .map_err(|error| self.runtime_error(expr.span, error))?;
+                let bound_tenant_param = check_scoped_sql_with_requirements(
+                    query,
+                    &self.program_context.tenant_requirements,
+                    None,
+                )
+                .map_err(|error| self.runtime_error(expr.span, error))?;
                 let capability = sql_required_capability(query);
                 self.require_runtime_capability(capability, "SQL access", expr.span)?;
                 let Some(database_url) = self.database_url.clone() else {
@@ -194,6 +198,19 @@ impl<'program, 'services> Interpreter<'program, 'services> {
                     );
                 };
                 let params = query_parameters(query, env, expr.span)?;
+                if let Some(tenant_param) = bound_tenant_param.as_deref() {
+                    let valid_tenant = params.iter().any(|(name, value)| {
+                        name == tenant_param && matches!(value, zelyra_database::QueryValue::Int(_))
+                    });
+                    if !valid_tenant {
+                        return Err(self.runtime_error(
+                            expr.span,
+                            format!(
+                                "tenant-scoped SQL requires a non-null integer value for `:{tenant_param}`"
+                            ),
+                        ));
+                    }
+                }
                 self.ensure_database_storage(expr.span)?;
                 let database_query = zelyra_database::Query {
                     sql: query.clone(),
@@ -235,6 +252,22 @@ impl<'program, 'services> Interpreter<'program, 'services> {
                 })
             }
             ExprKind::Await(inner) => self.eval(inner, env),
+            ExprKind::Try(inner) => match self.eval(inner, env)? {
+                Value::Result(Ok(value)) => Ok(*value),
+                Value::Result(Err(error)) => {
+                    self.early_return = Some(Value::Result(Err(error)));
+                    Err(self.runtime_error(expr.span, "early return from `?`"))
+                }
+                Value::Option(Some(value)) => Ok(*value),
+                Value::Option(None) => {
+                    self.early_return = Some(Value::Option(None));
+                    Err(self.runtime_error(expr.span, "early return from `?`"))
+                }
+                other => Err(self.runtime_error(
+                    expr.span,
+                    format!("`?` requires Result or Option, found {}", other.ty()),
+                )),
+            },
             ExprKind::Match { value, arms } => {
                 let scrutinee = self.eval(value, env)?;
                 for arm in arms {

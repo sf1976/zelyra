@@ -62,12 +62,14 @@ fn analyze_capabilities(
     grants: Option<&HashSet<String>>,
 ) -> (Vec<CapabilityError>, Vec<CapabilityUse>) {
     let (validation_functions, _) = zelyra_ast::build_table_validation_functions(program);
+    let (state_guard_functions, _) = zelyra_ast::build_state_transition_guard_functions(program);
     let (computed_functions, _) = zelyra_ast::build_computed_column_functions(program);
     let (crud_policy_functions, _) = zelyra_ast::build_crud_policy_functions(program);
     let all_functions = program
         .functions
         .iter()
         .chain(validation_functions.iter())
+        .chain(state_guard_functions.iter())
         .chain(computed_functions.iter())
         .chain(crud_policy_functions.iter())
         .collect::<Vec<_>>();
@@ -410,7 +412,9 @@ fn check_indirect_capability_expr(
                 }
                 pending.extend(args);
             }
-            ExprKind::Unary { expr, .. } | ExprKind::Await(expr) => pending.push(expr),
+            ExprKind::Unary { expr, .. } | ExprKind::Await(expr) | ExprKind::Try(expr) => {
+                pending.push(expr)
+            }
             ExprKind::Binary { left, right, .. } => {
                 pending.push(left);
                 pending.push(right);
@@ -625,7 +629,7 @@ fn check_capability_expr(
                 pending.push(target);
             }
             ExprKind::Lambda { body, .. } => pending.push(body),
-            ExprKind::Await(inner) => {
+            ExprKind::Await(inner) | ExprKind::Try(inner) => {
                 pending.push(inner);
             }
             ExprKind::Match { value, arms } => {

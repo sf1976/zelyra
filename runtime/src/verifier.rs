@@ -196,6 +196,7 @@ fn verify_table_state_machine(
     };
 
     // 1. BFS reachability from initial state.
+    let all_states = machine.states();
     let mut reachable = std::collections::HashSet::new();
     let mut queue = std::collections::VecDeque::new();
     reachable.insert(initial);
@@ -203,17 +204,16 @@ fn verify_table_state_machine(
     while let Some(state) = queue.pop_front() {
         if let Some(targets) = machine.allowed_next(state) {
             for target in targets {
-                if reachable.insert(target.as_str()) {
-                    queue.push_back(target.as_str());
+                if reachable.insert(target) {
+                    queue.push_back(target);
                 }
             }
         }
     }
-    let unreachable = machine
-        .transitions
+    let unreachable = all_states
         .iter()
-        .filter(|rule| !reachable.contains(rule.from.as_str()))
-        .map(|rule| rule.from.as_str())
+        .copied()
+        .filter(|state| !reachable.contains(state))
         .collect::<Vec<_>>();
     if !unreachable.is_empty() {
         return VerificationResult {
@@ -232,11 +232,20 @@ fn verify_table_state_machine(
 
     // 2. Check for non-final states that have no path to any final state (if
     //    terminal states exist) or have zero outgoing transitions.
-    let dead_ends = machine
-        .transitions
+    let final_states = machine.final_states();
+    let final_set = final_states
         .iter()
-        .filter(|rule| !rule.is_final && rule.to.is_empty())
-        .map(|rule| rule.from.as_str())
+        .copied()
+        .collect::<std::collections::HashSet<_>>();
+    let dead_ends = all_states
+        .iter()
+        .copied()
+        .filter(|state| {
+            !final_set.contains(state)
+                && machine
+                    .allowed_next(state)
+                    .is_none_or(|targets| targets.is_empty())
+        })
         .collect::<Vec<_>>();
     if !dead_ends.is_empty() {
         return VerificationResult {
@@ -253,12 +262,8 @@ fn verify_table_state_machine(
         };
     }
 
-    let final_states = machine.final_states();
     if !final_states.is_empty() {
-        let mut can_reach_final = final_states
-            .iter()
-            .copied()
-            .collect::<std::collections::HashSet<_>>();
+        let mut can_reach_final = final_set;
         let mut changed = true;
         while changed {
             changed = false;
@@ -274,11 +279,10 @@ fn verify_table_state_machine(
                 }
             }
         }
-        let trapped = machine
-            .transitions
+        let trapped = all_states
             .iter()
-            .filter(|rule| !can_reach_final.contains(rule.from.as_str()))
-            .map(|rule| rule.from.as_str())
+            .copied()
+            .filter(|state| !can_reach_final.contains(state))
             .collect::<Vec<_>>();
         if !trapped.is_empty() {
             return VerificationResult {
@@ -296,6 +300,17 @@ fn verify_table_state_machine(
         }
     }
 
+    let guarded_count = machine
+        .transitions
+        .iter()
+        .filter(|rule| rule.guard.is_some())
+        .count();
+    let guard_note = if guarded_count > 0 {
+        format!(" ({guarded_count} guarded transition(s) enforced at runtime)")
+    } else {
+        String::new()
+    };
+
     VerificationResult {
         function: label.clone(),
         kind: ContractKind::StateMachine,
@@ -303,8 +318,8 @@ fn verify_table_state_machine(
         status: VerificationStatus::Proven,
         span: machine.span,
         message: format!(
-            "State machine `{label}` verified: all {} state(s) are reachable from `{initial}` with {} terminal state(s) and no deadlocks.",
-            machine.transitions.len(),
+            "State machine `{label}` verified: all {} state(s) are reachable from `{initial}` with {} terminal state(s) and no deadlocks{guard_note}.",
+            all_states.len(),
             final_states.len()
         ),
         counterexample: None,
@@ -1355,7 +1370,7 @@ fn expression_contains_variable(expression: &Expr, name: &str) -> bool {
             expression_contains_variable(target, name) || expression_contains_variable(index, name)
         }
         ExprKind::Field { target, .. } => expression_contains_variable(target, name),
-        ExprKind::Await(inner) => expression_contains_variable(inner, name),
+        ExprKind::Await(inner) | ExprKind::Try(inner) => expression_contains_variable(inner, name),
         ExprKind::Match { value, arms } => {
             expression_contains_variable(value, name)
                 || arms
@@ -2745,6 +2760,7 @@ fn constant_value(expression: &Expr) -> Option<ConstantValue> {
         | ExprKind::Call { .. }
         | ExprKind::Sql { .. }
         | ExprKind::Await(_)
+        | ExprKind::Try(_)
         | ExprKind::Match { .. } => None,
     }
 }

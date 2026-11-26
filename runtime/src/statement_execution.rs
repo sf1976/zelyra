@@ -26,9 +26,15 @@ impl<'program, 'services> Interpreter<'program, 'services> {
     ) -> Result<Flow, RuntimeError> {
         env.with_scope(|env| {
             for statement in &block.statements {
-                match self.exec_statement(statement, env)? {
-                    Flow::Continue => {}
-                    flow => return Ok(flow),
+                match self.exec_statement(statement, env) {
+                    Ok(Flow::Continue) => {}
+                    Ok(flow) => return Ok(flow),
+                    Err(error) => {
+                        if let Some(value) = self.early_return.take() {
+                            return Ok(Flow::Return(value));
+                        }
+                        return Err(error);
+                    }
                 }
             }
             Ok(Flow::Continue)
@@ -479,6 +485,7 @@ impl<'program, 'services> Interpreter<'program, 'services> {
                         active_type_substitutions: std::mem::take(
                             &mut self.active_type_substitutions,
                         ),
+                        early_return: None,
                     };
                     let flow = child.exec_block(body, env);
                     self.output = child.output;

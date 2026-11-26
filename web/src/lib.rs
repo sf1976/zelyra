@@ -32,6 +32,7 @@ mod module_settings;
 pub mod multipart;
 mod password_reset;
 mod server;
+mod state_guards;
 mod ui;
 use edit_snapshot::{form_snapshot_matches, sign_form_snapshot, verify_form_snapshot, EditValues};
 use forms::*;
@@ -49,6 +50,9 @@ pub use password_reset::{PasswordResetMailer, PasswordResetSmtpConfig};
 pub use server::{serve_app, serve_app_listener};
 #[cfg(test)]
 pub(crate) use server::{spawn_connection, MAX_CONCURRENT_CONNECTIONS};
+use state_guards::{
+    evaluate_state_transition_guard, execute_typed_form_action, runtime_value_for_form_field,
+};
 use ui::*;
 
 const ZELYRA_DESIGN_SYSTEM_CSS: &str = include_str!("../assets/zelyra-ui.v1.css");
@@ -777,6 +781,7 @@ struct FormExecutionContext<'a> {
     tenant_context: Option<&'a TenantContext>,
     validation_program: Option<&'a Program>,
     table_validation_functions: &'a [zelyra_ast::TableValidationFunction],
+    state_transition_guard_functions: &'a [zelyra_ast::StateTransitionGuardFunction],
     crud_policy_functions: &'a [zelyra_ast::CrudPolicyFunction],
     crud_action_functions: &'a [zelyra_ast::CrudActionFunction],
     form_action_functions: &'a [zelyra_ast::FormActionFunction],
@@ -791,6 +796,7 @@ struct FormDispatchContext<'a> {
     language: UiLanguage,
     validation_program: Option<&'a Program>,
     table_validation_functions: &'a [zelyra_ast::TableValidationFunction],
+    state_transition_guard_functions: &'a [zelyra_ast::StateTransitionGuardFunction],
     computed_column_functions: &'a [zelyra_ast::ComputedColumnFunction],
     crud_policy_functions: &'a [zelyra_ast::CrudPolicyFunction],
     crud_action_functions: &'a [zelyra_ast::CrudActionFunction],
@@ -1232,6 +1238,7 @@ pub struct WebApp {
     pub forms: Vec<FormRoute>,
     validation_program: Option<Arc<Program>>,
     table_validation_functions: Vec<zelyra_ast::TableValidationFunction>,
+    state_transition_guard_functions: Vec<zelyra_ast::StateTransitionGuardFunction>,
     computed_column_functions: Vec<zelyra_ast::ComputedColumnFunction>,
     crud_policy_functions: Vec<zelyra_ast::CrudPolicyFunction>,
     crud_action_functions: Vec<zelyra_ast::CrudActionFunction>,
@@ -1272,6 +1279,7 @@ impl WebApp {
             forms,
             validation_program: None,
             table_validation_functions: Vec::new(),
+            state_transition_guard_functions: Vec::new(),
             computed_column_functions: Vec::new(),
             crud_policy_functions: Vec::new(),
             crud_action_functions: Vec::new(),
@@ -1378,6 +1386,7 @@ impl WebApp {
             forms,
             validation_program: None,
             table_validation_functions: Vec::new(),
+            state_transition_guard_functions: Vec::new(),
             computed_column_functions: Vec::new(),
             crud_policy_functions: Vec::new(),
             crud_action_functions: Vec::new(),
@@ -1418,7 +1427,9 @@ impl WebApp {
     /// Installs the compiler-lowered, statically checked table invariants used
     /// by generated and declarative form submissions.
     pub fn with_validation_program(mut self, program: Program) -> Self {
-        let (mut lowered, mappings) = zelyra_ast::lower_table_validation_functions_owned(program);
+        let (lowered, mappings) = zelyra_ast::lower_table_validation_functions_owned(program);
+        let (mut lowered, state_transition_guard_functions) =
+            zelyra_ast::lower_state_transition_guard_functions_owned(lowered);
         let (computed_functions, computed_mappings) =
             zelyra_ast::build_computed_column_functions(&lowered);
         lowered.functions.extend(computed_functions);
@@ -1430,6 +1441,7 @@ impl WebApp {
             zelyra_ast::lower_form_action_functions_owned(lowered);
         self.validation_program = Some(Arc::new(lowered));
         self.table_validation_functions = mappings;
+        self.state_transition_guard_functions = state_transition_guard_functions;
         self.computed_column_functions = computed_mappings;
         self.crud_policy_functions = crud_policy_functions;
         self.crud_action_functions = crud_action_functions;
@@ -2068,6 +2080,8 @@ impl WebApp {
                                 language: self.ui_language,
                                 validation_program: self.validation_program.as_deref(),
                                 table_validation_functions: &self.table_validation_functions,
+                                state_transition_guard_functions: &self
+                                    .state_transition_guard_functions,
                                 computed_column_functions: &self.computed_column_functions,
                                 crud_policy_functions: &self.crud_policy_functions,
                                 crud_action_functions: &[],
@@ -2193,6 +2207,8 @@ impl WebApp {
                                     language: self.ui_language,
                                     validation_program: self.validation_program.as_deref(),
                                     table_validation_functions: &self.table_validation_functions,
+                                    state_transition_guard_functions: &self
+                                        .state_transition_guard_functions,
                                     computed_column_functions: &self.computed_column_functions,
                                     crud_policy_functions: &self.crud_policy_functions,
                                     crud_action_functions: &self.crud_action_functions,
@@ -6531,6 +6547,7 @@ fn dispatch_form(
             language: UiLanguage::English,
             validation_program: None,
             table_validation_functions: &[],
+            state_transition_guard_functions: &[],
             computed_column_functions: &[],
             crud_policy_functions: &[],
             crud_action_functions: &[],
@@ -6557,6 +6574,7 @@ fn dispatch_form_with_language(
         language,
         validation_program,
         table_validation_functions,
+        state_transition_guard_functions,
         computed_column_functions,
         crud_policy_functions,
         crud_action_functions,
@@ -7381,6 +7399,7 @@ fn dispatch_form_with_language(
                 tenant_context,
                 validation_program,
                 table_validation_functions,
+                state_transition_guard_functions,
                 crud_policy_functions,
                 crud_action_functions,
                 form_action_functions,
@@ -13367,6 +13386,7 @@ fn execute_form_action_with_children(
         tenant_context,
         validation_program,
         table_validation_functions,
+        state_transition_guard_functions,
         crud_policy_functions,
         crud_action_functions,
         form_action_functions,
@@ -13776,26 +13796,50 @@ fn execute_form_action_with_children(
                         current_values.values.get(&machine.column),
                         values.get(&machine.column),
                     ) {
-                        if !current.is_empty()
-                            && !next.is_empty()
-                            && !machine.can_transition(current, next)
-                        {
-                            let allowed = machine
-                                .allowed_next(current)
-                                .map(|targets| {
-                                    if targets.is_empty() {
-                                        "none (final state)".to_owned()
-                                    } else {
-                                        targets.join(", ")
+                        if !current.is_empty() && !next.is_empty() {
+                            if !machine.can_transition(current, next) {
+                                let allowed = machine
+                                    .allowed_next(current)
+                                    .map(|targets| {
+                                        if targets.is_empty() {
+                                            "none (final state)".to_owned()
+                                        } else {
+                                            targets.join(", ")
+                                        }
+                                    })
+                                    .unwrap_or_else(|| "none".to_owned());
+                                return Err(zelyra_database::DatabaseError {
+                                    message: format!(
+                                        "ZELYRA_CHILD_VALIDATION: invalid state transition for `{}`: cannot move from `{current}` to `{next}` (allowed: {allowed})",
+                                        machine.column
+                                    ),
+                                });
+                            }
+                            if current != next {
+                                if let Some(program) = validation_program {
+                                    let mut merged = current_values.values.clone();
+                                    merged.extend(
+                                        values.iter().map(|(k, v)| (k.clone(), v.clone())),
+                                    );
+                                    if let Some(rejection) = evaluate_state_transition_guard(
+                                        program,
+                                        state_transition_guard_functions,
+                                        &table_def.name,
+                                        &machine.column,
+                                        current,
+                                        next,
+                                        &merged,
+                                    )
+                                    .map_err(|message| zelyra_database::DatabaseError { message })?
+                                    {
+                                        return Err(zelyra_database::DatabaseError {
+                                            message: format!(
+                                                "ZELYRA_CHILD_VALIDATION: {rejection}"
+                                            ),
+                                        });
                                     }
-                                })
-                                .unwrap_or_else(|| "none".to_owned());
-                            return Err(zelyra_database::DatabaseError {
-                                message: format!(
-                                    "ZELYRA_CHILD_VALIDATION: invalid state transition for `{}`: cannot move from `{current}` to `{next}` (allowed: {allowed})",
-                                    machine.column
-                                ),
-                            });
+                                }
+                            }
                         }
                     }
                 }
@@ -14337,176 +14381,6 @@ fn execute_typed_crud_action(
         }
         Ok(())
     }).map_err(|error| error.message)
-}
-
-fn runtime_value_for_form_field(
-    program: &Program,
-    table: Option<&zelyra_ast::TableDef>,
-    field_name: &str,
-    field_ty: &Type,
-    submitted: Option<&str>,
-) -> Result<RuntimeValue, String> {
-    if let Some(column) = table.and_then(|table| {
-        table
-            .columns
-            .iter()
-            .find(|column| column.name == field_name)
-    }) {
-        if column.ty == *field_ty {
-            if submitted.is_none() && matches!(field_ty, Type::Bool) && column.default.is_none() {
-                return Ok(RuntimeValue::Bool(false));
-            }
-            return runtime_value_for_column(program, column, submitted);
-        }
-    }
-    match (field_ty, submitted) {
-        (Type::Option(_), None | Some("")) => Ok(RuntimeValue::Option(None)),
-        (Type::Option(inner), Some(value)) => Ok(RuntimeValue::Option(Some(Box::new(
-            runtime_value_for_type(program, inner, value)?,
-        )))),
-        (Type::Bool, None) => Ok(RuntimeValue::Bool(false)),
-        (_, Some(value)) => runtime_value_for_type(program, field_ty, value),
-        (_, None) => Err(format!("missing value for typed form field `{field_name}`")),
-    }
-}
-
-#[allow(clippy::too_many_arguments)]
-fn execute_typed_form_action(
-    form: &FormRoute,
-    action: &zelyra_ast::FormAction,
-    values: &HashMap<String, String>,
-    path_params: &HashMap<String, String>,
-    database_url: &str,
-    actor_user_id: Option<i64>,
-    tenant_context: Option<&TenantContext>,
-    program: Option<&Program>,
-    mappings: &[zelyra_ast::FormActionFunction],
-    grants: Option<&HashSet<String>>,
-    policy: Option<&zelyra_runtime::RuntimePolicy>,
-) -> Result<(), String> {
-    let program = program.ok_or_else(|| "E-FORM-002: action program is unavailable".to_owned())?;
-    let form_index = program
-        .forms
-        .iter()
-        .position(|candidate| candidate.name == form.form.name)
-        .ok_or_else(|| format!("E-FORM-002: form `{}` is unavailable", form.form.name))?;
-    let action_index = program.forms[form_index]
-        .actions
-        .iter()
-        .position(|candidate| candidate.name == action.name)
-        .ok_or_else(|| format!("E-FORM-002: form action `{}` is unavailable", action.name))?;
-    let mapping = mappings
-        .iter()
-        .find(|mapping| mapping.form_index == form_index && mapping.action_index == action_index)
-        .ok_or_else(|| format!("E-FORM-002: form action `{}` was not lowered", action.name))?;
-    let table = form
-        .form
-        .table
-        .as_deref()
-        .and_then(|name| program.tables.iter().find(|table| table.name == name));
-    let mut args = Vec::with_capacity(
-        mapping.field_params.len()
-            + mapping.path_params.len()
-            + usize::from(mapping.has_session_param),
-    );
-    for (field_name, field_ty) in &mapping.field_params {
-        args.push(runtime_value_for_form_field(
-            program,
-            table,
-            field_name,
-            field_ty,
-            values.get(field_name).map(String::as_str),
-        )?);
-    }
-    for (param_name, param_ty) in &mapping.path_params {
-        let raw = path_params.get(param_name).ok_or_else(|| {
-            format!("missing route parameter `{param_name}` for typed form action")
-        })?;
-        args.push(runtime_value_for_type(program, param_ty, raw)?);
-    }
-    if mapping.has_session_param {
-        args.push(RuntimeValue::Object {
-            type_name: mapping.session_type_name.clone(),
-            type_args: Vec::new(),
-            fields: [
-                (
-                    "tenant_id".into(),
-                    RuntimeValue::Option(
-                        tenant_context.map(|ctx| Box::new(RuntimeValue::Int(ctx.tenant_id))),
-                    ),
-                ),
-                (
-                    "user_id".into(),
-                    RuntimeValue::Option(actor_user_id.map(|id| Box::new(RuntimeValue::Int(id)))),
-                ),
-            ]
-            .into_iter()
-            .collect(),
-        });
-    }
-    let is_postgres = zelyra_database::is_postgres_url(database_url);
-    zelyra_database::with_decision_transaction(database_url, |transaction| {
-        if let Some(context) = tenant_context {
-            let mut authorized = false;
-            for query in tenant_access_queries(context, is_postgres, Some(context.tenant_id), true)
-            {
-                if !transaction.execute(&query)?.rows.is_empty() {
-                    authorized = true;
-                    break;
-                }
-            }
-            if !authorized {
-                return Err(zelyra_database::DatabaseError {
-                    message:
-                        "ZELYRA_TENANT_DENIED: tenant ownership or membership is no longer valid"
-                            .into(),
-                });
-            }
-        }
-        let mut query = |query: &zelyra_database::Query| {
-            transaction
-                .execute(query)
-                .map_err(|error| error.to_string())
-        };
-        let outcome = zelyra_runtime::execute_function_captured_with_transactional_query(
-            program,
-            &mapping.execute_function,
-            args,
-            database_url,
-            grants,
-            policy,
-            &mut query,
-        );
-        if let Some(error) = outcome.error {
-            return Err(zelyra_database::DatabaseError {
-                message: format!("typed form action failed: {}", error.message),
-            });
-        }
-        if let (Some(audit_table), Some(audit_event)) =
-            (form.audit_table.as_deref(), form.audit_event.as_deref())
-        {
-            let (record_id, mut details) =
-                form_audit_details(form, audit_event, path_params, None, values);
-            if let Some(context) = tenant_context {
-                details.push_str(&format!(";tenant_id={}", context.tenant_id));
-            }
-            for query in audit_insert_queries_for(
-                audit_table,
-                form.audit_chain,
-                actor_user_id,
-                audit_event,
-                record_id,
-                &details,
-                is_postgres,
-            )
-            .map_err(|message| zelyra_database::DatabaseError { message })?
-            {
-                transaction.execute(&query)?;
-            }
-        }
-        Ok(())
-    })
-    .map_err(|error| error.message)
 }
 
 fn form_query_parameters(

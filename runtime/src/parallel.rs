@@ -57,6 +57,7 @@ impl Interpreter<'_, '_> {
                         execution_context: self.execution_context.clone(),
                         active_capabilities: self.active_capabilities.clone(),
                         active_type_substitutions: self.active_type_substitutions.clone(),
+                        early_return: None,
                     };
                     let mut child_env = env.clone();
                     let stack_size = runtime_stack_size_for_depth(child.call_depth_limit);

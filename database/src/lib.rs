@@ -1333,15 +1333,33 @@ fn validate_table_state_machines(
             continue;
         }
         let mut declared_states = HashSet::new();
+        let mut final_states = HashSet::new();
+        let mut non_final_states = HashSet::new();
         for rule in &machine.transitions {
-            if !declared_states.insert(rule.from.as_str()) {
-                errors.push(SchemaError {
-                    message: format!(
-                        "state `{}` is declared more than once in `{}.{}`",
-                        rule.from, table.name, machine.column
-                    ),
-                    span: rule.span,
-                });
+            declared_states.insert(rule.from.as_str());
+            if rule.is_final {
+                if !final_states.insert(rule.from.as_str()) {
+                    errors.push(SchemaError {
+                        message: format!(
+                            "final state `{}` is declared more than once in `{}.{}`",
+                            rule.from, table.name, machine.column
+                        ),
+                        span: rule.span,
+                    });
+                }
+            } else {
+                non_final_states.insert(rule.from.as_str());
+            }
+            if let Some(guard) = &rule.guard {
+                if guard.message.trim().is_empty() {
+                    errors.push(SchemaError {
+                        message: format!(
+                            "transition guard message from `{}` in `{}.{}` must not be empty",
+                            rule.from, table.name, machine.column
+                        ),
+                        span: guard.span,
+                    });
+                }
             }
             if let Some(limit) = column.length {
                 if rule.from.chars().count() > limit as usize {
@@ -1355,10 +1373,19 @@ fn validate_table_state_machines(
                 }
             }
         }
+        for state in final_states.intersection(&non_final_states) {
+            errors.push(SchemaError {
+                message: format!(
+                    "state `{state}` in `{}.{}` cannot be both `final` and have outgoing transitions",
+                    table.name, machine.column
+                ),
+                span: machine.span,
+            });
+        }
+        let mut seen_edges = HashSet::new();
         for rule in &machine.transitions {
-            let mut seen_targets = HashSet::new();
             for target in &rule.to {
-                if !seen_targets.insert(target.as_str()) {
+                if !seen_edges.insert((rule.from.as_str(), target.as_str())) {
                     errors.push(SchemaError {
                         message: format!(
                             "duplicate transition target `{target}` from state `{}` in `{}.{}`",

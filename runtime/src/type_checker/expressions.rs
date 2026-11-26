@@ -55,7 +55,9 @@ impl Checker<'_> {
                     );
                 }
                 lambda_scopes.push(parameter_scope);
+                let previous_return_type = self.current_return_type.take();
                 let return_type = self.check_expr(body, &lambda_scopes);
+                self.current_return_type = previous_return_type;
                 Type::Function {
                     params: parameter_types,
                     return_type: Box::new(return_type),
@@ -374,6 +376,67 @@ impl Checker<'_> {
                     self.error(expr.span, "`await` is only valid inside a `parallel` block");
                 }
                 self.check_expr(inner, scopes)
+            }
+            ExprKind::Try(inner) => {
+                let inner_type = self.check_expr(inner, scopes);
+                let expanded_inner =
+                    expand_type_aliases(&inner_type, &self.type_aliases).unwrap_or(inner_type);
+                let enclosing_return = self
+                    .current_return_type
+                    .clone()
+                    .map(|ty| expand_type_aliases(&ty, &self.type_aliases).unwrap_or(ty));
+                match expanded_inner {
+                    Type::Result(ok, err) => {
+                        match enclosing_return {
+                            Some(Type::Result(_, expected_err)) => {
+                                self.expect_type(&expected_err, &err, expr.span);
+                            }
+                            Some(other) => {
+                                self.error(
+                                    expr.span,
+                                    format!(
+                                        "`?` on `Result` requires the enclosing function to return `Result`, found `{other}`"
+                                    ),
+                                );
+                            }
+                            None => {
+                                self.error(
+                                    expr.span,
+                                    "`?` cannot be used outside a function body returning `Result` or `Option`",
+                                );
+                            }
+                        }
+                        *ok
+                    }
+                    Type::Option(some) => {
+                        match enclosing_return {
+                            Some(Type::Option(_)) => {}
+                            Some(other) => {
+                                self.error(
+                                    expr.span,
+                                    format!(
+                                        "`?` on `Option` requires the enclosing function to return `Option`, found `{other}`"
+                                    ),
+                                );
+                            }
+                            None => {
+                                self.error(
+                                    expr.span,
+                                    "`?` cannot be used outside a function body returning `Result` or `Option`",
+                                );
+                            }
+                        }
+                        *some
+                    }
+                    Type::Unknown => Type::Unknown,
+                    other => {
+                        self.error(
+                            expr.span,
+                            format!("`?` operator requires `Result` or `Option`, found `{other}`"),
+                        );
+                        Type::Unknown
+                    }
+                }
             }
             ExprKind::Match { value, arms } => {
                 let value_type = self.check_expr(value, scopes);
@@ -720,7 +783,7 @@ impl Checker<'_> {
                     pending.push(left);
                     pending.push(right);
                 }
-                ExprKind::Await(inner) => pending.push(inner),
+                ExprKind::Await(inner) | ExprKind::Try(inner) => pending.push(inner),
                 ExprKind::Match { value, arms } => {
                     pending.push(value);
                     pending.extend(arms.iter().map(|arm| &arm.value));
