@@ -2989,8 +2989,12 @@ impl<'program, 'tx> Machine<'program, 'tx> {
         locals: &HashMap<LocalId, Value>,
         span: Span,
     ) -> Result<Value, RuntimeError> {
-        zelyra_runtime::check_scoped_sql(query, &self.program.scoped_tables)
-            .map_err(|message| runtime_error(span, message))?;
+        let bound_tenant_param = zelyra_runtime::check_scoped_sql_with_requirements(
+            query,
+            &self.program.tenant_requirements,
+            None,
+        )
+        .map_err(|message| runtime_error(span, message))?;
         let capability = zelyra_runtime::sql_required_capability(query);
         self.require_host_capability(capability, "SQL access", span)?;
         let database_url = self.database_url.as_deref().ok_or_else(|| RuntimeError {
@@ -3006,6 +3010,19 @@ impl<'program, 'tx> Machine<'program, 'tx> {
             named_values.insert(name.clone(), value);
         }
         let params = zelyra_runtime::sql_parameters_from_named_values(query, &named_values, span)?;
+        if let Some(tenant_param) = bound_tenant_param.as_deref() {
+            let valid_tenant = params.iter().any(|(name, value)| {
+                name == tenant_param && matches!(value, zelyra_database::QueryValue::Int(_))
+            });
+            if !valid_tenant {
+                return Err(runtime_error(
+                    span,
+                    format!(
+                        "tenant-scoped SQL requires a non-null integer value for `:{tenant_param}`"
+                    ),
+                ));
+            }
+        }
         if !self.storage_checked {
             zelyra_runtime::validate_database_storage_with_host(
                 database_url,

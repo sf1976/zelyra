@@ -58,6 +58,8 @@ pub struct MirProgram {
     pub sql_records: Vec<zelyra_ast::RecordDef>,
     /// Tables whose tenant scopes are enforced before SQL host operations.
     pub scoped_tables: Vec<String>,
+    /// Detailed tenant-scope requirements for verifying multi-table tenant SELECT queries.
+    pub tenant_requirements: Vec<zelyra_database::sql::TenantScopeRequirement>,
     pub enums: Vec<zelyra_ast::EnumDef>,
     /// Checked views required by the shared server-side PDF renderer.
     pub views: Vec<zelyra_ast::ViewDef>,
@@ -427,6 +429,19 @@ pub fn lower(program: &zelyra_ast::Program) -> Result<MirProgram, Vec<MirError>>
             .filter(|table| table.tenant_scope.is_some())
             .map(|table| table.name.clone())
             .collect(),
+        program
+            .tables
+            .iter()
+            .filter_map(|table| {
+                table.tenant_scope.as_ref().map(|scope| {
+                    zelyra_database::sql::TenantScopeRequirement {
+                        table: table.name.clone(),
+                        column: scope.column.clone(),
+                        tenant_type: scope.tenant_type.clone(),
+                    }
+                })
+            })
+            .collect(),
         program.views.clone(),
     )
 }
@@ -437,6 +452,7 @@ fn lower_checked(
     database_schema: Result<zelyra_database::Schema, Vec<zelyra_database::SchemaError>>,
     sql_records: Vec<zelyra_ast::RecordDef>,
     scoped_tables: Vec<String>,
+    tenant_requirements: Vec<zelyra_database::sql::TenantScopeRequirement>,
     views: Vec<zelyra_ast::ViewDef>,
 ) -> Result<MirProgram, Vec<MirError>> {
     let mut builder = ProgramBuilder {
@@ -464,6 +480,7 @@ fn lower_checked(
         records: hir.records.clone(),
         sql_records,
         scoped_tables,
+        tenant_requirements,
         enums: hir.enums.clone(),
         views,
         database_schema,
@@ -1831,7 +1848,11 @@ fn verify_expression_kind(
             query_plan,
             ..
         } => {
-            if let Err(message) = zelyra_runtime::check_scoped_sql(query, &program.scoped_tables) {
+            if let Err(message) = zelyra_runtime::check_scoped_sql_with_requirements(
+                query,
+                &program.tenant_requirements,
+                None,
+            ) {
                 errors.push(MirError {
                     code: "E-MIR-VERIFY-003",
                     message,

@@ -5565,3 +5565,141 @@ fn main() {}
 
     fs::remove_dir_all(directory).unwrap();
 }
+
+#[test]
+fn compiler_verifies_multi_table_tenant_scoped_select_queries_and_rejects_leaks() {
+    let directory = temporary_directory("tenant-multi-table-select");
+    fs::create_dir_all(&directory).unwrap();
+    let run = |args: &[&str]| Command::new(binary()).args(args).output().unwrap();
+
+    let base_schema = r#"
+database main { engine: mariadb }
+
+type TenantId = Id
+
+table customers scoped by tenant_id: TenantId {
+    id: Id primary auto
+    tenant_id: TenantId required
+    email: Email required
+}
+
+table unsubscriptions scoped by tenant_id: TenantId {
+    id: Id primary auto
+    tenant_id: TenantId required
+    customer_id: Id required references customers
+}
+"#;
+
+    // Positive: verified multi-table LEFT JOIN exclusion query with nominal TenantId.
+    let valid_file = directory.join("valid.zyl");
+    fs::write(
+        &valid_file,
+        format!(
+            r#"{base_schema}
+fn campaign_recipients(tenant_id: TenantId) -> Customer[] uses Database(read) {{
+    return sql<Customer[]> {{
+        SELECT c.id, c.tenant_id, c.email
+        FROM customers c
+        LEFT JOIN unsubscriptions u
+            ON u.customer_id = c.id AND u.tenant_id = :tenant_id
+        WHERE c.tenant_id = :tenant_id
+          AND u.id IS NULL
+    }}
+}}
+
+fn main() {{}}
+"#
+        ),
+    )
+    .unwrap();
+    let ok = run(&["check", valid_file.to_str().unwrap()]);
+    assert!(
+        ok.status.success(),
+        "verified multi-table tenant query should pass: {}",
+        String::from_utf8_lossy(&ok.stderr)
+    );
+
+    // Negative 1: missing tenant filter on LEFT JOIN table fails with E-TENANT-003.
+    let leak_join = directory.join("leak_join.zyl");
+    fs::write(
+        &leak_join,
+        format!(
+            r#"{base_schema}
+fn leaky_recipients(tenant_id: TenantId) -> Customer[] uses Database(read) {{
+    return sql<Customer[]> {{
+        SELECT c.id, c.tenant_id, c.email
+        FROM customers c
+        LEFT JOIN unsubscriptions u ON u.customer_id = c.id
+        WHERE c.tenant_id = :tenant_id AND u.id IS NULL
+    }}
+}}
+
+fn main() {{}}
+"#
+        ),
+    )
+    .unwrap();
+    let leak_res = run(&["check", leak_join.to_str().unwrap()]);
+    assert!(!leak_res.status.success());
+    assert!(
+        String::from_utf8_lossy(&leak_res.stderr).contains("E-TENANT-003"),
+        "{}",
+        String::from_utf8_lossy(&leak_res.stderr)
+    );
+
+    // Negative 2: top-level OR bypass fails with E-TENANT-003.
+    let or_bypass = directory.join("or_bypass.zyl");
+    fs::write(
+        &or_bypass,
+        format!(
+            r#"{base_schema}
+fn bypass(tenant_id: TenantId) -> Customer[] uses Database(read) {{
+    return sql<Customer[]> {{
+        SELECT c.id, c.tenant_id, c.email
+        FROM customers c
+        WHERE c.tenant_id = :tenant_id OR c.id > 0
+    }}
+}}
+
+fn main() {{}}
+"#
+        ),
+    )
+    .unwrap();
+    let or_res = run(&["check", or_bypass.to_str().unwrap()]);
+    assert!(!or_res.status.success());
+    assert!(
+        String::from_utf8_lossy(&or_res.stderr).contains("E-TENANT-003"),
+        "{}",
+        String::from_utf8_lossy(&or_res.stderr)
+    );
+
+    // Negative 3: raw Int instead of nominal TenantId fails with E-TENANT-003.
+    let raw_int = directory.join("raw_int.zyl");
+    fs::write(
+        &raw_int,
+        format!(
+            r#"{base_schema}
+fn untyped(tenant_id: Int) -> Customer[] uses Database(read) {{
+    return sql<Customer[]> {{
+        SELECT c.id, c.tenant_id, c.email
+        FROM customers c
+        WHERE c.tenant_id = :tenant_id
+    }}
+}}
+
+fn main() {{}}
+"#
+        ),
+    )
+    .unwrap();
+    let raw_res = run(&["check", raw_int.to_str().unwrap()]);
+    assert!(!raw_res.status.success());
+    assert!(
+        String::from_utf8_lossy(&raw_res.stderr).contains("E-TENANT-003"),
+        "{}",
+        String::from_utf8_lossy(&raw_res.stderr)
+    );
+
+    fs::remove_dir_all(directory).unwrap();
+}
