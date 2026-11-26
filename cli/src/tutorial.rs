@@ -64,6 +64,7 @@ pub(super) fn command(mut arguments: impl Iterator<Item = String>) -> ExitCode {
         auth_template: false,
         business_template: false,
         canonical_layout: false,
+        strict_architecture: false,
         web_port: DEFAULT_WEB_PORT,
         host_port: DEFAULT_WEB_PORT,
         database_host_port: DEFAULT_DATABASE_HOST_PORT,

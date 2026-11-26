@@ -142,6 +142,7 @@ fn number_series_allocator_is_atomic_and_scoped_per_tenant() {
             table_validation_functions: &[],
             crud_policy_functions: &[],
             crud_action_functions: &[],
+            form_action_functions: &[],
             capability_grants: None,
             runtime_policy: None,
             granted_permissions: &[],
@@ -561,6 +562,7 @@ fn computed_field_invalid_input_returns_form_error_before_database_access() {
             computed_column_functions: &mappings,
             crud_policy_functions: &[],
             crud_action_functions: &[],
+            form_action_functions: &[],
             capability_grants: None,
             runtime_policy: None,
             granted_permissions: Vec::new(),
@@ -728,6 +730,7 @@ fn computed_decimal_crud_post_persists_the_server_recalculated_value() {
             computed_column_functions: &computed_column_functions,
             crud_policy_functions: &[],
             crud_action_functions: &[],
+            form_action_functions: &[],
             capability_grants: None,
             runtime_policy: None,
             granted_permissions: Vec::new(),
@@ -780,6 +783,7 @@ fn computed_decimal_crud_post_persists_the_server_recalculated_value() {
         computed_column_functions: &computed_column_functions,
         crud_policy_functions: &[],
         crud_action_functions: &[],
+        form_action_functions: &[],
         capability_grants: None,
         runtime_policy: None,
         granted_permissions: Vec::new(),
@@ -1612,6 +1616,7 @@ fn table_validation_rejects_invalid_form_before_action_execution() {
             computed_column_functions: &[],
             crud_policy_functions: &[],
             crud_action_functions: &[],
+            form_action_functions: &[],
             capability_grants: None,
             runtime_policy: None,
             granted_permissions: Vec::new(),
@@ -1643,6 +1648,7 @@ fn table_validation_rejects_invalid_form_before_action_execution() {
             computed_column_functions: &[],
             crud_policy_functions: &[],
             crud_action_functions: &[],
+            form_action_functions: &[],
             capability_grants: None,
             runtime_policy: None,
             granted_permissions: Vec::new(),
@@ -7632,6 +7638,7 @@ fn execute_form_action_rejects_postgres_chained_audit() {
         table_validation_functions: &[],
         crud_policy_functions: &[],
         crud_action_functions: &[],
+        form_action_functions: &[],
         capability_grants: None,
         runtime_policy: None,
         granted_permissions: &[],
@@ -7853,5 +7860,91 @@ fn table_state_machine_renders_legal_next_states_and_rejects_invalid_values() {
             .iter()
             .any(|message| message.contains("invalid state `bogus`")),
         "api_errors: {api_errors:?}"
+    );
+}
+
+#[test]
+fn typed_form_and_crud_action_lowering_binds_fields_route_params_and_session() {
+    let source = r#"
+        table machines {
+            id: Id primary auto
+            name: String(100) required
+            active: Bool default true
+        }
+        fn save_machine(name: String, active: Bool, org: String) {
+            x = name
+            y = active
+            z = org
+        }
+        fn toggle_machine(id: Id, active: Bool) {
+            target = id
+            flag = active
+        }
+        form MachineQuickCreate -> machines {
+            route: "/orgs/{org}/machines/new"
+            fields { name active }
+            action save {
+                execute {
+                    tenant = session.tenant_id
+                    save_machine(name, active, org)
+                }
+            }
+        }
+        crud Machine -> machines {
+            action set_active {
+                field active: Bool { required }
+                execute {
+                    toggle_machine(row.id, active)
+                }
+            }
+        }
+        fn main() {}
+    "#;
+    let program = zelyra_parser::parse(&zelyra_lexer::lex(source).unwrap()).unwrap();
+    let app = WebApp::new(Vec::new(), Vec::new()).with_validation_program(program);
+    let lowered = app
+        .validation_program
+        .as_deref()
+        .expect("validation program should be installed");
+    zelyra_runtime::check(lowered)
+        .expect("lowered form and CRUD actions with fields should type check");
+
+    assert_eq!(app.form_action_functions.len(), 1);
+    let form_mapping = &app.form_action_functions[0];
+    assert_eq!(
+        form_mapping.field_params,
+        vec![
+            ("name".into(), Type::String),
+            ("active".into(), Type::Bool),
+        ]
+    );
+    assert_eq!(form_mapping.path_params, vec![("org".into(), Type::String)]);
+    assert!(form_mapping.has_session_param);
+
+    assert_eq!(app.crud_action_functions.len(), 1);
+    assert_eq!(
+        app.crud_action_functions[0].field_params,
+        vec![("active".into(), Type::Bool)]
+    );
+
+    let table = &lowered.tables[0];
+    assert_eq!(
+        runtime_value_for_form_field(lowered, Some(table), "active", &Type::Bool, None).unwrap(),
+        RuntimeValue::Bool(true)
+    );
+    assert_eq!(
+        runtime_value_for_form_field(lowered, None, "flag", &Type::Bool, None).unwrap(),
+        RuntimeValue::Bool(false)
+    );
+    assert_eq!(
+        runtime_value_for_form_field(
+            lowered,
+            Some(table),
+            "name",
+            &Type::String,
+            Some("Press 01")
+        )
+        .unwrap(),
+        RuntimeValue::String("Press 01".into())
     );
 }

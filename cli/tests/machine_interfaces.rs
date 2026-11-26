@@ -5257,3 +5257,162 @@ fn main() {
 
     fs::remove_dir_all(directory).unwrap();
 }
+
+#[test]
+fn new_standard_strict_templates_pass_check_and_allow_tests_subdir() {
+    let invalid_dir = temporary_directory("new-strict-without-standard");
+    let invalid = Command::new(binary())
+        .args(["new", invalid_dir.to_str().unwrap(), "--strict"])
+        .output()
+        .unwrap();
+    assert!(!invalid.status.success());
+    assert!(
+        String::from_utf8_lossy(&invalid.stderr).contains("--strict requires --layout standard"),
+        "{}",
+        String::from_utf8_lossy(&invalid.stderr)
+    );
+
+    for (label, extra_args, expects_domain_actions) in [
+        ("minimal", vec![], false),
+        ("mariadb-crud", vec!["--template", "mariadb-crud"], true),
+        ("mariadb-business", vec!["--template", "mariadb-business"], true),
+    ] {
+        let directory = temporary_directory(&format!("new-standard-strict-{label}"));
+        let mut args = vec!["new", directory.to_str().unwrap(), "--layout", "standard", "--strict"];
+        args.extend(extra_args);
+        let created = Command::new(binary()).args(&args).output().unwrap();
+        assert!(
+            created.status.success(),
+            "failed to create {label}: {}",
+            String::from_utf8_lossy(&created.stderr)
+        );
+        let manifest = fs::read_to_string(directory.join("zelyra.toml")).unwrap();
+        assert!(manifest.contains("layout = \"standard\""));
+        assert!(manifest.contains("strict_architecture = true"));
+        assert_eq!(
+            directory.join("domain/actions.zyl").is_file(),
+            expects_domain_actions,
+            "unexpected domain/actions.zyl state for {label}"
+        );
+
+        // Verify `tests/*.zyl` modules are accepted under strict_architecture = true.
+        fs::create_dir_all(directory.join("tests")).unwrap();
+        fs::write(
+            directory.join("tests/smoke.zyl"),
+            "pub fn ok() -> Bool { return true }\n",
+        )
+        .unwrap();
+        let entry = directory.join("main.zyl");
+        let original_main = fs::read_to_string(&entry).unwrap();
+        fs::write(
+            &entry,
+            format!("import \"tests/smoke.zyl\" as smoke\n{original_main}"),
+        )
+        .unwrap();
+
+        let checked = Command::new(binary())
+            .args(["check", entry.to_str().unwrap()])
+            .output()
+            .unwrap();
+        assert!(
+            checked.status.success(),
+            "strict check failed for {label}: {}",
+            String::from_utf8_lossy(&checked.stderr)
+        );
+        fs::remove_dir_all(directory).unwrap();
+    }
+}
+
+#[test]
+fn standalone_form_typed_execute_checks_capabilities_architecture_and_rejects_guards() {
+    let directory = temporary_directory("standalone-form-execute");
+    for subdir in ["schema", "domain", "routes", "assets", "public"] {
+        fs::create_dir_all(directory.join(subdir)).unwrap();
+    }
+    fs::write(
+        directory.join("zelyra.toml"),
+        "[project]\nname = \"form-exec\"\nlayout = \"standard\"\nstrict_architecture = true\n\n[capabilities]\ndatabase = true\n",
+    )
+    .unwrap();
+    fs::write(
+        directory.join("schema/tables.zyl"),
+        "database main { engine: mariadb }\n\ntable customers {\n    id: Id primary auto\n    name: String(100) required\n    access {\n        read_write: [\"domain/actions.zyl\", \"routes/web.zyl\"]\n    }\n}\n",
+    )
+    .unwrap();
+    fs::write(
+        directory.join("domain/actions.zyl"),
+        "import \"schema::tables\" as schema\n\npub fn create_customer(name: String) uses Database(write) {\n    sql { INSERT INTO customers (name) VALUES (:name) }\n}\n",
+    )
+    .unwrap();
+    fs::write(
+        directory.join("main.zyl"),
+        "import \"routes::web\" as web\nimport \"schema::tables\" as schema\n\nfn main() {}\n",
+    )
+    .unwrap();
+
+    // Positive: standalone form delegates write to domain module via typed execute block.
+    fs::write(
+        directory.join("routes/web.zyl"),
+        "import \"schema::tables\" as schema\nimport \"domain::actions\" as actions\n\nform CustomerQuickCreate -> customers {\n    fields { name }\n    action save {\n        uses Database(write)\n        execute {\n            actions::create_customer(name)\n        }\n        redirect \"/customers\"\n    }\n}\n",
+    )
+    .unwrap();
+    let entry = directory.join("main.zyl");
+    let ok = Command::new(binary())
+        .args(["check", entry.to_str().unwrap()])
+        .output()
+        .unwrap();
+    assert!(ok.status.success(), "{}", String::from_utf8_lossy(&ok.stderr));
+
+    // Negative 1: missing `uses Database(write)` on standalone form execute fails with E-CAP-001.
+    fs::write(
+        directory.join("routes/web.zyl"),
+        "import \"schema::tables\" as schema\nimport \"domain::actions\" as actions\n\nform CustomerQuickCreate -> customers {\n    fields { name }\n    action save {\n        execute {\n            actions::create_customer(name)\n        }\n        redirect \"/customers\"\n    }\n}\n",
+    )
+    .unwrap();
+    let missing_cap = Command::new(binary())
+        .args(["check", entry.to_str().unwrap()])
+        .output()
+        .unwrap();
+    assert!(!missing_cap.status.success());
+    assert!(
+        String::from_utf8_lossy(&missing_cap.stderr).contains("E-CAP-001"),
+        "{}",
+        String::from_utf8_lossy(&missing_cap.stderr)
+    );
+
+    // Negative 2: direct write SQL inside route form execute is rejected by strict_architecture.
+    fs::write(
+        directory.join("routes/web.zyl"),
+        "import \"schema::tables\" as schema\n\nform CustomerQuickCreate -> customers {\n    fields { name }\n    action save {\n        uses Database(write)\n        execute {\n            sql { INSERT INTO customers (name) VALUES (:name) }\n        }\n        redirect \"/customers\"\n    }\n}\n",
+    )
+    .unwrap();
+    let direct_write = Command::new(binary())
+        .args(["check", entry.to_str().unwrap()])
+        .output()
+        .unwrap();
+    assert!(!direct_write.status.success());
+    assert!(
+        String::from_utf8_lossy(&direct_write.stderr).contains("E-ARCH-002"),
+        "{}",
+        String::from_utf8_lossy(&direct_write.stderr)
+    );
+
+    // Negative 3: `guard` remains rejected on standalone forms with E-FORM-002.
+    fs::write(
+        directory.join("routes/web.zyl"),
+        "import \"schema::tables\" as schema\nimport \"domain::actions\" as actions\n\nform CustomerQuickCreate -> customers {\n    fields { name }\n    action save {\n        guard when name == \"\" { error: \"name required\" }\n        uses Database(write)\n        execute {\n            actions::create_customer(name)\n        }\n        redirect \"/customers\"\n    }\n}\n",
+    )
+    .unwrap();
+    let guard_err = Command::new(binary())
+        .args(["check", entry.to_str().unwrap()])
+        .output()
+        .unwrap();
+    assert!(!guard_err.status.success());
+    assert!(
+        String::from_utf8_lossy(&guard_err.stderr).contains("E-FORM-002"),
+        "{}",
+        String::from_utf8_lossy(&guard_err.stderr)
+    );
+
+    fs::remove_dir_all(directory).unwrap();
+}

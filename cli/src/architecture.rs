@@ -89,6 +89,8 @@ pub(super) fn validate_project_modules(
         let path = module.path.replace('\\', "/");
         if path == "main.zyl"
             || path == "tests.zyl"
+            || path.starts_with("tests/")
+            || path == "zelyra/ui.zyl"
             || path.starts_with("<zelyra-")
             || path.starts_with("packages/")
         {

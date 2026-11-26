@@ -314,6 +314,7 @@ pub(super) fn run() -> ExitCode {
         let mut auth_template = false;
         let mut business_template = false;
         let mut canonical_layout = false;
+        let mut strict_architecture = false;
         let mut web_port = DEFAULT_WEB_PORT;
         let mut web_port_given = false;
         let mut host_port = DEFAULT_WEB_PORT;
@@ -334,6 +335,8 @@ pub(super) fn run() -> ExitCode {
                     return ExitCode::from(2);
                 }
                 canonical_layout = true;
+            } else if argument == "--strict" && !strict_architecture {
+                strict_architecture = true;
             } else if argument == "--template" {
                 let Some(value) = arguments.next() else {
                     eprintln!("error[E-CLI-001]: --template requires a value");
@@ -414,6 +417,10 @@ pub(super) fn run() -> ExitCode {
                 return ExitCode::from(2);
             }
         }
+        if strict_architecture && !canonical_layout {
+            eprintln!("error[E-CLI-001]: --strict requires --layout standard");
+            return ExitCode::from(2);
+        }
         if (web_port_given || host_port_given || database_host_port_given) && !with_mariadb {
             eprintln!(
                 "error[E-CLI-001]: --web-port, --host-port, and --db-host-port require --mariadb"
@@ -429,6 +436,7 @@ pub(super) fn run() -> ExitCode {
                 auth_template,
                 business_template,
                 canonical_layout,
+                strict_architecture,
                 web_port,
                 host_port,
                 database_host_port,
@@ -552,6 +560,7 @@ pub(super) fn run() -> ExitCode {
                 auth_template,
                 business_template,
                 canonical_layout: false,
+                strict_architecture: false,
                 web_port,
                 host_port,
                 database_host_port,
