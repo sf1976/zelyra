@@ -830,13 +830,7 @@ pub(super) fn run() -> ExitCode {
                         Ok(mir) => mir,
                         Err(errors) => {
                             for error in errors {
-                                diagnostic(
-                                    &path,
-                                    error.code,
-                                    &error.message,
-                                    error.span.line,
-                                    error.span.column,
-                                );
+                                diagnostic_with_span(&path, error.code, &error.message, error.span);
                             }
                             return Err(());
                         }
@@ -844,13 +838,7 @@ pub(super) fn run() -> ExitCode {
                     if optimize_mir {
                         if let Err(errors) = zelyra_mir::optimize_scalar_constants(&mut mir) {
                             for error in errors {
-                                diagnostic(
-                                    &path,
-                                    error.code,
-                                    &error.message,
-                                    error.span.line,
-                                    error.span.column,
-                                );
+                                diagnostic_with_span(&path, error.code, &error.message, error.span);
                             }
                             return Err(());
                         }
@@ -897,13 +885,7 @@ pub(super) fn run() -> ExitCode {
                         Ok(mir) => mir,
                         Err(errors) => {
                             for error in errors {
-                                diagnostic(
-                                    &path,
-                                    error.code,
-                                    &error.message,
-                                    error.span.line,
-                                    error.span.column,
-                                );
+                                diagnostic_with_span(&path, error.code, &error.message, error.span);
                             }
                             return Err(());
                         }
@@ -912,13 +894,7 @@ pub(super) fn run() -> ExitCode {
                         Ok(bytecode) => bytecode,
                         Err(errors) => {
                             for error in errors {
-                                diagnostic(
-                                    &path,
-                                    error.code,
-                                    &error.message,
-                                    error.span.line,
-                                    error.span.column,
-                                );
+                                diagnostic_with_span(&path, error.code, &error.message, error.span);
                             }
                             return Err(());
                         }
@@ -964,13 +940,7 @@ pub(super) fn run() -> ExitCode {
                 println!("{line}");
             }
             if let Some(error) = error {
-                diagnostic(
-                    &path,
-                    "E-RUNTIME-001",
-                    &error.message,
-                    error.span.line,
-                    error.span.column,
-                );
+                diagnostic_with_span(&path, "E-RUNTIME-001", &error.message, error.span);
                 Err(())
             } else {
                 match return_value {

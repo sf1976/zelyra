@@ -5111,3 +5111,63 @@ fn typed_view_bindings_are_checked_as_machine_diagnostics() {
     assert!(codes.contains(&"E-VIEW-010"));
     assert!(codes.contains(&"E-VIEW-015"));
 }
+
+#[test]
+fn mir_and_runtime_diagnostics_report_imported_module_paths() {
+    let directory = temporary_directory("multi-file-backend-diagnostics");
+    fs::create_dir_all(&directory).unwrap();
+    fs::write(
+        directory.join("helper.zyl"),
+        "pub fn broken_tx() {\n    transaction {}\n}\n\npub fn divide_by_zero() -> Int {\n    return 10 / 0\n}\n",
+    )
+    .unwrap();
+    fs::write(
+        directory.join("main.zyl"),
+        "import \"helper.zyl\" as helper\n\nfn main() {\n    print(helper::divide_by_zero())\n}\n",
+    )
+    .unwrap();
+
+    for backend in ["mir", "bytecode"] {
+        let output = run(&[
+            "run",
+            directory.join("main.zyl").to_str().unwrap(),
+            "--backend",
+            backend,
+        ]);
+        assert_eq!(output.status.code(), Some(1));
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        assert!(
+            stderr.contains("E-MIR-UNSUPPORTED-001"),
+            "backend={backend} stderr={stderr}"
+        );
+        assert!(
+            stderr.contains("helper.zyl:2:5"),
+            "expected imported module path for backend={backend}, got stderr={stderr}"
+        );
+    }
+
+    fs::write(
+        directory.join("helper.zyl"),
+        "pub fn divide_by_zero() -> Int {\n    return 10 / 0\n}\n",
+    )
+    .unwrap();
+    for backend in ["ast", "mir", "bytecode"] {
+        let output = run(&[
+            "run",
+            directory.join("main.zyl").to_str().unwrap(),
+            "--backend",
+            backend,
+        ]);
+        assert_eq!(output.status.code(), Some(1));
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        assert!(
+            stderr.contains("E-RUNTIME-001"),
+            "backend={backend} stderr={stderr}"
+        );
+        assert!(
+            stderr.contains("helper.zyl:2:"),
+            "expected imported module path for runtime error on backend={backend}, got stderr={stderr}"
+        );
+    }
+    fs::remove_dir_all(directory).unwrap();
+}

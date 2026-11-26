@@ -4936,6 +4936,7 @@ fn called_functions(program: &MirProgram, function: &crate::MirFunction) -> Vec<
                     }
                 },
                 MirInstruction::Transaction { operations, .. } => roots.extend(operations),
+                MirInstruction::DecisionTransaction { .. } => {}
                 MirInstruction::Parallel { bindings, .. } => {
                     roots.extend(bindings.iter().map(|binding| binding.value));
                 }

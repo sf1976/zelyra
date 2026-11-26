@@ -7,7 +7,7 @@
 //! bytecode and is not a VM.
 
 use crate::{
-    verify, ExpressionId, IteratorId, LoopInvariantPhase, MatchId, MirExpressionKind,
+    verify, BlockId, ExpressionId, IteratorId, LoopInvariantPhase, MatchId, MirExpressionKind,
     MirInstruction, MirIteratorBinding, MirIteratorSource, MirProgram, MirTerminator,
 };
 use std::{
@@ -297,6 +297,7 @@ fn execute_function_captured_with_host_services_and_database_url(
                     package_settings: runtime_policy
                         .and_then(|policy| policy.package_settings.clone()),
                     host_services: execution_host.host_services,
+                    transactional_query: None,
                     output: Arc::new(Mutex::new(Vec::new())),
                 };
                 match machine.call(function.id, arguments, 1, function.span) {
@@ -339,7 +340,16 @@ fn failed_outcome(error: RuntimeError) -> ExecutionOutcome {
     }
 }
 
-struct Machine<'program> {
+type MirTransactionalQuery<'tx> = dyn FnMut(&zelyra_database::Query) -> Result<zelyra_database::QueryResult, String>
+    + Send
+    + 'tx;
+
+enum BlockExit {
+    ReachedStop,
+    Returned(Value),
+}
+
+struct Machine<'program, 'tx> {
     program: &'program MirProgram,
     functions: HashMap<FunctionId, &'program crate::MirFunction>,
     match_values: HashMap<MatchId, Value>,
@@ -359,6 +369,7 @@ struct Machine<'program> {
     mail_policy: Option<MailPolicy>,
     package_settings: Option<PackageSettings>,
     host_services: Arc<dyn HostServices>,
+    transactional_query: Option<&'tx mut MirTransactionalQuery<'tx>>,
     output: Arc<Mutex<Vec<String>>>,
 }
 
@@ -531,6 +542,7 @@ fn instruction_span(program: &MirProgram, instruction: &MirInstruction) -> Span 
         | MirInstruction::ArrayIndexAssign { span, .. }
         | MirInstruction::TupleBind { span, .. }
         | MirInstruction::Transaction { span, .. }
+        | MirInstruction::DecisionTransaction { span, .. }
         | MirInstruction::Parallel { span, .. }
         | MirInstruction::LoopInvariantCheck { span, .. } => *span,
         MirInstruction::Evaluate(expression) => program
@@ -540,7 +552,7 @@ fn instruction_span(program: &MirProgram, instruction: &MirInstruction) -> Span 
     }
 }
 
-impl Machine<'_> {
+impl<'program, 'tx> Machine<'program, 'tx> {
     fn tick(&mut self, span: Span) -> Result<(), RuntimeError> {
         match self.step_budget.consume() {
             Ok(_) => Ok(()),
@@ -656,7 +668,7 @@ impl Machine<'_> {
         Ok(())
     }
 
-    fn parallel_child(&self) -> Machine<'_> {
+    fn parallel_child(&self) -> Machine<'program, 'static> {
         Machine {
             program: self.program,
             functions: self.functions.clone(),
@@ -677,6 +689,7 @@ impl Machine<'_> {
             mail_policy: self.mail_policy.clone(),
             package_settings: self.package_settings.clone(),
             host_services: Arc::clone(&self.host_services),
+            transactional_query: None,
             output: Arc::clone(&self.output),
         }
     }
@@ -805,336 +818,11 @@ impl Machine<'_> {
             }
         }
 
-        let result = (|| -> Result<Value, RuntimeError> {
-            let mut block = function.entry;
-            loop {
-                let basic_block = function.blocks.get(block.0).ok_or_else(|| RuntimeError {
-                    message: format!("MIR control flow reached missing block {}", block.0),
-                    span: function.span,
-                })?;
-                if let Some(loop_span) = basic_block.loop_span {
-                    self.tick(loop_span)?;
-                }
-                if !basic_block.loop_invariants.is_empty() {
-                    self.check_loop_invariants(
-                        &basic_block.loop_invariants,
-                        &mut locals,
-                        depth,
-                        basic_block.loop_span.unwrap_or(basic_block.span),
-                        LoopInvariantPhase::Before,
-                    )?;
-                }
-                for instruction in &basic_block.instructions {
-                    if !matches!(
-                        instruction,
-                        MirInstruction::SourceStep { .. }
-                            | MirInstruction::LoopInvariantCheck { .. }
-                    ) {
-                        self.tick(instruction_span(self.program, instruction))?;
-                    }
-                    match instruction {
-                        MirInstruction::SourceStep { span } => self.tick(*span)?,
-                        MirInstruction::Let {
-                            local, value, span, ..
-                        } => {
-                            let value = self.expression(*value, &mut locals, depth, *span)?;
-                            locals.insert(*local, value);
-                        }
-                        MirInstruction::Assign {
-                            local, value, span, ..
-                        } => {
-                            if !locals.contains_key(local) {
-                                return Err(RuntimeError {
-                                    message: "MIR assignment targets an uninitialized local".into(),
-                                    span: *span,
-                                });
-                            }
-                            let value = self.expression(*value, &mut locals, depth, *span)?;
-                            locals.insert(*local, value);
-                        }
-                        MirInstruction::ArrayIndexAssign {
-                            local,
-                            index,
-                            value,
-                            operation,
-                            span,
-                            ..
-                        } => {
-                            let items_len = match locals.get(local) {
-                                Some(Value::Array(items)) => items.len(),
-                                Some(other) => {
-                                    return Err(runtime_error(
-                                        *span,
-                                        format!(
-                                            "indexed assignment requires Array, got `{}`",
-                                            other.ty()
-                                        ),
-                                    ));
-                                }
-                                None => {
-                                    return Err(runtime_error(
-                                        *span,
-                                        "MIR indexed assignment targets an uninitialized local",
-                                    ));
-                                }
-                            };
-                            let index = self.expression(*index, &mut locals, depth, *span)?;
-                            let index = array_assignment_index(index, items_len, *span)?;
-                            let current = if *operation == ArrayIndexAssignOp::Add {
-                                let Some(Value::Array(items)) = locals.get(local) else {
-                                    return Err(runtime_error(
-                                        *span,
-                                        "MIR indexed assignment target changed during evaluation",
-                                    ));
-                                };
-                                Some(items[index].clone())
-                            } else {
-                                None
-                            };
-                            let value = self.expression(*value, &mut locals, depth, *span)?;
-                            let value = match current {
-                                None => value,
-                                Some(current) => {
-                                    evaluate_binary(current, BinaryOp::Add, value, *span)?
-                                }
-                            };
-                            let Some(Value::Array(items)) = locals.get_mut(local) else {
-                                return Err(runtime_error(
-                                    *span,
-                                    "MIR indexed assignment target changed during evaluation",
-                                ));
-                            };
-                            let element = items.get_mut(index).ok_or_else(|| {
-                                runtime_error(*span, "MIR mutable array index is out of bounds")
-                            })?;
-                            *element = value;
-                        }
-                        MirInstruction::MatchInit {
-                            match_id,
-                            value,
-                            span,
-                        } => {
-                            let value = self.expression(*value, &mut locals, depth, *span)?;
-                            self.match_values.insert(*match_id, value);
-                        }
-                        MirInstruction::IteratorInit {
-                            iterator,
-                            source,
-                            span,
-                        } => {
-                            let state = match source {
-                                MirIteratorSource::Collection(expression) => {
-                                    let value =
-                                        self.expression(*expression, &mut locals, depth, *span)?;
-                                    match value {
-                                        Value::Array(values) | Value::Set(values) => {
-                                            IteratorState::Values(values.into_iter())
-                                        }
-                                        other => {
-                                            return Err(runtime_error(
-                                            *span,
-                                            format!(
-                                                "MIR collection iterator requires Array or Set, got `{}`",
-                                                other.ty()
-                                            ),
-                                        ));
-                                        }
-                                    }
-                                }
-                                MirIteratorSource::IntegerRange { start, end, step } => {
-                                    let start_value =
-                                        self.expression(*start, &mut locals, depth, *span)?;
-                                    let end_value =
-                                        self.expression(*end, &mut locals, depth, *span)?;
-                                    let (Value::Int(start), Value::Int(end)) =
-                                        (start_value, end_value)
-                                    else {
-                                        return Err(runtime_error(
-                                            *span,
-                                            "MIR integer range requires Int start and end values",
-                                        ));
-                                    };
-                                    let step = match step {
-                                        Some(expression) => match self.expression(
-                                            *expression,
-                                            &mut locals,
-                                            depth,
-                                            *span,
-                                        )? {
-                                            Value::Int(step) => step,
-                                            other => {
-                                                return Err(runtime_error(
-                                                    *span,
-                                                    format!(
-                                                    "MIR integer range step must be Int, got `{}`",
-                                                    other.ty()
-                                                ),
-                                                ));
-                                            }
-                                        },
-                                        None => 1,
-                                    };
-                                    if step == 0 {
-                                        return Err(runtime_error(
-                                            *span,
-                                            "MIR integer range step must not be zero",
-                                        ));
-                                    }
-                                    IteratorState::Range {
-                                        current: Some(start),
-                                        end,
-                                        step,
-                                    }
-                                }
-                            };
-                            self.iterators.insert(*iterator, state);
-                        }
-                        MirInstruction::TupleBind {
-                            bindings,
-                            value,
-                            span,
-                        } => {
-                            let value = self.expression(*value, &mut locals, depth, *span)?;
-                            let Value::Tuple(values) = value else {
-                                return Err(runtime_error(
-                                    *span,
-                                    "MIR tuple binding requires a Tuple value",
-                                ));
-                            };
-                            if bindings.len() != values.len() {
-                                return Err(runtime_error(
-                                    *span,
-                                    format!(
-                                        "MIR tuple binding expects {} values, received {}",
-                                        bindings.len(),
-                                        values.len()
-                                    ),
-                                ));
-                            }
-                            if bindings.iter().any(|binding| {
-                                !binding.is_new && !locals.contains_key(&binding.local)
-                            }) {
-                                return Err(runtime_error(
-                                    *span,
-                                    "MIR tuple assignment targets an uninitialized local",
-                                ));
-                            }
-                            for (binding, value) in bindings.iter().zip(values) {
-                                locals.insert(binding.local, value);
-                            }
-                        }
-                        MirInstruction::Transaction { operations, span } => {
-                            self.execute_transaction(operations, &mut locals, depth, *span)?;
-                        }
-                        MirInstruction::Parallel { bindings, span } => {
-                            self.execute_parallel(bindings, &mut locals, depth, *span)?;
-                        }
-                        MirInstruction::LoopInvariantCheck {
-                            expressions,
-                            phase,
-                            span,
-                        } => self.check_loop_invariants(
-                            expressions,
-                            &mut locals,
-                            depth,
-                            *span,
-                            *phase,
-                        )?,
-                        MirInstruction::Evaluate(expression) => {
-                            let _ =
-                                self.expression(*expression, &mut locals, depth, basic_block.span)?;
-                        }
-                    }
-                }
-
-                match basic_block
-                    .terminator
-                    .as_ref()
-                    .expect("verified terminator")
-                {
-                    MirTerminator::Goto(target) => block = *target,
-                    MirTerminator::Branch {
-                        condition,
-                        then_block,
-                        else_block,
-                    } => {
-                        let condition =
-                            self.expression(*condition, &mut locals, depth, basic_block.span)?;
-                        block = if self.expect_bool(condition, basic_block.span)? {
-                            *then_block
-                        } else {
-                            *else_block
-                        };
-                    }
-                    MirTerminator::MatchTest {
-                        match_id,
-                        pattern,
-                        matched_block,
-                        unmatched_block,
-                    } => {
-                        let value = self.match_values.get(match_id).cloned().ok_or_else(|| {
-                            runtime_error(basic_block.span, "MIR match value was not initialized")
-                        })?;
-                        let mut bindings = HashMap::new();
-                        if match_pattern(pattern, &value, &mut bindings) {
-                            locals.extend(bindings);
-                            block = *matched_block;
-                        } else {
-                            block = *unmatched_block;
-                        }
-                    }
-                    MirTerminator::MatchFailure { span } => {
-                        return Err(runtime_error(*span, "MIR match had no matching arm"));
-                    }
-                    MirTerminator::IteratorNext {
-                        iterator,
-                        bindings,
-                        body_block,
-                        exit_block,
-                    } => {
-                        let value = self
-                            .iterators
-                            .get_mut(iterator)
-                            .ok_or_else(|| {
-                                runtime_error(basic_block.span, "MIR iterator was not initialized")
-                            })?
-                            .next();
-                        if let Some(value) = value {
-                            bind_iterator_value(&mut locals, bindings, value, basic_block.span)?;
-                            block = *body_block;
-                        } else {
-                            block = *exit_block;
-                        }
-                    }
-                    MirTerminator::Return(value) => {
-                        return value.map_or(Ok(Value::Unit), |expression| {
-                            self.expression(expression, &mut locals, depth, function.span)
-                        });
-                    }
-                    MirTerminator::ReturnAfterLoopInvariants { value, invariants } => {
-                        let result = value.map_or(Ok(Value::Unit), |expression| {
-                            self.expression(expression, &mut locals, depth, function.span)
-                        })?;
-                        for invariant in invariants {
-                            self.check_loop_invariants(
-                                &[invariant.expression],
-                                &mut locals,
-                                depth,
-                                invariant.loop_span,
-                                LoopInvariantPhase::After,
-                            )?;
-                        }
-                        return Ok(result);
-                    }
-                    MirTerminator::Unreachable => {
-                        return Err(RuntimeError {
-                            message: "MIR execution reached an unreachable block".into(),
-                            span: basic_block.span,
-                        });
-                    }
-                }
-            }
-        })()?;
+        let result = match self.execute_blocks(function, function.entry, None, &mut locals, depth)?
+        {
+            BlockExit::Returned(value) => value,
+            BlockExit::ReachedStop => Value::Unit,
+        };
 
         if !function.ensures.is_empty() {
             locals.insert(function.contract_result_local, result.clone());
@@ -1150,6 +838,439 @@ impl Machine<'_> {
             }
         }
         Ok(result)
+    }
+
+    fn execute_blocks(
+        &mut self,
+        function: &'program crate::MirFunction,
+        entry: BlockId,
+        stop_at: Option<BlockId>,
+        locals: &mut HashMap<LocalId, Value>,
+        depth: usize,
+    ) -> Result<BlockExit, RuntimeError> {
+        let mut block = entry;
+        loop {
+            if stop_at == Some(block) {
+                return Ok(BlockExit::ReachedStop);
+            }
+            let basic_block = function.blocks.get(block.0).ok_or_else(|| RuntimeError {
+                message: format!("MIR control flow reached missing block {}", block.0),
+                span: function.span,
+            })?;
+            if let Some(loop_span) = basic_block.loop_span {
+                self.tick(loop_span)?;
+            }
+            if !basic_block.loop_invariants.is_empty() {
+                self.check_loop_invariants(
+                    &basic_block.loop_invariants,
+                    locals,
+                    depth,
+                    basic_block.loop_span.unwrap_or(basic_block.span),
+                    LoopInvariantPhase::Before,
+                )?;
+            }
+            for instruction in &basic_block.instructions {
+                if !matches!(
+                    instruction,
+                    MirInstruction::SourceStep { .. } | MirInstruction::LoopInvariantCheck { .. }
+                ) {
+                    self.tick(instruction_span(self.program, instruction))?;
+                }
+                match instruction {
+                    MirInstruction::SourceStep { span } => self.tick(*span)?,
+                    MirInstruction::Let {
+                        local, value, span, ..
+                    } => {
+                        let value = self.expression(*value, locals, depth, *span)?;
+                        locals.insert(*local, value);
+                    }
+                    MirInstruction::Assign {
+                        local, value, span, ..
+                    } => {
+                        if !locals.contains_key(local) {
+                            return Err(RuntimeError {
+                                message: "MIR assignment targets an uninitialized local".into(),
+                                span: *span,
+                            });
+                        }
+                        let value = self.expression(*value, locals, depth, *span)?;
+                        locals.insert(*local, value);
+                    }
+                    MirInstruction::ArrayIndexAssign {
+                        local,
+                        index,
+                        value,
+                        operation,
+                        span,
+                        ..
+                    } => {
+                        let items_len = match locals.get(local) {
+                            Some(Value::Array(items)) => items.len(),
+                            Some(other) => {
+                                return Err(runtime_error(
+                                    *span,
+                                    format!("indexed assignment requires Array, got `{}`", other.ty()),
+                                ));
+                            }
+                            None => {
+                                return Err(runtime_error(
+                                    *span,
+                                    "MIR indexed assignment targets an uninitialized local",
+                                ));
+                            }
+                        };
+                        let index = self.expression(*index, locals, depth, *span)?;
+                        let index = array_assignment_index(index, items_len, *span)?;
+                        let current = if *operation == ArrayIndexAssignOp::Add {
+                            let Some(Value::Array(items)) = locals.get(local) else {
+                                return Err(runtime_error(
+                                    *span,
+                                    "MIR indexed assignment target changed during evaluation",
+                                ));
+                            };
+                            Some(items[index].clone())
+                        } else {
+                            None
+                        };
+                        let value = self.expression(*value, locals, depth, *span)?;
+                        let value = match current {
+                            None => value,
+                            Some(current) => evaluate_binary(current, BinaryOp::Add, value, *span)?,
+                        };
+                        let Some(Value::Array(items)) = locals.get_mut(local) else {
+                            return Err(runtime_error(
+                                *span,
+                                "MIR indexed assignment target changed during evaluation",
+                            ));
+                        };
+                        let element = items.get_mut(index).ok_or_else(|| {
+                            runtime_error(*span, "MIR mutable array index is out of bounds")
+                        })?;
+                        *element = value;
+                    }
+                    MirInstruction::MatchInit {
+                        match_id,
+                        value,
+                        span,
+                    } => {
+                        let value = self.expression(*value, locals, depth, *span)?;
+                        self.match_values.insert(*match_id, value);
+                    }
+                    MirInstruction::IteratorInit {
+                        iterator,
+                        source,
+                        span,
+                    } => {
+                        let state = match source {
+                            MirIteratorSource::Collection(expression) => {
+                                let value = self.expression(*expression, locals, depth, *span)?;
+                                match value {
+                                    Value::Array(values) | Value::Set(values) => {
+                                        IteratorState::Values(values.into_iter())
+                                    }
+                                    other => {
+                                        return Err(runtime_error(
+                                            *span,
+                                            format!(
+                                                "MIR collection iterator requires Array or Set, got `{}`",
+                                                other.ty()
+                                            ),
+                                        ));
+                                    }
+                                }
+                            }
+                            MirIteratorSource::IntegerRange { start, end, step } => {
+                                let start_value = self.expression(*start, locals, depth, *span)?;
+                                let end_value = self.expression(*end, locals, depth, *span)?;
+                                let (Value::Int(start), Value::Int(end)) = (start_value, end_value)
+                                else {
+                                    return Err(runtime_error(
+                                        *span,
+                                        "MIR integer range requires Int start and end values",
+                                    ));
+                                };
+                                let step = match step {
+                                    Some(expression) => {
+                                        match self.expression(*expression, locals, depth, *span)? {
+                                            Value::Int(step) => step,
+                                            other => {
+                                                return Err(runtime_error(
+                                                    *span,
+                                                    format!(
+                                                        "MIR integer range step must be Int, got `{}`",
+                                                        other.ty()
+                                                    ),
+                                                ));
+                                            }
+                                        }
+                                    }
+                                    None => 1,
+                                };
+                                if step == 0 {
+                                    return Err(runtime_error(
+                                        *span,
+                                        "MIR integer range step must not be zero",
+                                    ));
+                                }
+                                IteratorState::Range {
+                                    current: Some(start),
+                                    end,
+                                    step,
+                                }
+                            }
+                        };
+                        self.iterators.insert(*iterator, state);
+                    }
+                    MirInstruction::TupleBind {
+                        bindings,
+                        value,
+                        span,
+                    } => {
+                        let value = self.expression(*value, locals, depth, *span)?;
+                        let Value::Tuple(values) = value else {
+                            return Err(runtime_error(
+                                *span,
+                                "MIR tuple binding requires a Tuple value",
+                            ));
+                        };
+                        if bindings.len() != values.len() {
+                            return Err(runtime_error(
+                                *span,
+                                format!(
+                                    "MIR tuple binding expects {} values, received {}",
+                                    bindings.len(),
+                                    values.len()
+                                ),
+                            ));
+                        }
+                        if bindings
+                            .iter()
+                            .any(|binding| !binding.is_new && !locals.contains_key(&binding.local))
+                        {
+                            return Err(runtime_error(
+                                *span,
+                                "MIR tuple assignment targets an uninitialized local",
+                            ));
+                        }
+                        for (binding, value) in bindings.iter().zip(values) {
+                            locals.insert(binding.local, value);
+                        }
+                    }
+                    MirInstruction::Transaction { operations, span } => {
+                        self.execute_transaction(operations, locals, depth, *span)?;
+                    }
+                    MirInstruction::DecisionTransaction { entry, exit, span } => {
+                        if let BlockExit::Returned(value) = self.execute_decision_transaction(
+                            function, *entry, *exit, locals, depth, *span,
+                        )? {
+                            return Ok(BlockExit::Returned(value));
+                        }
+                    }
+                    MirInstruction::Parallel { bindings, span } => {
+                        if self.transactional_query.is_some() {
+                            return Err(runtime_error(
+                                *span,
+                                "parallel execution is unavailable inside a borrowed database transaction",
+                            ));
+                        }
+                        self.execute_parallel(bindings, locals, depth, *span)?;
+                    }
+                    MirInstruction::LoopInvariantCheck {
+                        expressions,
+                        phase,
+                        span,
+                    } => self.check_loop_invariants(expressions, locals, depth, *span, *phase)?,
+                    MirInstruction::Evaluate(expression) => {
+                        let _ = self.expression(*expression, locals, depth, basic_block.span)?;
+                    }
+                }
+            }
+
+            match basic_block
+                .terminator
+                .as_ref()
+                .expect("verified terminator")
+            {
+                MirTerminator::Goto(target) => block = *target,
+                MirTerminator::Branch {
+                    condition,
+                    then_block,
+                    else_block,
+                } => {
+                    let condition = self.expression(*condition, locals, depth, basic_block.span)?;
+                    block = if self.expect_bool(condition, basic_block.span)? {
+                        *then_block
+                    } else {
+                        *else_block
+                    };
+                }
+                MirTerminator::MatchTest {
+                    match_id,
+                    pattern,
+                    matched_block,
+                    unmatched_block,
+                } => {
+                    let value = self.match_values.get(match_id).cloned().ok_or_else(|| {
+                        runtime_error(basic_block.span, "MIR match value was not initialized")
+                    })?;
+                    let mut bindings = HashMap::new();
+                    if match_pattern(pattern, &value, &mut bindings) {
+                        locals.extend(bindings);
+                        block = *matched_block;
+                    } else {
+                        block = *unmatched_block;
+                    }
+                }
+                MirTerminator::MatchFailure { span } => {
+                    return Err(runtime_error(*span, "MIR match had no matching arm"));
+                }
+                MirTerminator::IteratorNext {
+                    iterator,
+                    bindings,
+                    body_block,
+                    exit_block,
+                } => {
+                    let value = self
+                        .iterators
+                        .get_mut(iterator)
+                        .ok_or_else(|| {
+                            runtime_error(basic_block.span, "MIR iterator was not initialized")
+                        })?
+                        .next();
+                    if let Some(value) = value {
+                        bind_iterator_value(locals, bindings, value, basic_block.span)?;
+                        block = *body_block;
+                    } else {
+                        block = *exit_block;
+                    }
+                }
+                MirTerminator::Return(value) => {
+                    let result = value.map_or(Ok(Value::Unit), |expression| {
+                        self.expression(expression, locals, depth, function.span)
+                    })?;
+                    return Ok(BlockExit::Returned(result));
+                }
+                MirTerminator::ReturnAfterLoopInvariants { value, invariants } => {
+                    let result = value.map_or(Ok(Value::Unit), |expression| {
+                        self.expression(expression, locals, depth, function.span)
+                    })?;
+                    for invariant in invariants {
+                        self.check_loop_invariants(
+                            &[invariant.expression],
+                            locals,
+                            depth,
+                            invariant.loop_span,
+                            LoopInvariantPhase::After,
+                        )?;
+                    }
+                    return Ok(BlockExit::Returned(result));
+                }
+                MirTerminator::Unreachable => {
+                    return Err(RuntimeError {
+                        message: "MIR execution reached an unreachable block".into(),
+                        span: basic_block.span,
+                    });
+                }
+            }
+        }
+    }
+
+    fn execute_decision_transaction(
+        &mut self,
+        function: &'program crate::MirFunction,
+        entry: BlockId,
+        exit: BlockId,
+        locals: &mut HashMap<LocalId, Value>,
+        depth: usize,
+        span: Span,
+    ) -> Result<BlockExit, RuntimeError> {
+        if self.transactional_query.is_some() {
+            return self.execute_blocks(function, entry, Some(exit), locals, depth);
+        }
+        let database_url = self.database_url.clone().ok_or_else(|| RuntimeError {
+            message: "transaction execution requires a database runtime".into(),
+            span,
+        })?;
+        if !self.storage_checked {
+            zelyra_runtime::validate_database_storage_with_host(
+                &database_url,
+                &self.storage_schema,
+                self.host_services.as_ref(),
+                span,
+            )?;
+            self.storage_checked = true;
+        }
+        let host_services = Arc::clone(&self.host_services);
+        let mut outcome: Option<Result<BlockExit, RuntimeError>> = None;
+        let mut rolled_back_for_err_return = false;
+        let tx_result = host_services.run_database_transaction(&database_url, &mut |tx| {
+            let mut child = Machine {
+                program: self.program,
+                functions: std::mem::take(&mut self.functions),
+                match_values: std::mem::take(&mut self.match_values),
+                iterators: std::mem::take(&mut self.iterators),
+                closures: Arc::clone(&self.closures),
+                next_closure_id: Arc::clone(&self.next_closure_id),
+                step_budget: std::mem::replace(&mut self.step_budget, StepBudget::new(None)),
+                limits: self.limits,
+                active_capabilities: std::mem::take(&mut self.active_capabilities),
+                database_url: self.database_url.clone(),
+                storage_schema: self.storage_schema.clone(),
+                storage_checked: self.storage_checked,
+                grants: self.grants.clone(),
+                process_policy: self.process_policy.clone(),
+                filesystem_policy: self.filesystem_policy.clone(),
+                network_policy: self.network_policy.clone(),
+                mail_policy: self.mail_policy.clone(),
+                package_settings: self.package_settings.clone(),
+                host_services: Arc::clone(&self.host_services),
+                transactional_query: Some(tx),
+                output: Arc::clone(&self.output),
+            };
+            let block_result = child.execute_blocks(function, entry, Some(exit), locals, depth);
+            self.functions = child.functions;
+            self.match_values = child.match_values;
+            self.iterators = child.iterators;
+            self.step_budget = child.step_budget;
+            self.active_capabilities = child.active_capabilities;
+            self.storage_checked = child.storage_checked;
+            let should_rollback = match &block_result {
+                Err(_) => true,
+                Ok(BlockExit::Returned(Value::Result(Err(_)))) => {
+                    rolled_back_for_err_return = true;
+                    true
+                }
+                Ok(_) => false,
+            };
+            outcome = Some(block_result);
+            if should_rollback {
+                Err("transaction rolled back".into())
+            } else {
+                Ok(())
+            }
+        });
+        match outcome {
+            Some(Err(error)) => Err(error),
+            Some(Ok(exit)) if rolled_back_for_err_return => Ok(exit),
+            Some(Ok(exit)) => {
+                if let Err(error) = tx_result {
+                    return Err(runtime_error(
+                        span,
+                        format!("database transaction failed: {error}"),
+                    ));
+                }
+                Ok(exit)
+            }
+            None => Err(runtime_error(
+                span,
+                format!(
+                    "database transaction failed: {}",
+                    tx_result
+                        .err()
+                        .unwrap_or_else(|| "transaction did not execute".into())
+                ),
+            )),
+        }
     }
 
     fn expression(
@@ -1725,6 +1846,7 @@ impl Machine<'_> {
                     | "http_request"
                     | "http_json"
                     | "http_result"
+                    | "mail_queue"
                     | "mail_deliver"
                     | "json_encode"
                     | "json_decode"
@@ -2009,6 +2131,60 @@ impl Machine<'_> {
                 Ok(Value::Option(
                     value.map(|value| Box::new(Value::String(value))),
                 ))
+            }
+            "mail_queue" => {
+                if self.transactional_query.is_none() {
+                    return Err(runtime_error(
+                        span,
+                        "mail_queue is only allowed inside a transaction",
+                    ));
+                }
+                if !matches!(args.len(), 3..=6) {
+                    return Err(runtime_error(
+                        span,
+                        "mail_queue expects recipient, subject, text body, optional HTML body, and optional PDF filename and Bytes",
+                    ));
+                }
+                self.require_host_capability("Email", "email outbox", span)?;
+                self.require_host_capability(
+                    "Database(write)",
+                    "transactional mail queue write",
+                    span,
+                )?;
+                let database_url = self.database_url.as_deref().ok_or_else(|| {
+                    runtime_error(
+                        span,
+                        "mail_queue requires a MariaDB or MySQL database runtime",
+                    )
+                })?;
+                if !zelyra_runtime::supports_mail_outbox_database(database_url) {
+                    return Err(runtime_error(
+                        span,
+                        "mail_queue currently requires MariaDB or MySQL; PostgreSQL outbox support is not available",
+                    ));
+                }
+                let mut values = Vec::with_capacity(args.len());
+                let mut argument_spans = Vec::with_capacity(args.len());
+                for argument in args {
+                    argument_spans.push(
+                        self.program
+                            .expressions
+                            .get(argument.0)
+                            .map(|item| item.span)
+                            .unwrap_or(span),
+                    );
+                    values.push(self.expression(*argument, locals, depth, span)?);
+                }
+                let query = zelyra_runtime::prepare_mail_queue_query(
+                    &values,
+                    &argument_spans,
+                    span,
+                    self.host_services.as_ref(),
+                )?;
+                let tx = self.transactional_query.as_deref_mut().expect("checked above");
+                tx(&query)
+                    .map_err(|error| runtime_error(span, format!("database transaction failed: {error}")))?;
+                Ok(Value::Unit)
             }
             "mail_deliver" => {
                 if args.len() != 2 {
@@ -2791,15 +2967,21 @@ impl Machine<'_> {
             )?;
             self.storage_checked = true;
         }
-        let result = zelyra_runtime::execute_database_query_with_host(
-            database_url,
-            &zelyra_database::Query {
-                sql: query.into(),
-                params,
-            },
-            self.host_services.as_ref(),
-            span,
-        )?;
+        let database_query = zelyra_database::Query {
+            sql: query.into(),
+            params,
+        };
+        let result = if let Some(tx) = &mut self.transactional_query {
+            tx(&database_query)
+                .map_err(|error| runtime_error(span, format!("database query failed: {error}")))?
+        } else {
+            zelyra_runtime::execute_database_query_with_host(
+                database_url,
+                &database_query,
+                self.host_services.as_ref(),
+                span,
+            )?
+        };
         Ok(Value::Rows {
             columns: result.columns,
             rows: result.rows,
@@ -2904,11 +3086,19 @@ impl Machine<'_> {
             )?;
             self.storage_checked = true;
         }
-        self.host_services
-            .execute_database_batch(&database_url, &queries, true)
-            .map_err(|error| {
-                runtime_error(span, format!("database transaction failed: {error}"))
-            })?;
+        if let Some(tx) = &mut self.transactional_query {
+            for query in &queries {
+                tx(query).map_err(|error| {
+                    runtime_error(span, format!("database transaction failed: {error}"))
+                })?;
+            }
+        } else {
+            self.host_services
+                .execute_database_batch(&database_url, &queries, true)
+                .map_err(|error| {
+                    runtime_error(span, format!("database transaction failed: {error}"))
+                })?;
+        }
         Ok(())
     }
 
@@ -7015,5 +7205,155 @@ fn main() -> Int {
         assert!(matches!(actual.value, Value::Result(Err(_))));
         assert!(!base.join("escape.txt").exists());
         std::fs::remove_dir_all(base).unwrap();
+    }
+
+    #[test]
+    fn decision_transactions_commit_on_ok_and_roll_back_on_err_return_across_ast_and_mir() {
+        struct InMemoryDecisionHost {
+            committed_balance: Mutex<i64>,
+            commits: AtomicUsize,
+            rollbacks: AtomicUsize,
+        }
+
+        impl HostServices for InMemoryDecisionHost {
+            fn unix_time_millis(&self) -> Result<i64, String> {
+                Ok(0)
+            }
+
+            fn environment_variable(&self, _name: &str) -> Result<Option<String>, String> {
+                Ok(None)
+            }
+
+            fn fill_random(&self, _output: &mut [u8]) -> Result<(), String> {
+                Ok(())
+            }
+
+            fn validate_database_storage(
+                &self,
+                _database_url: &str,
+                _schema: &zelyra_database::Schema,
+            ) -> Result<(), String> {
+                Ok(())
+            }
+
+            fn run_database_transaction(
+                &self,
+                _database_url: &str,
+                operation: &mut dyn FnMut(
+                    &mut (dyn FnMut(
+                        &zelyra_database::Query,
+                    ) -> Result<zelyra_database::QueryResult, String>
+                              + Send),
+                ) -> Result<(), String>,
+            ) -> Result<(), String> {
+                let mut staged = *self.committed_balance.lock().unwrap();
+                let mut exec = |query: &zelyra_database::Query| -> Result<zelyra_database::QueryResult, String> {
+                    if query.sql.contains("SELECT") {
+                        Ok(zelyra_database::QueryResult {
+                            columns: vec!["id".into(), "balance".into()],
+                            rows: vec![vec!["1".into(), staged.to_string()]],
+                            nulls: vec![vec![false, false]],
+                            column_types: vec![
+                                zelyra_database::QueryColumnType::Integer,
+                                zelyra_database::QueryColumnType::Integer,
+                            ],
+                        })
+                    } else if query.sql.contains("UPDATE") {
+                        if let Some((_, zelyra_database::QueryValue::Int(next))) =
+                            query.params.iter().find(|(name, _)| name == "next_balance")
+                        {
+                            staged = *next;
+                        }
+                        Ok(zelyra_database::QueryResult::default())
+                    } else {
+                        Ok(zelyra_database::QueryResult::default())
+                    }
+                };
+                match operation(&mut exec) {
+                    Ok(()) => {
+                        *self.committed_balance.lock().unwrap() = staged;
+                        self.commits.fetch_add(1, Ordering::SeqCst);
+                        Ok(())
+                    }
+                    Err(error) => {
+                        self.rollbacks.fetch_add(1, Ordering::SeqCst);
+                        Err(error)
+                    }
+                }
+            }
+        }
+
+        let source = r#"
+            database main { engine: mariadb database: "decision_test" }
+            table accounts { id: Id primary auto balance: Int required }
+            pub struct Account { id: Id balance: Int }
+            fn withdraw(account_id: Int, amount: Int) -> Result<Int, String> uses Database {
+                transaction {
+                    rows = sql_decode<Account[]>(sql<Account[]> {
+                        SELECT id, balance FROM accounts WHERE id = :account_id FOR UPDATE
+                    })
+                    next_balance = rows[0].balance - amount
+                    sql { UPDATE accounts SET balance = :next_balance WHERE id = :account_id }
+                    if next_balance < 0 {
+                        return Err("insufficient funds")
+                    }
+                    return Ok(next_balance)
+                }
+                return Err("unreachable")
+            }
+            fn main() {}
+        "#;
+        let (ast, mir) = program(source);
+        let grants = HashSet::from(["Database".to_owned()]);
+        let url = "mariadb://user:secret@127.0.0.1:3306/decision_test";
+
+        for (amount, expect_ok, expected_balance, expected_commits, expected_rollbacks) in
+            [(40_i64, true, 60_i64, 1_usize, 0_usize), (150, false, 100, 0, 1)]
+        {
+            let ast_host = Arc::new(InMemoryDecisionHost {
+                committed_balance: Mutex::new(100),
+                commits: AtomicUsize::new(0),
+                rollbacks: AtomicUsize::new(0),
+            });
+            let mir_host = Arc::new(InMemoryDecisionHost {
+                committed_balance: Mutex::new(100),
+                commits: AtomicUsize::new(0),
+                rollbacks: AtomicUsize::new(0),
+            });
+            let args = vec![Value::Int(1), Value::Int(amount)];
+            let ast_val =
+                zelyra_runtime::execute_function_with_host_services_and_capabilities_and_policies(
+                    &ast,
+                    "withdraw",
+                    args.clone(),
+                    Some(url),
+                    Some(&grants),
+                    None,
+                    ast_host.clone(),
+                )
+                .unwrap();
+            let mir_val = execute_function_with_database_and_host_services_and_policy(
+                &mir,
+                "withdraw",
+                args,
+                ExecutionLimits::default(),
+                Some(&grants),
+                None,
+                DatabaseExecution {
+                    url,
+                    host_services: mir_host.clone(),
+                },
+            )
+            .unwrap()
+            .value;
+            assert_eq!(mir_val, ast_val);
+            assert_eq!(matches!(ast_val, Value::Result(Ok(_))), expect_ok);
+            assert_eq!(*ast_host.committed_balance.lock().unwrap(), expected_balance);
+            assert_eq!(*mir_host.committed_balance.lock().unwrap(), expected_balance);
+            assert_eq!(ast_host.commits.load(Ordering::SeqCst), expected_commits);
+            assert_eq!(mir_host.commits.load(Ordering::SeqCst), expected_commits);
+            assert_eq!(ast_host.rollbacks.load(Ordering::SeqCst), expected_rollbacks);
+            assert_eq!(mir_host.rollbacks.load(Ordering::SeqCst), expected_rollbacks);
+        }
     }
 }
