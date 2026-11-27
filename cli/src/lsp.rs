@@ -769,6 +769,10 @@ impl Server {
                     ("verify_ledger_balance", 3, "verify_ledger_balance(debits, credits) -> Result<Decimal, String>"),
                     ("einvoice_xml", 3, "einvoice_xml(...) -> Result<String, String>"),
                     ("einvoice_validate", 3, "einvoice_validate(xml) -> Result<Bool, String>"),
+                    ("redact", 3, "redact(value: String) -> String"),
+                    ("@pii", 14, "mark table column, record field, or param as personal data"),
+                    ("@secret", 14, "mark table column, record field, or param as secret (never logged/exposed)"),
+                    ("@redact", 14, "mark field for redaction semantics in GDPR inventories"),
                 ] {
                     completions.push(json!({
                         "label": label,

@@ -8,8 +8,10 @@ impl<'program, 'services> Interpreter<'program, 'services> {
         span: Span,
     ) -> Result<(), RuntimeError> {
         let declared = self.active_capabilities.last().is_some_and(|capabilities| {
-            capabilities.contains(capability)
-                || (capability.starts_with("Database(") && capabilities.contains("Database"))
+            crate::capabilities::capability_set_satisfies_primitive(
+                capabilities.iter().map(String::as_str),
+                capability,
+            )
         });
         if !declared {
             return Err(self.runtime_error(
@@ -33,6 +35,24 @@ impl<'program, 'services> Interpreter<'program, 'services> {
         Ok(())
     }
 
+    pub(crate) fn require_runtime_sql_table_scope(
+        &self,
+        query: &str,
+        span: Span,
+    ) -> Result<(), RuntimeError> {
+        let Some(capabilities) = self.active_capabilities.last() else {
+            return Ok(());
+        };
+        let declared = capabilities.iter().map(String::as_str).collect::<Vec<_>>();
+        let known_tables: Vec<String> = self.program_context.storage_schema.as_ref().map_or_else(
+            |_| Vec::new(),
+            |schema| schema.tables.iter().map(|t| t.name.clone()).collect(),
+        );
+        crate::capabilities::check_sql_table_scope(query, &known_tables, &declared).map_err(
+            |reason| self.runtime_error(span, format!("runtime capability denied: {reason}")),
+        )
+    }
+
     pub(crate) fn filesystem_roots(&self, write: bool) -> Vec<PathBuf> {
         self.execution_context
             .filesystem_policy
@@ -54,6 +74,12 @@ impl<'program, 'services> Interpreter<'program, 'services> {
         span: Span,
         allow_missing: bool,
     ) -> Result<PathBuf, RuntimeError> {
+        if let Some(capabilities) = self.active_capabilities.last() {
+            let declared = capabilities.iter().map(String::as_str).collect::<Vec<_>>();
+            crate::capabilities::check_filesystem_path_scope(path, &declared).map_err(
+                |reason| self.runtime_error(span, format!("runtime capability denied: {reason}")),
+            )?;
+        }
         resolve_filesystem_path_rule(
             self.execution_context.filesystem_policy.as_ref(),
             path,
@@ -73,6 +99,12 @@ impl<'program, 'services> Interpreter<'program, 'services> {
         request_body: Option<&str>,
         span: Span,
     ) -> Result<Value, RuntimeError> {
+        if let Some(capabilities) = self.active_capabilities.last() {
+            let declared = capabilities.iter().map(String::as_str).collect::<Vec<_>>();
+            crate::capabilities::check_network_url_scope(url, &declared).map_err(|reason| {
+                self.runtime_error(span, format!("runtime capability denied: {reason}"))
+            })?;
+        }
         let response = execute_http_request_with_host(
             method,
             url,

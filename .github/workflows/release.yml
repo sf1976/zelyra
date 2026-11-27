@@ -65,6 +65,7 @@ on:
       - 'docs/release-plans/1.2.22-business-invariants-and-master-detail.*.md'
       - 'docs/release-notes/1.2.22.en.md'
       - 'docs/release-notes/1.2.22.de.md'
+      - 'docs/release-notes/1.7.0.*.md'
       - 'docs/packages.*.md'
       - 'docs/handbook/en/textbook-foundations.md'
       - 'docs/handbook/de/lehrbuch-grundlagen.md'

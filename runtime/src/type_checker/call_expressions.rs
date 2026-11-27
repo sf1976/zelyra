@@ -182,6 +182,17 @@ impl Checker<'_> {
             let xml = self.check_expr(&args[0], scopes);
             self.expect_type(&Type::String, &xml, args[0].span);
             Type::Result(Box::new(Type::Bool), Box::new(Type::String))
+        } else if name == "redact" {
+            if !type_args.is_empty() || args.len() != 1 {
+                self.error(
+                    span,
+                    "`redact(value)` expects one String argument and no type arguments",
+                );
+                return Type::Unknown;
+            }
+            let value = self.check_expr(&args[0], scopes);
+            self.expect_type(&Type::String, &value, args[0].span);
+            Type::String
         } else if name == "assert" {
             if !type_args.is_empty() {
                 self.error(span, "`assert` does not accept type arguments");

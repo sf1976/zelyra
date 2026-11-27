@@ -372,6 +372,7 @@ fn is_compact_token(kind: &TokenKind) -> bool {
             | TokenKind::LParen
             | TokenKind::LBracket
             | TokenKind::Comma
+            | TokenKind::At
             | TokenKind::Colon
             | TokenKind::DoubleColon
             | TokenKind::Dot
@@ -535,6 +536,7 @@ fn token_text<'a>(token: &'a Token, source: &'a str) -> &'a str {
         TokenKind::Colon => ":",
         TokenKind::DoubleColon => "::",
         TokenKind::Comma => ",",
+        TokenKind::At => "@",
         TokenKind::LParen => "(",
         TokenKind::RParen => ")",
         TokenKind::LBrace => "{",

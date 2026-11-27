@@ -78,13 +78,13 @@ Verifikation oder `PROVEN` gelten.
 Kurz und ohne Fachjargon — was sich für Teams, Betreiber und bestehende
 Anwendungen mit jedem Schritt konkret verbessert:
 
-- **Heute (`1.6.0`):** Deine Anwendung kann keine Währungen versehentlich
+- **Bis `1.6.0` (Finanzen & Prozessintegrität):** Deine Anwendung kann keine Währungen versehentlich
   mischen, keine Buchungen im Ledger heimlich überschreiben und keine
   Vier-Augen-Freigabe umgehen — geprüft vor dem Produktivstart.
-- **Ab `1.7.0` (Datenschutz & Berechtigungen):** Persönliche Kundendaten und
-  Geheimnisse können nicht versehentlich in Logdateien oder öffentliche
-  Schnittstellen geraten. DSGVO-Übersichten (wo welche Daten liegen und wie sie
-  exportiert oder gelöscht werden) erzeugt Zelyra direkt aus dem Quelltext.
+- **Release-Kandidat (`1.7.0`, Datenschutz & Berechtigungen):** Der Compiler
+  prüft unterstützte Flüsse markierter Daten in Logs und öffentliche Routen.
+  Aus den Markierungen im Quelltext leitet Zelyra Dateninventare sowie
+  Export- und Löschpläne ab.
 - **Ab `1.8.0` (Unabhängiger Sicherheitsnachweis):** Jedes Release bekommt einen
   offenen, unabhängig prüfbaren Nachweis (`zelyra-proof.json`). Änderungen —
   egal ob von Menschen oder KI-Werkzeugen geschrieben — werden automatisch
@@ -122,7 +122,7 @@ Anwendungen mit jedem Schritt konkret verbessert:
 
 | Version | Schwerpunkt | Verbindlicher Umfang & Exit-Kriterien |
 | --- | --- | --- |
-| 1.7.0 🗺️ | **Information Flow Control, Mandanten-SQL & Verified Authorization v1** | Sprachweite statische Verfolgung sensibler Daten (`@pii`, `@secret`, `@redact` mit `E-PRIVACY-001`), technisch erzwungener Datenschutz, Mandantenisolation und Verhinderung unzulässiger Datenweitergabe; compiler-generierter DSGVO-Katalog (`zelyra privacy map\|export-plan\|erase-plan`); erweiterte fail-closed Mandanten-SQL-Algebra (nicht-rekursive `WITH`-CTEs, `GROUP BY`/`HAVING`, mandantensichere Batch-Writes); ressourcengenaue Capabilities (`Database(read/write)`, `Network(allow: [...])`, `FileSystem(scope: ...)`); **Verified Authorization v1** (statisch geprüfte Rollen-, Objekt- und Mandanten-Berechtigungsmatrix ohne unzulässige Privilegienausweitung). |
+| 1.7.0 🧪 | **Information Flow Control, Mandanten-SQL & Verified Authorization v1** | Sprachweite statische Verfolgung sensibler Daten (`@pii`, `@secret`, `@redact` mit `E-PRIVACY-001`), technisch erzwungener Datenschutz, Mandantenisolation und Verhinderung unzulässiger Datenweitergabe; compiler-generierter DSGVO-Katalog (`zelyra privacy map\|export-plan\|erase-plan`); erweiterte fail-closed Mandanten-SQL-Algebra (nicht-rekursive `WITH`-CTEs, `GROUP BY`/`HAVING`, mandantensichere Batch-Writes); ressourcengenaue Capabilities (`Database(read/write)`, `Network(allow: [...])`, `FileSystem(scope: ...)`); **Verified Authorization v1** (prüft die Authentifizierung datenbankschreibender API-Routen und validiert Rollen- und Vier-Augen-Anforderungen für Zustandsübergänge). Die Release-Gates sind offen. Siehe die [Release-Notizen 1.7.0](release-notes/1.7.0.de.md). |
 | 1.8.0 🗺️ | **Independent Proof Verification v1, Proof-Carrying Deployment v1 & Explainable Decisions v1** | Offenes Beweisformat (`zelyra certify` → `zelyra-proof.json`) mit allen 6 Evidenzklassen (`PROVEN`–`UNVERIFIED`) und expliziten Beweisannahmen; **Independent Proof Verification v1** (eigenständiger, quelloffener Proof Checker mit minimaler Trusted Computing Base); semantische PR-/KI-Diff-Verifikation (`zelyra diff-verify --fail-on-privilege-escalation`); **Proof-Carrying Deployment v1** (`zelyra build --bundle`, reproduzierbarer Build, SPDX-SBOM, kryptografisch signierte Deployment-Attestierung); **Explainable Business Decisions v1** (nachvollziehbare Entscheidungs- und Regelprotokolle); Bytecode-Standard-Gate (nur bei belegter Parität & gemessenem Nutzen) sowie opt-in Wasm-Erweiterungen unter Capability-Sandbox. |
 | 1.9.0 🗺️ | **Formal Verification Foundation v1, Verified Resilience v1 & Enterprise DX v1** | Feature-Freeze für `2.0.0`; **Formal Verification Foundation v1** (frühzeitige Integration der SMT-Verifikation mit strikter Timeout-→`UNVERIFIED`-Regel, kontinuierliches Compiler-Fuzzing, formale Spezifikation der Sprachkernsemantik, unabhängige Sicherheitsprüfung); **Verified Resilience v1** (Idempotenz, Transactional Outbox/Inbox, Crash-Recovery, reproduzierbare Fault-Injection-Tests); Zero-Downtime-Schema-Migrationen (`zelyra db plan --zero-downtime`: `expand -> backfill -> contract`); **Enterprise DX v1** (Dependency-Verifikation, Abwärtskompatibilitäts- und verbindliche Sicherheitsupdate-Strategie, vollständige zweisprachige Handbücher); Zelyra Studio 2.0 (Schema-, State-Machine-, Workflow- & `@pii`-Explorer); lokale telemetriefreie Observability (`/__zelyra/metrics`) und No-Telemetry-CI-Gate. |
 | 2.0.0 🗺️ | **The Proof-Carrying Business Language (LTS)** | Stabile Sprachlinie `1.0` (3-Jahres-LTS-Pflege); **verbindliche unabhängige Beweisprüfung** über den eigenständigen Proof Checker im Release- und Deployment-Pfad; versionierte Verträge für `reflect`, `certify`, `diff-verify`, `lsp`, `zelyra.lock` und Zelyra-UI-CSS; vollständige MariaDB-/PostgreSQL-Parität im definierten Umfang; reproduzierbare Mini-ERP-Referenz mit unabhängig verifiziertem `zelyra-proof.json`. |

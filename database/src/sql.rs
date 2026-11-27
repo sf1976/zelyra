@@ -75,12 +75,99 @@ pub fn check_sql_query(
 /// Reports conservative table access modes for the SQL statement forms
 /// accepted by the current checker. Complex joined UPDATE/DELETE statements
 /// are marked unknown because their write targets are dialect-sensitive.
+type SplitCteResult<'a> = (Vec<(String, Vec<SqlToken>)>, &'a [SqlToken]);
+
+fn split_with_ctes(tokens: &[SqlToken]) -> Result<SplitCteResult<'_>, String> {
+    let Some(SqlToken::Word(first)) = tokens.first() else {
+        return Err("SQL query must not be empty".into());
+    };
+    if !first.eq_ignore_ascii_case("WITH") {
+        return Ok((Vec::new(), tokens));
+    }
+    if matches!(tokens.get(1), Some(SqlToken::Word(w)) if w.eq_ignore_ascii_case("RECURSIVE")) {
+        return Err("recursive CTEs (`WITH RECURSIVE`) are not supported".into());
+    }
+    let mut pos = 1usize;
+    let mut ctes = Vec::new();
+    loop {
+        let Some(SqlToken::Word(cte_name)) = tokens.get(pos) else {
+            return Err("expected CTE name after `WITH` or `,`".into());
+        };
+        let cte_name = cte_name.clone();
+        pos += 1;
+        // Skip optional CTE column list `(col1, col2, ...)`
+        if matches!(tokens.get(pos), Some(SqlToken::OpenParen)) {
+            let mut depth = 0isize;
+            while pos < tokens.len() {
+                match &tokens[pos] {
+                    SqlToken::OpenParen => depth += 1,
+                    SqlToken::CloseParen => {
+                        depth -= 1;
+                        if depth == 0 {
+                            pos += 1;
+                            break;
+                        }
+                    }
+                    _ => {}
+                }
+                pos += 1;
+            }
+            if depth != 0 {
+                return Err("unbalanced parentheses in CTE column list".into());
+            }
+        }
+        if !matches!(tokens.get(pos), Some(SqlToken::Word(w)) if w.eq_ignore_ascii_case("AS")) {
+            return Err(format!("expected `AS` after CTE `{cte_name}`"));
+        }
+        pos += 1;
+        if !matches!(tokens.get(pos), Some(SqlToken::OpenParen)) {
+            return Err(format!("expected `(` after `AS` for CTE `{cte_name}`"));
+        }
+        pos += 1;
+        let body_start = pos;
+        let mut depth = 1isize;
+        let mut body_end = None;
+        while pos < tokens.len() {
+            match &tokens[pos] {
+                SqlToken::OpenParen => depth += 1,
+                SqlToken::CloseParen => {
+                    depth -= 1;
+                    if depth == 0 {
+                        body_end = Some(pos);
+                        pos += 1;
+                        break;
+                    }
+                }
+                _ => {}
+            }
+            pos += 1;
+        }
+        let Some(end) = body_end else {
+            return Err(format!("unbalanced parentheses in CTE `{cte_name}`"));
+        };
+        ctes.push((cte_name, tokens[body_start..end].to_vec()));
+        if matches!(tokens.get(pos), Some(SqlToken::Comma)) {
+            pos += 1;
+            continue;
+        }
+        break;
+    }
+    if pos >= tokens.len() {
+        return Err("expected outer SQL statement after `WITH` CTEs".into());
+    }
+    Ok((ctes, &tokens[pos..]))
+}
+
 pub fn analyze_table_access(
     query: &str,
     known_tables: &[String],
 ) -> (Option<&'static str>, Vec<SqlTableAccess>) {
     let tokens = tokenize(query);
-    let Some(SqlToken::Word(command)) = tokens.first() else {
+    let (ctes, main_tokens) = match split_with_ctes(&tokens) {
+        Ok(split) => split,
+        Err(_) => return (None, Vec::new()),
+    };
+    let Some(SqlToken::Word(command)) = main_tokens.first() else {
         return (None, Vec::new());
     };
     let command = command.to_ascii_uppercase();
@@ -88,132 +175,145 @@ pub fn analyze_table_access(
         return (None, Vec::new());
     }
 
+    let cte_names = ctes
+        .iter()
+        .map(|(name, _)| name.to_ascii_lowercase())
+        .collect::<HashSet<_>>();
     let known = known_tables
         .iter()
+        .filter(|name| !cte_names.contains(&name.to_ascii_lowercase()))
         .map(|name| (name.to_ascii_lowercase(), name.as_str()))
         .collect::<HashMap<_, _>>();
     let mut modes = HashMap::<String, SqlAccessMode>::new();
-    let has_join = tokens
-        .iter()
-        .any(|token| matches!(token, SqlToken::Word(word) if word.eq_ignore_ascii_case("JOIN")));
-    let add_at = |index: usize, mode: SqlAccessMode, modes: &mut HashMap<String, SqlAccessMode>| {
-        let candidate = match (
-            tokens.get(index + 1),
-            tokens.get(index + 2),
-            tokens.get(index + 3),
-        ) {
-            (Some(SqlToken::Word(_schema)), Some(SqlToken::Dot), Some(SqlToken::Word(name))) => {
-                name
-            }
-            (Some(SqlToken::Word(name)), _, _) => name,
-            (Some(SqlToken::String(_)), _, _) => {
-                modes
-                    .entry(String::new())
-                    .and_modify(|existing| {
-                        *existing = merge_access(*existing, SqlAccessMode::Unknown)
-                    })
-                    .or_insert(SqlAccessMode::Unknown);
-                return;
-            }
-            _ => return,
-        };
-        let normalized = candidate.to_ascii_lowercase();
-        let Some(canonical) = known.get(&normalized) else {
-            return;
-        };
-        modes
-            .entry((*canonical).to_owned())
-            .and_modify(|existing| *existing = merge_access(*existing, mode))
-            .or_insert(mode);
-    };
+    let collect_from_slice =
+        |slice: &[SqlToken], cmd: &str, modes: &mut HashMap<String, SqlAccessMode>| {
+            let has_join = slice.iter().any(
+                |token| matches!(token, SqlToken::Word(word) if word.eq_ignore_ascii_case("JOIN")),
+            );
+            let add_at =
+                |index: usize, mode: SqlAccessMode, modes: &mut HashMap<String, SqlAccessMode>| {
+                    let candidate = match (
+                        slice.get(index + 1),
+                        slice.get(index + 2),
+                        slice.get(index + 3),
+                    ) {
+                        (
+                            Some(SqlToken::Word(_schema)),
+                            Some(SqlToken::Dot),
+                            Some(SqlToken::Word(name)),
+                        ) => name,
+                        (Some(SqlToken::Word(name)), _, _) => name,
+                        (Some(SqlToken::String(_)), _, _) => {
+                            modes
+                                .entry(String::new())
+                                .and_modify(|existing| {
+                                    *existing = merge_access(*existing, SqlAccessMode::Unknown)
+                                })
+                                .or_insert(SqlAccessMode::Unknown);
+                            return;
+                        }
+                        _ => return,
+                    };
+                    let normalized = candidate.to_ascii_lowercase();
+                    let Some(canonical) = known.get(&normalized) else {
+                        return;
+                    };
+                    modes
+                        .entry((*canonical).to_owned())
+                        .and_modify(|existing| *existing = merge_access(*existing, mode))
+                        .or_insert(mode);
+                };
 
-    match command.as_str() {
-        "SELECT" => {
-            for (index, token) in tokens
-                .iter()
-                .enumerate()
-                .take(tokens.len().saturating_sub(1))
-            {
-                if matches!(token, SqlToken::Word(word) if word.eq_ignore_ascii_case("FROM") || word.eq_ignore_ascii_case("JOIN"))
-                {
-                    add_at(index, SqlAccessMode::Read, &mut modes);
-                }
-            }
-        }
-        "INSERT" => {
-            for (index, token) in tokens
-                .iter()
-                .enumerate()
-                .take(tokens.len().saturating_sub(1))
-            {
-                if let SqlToken::Word(word) = token {
-                    if word.eq_ignore_ascii_case("INTO") {
-                        add_at(index, SqlAccessMode::Write, &mut modes);
-                    } else if word.eq_ignore_ascii_case("FROM") || word.eq_ignore_ascii_case("JOIN")
+            match cmd {
+                "SELECT" => {
+                    for (index, token) in
+                        slice.iter().enumerate().take(slice.len().saturating_sub(1))
                     {
-                        add_at(index, SqlAccessMode::Read, &mut modes);
+                        if matches!(token, SqlToken::Word(word) if word.eq_ignore_ascii_case("FROM") || word.eq_ignore_ascii_case("JOIN"))
+                        {
+                            add_at(index, SqlAccessMode::Read, modes);
+                        }
                     }
                 }
-            }
-        }
-        "UPDATE" => {
-            add_at(
-                0,
-                if has_join {
-                    SqlAccessMode::Unknown
-                } else {
-                    SqlAccessMode::Write
-                },
-                &mut modes,
-            );
-            for (index, token) in tokens
-                .iter()
-                .enumerate()
-                .take(tokens.len().saturating_sub(1))
-                .skip(1)
-            {
-                if matches!(token, SqlToken::Word(word) if word.eq_ignore_ascii_case("FROM") || word.eq_ignore_ascii_case("JOIN"))
-                {
+                "INSERT" => {
+                    for (index, token) in
+                        slice.iter().enumerate().take(slice.len().saturating_sub(1))
+                    {
+                        if let SqlToken::Word(word) = token {
+                            if word.eq_ignore_ascii_case("INTO") {
+                                add_at(index, SqlAccessMode::Write, modes);
+                            } else if word.eq_ignore_ascii_case("FROM")
+                                || word.eq_ignore_ascii_case("JOIN")
+                            {
+                                add_at(index, SqlAccessMode::Read, modes);
+                            }
+                        }
+                    }
+                }
+                "UPDATE" => {
                     add_at(
-                        index,
+                        0,
                         if has_join {
                             SqlAccessMode::Unknown
                         } else {
-                            SqlAccessMode::Read
+                            SqlAccessMode::Write
                         },
-                        &mut modes,
+                        modes,
                     );
+                    for (index, token) in slice
+                        .iter()
+                        .enumerate()
+                        .take(slice.len().saturating_sub(1))
+                        .skip(1)
+                    {
+                        if matches!(token, SqlToken::Word(word) if word.eq_ignore_ascii_case("FROM") || word.eq_ignore_ascii_case("JOIN"))
+                        {
+                            add_at(
+                                index,
+                                if has_join {
+                                    SqlAccessMode::Unknown
+                                } else {
+                                    SqlAccessMode::Read
+                                },
+                                modes,
+                            );
+                        }
+                    }
                 }
-            }
-        }
-        "DELETE" => {
-            let mut first_from = true;
-            for (index, token) in tokens
-                .iter()
-                .enumerate()
-                .take(tokens.len().saturating_sub(1))
-                .skip(1)
-            {
-                let SqlToken::Word(word) = token else {
-                    continue;
-                };
-                if word.eq_ignore_ascii_case("FROM") {
-                    let mode = if has_join {
-                        SqlAccessMode::Unknown
-                    } else if first_from {
-                        SqlAccessMode::Write
-                    } else {
-                        SqlAccessMode::Read
-                    };
-                    add_at(index, mode, &mut modes);
-                    first_from = false;
-                } else if word.eq_ignore_ascii_case("JOIN") {
-                    add_at(index, SqlAccessMode::Unknown, &mut modes);
+                "DELETE" => {
+                    let mut first_from = true;
+                    for (index, token) in slice
+                        .iter()
+                        .enumerate()
+                        .take(slice.len().saturating_sub(1))
+                        .skip(1)
+                    {
+                        let SqlToken::Word(word) = token else {
+                            continue;
+                        };
+                        if word.eq_ignore_ascii_case("FROM") {
+                            let mode = if has_join {
+                                SqlAccessMode::Unknown
+                            } else if first_from {
+                                SqlAccessMode::Write
+                            } else {
+                                SqlAccessMode::Read
+                            };
+                            add_at(index, mode, modes);
+                            first_from = false;
+                        } else if word.eq_ignore_ascii_case("JOIN") {
+                            add_at(index, SqlAccessMode::Unknown, modes);
+                        }
+                    }
                 }
+                _ => {}
             }
-        }
-        _ => unreachable!("SQL command was checked above"),
+        };
+
+    for (_, cte_tokens) in &ctes {
+        collect_from_slice(cte_tokens, "SELECT", &mut modes);
     }
+    collect_from_slice(main_tokens, command.as_str(), &mut modes);
 
     let mut accesses = modes
         .into_iter()
@@ -1975,7 +2075,21 @@ fn check_query(
 ) -> Vec<SqlError> {
     let tokens = tokenize(query);
     let mut errors = Vec::new();
-    let Some(SqlToken::Word(command)) = tokens.first() else {
+    let Some(SqlToken::Word(first_cmd)) = tokens.first() else {
+        return vec![sql_error(span, "SQL query must not be empty")];
+    };
+    let (ctes, main_tokens) = if first_cmd.eq_ignore_ascii_case("WITH") {
+        match split_with_ctes(&tokens) {
+            Ok(split) => split,
+            Err(message) => {
+                errors.push(sql_error(span, message));
+                return errors;
+            }
+        }
+    } else {
+        (Vec::new(), tokens.as_slice())
+    };
+    let Some(SqlToken::Word(command)) = main_tokens.first() else {
         return vec![sql_error(span, "SQL query must not be empty")];
     };
     let command = command.to_ascii_uppercase();
@@ -1987,12 +2101,73 @@ fn check_query(
         return errors;
     }
 
-    let table_names = schema
+    let mut extended_schema = schema.clone();
+    let real_table_names = schema
         .tables
         .iter()
         .map(|table| table.name.clone())
         .collect::<HashSet<_>>();
-    let tables = query_tables(&tokens, schema, &table_names, span, &mut errors);
+    let mut active_table_names = real_table_names.clone();
+
+    let mut cte_table_maps = Vec::with_capacity(ctes.len());
+    for (cte_name, cte_tokens) in &ctes {
+        let cte_tables = query_tables(
+            cte_tokens,
+            &extended_schema,
+            &active_table_names,
+            span,
+            &mut errors,
+        );
+        check_select_columns(cte_tokens, &cte_tables, &extended_schema, span, &mut errors);
+        cte_table_maps.push(cte_tables.clone());
+        let raw_projections = select_projections(cte_tokens).unwrap_or_default();
+        let has_star = raw_projections.iter().any(|proj| {
+            matches!(proj.as_slice(), [SqlToken::Star])
+                || matches!(
+                    proj.as_slice(),
+                    [SqlToken::Word(_), SqlToken::Dot, SqlToken::Star]
+                )
+        });
+        let virtual_cols = if has_star {
+            cte_tables
+                .values()
+                .filter_map(|tname| extended_schema.tables.iter().find(|t| &t.name == tname))
+                .flat_map(|t| t.columns.iter().cloned())
+                .collect::<Vec<_>>()
+        } else {
+            raw_projections
+                .into_iter()
+                .filter_map(|proj| projection_name(&proj))
+                .map(|col_name| crate::Column {
+                    name: col_name.to_ascii_lowercase(),
+                    sql_type: "TEXT".into(),
+                    nullable: true,
+                    primary_key: false,
+                    auto: false,
+                    unique: false,
+                    default: None,
+                })
+                .collect::<Vec<_>>()
+        };
+        let cte_lower = cte_name.to_ascii_lowercase();
+        active_table_names.insert(cte_lower.clone());
+        extended_schema.tables.push(crate::Table {
+            name: cte_lower,
+            tenant_scope_column: None,
+            columns: virtual_cols,
+            foreign_keys: Vec::new(),
+            indexes: Vec::new(),
+            uniques: Vec::new(),
+        });
+    }
+
+    let tables = query_tables(
+        main_tokens,
+        &extended_schema,
+        &active_table_names,
+        span,
+        &mut errors,
+    );
     for token in &tokens {
         let SqlToken::Parameter(name) = token else {
             continue;
@@ -2004,14 +2179,15 @@ fn check_query(
             ));
         }
     }
-    for (index, token) in tokens.iter().enumerate() {
+    for (index, token) in main_tokens.iter().enumerate() {
         let SqlToken::Parameter(name) = token else {
             continue;
         };
         let Some(actual) = environment.get(name) else {
             continue;
         };
-        let Some((column_name, expected)) = parameter_column_type(&tokens, index, &tables, schema)
+        let Some((column_name, expected)) =
+            parameter_column_type(main_tokens, index, &tables, &extended_schema)
         else {
             continue;
         };
@@ -2024,13 +2200,36 @@ fn check_query(
             ));
         }
     }
+    for ((_, cte_tokens), cte_tables) in ctes.iter().zip(cte_table_maps.iter()) {
+        for (index, token) in cte_tokens.iter().enumerate() {
+            let SqlToken::Parameter(name) = token else {
+                continue;
+            };
+            let Some(actual) = environment.get(name) else {
+                continue;
+            };
+            let Some((column_name, expected)) =
+                parameter_column_type(cte_tokens, index, cte_tables, &extended_schema)
+            else {
+                continue;
+            };
+            if !sql_types_compatible(&expected, actual) {
+                errors.push(sql_error(
+                    span,
+                    format!(
+                        "SQL parameter `:{name}` has type `{actual}`, but column `{column_name}` expects `{expected}`"
+                    ),
+                ));
+            }
+        }
+    }
 
     if command == "SELECT" {
-        check_select_columns(&tokens, &tables, schema, span, &mut errors);
-        check_result_mapping(result_type, &table_names, span, &mut errors);
+        check_select_columns(main_tokens, &tables, &extended_schema, span, &mut errors);
+        check_result_mapping(result_type, &real_table_names, span, &mut errors);
     } else {
         if command == "INSERT" {
-            check_upsert_clauses(&tokens, &tables, schema, span, &mut errors);
+            check_upsert_clauses(main_tokens, &tables, &extended_schema, span, &mut errors);
         }
         if !matches!(result_type, Type::Unit) {
             errors.push(sql_error(
@@ -3028,6 +3227,8 @@ fn sql_keyword(value: &str) -> bool {
             | "ANY"
             | "SOME"
             | "NULLS"
+            | "WITH"
+            | "RECURSIVE"
             | "FIRST"
             | "LAST"
             | "ILIKE"
@@ -3199,6 +3400,32 @@ pub fn verify_tenant_scoped_select(
     tenant_tables: &[TenantScopeRequirement],
     param_types: Option<&HashMap<String, Type>>,
 ) -> Result<Option<String>, String> {
+    verify_tenant_scoped_inner(query, tenant_tables, param_types, false)
+}
+
+/// Extended fail-closed tenant SQL algebra verifier (`1.7.0`).
+///
+/// Accepts:
+/// - `SELECT` and non-recursive `WITH` CTEs with `INNER`/`LEFT [OUTER] JOIN`,
+///   `GROUP BY`, and `HAVING` (rejects `WITH RECURSIVE`, subqueries, `UNION`,
+///   `RIGHT`/`FULL`/`CROSS` joins, quoted/schema-qualified identifiers).
+/// - Single-table tenant-safe `UPDATE`, `DELETE`, and single- or multi-row
+///   `VALUES` `INSERT` in `program.functions` bound to a matching nominal
+///   `TenantId` parameter.
+pub fn verify_tenant_scoped_sql(
+    query: &str,
+    tenant_tables: &[TenantScopeRequirement],
+    param_types: Option<&HashMap<String, Type>>,
+) -> Result<Option<String>, String> {
+    verify_tenant_scoped_inner(query, tenant_tables, param_types, true)
+}
+
+fn verify_tenant_scoped_inner(
+    query: &str,
+    tenant_tables: &[TenantScopeRequirement],
+    param_types: Option<&HashMap<String, Type>>,
+    allow_writes: bool,
+) -> Result<Option<String>, String> {
     if tenant_tables.is_empty() {
         return Ok(None);
     }
@@ -3225,15 +3452,84 @@ pub fn verify_tenant_scoped_select(
         return Err("quoted SQL identifiers cannot be verified in tenant-scoped queries".into());
     }
     let tokens = tokenize(query);
-    let Some(SqlToken::Word(first)) = tokens.first() else {
+    let (ctes, main_tokens) = split_with_ctes(&tokens)?;
+    let Some(SqlToken::Word(first)) = main_tokens.first() else {
         return Err("only `SELECT` queries may access tenant-scoped tables in custom SQL".into());
     };
-    if !first.eq_ignore_ascii_case("SELECT") {
+    let upper = first.to_ascii_uppercase();
+    if upper == "SELECT" {
+        let mut allowed_ctes = HashSet::new();
+        let mut bound_param: Option<String> = None;
+        for (cte_name, cte_tokens) in &ctes {
+            let cte_bound =
+                verify_tenant_select_tokens(cte_tokens, tenant_tables, param_types, &allowed_ctes)?;
+            merge_bound_tenant_param(&mut bound_param, cte_bound)?;
+            allowed_ctes.insert(cte_name.to_ascii_lowercase());
+        }
+        let main_bound =
+            verify_tenant_select_tokens(main_tokens, tenant_tables, param_types, &allowed_ctes)?;
+        merge_bound_tenant_param(&mut bound_param, main_bound)?;
+        return Ok(bound_param);
+    }
+    if !allow_writes || !ctes.is_empty() {
         return Err(
-            "only read-only `SELECT` queries may access tenant-scoped tables in custom SQL; use generated tenant CRUD routes for writes".into(),
+            "only read-only `SELECT` (or non-recursive `WITH ... SELECT`) queries are allowed in this tenant SQL context".into(),
         );
     }
-    // Fail closed on subqueries, CTEs, set operations, multi-statements, and unbalanced parens.
+    match upper.as_str() {
+        "UPDATE" => verify_tenant_update_tokens(main_tokens, tenant_tables, param_types),
+        "DELETE" => verify_tenant_delete_tokens(main_tokens, tenant_tables, param_types),
+        "INSERT" => verify_tenant_insert_tokens(main_tokens, tenant_tables, param_types),
+        _ => Err("unsupported SQL command in verified tenant-scoped SQL".into()),
+    }
+}
+
+fn merge_bound_tenant_param(
+    bound_param: &mut Option<String>,
+    incoming: Option<String>,
+) -> Result<(), String> {
+    let Some(chosen) = incoming else {
+        return Ok(());
+    };
+    if let Some(previous) = bound_param {
+        if previous != &chosen {
+            return Err(format!(
+                "all tenant-scoped tables in one SQL query must bind the same tenant parameter (found `:{previous}` and `:{chosen}`)"
+            ));
+        }
+    } else {
+        *bound_param = Some(chosen);
+    }
+    Ok(())
+}
+
+fn verify_nominal_tenant_param(
+    table_name: &str,
+    chosen: &str,
+    requirement: &TenantScopeRequirement,
+    param_types: Option<&HashMap<String, Type>>,
+) -> Result<(), String> {
+    if let Some(params) = param_types {
+        let Some(actual_ty) = params.get(chosen) else {
+            return Err(format!(
+                "tenant parameter `:{chosen}` used for `{table_name}` must be a function parameter of nominal type `{}`",
+                requirement.tenant_type
+            ));
+        };
+        if actual_ty != &requirement.tenant_type {
+            return Err(format!(
+                "tenant parameter `:{chosen}` for `{table_name}` must have nominal type `{}`, found `{actual_ty}`",
+                requirement.tenant_type
+            ));
+        }
+    }
+    Ok(())
+}
+
+fn reject_nested_subqueries_or_set_ops(
+    tokens: &[SqlToken],
+    allow_leading_into: bool,
+) -> Result<(), String> {
     let mut depth = 0isize;
     for (idx, token) in tokens.iter().enumerate() {
         match token {
@@ -3252,6 +3548,9 @@ pub fn verify_tenant_scoped_select(
                 if idx > 0 && upper == "SELECT" {
                     return Err("subqueries are not allowed in verified tenant-scoped SQL".into());
                 }
+                if allow_leading_into && idx == 1 && upper == "INTO" {
+                    continue;
+                }
                 if matches!(
                     upper.as_str(),
                     "UNION" | "INTERSECT" | "EXCEPT" | "WITH" | "INTO" | "NATURAL" | "USING"
@@ -3267,10 +3566,28 @@ pub fn verify_tenant_scoped_select(
     if depth != 0 {
         return Err("unbalanced parentheses in tenant-scoped SQL query".into());
     }
+    Ok(())
+}
+
+fn verify_tenant_select_tokens(
+    tokens: &[SqlToken],
+    tenant_tables: &[TenantScopeRequirement],
+    param_types: Option<&HashMap<String, Type>>,
+    allowed_ctes: &HashSet<String>,
+) -> Result<Option<String>, String> {
+    let Some(SqlToken::Word(first)) = tokens.first() else {
+        return Err("only `SELECT` queries may access tenant-scoped tables in custom SQL".into());
+    };
+    if !first.eq_ignore_ascii_case("SELECT") {
+        return Err(
+            "only read-only `SELECT` queries may access tenant-scoped tables in custom SQL".into(),
+        );
+    }
+    reject_nested_subqueries_or_set_ops(tokens, false)?;
 
     // Locate top-level FROM clause.
     let mut from_pos = None;
-    depth = 0;
+    let mut depth = 0isize;
     for (idx, token) in tokens.iter().enumerate() {
         match token {
             SqlToken::OpenParen => depth += 1,
@@ -3469,6 +3786,9 @@ pub fn verify_tenant_scoped_select(
 
     let mut bound_param: Option<String> = None;
     for table_ref in &table_refs {
+        if allowed_ctes.contains(&table_ref.table.to_ascii_lowercase()) {
+            continue;
+        }
         let Some(requirement) = tenant_tables
             .iter()
             .find(|req| req.table.eq_ignore_ascii_case(&table_ref.table))
@@ -3504,28 +3824,333 @@ pub fn verify_tenant_scoped_select(
             ));
         }
         let chosen = matching_params[0];
-        if let Some(params) = param_types {
-            let Some(actual_ty) = params.get(chosen) else {
-                return Err(format!(
-                    "tenant parameter `:{chosen}` used for `{}` must be a function parameter of nominal type `{}`",
-                    table_ref.table, requirement.tenant_type
-                ));
+        verify_nominal_tenant_param(&table_ref.table, chosen, requirement, param_types)?;
+        merge_bound_tenant_param(&mut bound_param, Some(chosen.to_owned()))?;
+    }
+
+    Ok(bound_param)
+}
+
+fn verify_tenant_update_tokens(
+    tokens: &[SqlToken],
+    tenant_tables: &[TenantScopeRequirement],
+    param_types: Option<&HashMap<String, Type>>,
+) -> Result<Option<String>, String> {
+    reject_nested_subqueries_or_set_ops(tokens, false)?;
+    if tokens
+        .iter()
+        .any(|t| matches!(t, SqlToken::Word(w) if w.eq_ignore_ascii_case("JOIN")))
+    {
+        return Err("joined `UPDATE` statements cannot be verified against tenant scopes".into());
+    }
+    let Some(SqlToken::Word(table_name)) = tokens.get(1) else {
+        return Err("expected table name in tenant-scoped `UPDATE`".into());
+    };
+    if matches!(tokens.get(2), Some(SqlToken::Dot)) {
+        return Err("schema-qualified table names are not allowed in tenant-scoped SQL".into());
+    }
+    let Some(requirement) = tenant_tables
+        .iter()
+        .find(|req| req.table.eq_ignore_ascii_case(table_name))
+    else {
+        return Ok(None);
+    };
+    let mut pos = 2usize;
+    let mut qualifier = table_name.clone();
+    if let Some(SqlToken::Word(next)) = tokens.get(pos) {
+        if next.eq_ignore_ascii_case("AS") {
+            pos += 1;
+            let Some(SqlToken::Word(alias)) = tokens.get(pos) else {
+                return Err("expected alias after `AS` in tenant-scoped `UPDATE`".into());
             };
-            if actual_ty != &requirement.tenant_type {
+            qualifier = alias.clone();
+            pos += 1;
+        } else if !next.eq_ignore_ascii_case("SET") {
+            qualifier = next.clone();
+            pos += 1;
+        }
+    }
+    if !matches!(tokens.get(pos), Some(SqlToken::Word(w)) if w.eq_ignore_ascii_case("SET")) {
+        return Err("expected `SET` in tenant-scoped `UPDATE`".into());
+    }
+    pos += 1;
+    let set_start = pos;
+    let mut where_pos = None;
+    let mut depth = 0isize;
+    while pos < tokens.len() {
+        match &tokens[pos] {
+            SqlToken::OpenParen => depth += 1,
+            SqlToken::CloseParen => depth -= 1,
+            SqlToken::Word(w) if depth == 0 && w.eq_ignore_ascii_case("WHERE") => {
+                where_pos = Some(pos);
+                break;
+            }
+            _ => {}
+        }
+        pos += 1;
+    }
+    let Some(where_idx) = where_pos else {
+        return Err(format!(
+            "tenant-scoped `UPDATE` on `{}` requires a conjunctive `WHERE {} = :<tenant_param>` filter",
+            requirement.table, requirement.column
+        ));
+    };
+    // Ensure SET does not modify the tenant column itself.
+    let set_tokens = &tokens[set_start..where_idx];
+    let mut s_depth = 0isize;
+    let mut stmt_start = 0usize;
+    for idx in 0..=set_tokens.len() {
+        let is_sep = idx == set_tokens.len()
+            || (s_depth == 0 && matches!(set_tokens.get(idx), Some(SqlToken::Comma)));
+        if let Some(SqlToken::OpenParen) = set_tokens.get(idx) {
+            s_depth += 1;
+        } else if let Some(SqlToken::CloseParen) = set_tokens.get(idx) {
+            s_depth -= 1;
+        }
+        if is_sep {
+            let assign = &set_tokens[stmt_start..idx];
+            let lhs_col = match assign {
+                [SqlToken::Word(_), SqlToken::Dot, SqlToken::Word(col), SqlToken::Operator(op), ..]
+                    if op == "=" =>
+                {
+                    Some(col.as_str())
+                }
+                [SqlToken::Word(col), SqlToken::Operator(op), ..] if op == "=" => {
+                    Some(col.as_str())
+                }
+                _ => None,
+            };
+            if lhs_col.is_some_and(|col| col.eq_ignore_ascii_case(&requirement.column)) {
                 return Err(format!(
-                    "tenant parameter `:{chosen}` for `{}` must have nominal type `{}`, found `{actual_ty}`",
-                    table_ref.table, requirement.tenant_type
+                    "tenant-scoped `UPDATE` on `{}` cannot modify tenant column `{}`",
+                    requirement.table, requirement.column
                 ));
+            }
+            stmt_start = idx + 1;
+        }
+    }
+
+    let where_slice = &tokens[where_idx + 1..];
+    let equalities = extract_conjunctive_tenant_equalities(where_slice, Some(&qualifier));
+    let Some((_, _, chosen)) = equalities.iter().find(|(q, col, _)| {
+        q.eq_ignore_ascii_case(&qualifier) && col.eq_ignore_ascii_case(&requirement.column)
+    }) else {
+        return Err(format!(
+            "tenant-scoped `UPDATE` on `{}` is missing required conjunctive `{}.{} = :<tenant_param>` filter in `WHERE`",
+            requirement.table, qualifier, requirement.column
+        ));
+    };
+    verify_nominal_tenant_param(&requirement.table, chosen, requirement, param_types)?;
+    Ok(Some(chosen.clone()))
+}
+
+fn verify_tenant_delete_tokens(
+    tokens: &[SqlToken],
+    tenant_tables: &[TenantScopeRequirement],
+    param_types: Option<&HashMap<String, Type>>,
+) -> Result<Option<String>, String> {
+    reject_nested_subqueries_or_set_ops(tokens, false)?;
+    if tokens
+        .iter()
+        .any(|t| matches!(t, SqlToken::Word(w) if w.eq_ignore_ascii_case("JOIN")))
+    {
+        return Err("joined `DELETE` statements cannot be verified against tenant scopes".into());
+    }
+    if !matches!(tokens.get(1), Some(SqlToken::Word(w)) if w.eq_ignore_ascii_case("FROM")) {
+        return Err("expected `FROM` in tenant-scoped `DELETE`".into());
+    }
+    let Some(SqlToken::Word(table_name)) = tokens.get(2) else {
+        return Err("expected table name in tenant-scoped `DELETE`".into());
+    };
+    if matches!(tokens.get(3), Some(SqlToken::Dot)) {
+        return Err("schema-qualified table names are not allowed in tenant-scoped SQL".into());
+    }
+    let Some(requirement) = tenant_tables
+        .iter()
+        .find(|req| req.table.eq_ignore_ascii_case(table_name))
+    else {
+        return Ok(None);
+    };
+    let mut pos = 3usize;
+    let mut qualifier = table_name.clone();
+    if let Some(SqlToken::Word(next)) = tokens.get(pos) {
+        if next.eq_ignore_ascii_case("AS") {
+            pos += 1;
+            let Some(SqlToken::Word(alias)) = tokens.get(pos) else {
+                return Err("expected alias after `AS` in tenant-scoped `DELETE`".into());
+            };
+            qualifier = alias.clone();
+            pos += 1;
+        } else if !next.eq_ignore_ascii_case("WHERE") {
+            qualifier = next.clone();
+            pos += 1;
+        }
+    }
+    if !matches!(tokens.get(pos), Some(SqlToken::Word(w)) if w.eq_ignore_ascii_case("WHERE")) {
+        return Err(format!(
+            "tenant-scoped `DELETE` on `{}` requires a conjunctive `WHERE {} = :<tenant_param>` filter",
+            requirement.table, requirement.column
+        ));
+    }
+    let where_slice = &tokens[pos + 1..];
+    let equalities = extract_conjunctive_tenant_equalities(where_slice, Some(&qualifier));
+    let Some((_, _, chosen)) = equalities.iter().find(|(q, col, _)| {
+        q.eq_ignore_ascii_case(&qualifier) && col.eq_ignore_ascii_case(&requirement.column)
+    }) else {
+        return Err(format!(
+            "tenant-scoped `DELETE` on `{}` is missing required conjunctive `{}.{} = :<tenant_param>` filter in `WHERE`",
+            requirement.table, qualifier, requirement.column
+        ));
+    };
+    verify_nominal_tenant_param(&requirement.table, chosen, requirement, param_types)?;
+    Ok(Some(chosen.clone()))
+}
+
+fn verify_tenant_insert_tokens(
+    tokens: &[SqlToken],
+    tenant_tables: &[TenantScopeRequirement],
+    param_types: Option<&HashMap<String, Type>>,
+) -> Result<Option<String>, String> {
+    reject_nested_subqueries_or_set_ops(tokens, true)?;
+    if tokens
+        .iter()
+        .any(|t| matches!(t, SqlToken::Word(w) if w.eq_ignore_ascii_case("SELECT")))
+    {
+        return Err("`INSERT ... SELECT` is not supported in verified tenant-scoped SQL".into());
+    }
+    if !matches!(tokens.get(1), Some(SqlToken::Word(w)) if w.eq_ignore_ascii_case("INTO")) {
+        return Err("expected `INTO` in tenant-scoped `INSERT`".into());
+    }
+    let Some(SqlToken::Word(table_name)) = tokens.get(2) else {
+        return Err("expected table name in tenant-scoped `INSERT`".into());
+    };
+    if matches!(tokens.get(3), Some(SqlToken::Dot)) {
+        return Err("schema-qualified table names are not allowed in tenant-scoped SQL".into());
+    }
+    let Some(requirement) = tenant_tables
+        .iter()
+        .find(|req| req.table.eq_ignore_ascii_case(table_name))
+    else {
+        return Ok(None);
+    };
+    let mut pos = 3usize;
+    if !matches!(tokens.get(pos), Some(SqlToken::OpenParen)) {
+        return Err(format!(
+            "tenant-scoped `INSERT` into `{}` must explicitly list columns including `{}`",
+            requirement.table, requirement.column
+        ));
+    }
+    pos += 1;
+    let mut columns = Vec::new();
+    while pos < tokens.len() && !matches!(tokens.get(pos), Some(SqlToken::CloseParen)) {
+        match &tokens[pos] {
+            SqlToken::Word(col) => {
+                columns.push(col.clone());
+                pos += 1;
+            }
+            SqlToken::Comma => pos += 1,
+            _ => {
+                return Err("expected column name in tenant-scoped `INSERT` column list".into());
             }
         }
-        if let Some(previous) = &bound_param {
-            if previous != chosen {
-                return Err(format!(
-                    "all tenant-scoped tables in one SQL query must bind the same tenant parameter (found `:{previous}` and `:{chosen}`)"
-                ));
+    }
+    if !matches!(tokens.get(pos), Some(SqlToken::CloseParen)) {
+        return Err("unclosed column list in tenant-scoped `INSERT`".into());
+    }
+    pos += 1;
+    let Some(tenant_col_idx) = columns
+        .iter()
+        .position(|c| c.eq_ignore_ascii_case(&requirement.column))
+    else {
+        return Err(format!(
+            "tenant-scoped `INSERT` into `{}` must include tenant column `{}`",
+            requirement.table, requirement.column
+        ));
+    };
+    if !matches!(tokens.get(pos), Some(SqlToken::Word(w)) if w.eq_ignore_ascii_case("VALUES")) {
+        return Err("tenant-scoped `INSERT` must use explicit `VALUES (...)` rows".into());
+    }
+    pos += 1;
+
+    let mut bound_param: Option<String> = None;
+    let mut row_count = 0usize;
+    while pos < tokens.len() {
+        if matches!(tokens.get(pos), Some(SqlToken::Comma)) {
+            pos += 1;
+            continue;
+        }
+        if !matches!(tokens.get(pos), Some(SqlToken::OpenParen)) {
+            break;
+        }
+        pos += 1;
+        let tuple_start = pos;
+        let mut depth = 1isize;
+        let mut tuple_end = None;
+        while pos < tokens.len() {
+            match &tokens[pos] {
+                SqlToken::OpenParen => depth += 1,
+                SqlToken::CloseParen => {
+                    depth -= 1;
+                    if depth == 0 {
+                        tuple_end = Some(pos);
+                        pos += 1;
+                        break;
+                    }
+                }
+                _ => {}
             }
-        } else {
-            bound_param = Some(chosen.to_owned());
+            pos += 1;
+        }
+        let Some(end) = tuple_end else {
+            return Err("unclosed `VALUES` tuple in tenant-scoped `INSERT`".into());
+        };
+        let tuple_tokens = &tokens[tuple_start..end];
+        let mut items: Vec<&[SqlToken]> = Vec::new();
+        let mut item_start = 0usize;
+        let mut i_depth = 0isize;
+        for i in 0..=tuple_tokens.len() {
+            let at_end = i == tuple_tokens.len();
+            if !at_end {
+                match tuple_tokens[i] {
+                    SqlToken::OpenParen => i_depth += 1,
+                    SqlToken::CloseParen => i_depth -= 1,
+                    _ => {}
+                }
+            }
+            if at_end || (i_depth == 0 && matches!(tuple_tokens[i], SqlToken::Comma)) {
+                items.push(&tuple_tokens[item_start..i]);
+                item_start = i + 1;
+            }
+        }
+        if items.len() != columns.len() {
+            return Err("`INSERT` column count and `VALUES` tuple length do not match".into());
+        }
+        let [SqlToken::Parameter(param)] = items[tenant_col_idx] else {
+            return Err(format!(
+                "tenant column `{}` in `INSERT` into `{}` must bind directly to a `:<tenant_param>` parameter",
+                requirement.column, requirement.table
+            ));
+        };
+        verify_nominal_tenant_param(&requirement.table, param, requirement, param_types)?;
+        merge_bound_tenant_param(&mut bound_param, Some(param.clone()))?;
+        row_count += 1;
+    }
+
+    if row_count == 0 {
+        return Err("tenant-scoped `INSERT` must contain at least one `VALUES (...)` tuple".into());
+    }
+    // Reject trailing ON CONFLICT / ON DUPLICATE KEY UPDATE mutating tenant_id or containing subqueries.
+    if pos < tokens.len() {
+        let tail = &tokens[pos..];
+        let modifies_tenant = tail.windows(3).any(|w| {
+            matches!(&w[0], SqlToken::Word(c) if c.eq_ignore_ascii_case(&requirement.column))
+                && matches!(&w[1], SqlToken::Operator(op) if op == "=")
+        });
+        if modifies_tenant {
+            return Err(format!(
+                "upsert tail on `{}` cannot modify tenant column `{}`",
+                requirement.table, requirement.column
+            ));
         }
     }
 
@@ -4526,6 +5151,97 @@ mod tests {
             assert!(
                 verify_tenant_scoped_select(sql, &requirements, Some(&params)).is_err(),
                 "expected fail-closed rejection for case `{label}`: {sql}"
+            );
+        }
+
+        // 1.7.0 Expanded Tenant SQL Algebra: non-recursive WITH CTEs, GROUP BY / HAVING, and safe batch writes.
+        let cte_sql = r#"
+            WITH active_customers AS (
+                SELECT id, email FROM customers WHERE tenant_id = :tenant_id AND active = 1
+            ),
+            unsub AS (
+                SELECT customer_id FROM unsubscriptions WHERE tenant_id = :tenant_id
+            )
+            SELECT ac.id, COUNT(u.customer_id) AS unsub_count
+            FROM active_customers ac
+            LEFT JOIN unsub u ON u.customer_id = ac.id
+            GROUP BY ac.id
+            HAVING COUNT(u.customer_id) = 0
+        "#;
+        assert_eq!(
+            verify_tenant_scoped_sql(cte_sql, &requirements, Some(&params)),
+            Ok(Some("tenant_id".into()))
+        );
+        assert_eq!(
+            verify_tenant_scoped_sql(
+                "UPDATE customers SET active = 0 WHERE tenant_id = :tenant_id AND id = :cid",
+                &requirements,
+                Some(&params),
+            ),
+            Ok(Some("tenant_id".into()))
+        );
+        assert_eq!(
+            verify_tenant_scoped_sql(
+                "DELETE FROM customers WHERE tenant_id = :tenant_id AND id = :cid",
+                &requirements,
+                Some(&params),
+            ),
+            Ok(Some("tenant_id".into()))
+        );
+        assert_eq!(
+            verify_tenant_scoped_sql(
+                "INSERT INTO customers (tenant_id, email) VALUES (:tenant_id, :email1), (:tenant_id, :email2)",
+                &requirements,
+                Some(&params),
+            ),
+            Ok(Some("tenant_id".into()))
+        );
+
+        for (label, bad_sql) in [
+            (
+                "WITH RECURSIVE rejected",
+                "WITH RECURSIVE r AS (SELECT id FROM customers WHERE tenant_id = :tenant_id) SELECT id FROM r",
+            ),
+            (
+                "CTE missing tenant filter",
+                "WITH ac AS (SELECT id FROM customers) SELECT id FROM ac",
+            ),
+            (
+                "CTE mismatched tenant parameter",
+                "WITH ac AS (SELECT id FROM customers WHERE tenant_id = :other_tenant) SELECT ac.id FROM ac INNER JOIN unsubscriptions u ON u.customer_id = ac.id AND u.tenant_id = :tenant_id",
+            ),
+            (
+                "UPDATE modifying tenant_id",
+                "UPDATE customers SET tenant_id = :other_tenant WHERE tenant_id = :tenant_id",
+            ),
+            (
+                "UPDATE missing WHERE",
+                "UPDATE customers SET active = 0",
+            ),
+            (
+                "DELETE with OR bypass",
+                "DELETE FROM customers WHERE tenant_id = :tenant_id OR 1 = 1",
+            ),
+            (
+                "INSERT missing tenant column",
+                "INSERT INTO customers (email) VALUES (:email)",
+            ),
+            (
+                "INSERT literal tenant_id rejected",
+                "INSERT INTO customers (tenant_id, email) VALUES (1, :email)",
+            ),
+            (
+                "INSERT SELECT rejected",
+                "INSERT INTO customers (tenant_id, email) SELECT tenant_id, email FROM customers WHERE tenant_id = :tenant_id",
+            ),
+            (
+                "batch INSERT mismatched tenant params",
+                "INSERT INTO customers (tenant_id, email) VALUES (:tenant_id, :e1), (:other_tenant, :e2)",
+            ),
+        ] {
+            assert!(
+                verify_tenant_scoped_sql(bad_sql, &requirements, Some(&params)).is_err(),
+                "expected fail-closed rejection in 1.7.0 algebra for `{label}`: {bad_sql}"
             );
         }
     }

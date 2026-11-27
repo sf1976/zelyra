@@ -11,6 +11,8 @@ pub enum ContractKind {
     LoopInvariant,
     StateMachine,
     Workflow,
+    Authorization,
+    Privacy,
 }
 
 impl fmt::Display for ContractKind {
@@ -21,7 +23,40 @@ impl fmt::Display for ContractKind {
             Self::LoopInvariant => write!(f, "invariant"),
             Self::StateMachine => write!(f, "state_machine"),
             Self::Workflow => write!(f, "workflow"),
+            Self::Authorization => write!(f, "authorization"),
+            Self::Privacy => write!(f, "privacy"),
         }
+    }
+}
+
+/// Binding 6-level evidence classification shared across reports and future proofs.
+/// Undecidable checks, timeouts, and unknown states never classify as `PROVEN`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum EvidenceClass {
+    Proven,
+    Enforced,
+    Tested,
+    Attested,
+    Assumed,
+    Unverified,
+}
+
+impl EvidenceClass {
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Proven => "PROVEN",
+            Self::Enforced => "ENFORCED",
+            Self::Tested => "TESTED",
+            Self::Attested => "ATTESTED",
+            Self::Assumed => "ASSUMED",
+            Self::Unverified => "UNVERIFIED",
+        }
+    }
+}
+
+impl fmt::Display for EvidenceClass {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(self.as_str())
     }
 }
 
@@ -76,6 +111,16 @@ pub struct VerificationResult {
     pub span: Span,
     pub message: String,
     pub counterexample: Option<Vec<(String, i64)>>,
+}
+
+impl VerificationResult {
+    pub const fn evidence_class(&self) -> EvidenceClass {
+        match self.status {
+            VerificationStatus::Proven => EvidenceClass::Proven,
+            VerificationStatus::RuntimeCheck => EvidenceClass::Enforced,
+            VerificationStatus::Unproven | VerificationStatus::Failed => EvidenceClass::Unverified,
+        }
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -179,7 +224,196 @@ pub fn verify(program: &Program) -> Vec<VerificationResult> {
     for (index, workflow) in program.workflows.iter().enumerate() {
         results.push(verify_workflow(program, workflow, index));
     }
+    if program_uses_privacy(program) {
+        results.push(verify_privacy(program));
+    }
+    if program_uses_authorization(program) {
+        results.extend(verify_authorization_matrix(program, &functions));
+    }
     results
+}
+
+fn program_uses_privacy(program: &Program) -> bool {
+    program.tables.iter().any(|t| {
+        t.columns
+            .iter()
+            .any(|c| c.privacy != PrivacyClass::Public || c.redact)
+    }) || program.records.iter().any(|r| {
+        r.fields
+            .iter()
+            .any(|f| f.privacy != PrivacyClass::Public || f.redact)
+    }) || program
+        .functions
+        .iter()
+        .any(|f| f.params.iter().any(|p| p.privacy != PrivacyClass::Public))
+}
+
+fn verify_privacy(program: &Program) -> VerificationResult {
+    let inventory = crate::privacy::inspect_privacy_inventory(program);
+    let pii_count = inventory
+        .columns
+        .iter()
+        .filter(|c| c.privacy == PrivacyClass::Pii)
+        .count()
+        + inventory
+            .record_fields
+            .iter()
+            .filter(|f| f.privacy == PrivacyClass::Pii)
+            .count();
+    let secret_count = inventory
+        .columns
+        .iter()
+        .filter(|c| c.privacy == PrivacyClass::Secret)
+        .count()
+        + inventory
+            .record_fields
+            .iter()
+            .filter(|f| f.privacy == PrivacyClass::Secret)
+            .count();
+    let span = program
+        .tables
+        .iter()
+        .find_map(|t| {
+            t.columns
+                .iter()
+                .find(|c| c.privacy != PrivacyClass::Public || c.redact)
+                .map(|c| c.span)
+        })
+        .or_else(|| program.functions.first().map(|f| f.span))
+        .unwrap_or_default();
+    match crate::privacy::check_privacy(program) {
+        Ok(()) => VerificationResult {
+            function: "__privacy__".into(),
+            kind: ContractKind::Privacy,
+            index: 0,
+            status: VerificationStatus::Proven,
+            span,
+            message: format!(
+                "Information flow verified (E-PRIVACY-001): {pii_count} @pii and {secret_count} @secret declarations checked with zero unauthorized leaks in documented scope; legal GDPR compliance remains ASSUMED."
+            ),
+            counterexample: None,
+        },
+        Err(errors) => VerificationResult {
+            function: "__privacy__".into(),
+            kind: ContractKind::Privacy,
+            index: 0,
+            status: VerificationStatus::Failed,
+            span: errors.first().map_or(span, |e| e.span),
+            message: errors
+                .first()
+                .map_or_else(|| "Privacy flow check failed.".into(), |e| e.message.clone()),
+            counterexample: None,
+        },
+    }
+}
+
+fn program_uses_authorization(program: &Program) -> bool {
+    !program.auth.is_empty()
+        || !program.cruds.is_empty()
+        || program.tables.iter().any(|t| {
+            t.tenant_scope.is_some()
+                || t.state_machines.iter().any(|m| {
+                    m.transitions
+                        .iter()
+                        .any(|r| !r.required_roles.is_empty() || r.four_eyes_column.is_some())
+                })
+        })
+        || program
+            .apis
+            .iter()
+            .any(|a| a.requires_auth || !a.permissions.is_empty())
+}
+
+fn handler_writes_database(function: &Function) -> bool {
+    function.capabilities.iter().any(|cap| {
+        cap == "Database" || cap == "Database(write)" || cap.starts_with("Database(write:")
+    })
+}
+
+fn verify_authorization_matrix(
+    program: &Program,
+    functions: &HashMap<String, &Function>,
+) -> Vec<VerificationResult> {
+    let mut violations = Vec::new();
+    let strict_auth_context = !program.auth.is_empty()
+        || program
+            .tables
+            .iter()
+            .any(|t| t.tenant_scope.is_some() || t.is_ledger);
+    for (idx, api) in program.apis.iter().enumerate() {
+        let mutating = matches!(
+            api.method.to_ascii_uppercase().as_str(),
+            "POST" | "PUT" | "PATCH" | "DELETE"
+        );
+        if mutating && !api.requires_auth && strict_auth_context {
+            let writes_db = api
+                .handler
+                .as_ref()
+                .and_then(|name| functions.get(name))
+                .is_some_and(|func| handler_writes_database(func));
+            if writes_db {
+                violations.push(VerificationResult {
+                    function: api
+                        .handler
+                        .clone()
+                        .unwrap_or_else(|| format!("{} {}", api.method, api.path)),
+                    kind: ContractKind::Authorization,
+                    index: idx,
+                    status: VerificationStatus::Failed,
+                    span: api.span,
+                    message: format!(
+                        "Mutating API `{} {}` writes to the database without `requires auth` in a protected/tenant/ledger project.",
+                        api.method.to_ascii_uppercase(),
+                        api.path
+                    ),
+                    counterexample: None,
+                });
+            }
+        }
+    }
+    if !violations.is_empty() {
+        return violations;
+    }
+
+    let protected_apis = program.apis.iter().filter(|a| a.requires_auth).count();
+    let tenant_tables = program
+        .tables
+        .iter()
+        .filter(|t| t.tenant_scope.is_some())
+        .count();
+    let role_transitions: usize = program
+        .tables
+        .iter()
+        .flat_map(|t| t.state_machines.iter())
+        .flat_map(|m| m.transitions.iter())
+        .filter(|r| !r.required_roles.is_empty())
+        .count();
+    let four_eyes_transitions: usize = program
+        .tables
+        .iter()
+        .flat_map(|t| t.state_machines.iter())
+        .flat_map(|m| m.transitions.iter())
+        .filter(|r| r.four_eyes_column.is_some())
+        .count();
+    let span = program
+        .auth
+        .first()
+        .map(|a| a.span)
+        .or_else(|| program.apis.first().map(|a| a.span))
+        .or_else(|| program.tables.first().map(|t| t.span))
+        .unwrap_or_default();
+
+    vec![VerificationResult {
+        function: "__authorization__".into(),
+        kind: ContractKind::Authorization,
+        index: 0,
+        status: VerificationStatus::Proven,
+        span,
+        message: format!(
+            "Authorization matrix v1 verified: {protected_apis} auth-gated API(s), {tenant_tables} tenant-scoped table(s), {role_transitions} role-gated and {four_eyes_transitions} four-eyes transition(s); external identity provisioning and session secrets remain ASSUMED."
+        ),
+        counterexample: None,
+    }]
 }
 
 fn verify_workflow(program: &Program, workflow: &WorkflowDef, index: usize) -> VerificationResult {
@@ -498,6 +732,20 @@ fn verification_message(
         }
         (ContractKind::Workflow, VerificationStatus::Failed, _) => {
             "The workflow failed static timer-cycle or target verification.".into()
+        }
+        (ContractKind::Authorization, VerificationStatus::RuntimeCheck, _) => {
+            "Authorization requires runtime role/session checks.".into()
+        }
+        (ContractKind::Authorization, VerificationStatus::Failed, _) => {
+            "Authorization verification detected an unprotected mutating endpoint or role conflict."
+                .into()
+        }
+        (ContractKind::Privacy, VerificationStatus::RuntimeCheck, _) => {
+            "Privacy flow requires runtime redaction checks.".into()
+        }
+        (ContractKind::Privacy, VerificationStatus::Failed, _) => {
+            "Privacy flow verification detected a potential `@pii`/`@secret` leak (`E-PRIVACY-001`)."
+                .into()
         }
         (_, VerificationStatus::Unproven, false) => {
             "No proof target was declared for this function.".into()

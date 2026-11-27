@@ -172,7 +172,7 @@ pub use api_validation::{check_apis, ApiDiagnostic};
 pub(crate) use value::RuntimeClassObject;
 pub use value::{normalize_map_entries, ClassObjectRef, FunctionValue, SqlRowsMetadata, Value};
 mod verifier;
-pub use verifier::{verify, ContractKind, VerificationResult, VerificationStatus};
+pub use verifier::{verify, ContractKind, EvidenceClass, VerificationResult, VerificationStatus};
 mod type_checker;
 pub use type_checker::{
     check, check_with_inferred_types, inspect_expression_types, substitute_generic_type,
@@ -184,9 +184,10 @@ pub(crate) use type_checker::{
 mod capabilities;
 pub(crate) use capabilities::function_declares_capability;
 pub use capabilities::{
-    builtin_capability_requirements, check_capabilities, check_capabilities_with_grants,
-    inspect_capability_uses, project_grants_capability, sql_required_capability, CapabilityError,
-    CapabilityUse, FilePathUse,
+    builtin_capability_requirements, capability_set_satisfies, capability_set_satisfies_primitive,
+    check_capabilities, check_capabilities_with_grants, inspect_capability_uses,
+    parse_capability_spec, project_grants_capability, sql_required_capability, CapabilityError,
+    CapabilityUse, FilePathUse, ParsedCapability,
 };
 
 /// Fail closed on SQL that could bypass a declared tenant boundary. The
@@ -215,13 +216,13 @@ pub fn check_scoped_sql(query: &str, scoped_tables: &[String]) -> Result<(), Str
 }
 
 /// Fail-closed SQL tenant-scope verification supporting compiler-verified
-/// multi-table read-only `SELECT` queries over `tenant_scope` tables.
+/// `SELECT`, non-recursive `WITH` CTEs, aggregations, and tenant-safe writes.
 pub fn check_scoped_sql_with_requirements(
     query: &str,
     requirements: &[zelyra_database::sql::TenantScopeRequirement],
     param_types: Option<&HashMap<String, Type>>,
 ) -> Result<Option<String>, String> {
-    zelyra_database::sql::verify_tenant_scoped_select(query, requirements, param_types)
+    zelyra_database::sql::verify_tenant_scoped_sql(query, requirements, param_types)
 }
 mod ast_interpreter;
 pub use ast_interpreter::execution_api::{
@@ -276,6 +277,7 @@ pub use policies::{FileSystemPolicy, MailPolicy, NetworkPolicy, ProcessPolicy, R
 mod einvoice;
 mod pdf;
 mod pdf_template;
+pub mod privacy;
 mod pure_builtins;
 mod step_budget;
 pub use mail::{prepare_mail_queue_query, supports_mail_outbox_database};
@@ -283,6 +285,10 @@ pub use markdown::{markdown_toc, render_markdown};
 pub use operators::{evaluate_binary_value, evaluate_unary_value, index_collection_value};
 pub use package_settings::PackageSettings;
 use pdf_template::interpolate_pdf_data;
+pub use privacy::{
+    check_privacy, inspect_privacy_inventory, PrivacyColumnEntry, PrivacyError,
+    PrivacyExternalSinkEntry, PrivacyInventory, PrivacyRecordFieldEntry, PrivacyRouteEntry,
+};
 pub use pure_builtins::{execute_pure_builtin, is_pure_builtin};
 pub use repl::{ReplError, ReplEvaluation, ReplExecutionContext, ReplSession};
 pub use step_budget::{StepBudget, StepBudgetError};
@@ -1138,6 +1144,7 @@ fn is_runtime_builtin(name: &str) -> bool {
             | "verify_ledger_balance"
             | "einvoice_xml"
             | "einvoice_validate"
+            | "redact"
             | "render_markdown"
             | "markdown_toc"
             | "render_pdf"

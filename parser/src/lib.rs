@@ -460,18 +460,274 @@ impl<'a> Parser<'a> {
         })
     }
 
+    fn parse_privacy_annotations(
+        &mut self,
+        allow_redact: bool,
+    ) -> Result<(zelyra_ast::PrivacyClass, bool), ParseError> {
+        let mut privacy = zelyra_ast::PrivacyClass::Public;
+        let mut redact = false;
+        while self.at(&TokenKind::At) {
+            let at_span = self.advance().span;
+            let (name, ident_span) =
+                self.ident("privacy annotation (`pii`, `secret`, or `redact`)")?;
+            let full_span = at_span.join(ident_span);
+            match name.as_str() {
+                "pii" => match privacy {
+                    zelyra_ast::PrivacyClass::Public => privacy = zelyra_ast::PrivacyClass::Pii,
+                    zelyra_ast::PrivacyClass::Pii => {
+                        return Err(ParseError {
+                            message: "duplicate `@pii` annotation".into(),
+                            span: full_span,
+                        });
+                    }
+                    zelyra_ast::PrivacyClass::Secret => {
+                        return Err(ParseError {
+                            message: "cannot combine `@pii` and `@secret` on the same declaration"
+                                .into(),
+                            span: full_span,
+                        });
+                    }
+                },
+                "secret" => match privacy {
+                    zelyra_ast::PrivacyClass::Public => privacy = zelyra_ast::PrivacyClass::Secret,
+                    zelyra_ast::PrivacyClass::Secret => {
+                        return Err(ParseError {
+                            message: "duplicate `@secret` annotation".into(),
+                            span: full_span,
+                        });
+                    }
+                    zelyra_ast::PrivacyClass::Pii => {
+                        return Err(ParseError {
+                            message: "cannot combine `@pii` and `@secret` on the same declaration"
+                                .into(),
+                            span: full_span,
+                        });
+                    }
+                },
+                "redact" => {
+                    if !allow_redact {
+                        return Err(ParseError {
+                            message:
+                                "`@redact` is only supported on table columns and record fields"
+                                    .into(),
+                            span: full_span,
+                        });
+                    }
+                    if redact {
+                        return Err(ParseError {
+                            message: "duplicate `@redact` annotation".into(),
+                            span: full_span,
+                        });
+                    }
+                    redact = true;
+                }
+                _ => {
+                    return Err(ParseError {
+                        message: format!(
+                            "unknown annotation `@{name}`; expected `@pii`, `@secret`, or `@redact`"
+                        ),
+                        span: full_span,
+                    });
+                }
+            }
+        }
+        Ok((privacy, redact))
+    }
+
+    fn merge_privacy_annotations(
+        first: (zelyra_ast::PrivacyClass, bool),
+        second: (zelyra_ast::PrivacyClass, bool),
+        span: Span,
+    ) -> Result<(zelyra_ast::PrivacyClass, bool), ParseError> {
+        let privacy = match (first.0, second.0) {
+            (zelyra_ast::PrivacyClass::Public, other)
+            | (other, zelyra_ast::PrivacyClass::Public) => other,
+            (zelyra_ast::PrivacyClass::Pii, zelyra_ast::PrivacyClass::Pii) => {
+                return Err(ParseError {
+                    message: "duplicate `@pii` annotation".into(),
+                    span,
+                });
+            }
+            (zelyra_ast::PrivacyClass::Secret, zelyra_ast::PrivacyClass::Secret) => {
+                return Err(ParseError {
+                    message: "duplicate `@secret` annotation".into(),
+                    span,
+                });
+            }
+            (zelyra_ast::PrivacyClass::Pii, zelyra_ast::PrivacyClass::Secret)
+            | (zelyra_ast::PrivacyClass::Secret, zelyra_ast::PrivacyClass::Pii) => {
+                return Err(ParseError {
+                    message: "cannot combine `@pii` and `@secret` on the same declaration".into(),
+                    span,
+                });
+            }
+        };
+        if first.1 && second.1 {
+            return Err(ParseError {
+                message: "duplicate `@redact` annotation".into(),
+                span,
+            });
+        }
+        Ok((privacy, first.1 || second.1))
+    }
+
+    fn parse_string_allowlist(&mut self, label: &str) -> Result<Vec<String>, ParseError> {
+        self.expect(TokenKind::LBracket, "`[` before allowlist")?;
+        let mut items = Vec::new();
+        self.skip_newlines();
+        while !self.at(&TokenKind::RBracket) && !self.at(&TokenKind::Eof) {
+            let item = self.string_value(label)?;
+            items.push(item);
+            self.skip_newlines();
+            if self.at(&TokenKind::Comma) {
+                self.advance();
+                self.skip_newlines();
+            } else if !self.at(&TokenKind::RBracket) {
+                return self.error("expected `,` or `]` in capability list");
+            }
+        }
+        self.expect(TokenKind::RBracket, "`]` after capability list")?;
+        if items.is_empty() {
+            return self.error("capability allowlist must contain at least one entry");
+        }
+        items.sort();
+        items.dedup();
+        Ok(items)
+    }
+
+    fn parse_capability_spec(&mut self) -> Result<(String, Span), ParseError> {
+        let (name, start_span) = if self.at(&TokenKind::Database) {
+            ("Database".to_owned(), self.advance().span)
+        } else {
+            self.ident("capability name")?
+        };
+        if !self.at(&TokenKind::LParen) {
+            return Ok((name, start_span));
+        }
+        self.advance();
+        self.skip_newlines();
+        let capability = match name.as_str() {
+            "Database" => {
+                let (access, access_span) =
+                    self.ident("database access effect (`read` or `write`)")?;
+                if self.at(&TokenKind::Colon) {
+                    if !matches!(access.as_str(), "read" | "write") {
+                        return Err(ParseError {
+                            message: "scoped `Database(...)` effect must be `read` or `write`"
+                                .into(),
+                            span: access_span,
+                        });
+                    }
+                    self.advance();
+                    self.expect(TokenKind::LBracket, "`[` before table list")?;
+                    let mut tables = Vec::new();
+                    self.skip_newlines();
+                    while !self.at(&TokenKind::RBracket) && !self.at(&TokenKind::Eof) {
+                        let (table, _) = self.table_ident("table name")?;
+                        tables.push(table);
+                        self.skip_newlines();
+                        if self.at(&TokenKind::Comma) {
+                            self.advance();
+                            self.skip_newlines();
+                        } else if !self.at(&TokenKind::RBracket) {
+                            return self.error("expected `,` or `]` in database table scope");
+                        }
+                    }
+                    self.expect(TokenKind::RBracket, "`]` after table list")?;
+                    if tables.is_empty() {
+                        return self
+                            .error("scoped `Database` capability must list at least one table");
+                    }
+                    tables.sort();
+                    tables.dedup();
+                    format!("Database({access}: [{}])", tables.join(", "))
+                } else {
+                    format!("Database({access})")
+                }
+            }
+            "Network" => {
+                let (key, key_span) = self.ident("`allow`")?;
+                if key != "allow" {
+                    return Err(ParseError {
+                        message: "expected `allow: [...]` inside `Network(...)`".into(),
+                        span: key_span,
+                    });
+                }
+                self.expect(TokenKind::Colon, "`:` after `allow`")?;
+                let hosts = self.parse_string_allowlist("allowed host name")?;
+                for host in &hosts {
+                    if host.is_empty()
+                        || host.chars().any(char::is_whitespace)
+                        || host.contains("://")
+                        || host.contains(['/', '?', '#', '@'])
+                    {
+                        return self.error(format!(
+                            "invalid `Network(allow: ...)` host `{host}`; specify bare host or host:port"
+                        ));
+                    }
+                }
+                format!("Network(allow: [{}])", hosts.join(", "))
+            }
+            "FileSystem" => {
+                let (key, key_span) = self.ident("`scope`")?;
+                if key != "scope" {
+                    return Err(ParseError {
+                        message: "expected `scope: \"...\"` inside `FileSystem(...)`".into(),
+                        span: key_span,
+                    });
+                }
+                self.expect(TokenKind::Colon, "`:` after `scope`")?;
+                let scope = self.string_value("relative directory scope path")?;
+                let trimmed = scope.trim();
+                let is_drive = trimmed.as_bytes().get(1) == Some(&b':')
+                    && trimmed.as_bytes()[0].is_ascii_alphabetic();
+                if trimmed.is_empty()
+                    || trimmed.starts_with('/')
+                    || trimmed.starts_with('\\')
+                    || is_drive
+                    || trimmed.split(['/', '\\']).any(|seg| seg == "..")
+                {
+                    return self.error(
+                        "`FileSystem(scope: ...)` requires a non-empty relative path without `..`",
+                    );
+                }
+                format!("FileSystem(scope: {trimmed})")
+            }
+            "Email" => {
+                let (key, key_span) = self.ident("`templates`")?;
+                if key != "templates" {
+                    return Err(ParseError {
+                        message: "expected `templates: [...]` inside `Email(...)`".into(),
+                        span: key_span,
+                    });
+                }
+                self.expect(TokenKind::Colon, "`:` after `templates`")?;
+                let templates = self.parse_string_allowlist("allowed email template name")?;
+                for template in &templates {
+                    if template.trim().is_empty() || template.chars().any(char::is_whitespace) {
+                        return self.error(format!("invalid `Email` template name `{template}`"));
+                    }
+                }
+                format!("Email(templates: [{}])", templates.join(", "))
+            }
+            _ => {
+                return Err(ParseError {
+                    message: format!("capability `{name}` does not accept scope parameters"),
+                    span: start_span,
+                });
+            }
+        };
+        self.skip_newlines();
+        let end_span = self.expect(TokenKind::RParen, "`)` after capability parameters")?;
+        Ok((capability, start_span.join(end_span)))
+    }
+
     fn parse_optional_uses_clause(&mut self) -> Result<Vec<String>, ParseError> {
         let mut capabilities = Vec::new();
         if self.at(&TokenKind::Uses) {
             self.advance();
             loop {
-                let (mut capability, _) = self.ident("capability name")?;
-                if capability == "Database" && self.at(&TokenKind::LParen) {
-                    self.advance();
-                    let (access, _) = self.ident("database access effect")?;
-                    self.expect(TokenKind::RParen, "`)` after database access effect")?;
-                    capability = format!("Database({access})");
-                }
+                let (capability, _) = self.parse_capability_spec()?;
                 capabilities.push(capability);
                 self.skip_newlines();
                 if !self.at(&TokenKind::Comma) {
@@ -495,26 +751,7 @@ impl<'a> Parser<'a> {
             _ => return self.error("expected string literal test name after `test`"),
         };
         self.skip_newlines();
-        let mut capabilities = Vec::new();
-        if self.at(&TokenKind::Uses) {
-            self.advance();
-            loop {
-                let (mut capability, _) = self.ident("capability name")?;
-                if capability == "Database" && self.at(&TokenKind::LParen) {
-                    self.advance();
-                    let (access, _) = self.ident("database access effect")?;
-                    self.expect(TokenKind::RParen, "`)` after database access effect")?;
-                    capability = format!("Database({access})");
-                }
-                capabilities.push(capability);
-                self.skip_newlines();
-                if !self.at(&TokenKind::Comma) {
-                    break;
-                }
-                self.advance();
-                self.skip_newlines();
-            }
-        }
+        let capabilities = self.parse_optional_uses_clause()?;
         self.skip_newlines();
         let body = self.block()?;
         Ok(zelyra_ast::TestDef {
@@ -2776,23 +3013,7 @@ impl<'a> Parser<'a> {
                 self.advance();
                 permissions.push(self.string_value("permission")?);
             } else if self.at(&TokenKind::Uses) {
-                self.advance();
-                loop {
-                    let (mut capability, _) = self.ident("action capability name")?;
-                    if capability == "Database" && self.at(&TokenKind::LParen) {
-                        self.advance();
-                        let (access, _) = self.ident("database access effect")?;
-                        self.expect(TokenKind::RParen, "`)` after database access effect")?;
-                        capability = format!("Database({access})");
-                    }
-                    capabilities.push(capability);
-                    self.skip_newlines();
-                    if !self.at(&TokenKind::Comma) {
-                        break;
-                    }
-                    self.advance();
-                    self.skip_newlines();
-                }
+                capabilities.extend(self.parse_optional_uses_clause()?);
             } else if self.at_word("require_match") {
                 let marker = self.advance();
                 if require_match {
@@ -3336,6 +3557,7 @@ impl<'a> Parser<'a> {
         Ok(modules)
     }
     fn column_definition(&mut self) -> Result<ColumnDef, ParseError> {
+        let leading_privacy = self.parse_privacy_annotations(true)?;
         let (name, span) = self.field_ident("column name")?;
         self.expect(TokenKind::Colon, "`:` after column name")?;
         let (ty, length, decimal_precision) = self.column_type()?;
@@ -3345,6 +3567,7 @@ impl<'a> Parser<'a> {
         let mut auto_sequence = None;
         let mut computed = None;
         let mut attachment = None;
+        let mut trailing_privacy = (zelyra_ast::PrivacyClass::Public, false);
         let mut required = false;
         let mut primary_key = false;
         let mut auto = false;
@@ -3566,9 +3789,19 @@ impl<'a> Parser<'a> {
                         allowed_types: allowed_types.unwrap_or_default(),
                     });
                 }
+                TokenKind::At => {
+                    let next_privacy = self.parse_privacy_annotations(true)?;
+                    trailing_privacy = Self::merge_privacy_annotations(
+                        trailing_privacy,
+                        next_privacy,
+                        self.current().span,
+                    )?;
+                }
                 _ => break,
             }
         }
+        let (privacy, redact) =
+            Self::merge_privacy_annotations(leading_privacy, trailing_privacy, span)?;
         Ok(ColumnDef {
             name,
             ty,
@@ -3580,6 +3813,8 @@ impl<'a> Parser<'a> {
             auto_sequence,
             computed,
             attachment,
+            privacy,
+            redact,
             required,
             primary_key,
             auto,
@@ -3704,12 +3939,17 @@ impl<'a> Parser<'a> {
         let mut fields = Vec::new();
         self.skip_newlines();
         while !self.at(&TokenKind::RBrace) && !self.at(&TokenKind::Eof) {
+            let leading = self.parse_privacy_annotations(true)?;
             let (field_name, span) = self.field_ident("record field name")?;
             self.expect(TokenKind::Colon, "`:` after record field name")?;
             let ty = self.type_name()?;
+            let trailing = self.parse_privacy_annotations(true)?;
+            let (privacy, redact) = Self::merge_privacy_annotations(leading, trailing, span)?;
             fields.push(RecordField {
                 name: field_name,
                 ty,
+                privacy,
+                redact,
                 span,
             });
             self.skip_newlines();
@@ -3856,12 +4096,16 @@ impl<'a> Parser<'a> {
         self.skip_newlines();
         if !self.at(&TokenKind::RParen) {
             loop {
+                let leading = self.parse_privacy_annotations(false)?;
                 let (param_name, param_span) = self.ident("parameter name")?;
                 self.expect(TokenKind::Colon, "`:` after parameter name")?;
                 let ty = self.type_name()?;
+                let trailing = self.parse_privacy_annotations(false)?;
+                let (privacy, _) = Self::merge_privacy_annotations(leading, trailing, param_span)?;
                 params.push(Param {
                     name: param_name,
                     ty,
+                    privacy,
                     span: param_span,
                 });
                 self.skip_newlines();
@@ -3880,26 +4124,7 @@ impl<'a> Parser<'a> {
             None
         };
         self.skip_newlines();
-        let mut capabilities = Vec::new();
-        if self.at(&TokenKind::Uses) {
-            self.advance();
-            loop {
-                let (mut capability, _) = self.ident("capability name")?;
-                if capability == "Database" && self.at(&TokenKind::LParen) {
-                    self.advance();
-                    let (access, _) = self.ident("database access effect")?;
-                    self.expect(TokenKind::RParen, "`)` after database access effect")?;
-                    capability = format!("Database({access})");
-                }
-                capabilities.push(capability);
-                self.skip_newlines();
-                if !self.at(&TokenKind::Comma) {
-                    break;
-                }
-                self.advance();
-                self.skip_newlines();
-            }
-        }
+        let capabilities = self.parse_optional_uses_clause()?;
         self.skip_newlines();
         let mut requires = Vec::new();
         let mut ensures = Vec::new();
@@ -4070,12 +4295,7 @@ impl<'a> Parser<'a> {
                     self.expect(TokenKind::LBrace, "`{` after function-type `uses`")?;
                     self.skip_newlines();
                     while !self.at(&TokenKind::RBrace) && !self.at(&TokenKind::Eof) {
-                        let capability = match &self.current().kind {
-                            TokenKind::Ident(name) => name.clone(),
-                            TokenKind::Database => "Database".into(),
-                            _ => return self.error("expected a capability name in function type"),
-                        };
-                        let span = self.advance().span;
+                        let (capability, span) = self.parse_capability_spec()?;
                         if capabilities.contains(&capability) {
                             return Err(ParseError {
                                 message: format!(
@@ -5002,6 +5222,7 @@ impl<'a> Parser<'a> {
                     params.push(Param {
                         name,
                         ty,
+                        privacy: zelyra_ast::PrivacyClass::Public,
                         span: start.join(end),
                     });
                     self.skip_newlines();

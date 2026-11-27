@@ -3944,11 +3944,15 @@ fn shared_json_codec_handles_checked_record_definitions() {
             zelyra_ast::RecordField {
                 name: "name".into(),
                 ty: Type::String,
+                privacy: zelyra_ast::PrivacyClass::Public,
+                redact: false,
                 span,
             },
             zelyra_ast::RecordField {
                 name: "id".into(),
                 ty: Type::Int,
+                privacy: zelyra_ast::PrivacyClass::Public,
+                redact: false,
                 span,
             },
         ],

@@ -57,10 +57,351 @@ pub fn inspect_capability_uses(program: &Program) -> Vec<CapabilityUse> {
     analyze_capabilities(program, None).1
 }
 
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum ParsedCapability {
+    Simple(String),
+    DatabaseReadTables(Vec<String>),
+    DatabaseWriteTables(Vec<String>),
+    NetworkAllow(Vec<String>),
+    FileSystemScope(String),
+    EmailTemplates(Vec<String>),
+}
+
+pub fn parse_capability_spec(raw: &str) -> Option<ParsedCapability> {
+    if KNOWN_CAPABILITIES.contains(&raw) {
+        return Some(ParsedCapability::Simple(raw.to_owned()));
+    }
+    if let Some(inner) = raw
+        .strip_prefix("Database(read: [")
+        .and_then(|s| s.strip_suffix("])"))
+    {
+        let tables = inner
+            .split(',')
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+            .map(ToOwned::to_owned)
+            .collect::<Vec<_>>();
+        return (!tables.is_empty()).then_some(ParsedCapability::DatabaseReadTables(tables));
+    }
+    if let Some(inner) = raw
+        .strip_prefix("Database(write: [")
+        .and_then(|s| s.strip_suffix("])"))
+    {
+        let tables = inner
+            .split(',')
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+            .map(ToOwned::to_owned)
+            .collect::<Vec<_>>();
+        return (!tables.is_empty()).then_some(ParsedCapability::DatabaseWriteTables(tables));
+    }
+    if let Some(inner) = raw
+        .strip_prefix("Network(allow: [")
+        .and_then(|s| s.strip_suffix("])"))
+    {
+        let hosts = inner
+            .split(',')
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+            .map(ToOwned::to_owned)
+            .collect::<Vec<_>>();
+        return (!hosts.is_empty()).then_some(ParsedCapability::NetworkAllow(hosts));
+    }
+    if let Some(scope) = raw
+        .strip_prefix("FileSystem(scope: ")
+        .and_then(|s| s.strip_suffix(')'))
+    {
+        let trimmed = scope.trim();
+        return (!trimmed.is_empty())
+            .then_some(ParsedCapability::FileSystemScope(trimmed.to_owned()));
+    }
+    if let Some(inner) = raw
+        .strip_prefix("Email(templates: [")
+        .and_then(|s| s.strip_suffix("])"))
+    {
+        let templates = inner
+            .split(',')
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+            .map(ToOwned::to_owned)
+            .collect::<Vec<_>>();
+        return (!templates.is_empty()).then_some(ParsedCapability::EmailTemplates(templates));
+    }
+    None
+}
+
+fn single_capability_satisfies(held: &str, required: &str) -> bool {
+    if held == required {
+        return true;
+    }
+    let (Some(held_parsed), Some(req_parsed)) =
+        (parse_capability_spec(held), parse_capability_spec(required))
+    else {
+        return false;
+    };
+    match (held_parsed, req_parsed) {
+        (ParsedCapability::Simple(h), ParsedCapability::Simple(r)) => {
+            h == r || (h == "Database" && r.starts_with("Database("))
+        }
+        (ParsedCapability::Simple(h), ParsedCapability::DatabaseReadTables(_)) => {
+            h == "Database" || h == "Database(read)"
+        }
+        (ParsedCapability::Simple(h), ParsedCapability::DatabaseWriteTables(_)) => {
+            h == "Database" || h == "Database(write)"
+        }
+        (
+            ParsedCapability::DatabaseReadTables(held_tables),
+            ParsedCapability::DatabaseReadTables(req_tables),
+        ) => req_tables
+            .iter()
+            .all(|t| held_tables.iter().any(|ht| ht.eq_ignore_ascii_case(t))),
+        (
+            ParsedCapability::DatabaseWriteTables(held_tables),
+            ParsedCapability::DatabaseWriteTables(req_tables),
+        ) => req_tables
+            .iter()
+            .all(|t| held_tables.iter().any(|ht| ht.eq_ignore_ascii_case(t))),
+        (ParsedCapability::Simple(h), ParsedCapability::NetworkAllow(_)) => h == "Network",
+        (ParsedCapability::NetworkAllow(held_hosts), ParsedCapability::NetworkAllow(req_hosts)) => {
+            req_hosts
+                .iter()
+                .all(|h| held_hosts.iter().any(|hh| hh.eq_ignore_ascii_case(h)))
+        }
+        (ParsedCapability::Simple(h), ParsedCapability::FileSystemScope(_)) => h == "FileSystem",
+        (
+            ParsedCapability::FileSystemScope(held_scope),
+            ParsedCapability::FileSystemScope(req_scope),
+        ) => scope_contains(&held_scope, &req_scope),
+        (ParsedCapability::Simple(h), ParsedCapability::EmailTemplates(_)) => h == "Email",
+        (ParsedCapability::EmailTemplates(held_tpl), ParsedCapability::EmailTemplates(req_tpl)) => {
+            req_tpl.iter().all(|t| held_tpl.contains(t))
+        }
+        _ => false,
+    }
+}
+
+pub fn capability_set_satisfies<'a>(
+    held: impl IntoIterator<Item = &'a str>,
+    required: &str,
+) -> bool {
+    held.into_iter()
+        .any(|h| single_capability_satisfies(h, required))
+}
+
+/// Checks whether a set of held capabilities satisfies a primitive operation's
+/// coarse capability category (`Database(read)`, `Database(write)`, `Network`,
+/// `FileSystem`, `Email`). Caller sites must still enforce the specific table,
+/// host, or path scope via `check_*_scope`.
+pub fn capability_set_satisfies_primitive<'a>(
+    held: impl IntoIterator<Item = &'a str>,
+    required: &str,
+) -> bool {
+    let held_vec = held.into_iter().collect::<Vec<_>>();
+    if capability_set_satisfies(held_vec.iter().copied(), required) {
+        return true;
+    }
+    held_vec
+        .iter()
+        .filter_map(|h| parse_capability_spec(h))
+        .any(|parsed| {
+            matches!(
+                (parsed, required),
+                (ParsedCapability::DatabaseReadTables(_), "Database(read)")
+                    | (ParsedCapability::DatabaseWriteTables(_), "Database(write)")
+                    | (ParsedCapability::NetworkAllow(_), "Network")
+                    | (ParsedCapability::FileSystemScope(_), "FileSystem")
+                    | (ParsedCapability::EmailTemplates(_), "Email")
+            )
+        })
+}
+
+fn scope_contains(parent_scope: &str, candidate_path: &str) -> bool {
+    let parent = parent_scope.trim().trim_end_matches('/');
+    let clean_cand = candidate_path.trim().trim_start_matches("./");
+    if parent.is_empty()
+        || clean_cand.starts_with('/')
+        || clean_cand.starts_with('\\')
+        || clean_cand.split(['/', '\\']).any(|seg| seg == "..")
+    {
+        return false;
+    }
+    clean_cand == parent || clean_cand.starts_with(&format!("{parent}/"))
+}
+
+pub(crate) fn url_authority_and_host(url: &str) -> Option<(&str, &str)> {
+    let (_, rest) = url.split_once("://")?;
+    let end = rest.find(['/', '?', '#']).unwrap_or(rest.len());
+    let authority = &rest[..end];
+    let host = authority.rsplit_once(':').map_or(authority, |(h, _)| h);
+    Some((authority, host))
+}
+
+pub(crate) fn check_sql_table_scope(
+    query: &str,
+    known_tables: &[String],
+    declared: &[&str],
+) -> Result<(), String> {
+    let parsed = declared
+        .iter()
+        .filter_map(|c| parse_capability_spec(c))
+        .collect::<Vec<_>>();
+    let has_broad_db = parsed
+        .iter()
+        .any(|c| matches!(c, ParsedCapability::Simple(s) if s == "Database"));
+    let has_broad_read = has_broad_db
+        || parsed
+            .iter()
+            .any(|c| matches!(c, ParsedCapability::Simple(s) if s == "Database(read)"));
+    let has_broad_write = has_broad_db
+        || parsed
+            .iter()
+            .any(|c| matches!(c, ParsedCapability::Simple(s) if s == "Database(write)"));
+    let read_scopes: Vec<&str> = parsed
+        .iter()
+        .filter_map(|c| match c {
+            ParsedCapability::DatabaseReadTables(tables) => Some(tables.iter().map(String::as_str)),
+            _ => None,
+        })
+        .flatten()
+        .collect();
+    let write_scopes: Vec<&str> = parsed
+        .iter()
+        .filter_map(|c| match c {
+            ParsedCapability::DatabaseWriteTables(tables) => {
+                Some(tables.iter().map(String::as_str))
+            }
+            _ => None,
+        })
+        .flatten()
+        .collect();
+
+    if has_broad_read && has_broad_write {
+        return Ok(());
+    }
+    let (_, accesses) = zelyra_database::sql::analyze_table_access(query, known_tables);
+    for access in accesses {
+        if access.table.is_empty() {
+            return Err(
+                "quoted SQL table reference cannot satisfy table-scoped `Database` capability"
+                    .into(),
+            );
+        }
+        match access.mode {
+            zelyra_database::sql::SqlAccessMode::Read => {
+                if !has_broad_read
+                    && !read_scopes
+                        .iter()
+                        .any(|t| t.eq_ignore_ascii_case(&access.table))
+                {
+                    return Err(format!(
+                        "SQL reads table `{}` which is not in the function's `Database(read: [...])` scope",
+                        access.table
+                    ));
+                }
+            }
+            zelyra_database::sql::SqlAccessMode::Write
+            | zelyra_database::sql::SqlAccessMode::ReadWrite => {
+                if !has_broad_write
+                    && !write_scopes
+                        .iter()
+                        .any(|t| t.eq_ignore_ascii_case(&access.table))
+                {
+                    return Err(format!(
+                        "SQL writes table `{}` which is not in the function's `Database(write: [...])` scope",
+                        access.table
+                    ));
+                }
+            }
+            zelyra_database::sql::SqlAccessMode::Unknown => {
+                if !has_broad_db {
+                    return Err(format!(
+                        "SQL access mode on `{}` is ambiguous and requires broad `Database` capability",
+                        access.table
+                    ));
+                }
+            }
+        }
+    }
+    Ok(())
+}
+
+pub(crate) fn check_network_url_scope(url: &str, declared: &[&str]) -> Result<(), String> {
+    let parsed = declared
+        .iter()
+        .filter_map(|c| parse_capability_spec(c))
+        .collect::<Vec<_>>();
+    if parsed
+        .iter()
+        .any(|c| matches!(c, ParsedCapability::Simple(s) if s == "Network"))
+    {
+        return Ok(());
+    }
+    let allowed: Vec<&str> = parsed
+        .iter()
+        .filter_map(|c| match c {
+            ParsedCapability::NetworkAllow(hosts) => Some(hosts.iter().map(String::as_str)),
+            _ => None,
+        })
+        .flatten()
+        .collect();
+    if allowed.is_empty() {
+        return Ok(());
+    }
+    let Some((authority, host)) = url_authority_and_host(url) else {
+        return Err(format!(
+            "network URL `{url}` could not be verified against `Network(allow: [...])`"
+        ));
+    };
+    if !allowed
+        .iter()
+        .any(|a| a.eq_ignore_ascii_case(authority) || a.eq_ignore_ascii_case(host))
+    {
+        return Err(format!(
+            "network host `{authority}` is outside declared `Network(allow: [{}])` scope",
+            allowed.join(", ")
+        ));
+    }
+    Ok(())
+}
+
+pub(crate) fn check_filesystem_path_scope(path: &str, declared: &[&str]) -> Result<(), String> {
+    let parsed = declared
+        .iter()
+        .filter_map(|c| parse_capability_spec(c))
+        .collect::<Vec<_>>();
+    if parsed
+        .iter()
+        .any(|c| matches!(c, ParsedCapability::Simple(s) if s == "FileSystem"))
+    {
+        return Ok(());
+    }
+    let scopes: Vec<&str> = parsed
+        .iter()
+        .filter_map(|c| match c {
+            ParsedCapability::FileSystemScope(scope) => Some(scope.as_str()),
+            _ => None,
+        })
+        .collect();
+    if scopes.is_empty() {
+        return Ok(());
+    }
+    if !scopes.iter().any(|scope| scope_contains(scope, path)) {
+        return Err(format!(
+            "filesystem path `{path}` is outside declared `FileSystem(scope: ...)`"
+        ));
+    }
+    Ok(())
+}
+
 fn analyze_capabilities(
     program: &Program,
     grants: Option<&HashSet<String>>,
 ) -> (Vec<CapabilityError>, Vec<CapabilityUse>) {
+    let known_tables = program
+        .tables
+        .iter()
+        .map(|table| table.name.clone())
+        .collect::<Vec<_>>();
     let (validation_functions, _) = zelyra_ast::build_table_validation_functions(program);
     let (state_guard_functions, _) = zelyra_ast::build_state_transition_guard_functions(program);
     let (computed_functions, _) = zelyra_ast::build_computed_column_functions(program);
@@ -82,14 +423,13 @@ fn analyze_capabilities(
         .copied()
         .map(|function| (function.name.as_str(), function))
         .collect::<HashMap<_, _>>();
-    let known = KNOWN_CAPABILITIES.iter().copied().collect::<HashSet<_>>();
     let mut errors = Vec::new();
     let mut uses = Vec::new();
 
     for function in all_functions {
         let mut declared = HashSet::new();
         for capability in &function.capabilities {
-            if !known.contains(capability.as_str()) {
+            if parse_capability_spec(capability).is_none() {
                 errors.push(CapabilityError {
                     message: format!(
                         "unknown capability `{capability}`; expected one of {}",
@@ -116,6 +456,7 @@ fn analyze_capabilities(
             &function.body,
             function,
             &functions,
+            &known_tables,
             &declared,
             &mut errors,
             &mut uses,
@@ -143,6 +484,7 @@ fn analyze_capabilities(
                 contract,
                 function,
                 &functions,
+                &known_tables,
                 &declared,
                 &mut errors,
                 &mut uses,
@@ -460,6 +802,7 @@ fn check_capability_block(
     block: &Block,
     function: &Function,
     functions: &HashMap<&str, &Function>,
+    known_tables: &[String],
     declared: &HashSet<&str>,
     errors: &mut Vec<CapabilityError>,
     uses: &mut Vec<CapabilityUse>,
@@ -474,18 +817,48 @@ fn check_capability_block(
                 value: Some(value), ..
             }
             | Stmt::Match { value, .. } => {
-                check_capability_expr(value, function, functions, declared, errors, uses);
+                check_capability_expr(
+                    value,
+                    function,
+                    functions,
+                    known_tables,
+                    declared,
+                    errors,
+                    uses,
+                );
                 if let Stmt::Match { arms, .. } = statement {
                     for arm in arms {
                         check_capability_block(
-                            &arm.body, function, functions, declared, errors, uses,
+                            &arm.body,
+                            function,
+                            functions,
+                            known_tables,
+                            declared,
+                            errors,
+                            uses,
                         );
                     }
                 }
             }
             Stmt::ArrayIndexAssign { index, value, .. } => {
-                check_capability_expr(index, function, functions, declared, errors, uses);
-                check_capability_expr(value, function, functions, declared, errors, uses);
+                check_capability_expr(
+                    index,
+                    function,
+                    functions,
+                    known_tables,
+                    declared,
+                    errors,
+                    uses,
+                );
+                check_capability_expr(
+                    value,
+                    function,
+                    functions,
+                    known_tables,
+                    declared,
+                    errors,
+                    uses,
+                );
             }
             Stmt::Return { value: None, .. } | Stmt::Break { .. } | Stmt::Continue { .. } => {}
             Stmt::If {
@@ -494,10 +867,34 @@ fn check_capability_block(
                 else_block,
                 ..
             } => {
-                check_capability_expr(condition, function, functions, declared, errors, uses);
-                check_capability_block(then_block, function, functions, declared, errors, uses);
+                check_capability_expr(
+                    condition,
+                    function,
+                    functions,
+                    known_tables,
+                    declared,
+                    errors,
+                    uses,
+                );
+                check_capability_block(
+                    then_block,
+                    function,
+                    functions,
+                    known_tables,
+                    declared,
+                    errors,
+                    uses,
+                );
                 if let Some(else_block) = else_block {
-                    check_capability_block(else_block, function, functions, declared, errors, uses);
+                    check_capability_block(
+                        else_block,
+                        function,
+                        functions,
+                        known_tables,
+                        declared,
+                        errors,
+                        uses,
+                    );
                 }
             }
             Stmt::While {
@@ -506,29 +903,101 @@ fn check_capability_block(
                 body,
                 ..
             } => {
-                check_capability_expr(condition, function, functions, declared, errors, uses);
+                check_capability_expr(
+                    condition,
+                    function,
+                    functions,
+                    known_tables,
+                    declared,
+                    errors,
+                    uses,
+                );
                 for invariant in invariants {
-                    check_capability_expr(invariant, function, functions, declared, errors, uses);
+                    check_capability_expr(
+                        invariant,
+                        function,
+                        functions,
+                        known_tables,
+                        declared,
+                        errors,
+                        uses,
+                    );
                 }
-                check_capability_block(body, function, functions, declared, errors, uses);
+                check_capability_block(
+                    body,
+                    function,
+                    functions,
+                    known_tables,
+                    declared,
+                    errors,
+                    uses,
+                );
             }
             Stmt::For { iterable, body, .. } => {
-                check_capability_expr(iterable, function, functions, declared, errors, uses);
-                check_capability_block(body, function, functions, declared, errors, uses);
+                check_capability_expr(
+                    iterable,
+                    function,
+                    functions,
+                    known_tables,
+                    declared,
+                    errors,
+                    uses,
+                );
+                check_capability_block(
+                    body,
+                    function,
+                    functions,
+                    known_tables,
+                    declared,
+                    errors,
+                    uses,
+                );
             }
             Stmt::Loop {
                 invariants, body, ..
             } => {
                 for invariant in invariants {
-                    check_capability_expr(invariant, function, functions, declared, errors, uses);
+                    check_capability_expr(
+                        invariant,
+                        function,
+                        functions,
+                        known_tables,
+                        declared,
+                        errors,
+                        uses,
+                    );
                 }
-                check_capability_block(body, function, functions, declared, errors, uses);
+                check_capability_block(
+                    body,
+                    function,
+                    functions,
+                    known_tables,
+                    declared,
+                    errors,
+                    uses,
+                );
             }
             Stmt::Transaction { body, .. } => {
-                check_capability_block(body, function, functions, declared, errors, uses);
+                check_capability_block(
+                    body,
+                    function,
+                    functions,
+                    known_tables,
+                    declared,
+                    errors,
+                    uses,
+                );
             }
             Stmt::Parallel { body, .. } => {
-                check_capability_block(body, function, functions, declared, errors, uses);
+                check_capability_block(
+                    body,
+                    function,
+                    functions,
+                    known_tables,
+                    declared,
+                    errors,
+                    uses,
+                );
             }
         }
     }
@@ -538,6 +1007,7 @@ fn check_capability_expr(
     expression: &Expr,
     function: &Function,
     functions: &HashMap<&str, &Function>,
+    known_tables: &[String],
     declared: &HashSet<&str>,
     errors: &mut Vec<CapabilityError>,
     uses: &mut Vec<CapabilityUse>,
@@ -556,6 +1026,13 @@ fn check_capability_expr(
                     errors,
                     uses,
                 );
+                let declared_vec = declared.iter().copied().collect::<Vec<_>>();
+                if let Err(reason) = check_sql_table_scope(query, known_tables, &declared_vec) {
+                    errors.push(CapabilityError {
+                        message: reason,
+                        span: expression.span,
+                    });
+                }
             }
             ExprKind::Call { name, args, .. } => {
                 for (capability, operation) in builtin_capability_requirements(name) {
@@ -569,14 +1046,41 @@ fn check_capability_expr(
                         uses,
                     );
                 }
+                let declared_vec = declared.iter().copied().collect::<Vec<_>>();
                 if let Some(usage) = uses.last_mut() {
                     if usage.span == expression.span && usage.capability == "FileSystem" {
                         usage.file_paths = file_path_uses(name, args);
+                        for path_use in &usage.file_paths {
+                            if let Some(path) = &path_use.path {
+                                if let Err(reason) =
+                                    check_filesystem_path_scope(path, &declared_vec)
+                                {
+                                    errors.push(CapabilityError {
+                                        message: reason,
+                                        span: expression.span,
+                                    });
+                                }
+                            }
+                        }
+                    }
+                }
+                if matches!(
+                    name.as_str(),
+                    "http_get" | "http_request" | "http_json" | "http_result"
+                ) {
+                    let url_index = if name == "http_get" { 0 } else { 1 };
+                    if let Some(ExprKind::String(url)) = args.get(url_index).map(|a| &a.kind) {
+                        if let Err(reason) = check_network_url_scope(url, &declared_vec) {
+                            errors.push(CapabilityError {
+                                message: reason,
+                                span: expression.span,
+                            });
+                        }
                     }
                 }
                 if let Some(callee) = functions.get(name.as_str()) {
                     for capability in &callee.capabilities {
-                        if KNOWN_CAPABILITIES.contains(&capability.as_str()) {
+                        if parse_capability_spec(capability).is_some() {
                             uses.push(CapabilityUse {
                                 function: function.name.clone(),
                                 capability: capability.clone(),
@@ -585,7 +1089,7 @@ fn check_capability_expr(
                                 file_paths: Vec::new(),
                             });
                         }
-                        if KNOWN_CAPABILITIES.contains(&capability.as_str())
+                        if parse_capability_spec(capability).is_some()
                             && !function_declares_capability(declared, capability)
                         {
                             errors.push(CapabilityError {
@@ -702,7 +1206,7 @@ fn require_capability(
         span,
         file_paths: Vec::new(),
     });
-    if !function_declares_capability(declared, capability) {
+    if !capability_set_satisfies_primitive(declared.iter().copied(), capability) {
         errors.push(CapabilityError {
             message: format!(
                 "function `{}` uses {operation} but does not declare capability `{capability}`; add `uses {capability}`",
@@ -742,26 +1246,43 @@ fn file_path_uses(name: &str, args: &[Expr]) -> Vec<FilePathUse> {
 }
 
 pub(super) fn function_declares_capability(declared: &HashSet<&str>, capability: &str) -> bool {
-    declared.contains(capability)
-        || (capability.starts_with("Database(") && declared.contains("Database"))
+    capability_set_satisfies(declared.iter().copied(), capability)
 }
 
 pub fn project_grants_capability(grants: &HashSet<String>, capability: &str) -> bool {
-    if grants.contains(capability)
-        || (capability.starts_with("Database(") && grants.contains("Database"))
-    {
+    if capability_set_satisfies(grants.iter().map(String::as_str), capability) {
         return true;
     }
-    capability == "Database"
-        && grants.contains("Database(read)")
-        && grants.contains("Database(write)")
+    match parse_capability_spec(capability) {
+        Some(ParsedCapability::DatabaseReadTables(_)) => {
+            grants.contains("Database") || grants.contains("Database(read)")
+        }
+        Some(ParsedCapability::DatabaseWriteTables(_)) => {
+            grants.contains("Database") || grants.contains("Database(write)")
+        }
+        Some(ParsedCapability::NetworkAllow(_)) => grants.contains("Network"),
+        Some(ParsedCapability::FileSystemScope(_)) => grants.contains("FileSystem"),
+        Some(ParsedCapability::EmailTemplates(_)) => grants.contains("Email"),
+        _ => {
+            capability == "Database"
+                && grants.contains("Database(read)")
+                && grants.contains("Database(write)")
+        }
+    }
 }
 
 fn capability_config_key(capability: &str) -> String {
-    match capability {
-        "Database(read)" => "database_read".into(),
-        "Database(write)" => "database_write".into(),
-        _ => capability.to_ascii_lowercase(),
+    match parse_capability_spec(capability) {
+        Some(ParsedCapability::DatabaseReadTables(_)) => "database_read".into(),
+        Some(ParsedCapability::DatabaseWriteTables(_)) => "database_write".into(),
+        Some(ParsedCapability::NetworkAllow(_)) => "network".into(),
+        Some(ParsedCapability::FileSystemScope(_)) => "filesystem".into(),
+        Some(ParsedCapability::EmailTemplates(_)) => "email".into(),
+        _ => match capability {
+            "Database(read)" => "database_read".into(),
+            "Database(write)" => "database_write".into(),
+            _ => capability.to_ascii_lowercase(),
+        },
     }
 }
 

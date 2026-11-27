@@ -192,6 +192,7 @@ impl<'program, 'services> Interpreter<'program, 'services> {
                 .map_err(|error| self.runtime_error(expr.span, error))?;
                 let capability = sql_required_capability(query);
                 self.require_runtime_capability(capability, "SQL access", expr.span)?;
+                self.require_runtime_sql_table_scope(query, expr.span)?;
                 let Some(database_url) = self.database_url.clone() else {
                     return Err(
                         self.runtime_error(expr.span, "SQL execution requires a database runtime")

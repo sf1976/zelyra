@@ -171,6 +171,9 @@ pub(super) fn run() -> ExitCode {
     if command == "audit" {
         return audit_command(args);
     }
+    if command == "privacy" {
+        return privacy_cli::privacy_command(args);
+    }
     if command == "outbox" {
         return outbox_cli::outbox_command(args);
     }

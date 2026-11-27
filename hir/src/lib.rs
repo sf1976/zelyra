@@ -846,6 +846,7 @@ impl<'a> Resolver<'a> {
                             | "verify_ledger_balance"
                             | "einvoice_xml"
                             | "einvoice_validate"
+                            | "redact"
                             | "len"
                             | "range"
                             | "array_replace_result"

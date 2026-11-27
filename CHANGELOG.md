@@ -1,5 +1,33 @@
 ## Unreleased
 
+## 1.7.0 — Information Flow Control, Tenant SQL & Verified Authorization v1
+
+- Add language-wide sensitivity annotations (`@pii`, `@secret`, `@redact`) and
+  `redact(value: String) -> String` across lexer, parser, AST, HIR, MIR,
+  Bytecode, and runtime, backed by inter-procedural fixed-point taint analysis
+  (`E-PRIVACY-001`) blocking unredacted leaks to logs, errors, external HTTP
+  calls, or unauthenticated public APIs/pages. / Sprachweite
+  Sensitivitäts-Annotationen (`@pii`, `@secret`, `@redact`) und `redact(...)`
+  mit interprozeduraler Taint-Prüfung (`E-PRIVACY-001`).
+- Add compiler-derived GDPR catalog commands `zelyra privacy map|export-plan|erase-plan <file.zyl> [--format human|json|md]`
+  with explicit `ASSUMED` boundaries for organizational/legal compliance. /
+  Compiler-abgeleiteter DSGVO-Katalog (`zelyra privacy`) mit expliziter
+  `ASSUMED`-Abgrenzung.
+- Expand fail-closed tenant SQL verification to support non-recursive `WITH`
+  CTEs, `GROUP BY`/`HAVING`, and tenant-safe single-table `UPDATE`, `DELETE`,
+  and multi-row batch `INSERT` statements in functions while continuing to reject
+  `WITH RECURSIVE`, subqueries, `UNION`, `OR`, and mismatched `TenantId` bindings. /
+  Erweiterte Mandanten-SQL-Algebra (nicht-rekursive `WITH`-CTEs, `GROUP BY`/`HAVING`,
+  mandantensichere `UPDATE`/`DELETE`/Batch-`INSERT`).
+- Add resource-scoped capabilities (`Database(read: [...])`,
+  `Database(write: [...])`, `Network(allow: [...])`, `FileSystem(scope: "...")`,
+  `Email(templates: [...])`) enforced statically (`E-CAP-001`) and at runtime. /
+  Ressourcengenaue Capabilities mit statischer Subsumtion und Laufzeitdurchsetzung.
+- Add Verified Authorization v1 (`zelyra verify` privacy and authorization checks
+  with all six binding evidence classes `PROVEN`–`UNVERIFIED`) and export
+  `privacy`/`redact` metadata plus `authorization` summary in `zelyra reflect`. /
+  Verified Authorization v1 sowie die sechs Evidenzklassen (`PROVEN`–`UNVERIFIED`).
+
 ## 1.6.0 — Financial & Temporal Integrity (`Money<Currency>`, append-only `ledger`, `auditable` tables, and EN 16931 E-Invoicing)
 
 - Add currency-safe `Money<Currency>` parameterized by ISO-4217 currency tags

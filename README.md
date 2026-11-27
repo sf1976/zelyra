@@ -11,19 +11,22 @@ for database-backed business and web applications. It brings schema-aware SQL,
 forms, CRUD, views, and application logic together while keeping ordinary code
 and native SQL available.
 
-> **Release 1.6.0 · language compatibility line: 0.1** · [GitHub release](https://github.com/sf1976/zelyra/releases/tag/v1.6.0)
+> **Stable release 1.6.0 · language compatibility line: 0.1** · [GitHub release](https://github.com/sf1976/zelyra/releases/tag/v1.6.0)
 >
-> Compiler checks and the verifier cover defined scopes. They do not prove arbitrary applications correct. Review the documented support and limits for each workflow before deployment.
+> Compiler checks and the verifier cover defined scopes. They do not prove arbitrary applications correct or establish legal compliance (`ASSUMED`). Review the documented support and limits for each workflow before deployment.
 
-Zelyra 1.6.0 adds currency-safe `Money<Currency>` (compile-time rejection of
-mixed currencies, exact `Decimal` `convert_money<From, To>`), append-only
-`ledger` declarations (`UPDATE`/`DELETE` rejected at compile time with
-`E-LEDGER-001`, plus `verify_ledger_balance`), bitemporal `auditable` tables
-(`valid_from`, `valid_to`, `recorded_at`, `recorded_by`), and zero-dependency,
-XXE-safe EN 16931 e-invoice XML generation and validation (`einvoice_xml`,
-`einvoice_validate`). AST remains the default;
+The 1.7.0 release candidate adds static information flow control (`@pii`,
+`@secret`, `@redact`, `redact(...)` with `E-PRIVACY-001`), the compiler-derived GDPR catalog
+(`zelyra privacy map|export-plan|erase-plan`), expanded fail-closed tenant SQL
+algebra (non-recursive `WITH` CTEs, `GROUP BY`/`HAVING`, tenant-safe
+`UPDATE`/`DELETE`/batch `INSERT`), resource-scoped capabilities
+(`Database(read/write: [...])`, `Network(allow: [...])`,
+`FileSystem(scope: "...")`, `Email(templates: [...])`), and **Verified
+Authorization v1**. `zelyra verify` reports evidence classes (`PROVEN`–`UNVERIFIED`)
+and `zelyra reflect` exports privacy and authorization metadata. AST remains the default;
 experimental MIR and Bytecode remain opt-in and fail closed for unsupported
 constructs. The business starter is not a completed ERP. See the
+[1.7.0 release notes](docs/release-notes/1.7.0.en.md),
 [1.6.0 release notes](docs/release-notes/1.6.0.en.md),
 [1.5.0 release notes](docs/release-notes/1.5.0.en.md),
 [1.4.0 release notes](docs/release-notes/1.4.0.en.md),
