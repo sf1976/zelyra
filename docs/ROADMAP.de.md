@@ -35,48 +35,109 @@ Abschnitte bleiben als historische Planung und Nachweise erhalten; sie legen
 für sich keine aktuellen Releaseziele fest. Langfristige Ideen stehen im
 Abschnitt zur Weiterentwicklung nach 1.0.0.
 
-## Releasefolge bis 2.0.0 — Die *Proof-Carrying Business Language*
+## Verbindliche Gesamt-Roadmap (`1.7.0 → 3.0.0`)
 
-Diese Folge ist der verbindliche Plan für aktive Arbeiten ab **Zelyra 1.3.6**.
-Die vollständige strategische Positionierung, die 5 einzigartigen Säulen,
-Syntaxentwürfe und detaillierten Abnahmekriterien jeder Version stehen in der
-[Vision & Anforderungsspezifikation 2.0](VISION-2.0.de.md).
+Diese Folge ist der verbindliche, strategisch abgeschlossene Plan für alle
+aktiven Arbeiten ab **Zelyra 1.6.0** bis **Zelyra 3.0.0**. Sie gliedert sich in
+zwei aufeinander aufbauende Phasen:
 
-> **Strategische Leitlinie:** Zelyra baut kein weiteres generisches
-> Web-Framework nach, sondern entwickelt sich zur weltweit ersten
-> **Proof-Carrying Business Language**: Geschäftsprozesse (`states` + `workflow`
-> + `four_eyes`), Finanz- und Zeit-Integrität (`Money<C>`, `ledger`,
-> `auditable`), Zero-Leak-Datenflüsse (Mandanten-SQL, `@pii`/`@secret`,
-> feingranulare Capabilities) und KI-Änderungen werden vom Compiler geprüft und
-> per `zelyra certify` als kryptografisch nachprüfbares Zertifikat ausgeliefert.
+- **Phase A (`1.7.0 → 2.0.0`) — Die *Proof-Carrying Business Language* (LTS)**
+- **Phase B (`2.1.0 → 3.0.0`) — Das *Verifiable Business Operating System* (LTS)**
 
-Jedes aktive offene Ziel ist einem Release zugeordnet; historische
-Backlog-Einträge bleiben als Kontext erhalten und sind keine zusätzlichen,
-unversionierten Zusagen. Ein Release gilt erst nach Implementierung,
-Dokumentation, positiven und negativen Tests sowie den jeweiligen Sicherheits-
-und Kompatibilitätsprüfungen als abgeschlossen.
+> **Übergeordnetes Ziel:** Zelyra beweist nicht ausschließlich die Korrektheit
+> des Quellcodes, sondern macht die gesamte Kette aus **Geschäftslogik,
+> Datenhaltung, Berechtigungen, Kommunikation, Bereitstellung, Ausführung und
+> Weiterentwicklung** kontinuierlich verifizierbar.
+>
+> **Expliziter Geltungsbereich & Ehrlichkeit der Beweise:** Sämtliche Garantien
+> besitzen einen ausdrücklich definierten Geltungsbereich, dokumentierte
+> Annahmen und nachvollziehbare Beweisgrenzen. Rechtliche Konformität, externe
+> Systemzustände und organisatorische Voraussetzungen werden niemals pauschal
+> als mathematisch bewiesen dargestellt.
 
-### Produktetappen
+### Verbindliche Evidenzklassen (Fail-Closed)
+
+Jede verifizierte Eigenschaft in Zelyra-Berichten, `zelyra-proof.json` und dem
+eigenständigen Proof Checker trägt eine der sechs verbindlichen Evidenzklassen:
+
+| Evidenzklasse | Bedeutung |
+| --- | --- |
+| `PROVEN` | Statisch bzw. formal innerhalb der dokumentierten Annahmen bewiesen. |
+| `ENFORCED` | Technisch zur Compile- oder Laufzeit fail-closed erzwungen (z. B. Typ-, Capability-, Lock- oder Sandbox-Grenze). |
+| `TESTED` | Durch reproduzierbare positive, negative, Differential- oder Fault-Injection-Tests im definierten Korpus belegt. |
+| `ATTESTED` | Kryptografisch signiert, reproduzierbar gebaut oder extern auditiert (z. B. SBOM, Build-Attestierung, Audit). |
+| `ASSUMED` | Explizit dokumentierte Umwelt-, Infrastruktur- oder Organisationsannahme außerhalb der technischen Kontrolle. |
+| `UNVERIFIED` | Nicht geprüft, außerhalb des Geltungsbereichs, nicht entscheidbar oder wegen Solver-Timeout abgebrochen. |
+
+**Unverhandelbare Fail-Closed-Regel:** Nicht entscheidbare Beweise,
+SMT-/Solver-Timeouts und unbekannte Zustände dürfen **niemals** als erfolgreiche
+Verifikation oder `PROVEN` gelten.
+
+### Produktetappen — Bereits veröffentlicht (`1.2.56 – 1.6.0`)
 
 | Version | Schwerpunkt | Abschlusskriterium |
 | --- | --- | --- |
 | 1.2.56 ✅ | Studio-Menüs Datei/Bearbeiten, lesbare UI und SQL-Arbeitsplatz | Als [v1.2.56](https://github.com/sf1976/zelyra/releases/tag/v1.2.56) veröffentlicht; vollständige PR-CI, reproduzierbare Linux-/Windows-Pakete, Prüfsummen und SPDX-SBOMs bestanden. |
 | 1.3.0 ✅ | Compiler- und Studio-Grundlage | Veröffentlicht mit kanonischen Datenbankvorlagen, Architekturprüfung, Migrationsvorschau und compilergeführten Studio-Abläufen. |
 | 1.3.5–1.3.6 ✅ | Sprach- & Invarianten-Durchbruch (`states`, `transaction`, `?`, Mandanten-Joins) | Als [v1.3.5](https://github.com/sf1976/zelyra/releases/tag/v1.3.5) und [v1.3.6](https://github.com/sf1976/zelyra/releases/tag/v1.3.6) veröffentlicht: deklarative Tabellen-Zustandsmaschinen (`states` + `when`-Guards), Kontrollfluss-Entscheidungstransaktionen, Postfix-`?` über AST/MIR/Bytecode v30 (inkl. Transaktions-Rollback), SQL-Upserts/Row-Locks und compilergeprüfte Mehrtabellen-Mandanten-`SELECT`-Abfragen (`INNER`/`LEFT JOIN`). |
-| 1.4.0 ✅ | **Production Core & Developer Joy** | Als [v1.4.0](https://github.com/sf1976/zelyra/releases/tag/v1.4.0) veröffentlicht: erstklassiges `zelyra test` mit deklarativen `test "..." [uses ...] { ... }`-Blöcken, `--filter`, `--format json` und automatischer Rollback-DB-Sandbox (`with_rollback_transaction` auf MariaDB/MySQL & PostgreSQL), `assert_eq`/`assert_ne`/`assert_ok`/`assert_err` über AST/MIR/Bytecode v30 sowie `zelyra lsp` mit `textDocument/formatting`, angereichertem `states`-/Contract-Hover und `test`-Symbolen (ergänzend zu den gepoolten DB-Treibern, String-Interpolation und generischen Funktionen). Contract-/Property-Fuzzing und Mini-ERP Benchmark 01 laufen als Härtung weiter. |
-| 1.5.0 ✅ | **Living Business Processes (`states` v2, `four_eyes` & `workflow`)** | Als [v1.5.0](https://github.com/sf1976/zelyra/releases/tag/v1.5.0) veröffentlicht: `states` v2 mit `requires role(...)` und nativem fail-closed `requires four_eyes(<spalte>)` (statische Identitätsspalten-Prüfung + Laufzeitdurchsetzung unter `SELECT ... FOR UPDATE`), deklarative `workflow`-Blöcke (`after`, `on enter`, `compensate`) mit statischer Typ-/Capability-Prüfung und Timer-Zyklus-Verifikation in `zelyra verify`, `zelyra doc --workflows`, `zelyra reflect`-Export sowie `zelyra lsp`-Unterstützung. Kind-Aggregat-Guards und Hintergrund-Dispatch über den Scheduler bleiben Folgepunkte. |
-| 1.6.0 ✅ | **Financial & Temporal Integrity (`Money<C>`, `ledger`, `auditable`, E-Invoicing)** | Als [v1.6.0](https://github.com/sf1976/zelyra/releases/tag/v1.6.0) veröffentlicht: währungssicheres `Money<C>` (Mischen von Währungen ist Compile-Fehler, `convert_money<Von, Nach>`), append-only `ledger` (`UPDATE`/`DELETE` via `E-LEDGER-001` zur Compile-Zeit verboten, `verify_ledger_balance`), bitemporale `auditable`-Tabellen (`valid_from`, `valid_to`, `recorded_at`, `recorded_by`) sowie XXE-sichere EN-16931-E-Rechnungs-XML-Erzeugung und -Prüfung (`einvoice_xml`, `einvoice_validate`). `post_ledger`-Hash-Kette, `AS OF`-SQL und PDF/A-3-Outbox-Einbettung bleiben Folgepunkte. |
-| 1.7.0 🗺️ | **Zero-Leak Information Flow & Fine-Grained Capabilities** | Erweiterte fail-closed Mandanten-SQL-Algebra (nicht-rekursive `WITH`-CTEs, `GROUP BY`/`HAVING`, mandantensichere Batch-Writes), statisches Datenschutz-Taint-Tracking (`@pii`, `@secret`, `@redact` mit `E-PRIVACY-001`), compiler-generierter DSGVO-Katalog (`zelyra privacy map\|export-plan\|erase-plan`) und ressourcengenaue Capabilities (`Database(read/write)`, `Network(allow: [...])`, `FileSystem(scope: ...)`). |
-| 1.8.0 🗺️ | **Proof-Carrying Software, AI-Verified Engineering & Sovereign Deployment** | Kryptografisch signiertes Compiler-Zertifikat (`zelyra certify` → `zelyra-proof.json`), semantische PR-/KI-Diff-Verifikation (`zelyra diff-verify --fail-on-privilege-escalation`), reproduzierbares Single-Binary-Deployment (`zelyra build --bundle`), Bytecode-Standard-Gate (nur bei belegter Parität & gemessenem Nutzen) sowie opt-in Wasm-Erweiterungen unter Capability-Sandbox. |
-| 1.9.0 🗺️ | **2.0 Hardening, Zero-Downtime Migrations & Studio Polish** | Feature-Freeze, Zero-Downtime-Schema-Migrationen (`zelyra db plan --zero-downtime`: `expand -> backfill -> contract`), Zelyra Studio 2.0 (interaktiver Schema-, State-Machine-, Workflow- & `@pii`-Explorer mit Quelltext als einziger Source of Truth), lokale telemetriefreie Observability (`/__zelyra/metrics`), No-Telemetry-CI-Gate und vollständige zweisprachige Handbücher. |
-| 2.0.0 🗺️ | **The Proof-Carrying Business Language (LTS)** | Stabile Sprachlinie `1.0` (3-Jahres-LTS-Pflege), verbindliche Verträge für `reflect`, `certify`, `diff-verify`, `lsp`, `zelyra.lock` und Zelyra-UI-CSS, vollständige MariaDB-/PostgreSQL-Parität und reproduzierbare Mini-ERP-Referenz mit signiertem `zelyra-proof.json`. |
+| 1.4.0 ✅ | **Production Core & Developer Joy** | Als [v1.4.0](https://github.com/sf1976/zelyra/releases/tag/v1.4.0) veröffentlicht: erstklassiges `zelyra test` mit deklarativen `test "..." [uses ...] { ... }`-Blöcken, `--filter`, `--format json` und automatischer Rollback-DB-Sandbox (`with_rollback_transaction` auf MariaDB/MySQL & PostgreSQL), `assert_eq`/`assert_ne`/`assert_ok`/`assert_err` über AST/MIR/Bytecode v30 sowie `zelyra lsp` mit `textDocument/formatting`, angereichertem `states`-/Contract-Hover und `test`-Symbolen (ergänzend zu den gepoolten DB-Treibern, String-Interpolation und generischen Funktionen). |
+| 1.5.0 ✅ | **Living Business Processes (`states` v2, `four_eyes` & `workflow`)** | Als [v1.5.0](https://github.com/sf1976/zelyra/releases/tag/v1.5.0) veröffentlicht: `states` v2 mit `requires role(...)` und nativem fail-closed `requires four_eyes(<spalte>)` (statische Identitätsspalten-Prüfung + Laufzeitdurchsetzung unter `SELECT ... FOR UPDATE`), deklarative `workflow`-Blöcke (`after`, `on enter`, `compensate`) mit statischer Typ-/Capability-Prüfung und Timer-Zyklus-Verifikation in `zelyra verify`, `zelyra doc --workflows`, `zelyra reflect`-Export sowie `zelyra lsp`-Unterstützung. |
+| 1.6.0 ✅ | **Financial & Temporal Integrity (`Money<C>`, `ledger`, `auditable`, E-Invoicing)** | Als [v1.6.0](https://github.com/sf1976/zelyra/releases/tag/v1.6.0) veröffentlicht: währungssicheres `Money<C>` (Mischen von Währungen ist Compile-Fehler, `convert_money<Von, Nach>`), append-only `ledger` (`UPDATE`/`DELETE` via `E-LEDGER-001` zur Compile-Zeit verboten, `verify_ledger_balance`), bitemporale `auditable`-Tabellen (`valid_from`, `valid_to`, `recorded_at`, `recorded_by`) sowie XXE-sichere EN-16931-E-Rechnungs-XML-Erzeugung und -Prüfung (`einvoice_xml`, `einvoice_validate`). |
 
-Die Ziele `1.4.0` bis `2.0.0` sind eine priorisierte, verbindliche Planungsfolge
-mit klaren Exit-Kriterien (Details siehe [VISION-2.0.de.md](VISION-2.0.de.md)),
-keine pauschale Zusage für unbewiesene Funktionen. Nach jedem Release werden
-Umfang und Nachweise gegen reale Zelyra-Anwendungen überprüft.
+### Phase A (`1.7.0 → 2.0.0`) — Die *Proof-Carrying Business Language*
 
-**Aktueller Abgleich der realen Fähigkeitslücken (Stand `1.3.6`):**
+| Version | Schwerpunkt | Verbindlicher Umfang & Exit-Kriterien |
+| --- | --- | --- |
+| 1.7.0 🗺️ | **Information Flow Control, Mandanten-SQL & Verified Authorization v1** | Sprachweite statische Verfolgung sensibler Daten (`@pii`, `@secret`, `@redact` mit `E-PRIVACY-001`), technisch erzwungener Datenschutz, Mandantenisolation und Verhinderung unzulässiger Datenweitergabe; compiler-generierter DSGVO-Katalog (`zelyra privacy map\|export-plan\|erase-plan`); erweiterte fail-closed Mandanten-SQL-Algebra (nicht-rekursive `WITH`-CTEs, `GROUP BY`/`HAVING`, mandantensichere Batch-Writes); ressourcengenaue Capabilities (`Database(read/write)`, `Network(allow: [...])`, `FileSystem(scope: ...)`); **Verified Authorization v1** (statisch geprüfte Rollen-, Objekt- und Mandanten-Berechtigungsmatrix ohne unzulässige Privilegienausweitung). |
+| 1.8.0 🗺️ | **Independent Proof Verification v1, Proof-Carrying Deployment v1 & Explainable Decisions v1** | Offenes Beweisformat (`zelyra certify` → `zelyra-proof.json`) mit allen 6 Evidenzklassen (`PROVEN`–`UNVERIFIED`) und expliziten Beweisannahmen; **Independent Proof Verification v1** (eigenständiger, quelloffener Proof Checker mit minimaler Trusted Computing Base); semantische PR-/KI-Diff-Verifikation (`zelyra diff-verify --fail-on-privilege-escalation`); **Proof-Carrying Deployment v1** (`zelyra build --bundle`, reproduzierbarer Build, SPDX-SBOM, kryptografisch signierte Deployment-Attestierung); **Explainable Business Decisions v1** (nachvollziehbare Entscheidungs- und Regelprotokolle); Bytecode-Standard-Gate (nur bei belegter Parität & gemessenem Nutzen) sowie opt-in Wasm-Erweiterungen unter Capability-Sandbox. |
+| 1.9.0 🗺️ | **Formal Verification Foundation v1, Verified Resilience v1 & Enterprise DX v1** | Feature-Freeze für `2.0.0`; **Formal Verification Foundation v1** (frühzeitige Integration der SMT-Verifikation mit strikter Timeout-→`UNVERIFIED`-Regel, kontinuierliches Compiler-Fuzzing, formale Spezifikation der Sprachkernsemantik, unabhängige Sicherheitsprüfung); **Verified Resilience v1** (Idempotenz, Transactional Outbox/Inbox, Crash-Recovery, reproduzierbare Fault-Injection-Tests); Zero-Downtime-Schema-Migrationen (`zelyra db plan --zero-downtime`: `expand -> backfill -> contract`); **Enterprise DX v1** (Dependency-Verifikation, Abwärtskompatibilitäts- und verbindliche Sicherheitsupdate-Strategie, vollständige zweisprachige Handbücher); Zelyra Studio 2.0 (Schema-, State-Machine-, Workflow- & `@pii`-Explorer); lokale telemetriefreie Observability (`/__zelyra/metrics`) und No-Telemetry-CI-Gate. |
+| 2.0.0 🗺️ | **The Proof-Carrying Business Language (LTS)** | Stabile Sprachlinie `1.0` (3-Jahres-LTS-Pflege); **verbindliche unabhängige Beweisprüfung** über den eigenständigen Proof Checker im Release- und Deployment-Pfad; versionierte Verträge für `reflect`, `certify`, `diff-verify`, `lsp`, `zelyra.lock` und Zelyra-UI-CSS; vollständige MariaDB-/PostgreSQL-Parität im definierten Umfang; reproduzierbare Mini-ERP-Referenz mit unabhängig verifiziertem `zelyra-proof.json`. |
+
+### Phase B (`2.1.0 → 3.0.0`) — Das *Verifiable Business Operating System*
+
+| Version | Schwerpunkt | Verbindlicher Umfang & Exit-Kriterien |
+| --- | --- | --- |
+| 2.1.0 🗺️ | **Proof-Carrying Runtime, Verified Resilience v2 & Verified Disaster Recovery** | Strangler-Fig-Integration (`external table` mit expliziter `ASSUMED`-Grenze); **Proof-Carrying Runtime** (kontinuierliche Überwachung von Beweisannahmen und Invarianten im Produktivbetrieb, Erkennung externer Datenbankänderungen und Schema-Drift sowie automatische Isolation fehlerhafter Prozesse); **Verified Resilience v2** (persistente Workflows, Kompensations-Sagas, systematische Chaos- und Fault-Injection-Tests); **Verified Disaster Recovery** (verifizierbare Backups, konsistente Wiederherstellung, automatisierte Invariantenprüfung nach Restore, dokumentierte RPO-/RTO-Anforderungen und automatisierte Wiederherstellungstests). |
+| 2.2.0 🗺️ | **Verified Concurrency, Performance-Disziplin & Deep IFC** | **Verified Concurrency** (statische und laufzeitgestützte Prüfung auf Race Conditions, Lost Updates, Write Skew, Transaktionsisolation, konkurrierende Workflow-Übergänge und deterministische Lock-Reihenfolgen); statische Performance-, Index- und Lock-Disziplin (`E-PERF-001` gegen fehlende Indizes/unbegrenzte Scans); Deep Information Flow Control (kontext- und pfadsensitive Informationsflussprüfung); Ausbau von SMT-Verifikation und formaler Semantik. |
+| 2.3.0 🗺️ | **Temporal Business Logic & Business Digital Twin** | **Temporal Business Logic** (bitemporale Datenhaltung mit `AS OF`-Abfragen, zeitabhängige Geschäftsregeln und historisch reproduzierbare Berechnungen unter Berücksichtigung damaliger Vertrags-, Steuer- und Rechtsgrundlagen); deterministisches Shadow-Replay gegen echte historische Ereignisse; **Business Digital Twin** (zukunftsgerichtete What-if-Simulationen auf Grundlage derselben Geschäftslogik, die im Produktivsystem ausgeführt wird — technisch isoliert ohne reale Seiteneffekte). |
+| 2.4.0 🗺️ | **Proof-Preserving Evolution & Explainable Business Decisions v2** | Beweiserhaltende Weiterentwicklung laufender Systeme (`zelyra evolve`, `migrate state`, nachweislich null verwaiste Live-Workflows oder ungültige Zwischenzustände); **Explainable Business Decisions v2** (vollständig nachvollziehbare Geschäftsentscheidungen mit dokumentierten Berechnungswegen, Regelversionen und maschinenprüfbaren Entscheidungsnachweisen). |
+| 2.5.0 🗺️ | **Verified Authorization v2, WebAuthn-`four_eyes` & Proof-Carrying Deployment v2** | **Verified Authorization v2** (formal überprüfbare Berechtigungsmodelle mit Funktionstrennung/SoD, Delegation, Rechtevererbung und formaler Verhinderung unzulässiger Privilegienausweitungen); kryptografisch via Passkey/WebAuthn signiertes `four_eyes` sowie mTLS für Dienst-zu-Dienst-Kommunikation; **Proof-Carrying Deployment v2** (kontinuierliche kryptografische Integritätsprüfung von Quellcode, Build, SBOM und laufender Produktionsumgebung). |
+| 2.6.0 🗺️ | **Capability-Bounded Autonomous Agents & Enterprise DX v2** | Sprachnatives, capability-begrenztes `agent`-Konstrukt mit harten, technisch erzwungenen Sicherheitsgrenzen (`Money<C>`-Budgetdeckel, `forbid @secret/@pii`, verpflichtende `four_eyes`-Eskalation oberhalb von Schwellwerten, verbindliche Prompt-Injection-Negativtests); **Enterprise DX v2** (leistungsfähiger Debugger, signierte Paketverwaltung, transitive Dependency-Verifikation und verbindliche LTS-Sicherheitsupdate-Kanäle). |
+| 2.7.0 🗺️ | **Executable Law & Independent Proof Verification v2** | Deklarative Fach- und Regelwerksabbildung (`norm` & `conforms to`) ausschließlich innerhalb des dokumentierten technischen Geltungsbereichs mit expliziten Annahmen; **Independent Proof Verification v2** (Erweiterung des eigenständigen, quelloffenen Proof Checkers um Norm- und Compliance-Nachweise bei unverändert minimaler Trusted Computing Base). |
+| 2.8.0 🗺️ | **Inter-Company `protocol`, Verified Interoperability & Business-Module** | Firmenübergreifendes `protocol`-Konstrukt mit statischem Deadlock-Freiheitsnachweis; **Verified Interoperability** (automatische SDK-Generierung für **PHP, Python, TypeScript, Java und C#**, versionierte API- und Ereignisverträge sowie automatische Kompatibilitätsprüfung gegen Breaking Changes); vorgeprüfte Geschäftsmodule (`pkg:zelyra/*`: EN 16931 Vollprofil inkl. PDF/A-3, SEPA/ISO 20022, DATEV/GoBD im dokumentierten technischen Umfang). |
+| 2.9.0 🗺️ | **3.0 Hardening, Deep SMT, Multi-Target-Reproduzierbarkeit & Audit** | Feature-Freeze für `3.0.0`; Deep-SMT-Pfadbeweise (fail-closed bei Timeout); Multi-Target-Reproduzierbarkeit (Linux x64/ARM64, Windows, macOS); unabhängiges externes Sicherheitsaudit; Zelyra Studio 3.0 inkl. maschinenprüfbarem Prüfer-/Auditor-Exportpaket. |
+| 3.0.0 🗺️ | **The Verifiable Business Operating System (LTS)** | Stabile Sprachlinie `2.0` (5-Jahres-LTS-Pflege); durchgängig verifizierbare Kette über Geschäftslogik, Datenhaltung, Berechtigungen, Kommunikation, Bereitstellung, Ausführung und Weiterentwicklung; reproduzierbare Multi-Company-Referenzanwendung mit unabhängig verifiziertem Gesamtnachweis. |
+
+### Mandatory Release Gates (verbindlich für sämtliche zukünftigen Releases)
+
+Für jedes künftige Release von Zelyra gelten ohne Ausnahme folgende
+verbindliche, objektiv messbare Freigabekriterien:
+
+1. **100 % der verpflichtenden CI- und Regressionstests bestanden.**
+2. **Keine bekannten offenen kritischen oder hohen Sicherheitslücken im unterstützten Produktivumfang.**
+3. **Keine Regression bereits zugesicherter Sicherheits- und Verifikationsgarantien.**
+4. **Vollständige MariaDB-/PostgreSQL-Parität im definierten Funktionsumfang.**
+5. **Reproduzierbare Builds je unterstützter Zielplattform und kryptografisch überprüfbare Release-Artefakte.**
+6. **Veröffentlichte Performance-Benchmarks mit definierten Regressionstoleranzen.**
+7. **Vollständige zweisprachige Dokumentation einschließlich Anwendungsbeispielen.**
+8. **Überprüfung der Abwärtskompatibilität und gegebenenfalls dokumentierte Upgrade-Pfade.**
+9. **Explizite Dokumentation sämtlicher Beweisannahmen, Systemgrenzen und nicht verifizierter Eigenschaften.**
+10. **SMT-Timeouts, unbekannte Solver-Ergebnisse und nicht entscheidbare Eigenschaften dürfen niemals als `PROVEN` klassifiziert werden.**
+11. **Jede Version erhält objektiv messbare, funktionsspezifische Exit-Kriterien.**
+12. **Externe Seiteneffekte, insbesondere Zahlungen und Agentenaktionen, müssen durch technisch erzwungene Sicherheitsgrenzen abgesichert werden.**
+13. **Rechtliche Konformitätsnachweise dürfen ausschließlich innerhalb ihres dokumentierten technischen Geltungsbereichs erfolgen.**
+
+> **Strategische Abschlussregel:** Diese Roadmap gilt als strategisch
+> abgeschlossen. Weitere Funktionsbereiche dürfen nur aufgenommen werden, wenn
+> sie für bestehende Garantien zwingend erforderlich sind. **Qualität,
+> Sicherheit, Stabilität und tatsächliche Praxistauglichkeit haben Vorrang vor
+> zusätzlichen Features.**
+
+Details zur ursprünglichen 2.0-Spezifikation stehen ergänzend in
+[VISION-2.0.de.md](VISION-2.0.de.md). Nach jedem Release werden Umfang und
+Nachweise gegen reale Zelyra-Anwendungen überprüft.
+
+**Aktueller Abgleich der realen Fähigkeitslücken (Stand `1.6.0`):**
 - ✅ **Mehrtabellen-Mandanten-`SELECT` (Kampagnenausschlüsse):** Seit `1.3.6`
   durch `verify_tenant_scoped_select` fail-closed für `INNER JOIN` und
   `LEFT [OUTER] JOIN` über `tenant_scope`-Tabellen in typisierten
@@ -84,12 +145,11 @@ Umfang und Nachweise gegen reale Zelyra-Anwendungen überprüft.
   gelöst und getestet. Erweiterungen (nicht-rekursive `WITH`-CTEs,
   Aggregationen, mandantensichere Batch-Writes) sind verbindliches Ziel für
   `1.7.0`.
-- 🗺️ **Typisierte E-Rechnung (Factur-X / ZUGFeRD / XRechnung XML + PDF/A-3):**
-  Zelyras transaktionale Outbox hängt aktuell erzeugte PDF-Dateien an;
-  schemageprüftes, typisiertes Erzeugen und Anhängen validierter
-  EN-16931-XML-Dokumente ist verbindlicher Abnahmepunkt für `1.6.0`. Bis zur
-  Implementierung und Prüfung wird diese Fähigkeit nicht als unterstützt
-  dargestellt.
+- 🧪 **Typisierte E-Rechnung (Factur-X / ZUGFeRD / XRechnung XML + PDF/A-3):**
+  Seit `1.6.0` erzeugt und prüft Zelyra XXE-sicheres EN-16931-XML direkt im
+  Compiler/Runtime (`einvoice_xml`, `einvoice_validate`). Das vollständige
+  EN-16931-Profil inkl. PDF/A-3-Einbettung in der Outbox folgt als
+  vorgeprüftes Geschäftsmodul bis `2.8.0`.
 
 ### Praxis-Härtung (eingebunden in 1.4.0): Passwortgenerator, danach Mini-ERP Benchmark 01
 
