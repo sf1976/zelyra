@@ -73,6 +73,40 @@ eigenständigen Proof Checker trägt eine der sechs verbindlichen Evidenzklassen
 SMT-/Solver-Timeouts und unbekannte Zustände dürfen **niemals** als erfolgreiche
 Verifikation oder `PROVEN` gelten.
 
+### Einfach erklärt: Was bedeutet diese Weiterentwicklung für dein Projekt?
+
+Kurz und ohne Fachjargon — was sich für Teams, Betreiber und bestehende
+Anwendungen mit jedem Schritt konkret verbessert:
+
+- **Heute (`1.6.0`):** Deine Anwendung kann keine Währungen versehentlich
+  mischen, keine Buchungen im Ledger heimlich überschreiben und keine
+  Vier-Augen-Freigabe umgehen — geprüft vor dem Produktivstart.
+- **Ab `1.7.0` (Datenschutz & Berechtigungen):** Persönliche Kundendaten und
+  Geheimnisse können nicht versehentlich in Logdateien oder öffentliche
+  Schnittstellen geraten. DSGVO-Übersichten (wo welche Daten liegen und wie sie
+  exportiert oder gelöscht werden) erzeugt Zelyra direkt aus dem Quelltext.
+- **Ab `1.8.0` (Unabhängiger Sicherheitsnachweis):** Jedes Release bekommt einen
+  offenen, unabhängig prüfbaren Nachweis (`zelyra-proof.json`). Änderungen —
+  egal ob von Menschen oder KI-Werkzeugen geschrieben — werden automatisch
+  darauf geprüft, ob sie heimlich Berechtigungen ausweiten oder Sicherheitsregeln
+  aufweichen.
+- **Ab `1.9.0` & `2.0.0` (Ausfallsicherheit & 3 Jahre Planungssicherheit):**
+  Datenbank-Updates laufen ohne Ausfallzeit, Serverabstürze führen nicht zu
+  verlorenen Aufträgen oder Doppelbuchungen, und die stabile Sprachlinie `1.0`
+  gibt Projekten 3 Jahre verlässliche Langzeitpflege auf MariaDB und PostgreSQL.
+- **Ab `2.1.0` – `2.3.0` (Selbstschützender Betrieb & Simulation):** Bestehende
+  Altsysteme lassen sich schrittweise anbinden, Backups werden automatisch auf
+  Konsistenz geprüft, parallele Zugriffe überschreiben keine Bestände, und neue
+  Steuer- oder Preisregeln lassen sich vorab risikofrei simulieren.
+- **Ab `2.4.0` – `2.7.0` (Sichere Weiterentwicklung & begrenzte KI-Agenten):**
+  Laufende Geschäftsprozesse überstehen Software-Updates ohne Datenverlust, jede
+  Berechnung bleibt Schritt für Schritt nachvollziehbar, und KI-Agenten arbeiten
+  nur innerhalb harter Budget- und Datenschutzgrenzen.
+- **Ab `2.8.0` – `3.0.0` (Offene Zusammenarbeit & 5-Jahres-LTS):** Bestehende
+  PHP-, Python-, TypeScript-, Java- und C#-Systeme docken über automatisch
+  generierte SDKs an Zelyra an — getragen von einer durchgängig prüfbaren Kette
+  und 5 Jahren Langzeit-Stabilität.
+
 ### Produktetappen — Bereits veröffentlicht (`1.2.56 – 1.6.0`)
 
 | Version | Schwerpunkt | Abschlusskriterium |

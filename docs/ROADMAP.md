@@ -67,6 +67,39 @@ standalone Proof Checker carries one of six binding evidence classes:
 **Non-Negotiable Fail-Closed Rule:** Undecidable proofs, SMT/solver timeouts,
 and unknown states must **never** count as successful verification or `PROVEN`.
 
+### In Plain Language: What This Evolution Means for Your Project
+
+Without jargon—what concretely improves for teams, operators, and real
+business applications at each stage:
+
+- **Today (`1.6.0`):** Your application cannot accidentally mix currencies,
+  silently overwrite accounting history in a ledger, or bypass four-eyes
+  approvals—checked automatically before going live.
+- **Starting in `1.7.0` (Privacy & Permissions):** Customer personal data and
+  secrets cannot accidentally leak into log files or public routes. Zelyra
+  generates GDPR maps (where sensitive data lives and how to export or erase it)
+  directly from the source code.
+- **Starting in `1.8.0` (Independent Safety Proof):** Every release ships with
+  an open, independently verifiable safety report (`zelyra-proof.json`). Changes
+  from humans or AI tools are automatically checked for hidden privilege
+  escalations or weakened safety rules.
+- **Starting in `1.9.0` & `2.0.0` (Resilience & 3-Year Stability):** Database
+  updates run without downtime, server crashes do not cause lost orders or
+  duplicate bookings, and the stable `1.0` language line provides 3 years of
+  dependable long-term maintenance on MariaDB and PostgreSQL.
+- **Starting in `2.1.0` – `2.3.0` (Self-Protecting Operations & Simulation):**
+  Legacy systems can be migrated step by step, backups are automatically tested
+  for consistency, concurrent edits cannot silently overwrite inventory, and new
+  pricing or tax rules can be simulated safely before going live.
+- **Starting in `2.4.0` – `2.7.0` (Safe Evolution & Bounded AI Agents):**
+  Running workflows survive software updates cleanly, every business calculation
+  remains traceable step by step, and AI agents operate strictly inside hard
+  budget and privacy limits.
+- **Starting in `2.8.0` – `3.0.0` (Open Integration & 5-Year LTS):** Existing
+  PHP, Python, TypeScript, Java, and C# applications connect via auto-generated
+  typed SDKs—backed by an end-to-end verifiable chain and 5 years of LTS
+  stability.
+
 ### Product Milestones — Already Shipped (`1.2.56 – 1.6.0`)
 
 | Version | Focus | Exit Criteria |
