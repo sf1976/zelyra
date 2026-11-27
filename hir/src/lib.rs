@@ -836,6 +836,10 @@ impl<'a> Resolver<'a> {
                         name.as_str(),
                         "print"
                             | "assert"
+                            | "assert_eq"
+                            | "assert_ne"
+                            | "assert_ok"
+                            | "assert_err"
                             | "len"
                             | "range"
                             | "array_replace_result"

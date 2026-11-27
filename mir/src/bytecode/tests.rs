@@ -8624,3 +8624,35 @@ fn main() {}
     assert!(denied_ast_host.calls.lock().unwrap().is_empty());
     assert!(denied_mir_host.calls.lock().unwrap().is_empty());
 }
+
+#[test]
+fn rich_assertion_builtins_have_ast_mir_and_bytecode_parity() {
+    let source = r#"
+        fn checked(ok: Bool) -> Result<Int, String> {
+            if ok {
+                return Ok(7)
+            }
+            return Err("invalid")
+        }
+
+        fn main() -> Int {
+            assert_eq(3 + 4, 7)
+            assert_ne("a", "b")
+            value = assert_ok(checked(true))
+            err = assert_err(checked(false))
+            assert_eq(value, 7)
+            assert_eq(err, "invalid")
+            return value
+        }
+    "#;
+    let ast = parse(&lex(source).unwrap()).unwrap();
+    let (mir, bytecode) = compile_source(source, "main");
+    let ast_val = zelyra_runtime::execute_function(&ast, "main", Vec::new(), None).unwrap();
+    let mir_out =
+        execution::execute_function(&mir, "main", Vec::new(), ExecutionLimits::default()).unwrap();
+    let decoded = decode(&encode(&bytecode).unwrap()).unwrap();
+    let vm_out = execute(&decoded, Vec::new(), ExecutionLimits::default()).unwrap();
+    assert_eq!(ast_val, Value::Int(7));
+    assert_eq!(mir_out.value, Value::Int(7));
+    assert_eq!(vm_out.value, Value::Int(7));
+}

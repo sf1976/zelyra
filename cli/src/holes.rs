@@ -482,6 +482,10 @@ fn visible_functions(program: &zelyra_ast::Program) -> Vec<String> {
     let mut functions = vec![
         "print",
         "assert",
+        "assert_eq",
+        "assert_ne",
+        "assert_ok",
+        "assert_err",
         "now",
         "date",
         "decimal",

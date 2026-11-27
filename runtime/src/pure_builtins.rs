@@ -13,6 +13,10 @@ pub fn is_pure_builtin(name: &str) -> bool {
     matches!(
         name,
         "assert"
+            | "assert_eq"
+            | "assert_ne"
+            | "assert_ok"
+            | "assert_err"
             | "render_markdown"
             | "markdown_toc"
             | "Some"
@@ -191,6 +195,81 @@ pub fn execute_pure_builtin(
         "assert" => Err(builtin_error(
             span,
             "`assert` expects a Bool condition and an optional String message",
+        )),
+        "assert_eq" | "assert_ne" if (2..=3).contains(&arguments.len()) => {
+            let message = match arguments.get(2) {
+                Some(Value::String(message)) => Some(message.clone()),
+                Some(_) => {
+                    return Err(builtin_error(
+                        span,
+                        format!("`{name}` message must be a String"),
+                    ));
+                }
+                None => None,
+            };
+            let equal = arguments[0] == arguments[1];
+            let passed = if name == "assert_eq" { equal } else { !equal };
+            if passed {
+                Ok(Value::Unit)
+            } else {
+                let op = if name == "assert_eq" { "==" } else { "!=" };
+                Err(builtin_error(
+                    span,
+                    message.unwrap_or_else(|| {
+                        format!(
+                            "assertion failed: expected `{}` {op} `{}`",
+                            arguments[0].output(),
+                            arguments[1].output()
+                        )
+                    }),
+                ))
+            }
+        }
+        "assert_eq" | "assert_ne" => Err(builtin_error(
+            span,
+            format!("`{name}` expects two values and an optional String message"),
+        )),
+        "assert_ok" | "assert_err" if (1..=2).contains(&arguments.len()) => {
+            let message = match arguments.get(1) {
+                Some(Value::String(message)) => Some(message.clone()),
+                Some(_) => {
+                    return Err(builtin_error(
+                        span,
+                        format!("`{name}` message must be a String"),
+                    ));
+                }
+                None => None,
+            };
+            match &arguments[0] {
+                Value::Result(Ok(inner)) if name == "assert_ok" => Ok((**inner).clone()),
+                Value::Result(Err(err)) if name == "assert_ok" => Err(builtin_error(
+                    span,
+                    message.unwrap_or_else(|| {
+                        format!(
+                            "assertion failed: expected Ok, found Err({})",
+                            err.output()
+                        )
+                    }),
+                )),
+                Value::Result(Err(inner)) if name == "assert_err" => Ok((**inner).clone()),
+                Value::Result(Ok(val)) if name == "assert_err" => Err(builtin_error(
+                    span,
+                    message.unwrap_or_else(|| {
+                        format!(
+                            "assertion failed: expected Err, found Ok({})",
+                            val.output()
+                        )
+                    }),
+                )),
+                other => Err(builtin_error(
+                    span,
+                    format!("`{name}` expects Result, found {}", other.ty()),
+                )),
+            }
+        }
+        "assert_ok" | "assert_err" => Err(builtin_error(
+            span,
+            format!("`{name}` expects a Result and an optional String message"),
         )),
         "None" if arguments.is_empty() => Ok(Value::Option(None)),
         "Some" if arguments.len() == 1 => Ok(Value::Option(Some(Box::new(arguments[0].clone())))),
