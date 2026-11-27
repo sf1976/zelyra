@@ -678,6 +678,17 @@ impl Server {
                 12,
             );
         }
+        for workflow in &program.workflows {
+            let name = format!("workflow {}", workflow.name);
+            push_outline_symbol(
+                &mut symbols,
+                &self.root,
+                &analysis.sources,
+                &name,
+                workflow.span,
+                23,
+            );
+        }
         match method {
             "textDocument/completion" => {
                 let uri = params
@@ -744,9 +755,13 @@ impl Server {
                     (
                         "states",
                         14,
-                        "states <column> { <from> -> <to> [when ...] }",
+                        "states <column> { <from> -> <to> [requires role(...), four_eyes(...)] [when ...] }",
                     ),
                     ("when", 14, "transition guard predicate"),
+                    ("workflow", 14, "workflow <Name> on <Table>.<column> { ... }"),
+                    ("four_eyes", 14, "requires four_eyes(<creator_column>)"),
+                    ("after", 14, "after <duration> in <state> -> <target>"),
+                    ("compensate", 14, "compensate [on <state>] [uses ...] { ... }"),
                 ] {
                     completions.push(json!({
                         "label": label,
@@ -940,13 +955,23 @@ fn enriched_hover_detail(
                     .transitions
                     .iter()
                     .map(|transition| {
-                        let guard = if transition.guard.is_some() {
-                            " [guarded]"
+                        let mut tags = Vec::new();
+                        if !transition.required_roles.is_empty() {
+                            tags.push(format!("[role: {}]", transition.required_roles.join("|")));
+                        }
+                        if let Some(creator_col) = &transition.four_eyes_column {
+                            tags.push(format!("[four-eyes: {creator_col}]"));
+                        }
+                        if transition.guard.is_some() {
+                            tags.push("[guarded]".to_owned());
+                        }
+                        let suffix = if tags.is_empty() {
+                            String::new()
                         } else {
-                            ""
+                            format!(" {}", tags.join(" "))
                         };
                         format!(
-                            "{} -> {}{guard}",
+                            "{} -> {}{suffix}",
                             transition.from,
                             transition.to.join(" | ")
                         )
@@ -954,6 +979,20 @@ fn enriched_hover_detail(
                     .collect::<Vec<_>>()
                     .join(", ");
                 detail.push_str(&format!("\nstates {}: {transitions}", machine.column));
+            }
+            for workflow in program
+                .workflows
+                .iter()
+                .filter(|workflow| workflow.table == table.name)
+            {
+                detail.push_str(&format!(
+                    "\nworkflow {} on {}.{} ({} timer(s), {} hook(s))",
+                    workflow.name,
+                    workflow.table,
+                    workflow.column,
+                    workflow.timers.len(),
+                    workflow.hooks.len()
+                ));
             }
         }
     } else if symbol.detail.starts_with("fn ")

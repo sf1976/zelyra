@@ -1,5 +1,48 @@
 ## Unreleased
 
+## 1.5.0 — Living Business Processes (`states` v2, `four_eyes`, declarative `workflow`, and `zelyra doc --workflows`)
+
+- Extend declarative table state machines (`states` v2) with per-transition role
+  requirements (`requires role("approver")`) and native four-eyes enforcement
+  (`requires four_eyes(<creator_column>)`), composable with `when` guards on the
+  same transition line. The schema checker statically verifies that
+  `<creator_column>` exists on the table, is not the state column itself, and
+  has an identity-compatible type (`Id`, `Uuid`, `Int`, `UInt`, or `String`).
+  The web runtime enforces both role and four-eyes rules fail-closed under the
+  `SELECT ... FOR UPDATE` row lock (rejecting self-approvals, unauthenticated
+  actors, missing creator columns, and missing roles). / Deklarative
+  Tabellen-Zustandsmaschinen (`states` v2) um Rollenanforderungen
+  (`requires role("approver")`) und natives Vier-Augen-Prinzip
+  (`requires four_eyes(<ersteller_spalte>)`) je Übergang erweitern, kombinierbar
+  mit `when`-Guards. Die Schemaprüfung stellt statisch sicher, dass die
+  Ersteller-Spalte existiert, nicht die Zustandsspalte selbst ist und einen
+  Identitätstyp (`Id`, `Uuid`, `Int`, `UInt` oder `String`) besitzt. Die
+  Web-Laufzeit prüft Rollen und Vier-Augen-Prinzip fail-closed unter
+  `SELECT ... FOR UPDATE` (Selbstfreigaben, unauthentifizierte Nutzer, fehlende
+  Ersteller-Spalten und fehlende Rollen werden abgewiesen).
+- Add declarative top-level `workflow <Name> on <Table>.<column> { ... }`
+  declarations supporting timer rules (`after <N><s|m|h|d> in <state> -> <target>`),
+  `on enter <state> [uses ...] { ... }`, and `compensate [on <state>] [uses ...] { ... }`.
+  Workflows are statically type-checked (`E-WORKFLOW-001`), capability-checked
+  via lowered hook functions, and verified by `zelyra verify` for timer-cycle
+  freedom (`ContractKind::Workflow`). / Deklarative Top-Level-Blöcke
+  `workflow <Name> on <Table>.<column> { ... }` mit Zeitregeln
+  (`after <N><s|m|h|d> in <state> -> <target>`), `on enter <state> [uses ...] { ... }`
+  und `compensate [on <state>] [uses ...] { ... }` ergänzen. Workflows werden
+  statisch typ- (`E-WORKFLOW-001`) und capability-geprüft sowie in
+  `zelyra verify` auf Timer-Zyklenfreiheit (`ContractKind::Workflow`) verifiziert.
+- Add `zelyra doc <file.zyl> --workflows` to generate deterministic Mermaid
+  `stateDiagram-v2` process diagrams including `[role: ...]`,
+  `[four-eyes: <col>]`, `[guarded]`, `[after <dur>]`, and hook notes; export
+  `required_roles`, `four_eyes_column`, and `workflows` in
+  `zelyra reflect --format=json`; and surface `workflow` symbols, completions,
+  and enriched hover details in `zelyra lsp`. / `zelyra doc <datei.zyl> --workflows`
+  für deterministische Mermaid-`stateDiagram-v2`-Prozessdiagramme (inkl.
+  `[role: ...]`, `[four-eyes: <col>]`, `[guarded]`, `[after <dur>]` und
+  Hook-Notizen), Export von `required_roles`, `four_eyes_column` und `workflows`
+  in `zelyra reflect --format=json` sowie `workflow`-Symbole, Completions und
+  angereichertes Hover in `zelyra lsp` ergänzen.
+
 ## 1.4.0 — Production Core & Developer Joy (`zelyra test`, rich assertions, DB rollback sandbox, LSP formatting & hover)
 
 - Add first-class declarative `test "description" [uses ...] { ... }` blocks and

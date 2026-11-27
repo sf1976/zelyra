@@ -51,7 +51,8 @@ pub use server::{serve_app, serve_app_listener};
 #[cfg(test)]
 pub(crate) use server::{spawn_connection, MAX_CONCURRENT_CONNECTIONS};
 use state_guards::{
-    evaluate_state_transition_guard, execute_typed_form_action, runtime_value_for_form_field,
+    evaluate_state_transition_guard, evaluate_state_transition_policy, execute_typed_form_action,
+    runtime_value_for_form_field,
 };
 use ui::*;
 
@@ -13816,11 +13817,25 @@ fn execute_form_action_with_children(
                                 });
                             }
                             if current != next {
+                                let mut merged = current_values.values.clone();
+                                merged.extend(
+                                    values.iter().map(|(k, v)| (k.clone(), v.clone())),
+                                );
+                                if let Some(policy_rejection) = evaluate_state_transition_policy(
+                                    machine,
+                                    current,
+                                    next,
+                                    &merged,
+                                    actor_user_id,
+                                    granted_permissions,
+                                ) {
+                                    return Err(zelyra_database::DatabaseError {
+                                        message: format!(
+                                            "ZELYRA_CHILD_VALIDATION: {policy_rejection}"
+                                        ),
+                                    });
+                                }
                                 if let Some(program) = validation_program {
-                                    let mut merged = current_values.values.clone();
-                                    merged.extend(
-                                        values.iter().map(|(k, v)| (k.clone(), v.clone())),
-                                    );
                                     if let Some(rejection) = evaluate_state_transition_guard(
                                         program,
                                         state_transition_guard_functions,

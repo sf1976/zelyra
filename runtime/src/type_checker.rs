@@ -557,6 +557,108 @@ fn inspect_program(
             });
         }
     }
+    let mut workflow_names = HashSet::new();
+    for workflow in &program.workflows {
+        if !workflow_names.insert(workflow.name.clone()) {
+            errors.push(TypeError {
+                code: "E-WORKFLOW-001",
+                message: format!("duplicate workflow `{}`", workflow.name),
+                span: workflow.span,
+            });
+            continue;
+        }
+        let Some(table) = program
+            .tables
+            .iter()
+            .find(|table| table.name == workflow.table)
+        else {
+            errors.push(TypeError {
+                code: "E-WORKFLOW-001",
+                message: format!(
+                    "workflow `{}` references unknown table `{}`",
+                    workflow.name, workflow.table
+                ),
+                span: workflow.span,
+            });
+            continue;
+        };
+        let Some(machine) = table
+            .state_machines
+            .iter()
+            .find(|machine| machine.column == workflow.column)
+        else {
+            errors.push(TypeError {
+                code: "E-WORKFLOW-001",
+                message: format!(
+                    "workflow `{}` targets `{}.{}`, which has no `states` declaration",
+                    workflow.name, workflow.table, workflow.column
+                ),
+                span: workflow.span,
+            });
+            continue;
+        };
+        let finals = machine.final_states();
+        for timer in &workflow.timers {
+            if !machine.is_valid_state(&timer.state) {
+                errors.push(TypeError {
+                    code: "E-WORKFLOW-001",
+                    message: format!(
+                        "workflow `{}` timer references unknown state `{}` on `{}.{}`",
+                        workflow.name, timer.state, workflow.table, workflow.column
+                    ),
+                    span: timer.span,
+                });
+            } else if finals.contains(&timer.state.as_str()) {
+                errors.push(TypeError {
+                    code: "E-WORKFLOW-001",
+                    message: format!(
+                        "workflow `{}` timer cannot trigger on final state `{}`",
+                        workflow.name, timer.state
+                    ),
+                    span: timer.span,
+                });
+            }
+            let target_is_state = machine.is_valid_state(&timer.target);
+            let target_is_handler = functions.contains_key(&timer.target)
+                || program
+                    .commands
+                    .iter()
+                    .any(|command| command.name == timer.target);
+            if !target_is_state && !target_is_handler {
+                errors.push(TypeError {
+                    code: "E-WORKFLOW-001",
+                    message: format!(
+                        "workflow `{}` timer target `{}` is neither a state in `{}.{}` nor a declared function/command",
+                        workflow.name, timer.target, workflow.table, workflow.column
+                    ),
+                    span: timer.span,
+                });
+            } else if target_is_state && !machine.can_transition(&timer.state, &timer.target) {
+                errors.push(TypeError {
+                    code: "E-WORKFLOW-001",
+                    message: format!(
+                        "workflow `{}` timer transition `{} -> {}` is not permitted by `{}.{}`",
+                        workflow.name, timer.state, timer.target, workflow.table, workflow.column
+                    ),
+                    span: timer.span,
+                });
+            }
+        }
+        for hook in &workflow.hooks {
+            if let Some(state) = &hook.state {
+                if !machine.is_valid_state(state) {
+                    errors.push(TypeError {
+                        code: "E-WORKFLOW-001",
+                        message: format!(
+                            "workflow `{}` hook references unknown state `{state}` on `{}.{}`",
+                            workflow.name, workflow.table, workflow.column
+                        ),
+                        span: hook.span,
+                    });
+                }
+            }
+        }
+    }
     let mut checker = Checker {
         type_aliases: program
             .types
@@ -593,6 +695,10 @@ fn inspect_program(
     }
     let (test_functions, _) = zelyra_ast::build_test_functions(program);
     for function in &test_functions {
+        checker.check_function(function);
+    }
+    let (workflow_functions, _) = zelyra_ast::build_workflow_functions(program);
+    for function in &workflow_functions {
         checker.check_function(function);
     }
     for (span, cycle) in zelyra_ast::computed_column_dependency_cycles(program) {

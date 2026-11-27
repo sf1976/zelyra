@@ -1361,6 +1361,59 @@ fn validate_table_state_machines(
                     });
                 }
             }
+            for role in &rule.required_roles {
+                if role.trim().is_empty() {
+                    errors.push(SchemaError {
+                        message: format!(
+                            "transition role requirement from `{}` in `{}.{}` must not be empty",
+                            rule.from, table.name, machine.column
+                        ),
+                        span: rule.span,
+                    });
+                }
+            }
+            if let Some(creator_col_name) = &rule.four_eyes_column {
+                if creator_col_name == &machine.column {
+                    errors.push(SchemaError {
+                        message: format!(
+                            "`four_eyes({creator_col_name})` on `{}.{}` cannot reference the state column itself",
+                            table.name, machine.column
+                        ),
+                        span: rule.span,
+                    });
+                } else if let Some(creator_col) = table
+                    .columns
+                    .iter()
+                    .find(|candidate| &candidate.name == creator_col_name)
+                {
+                    let resolved_creator = resolve_type(&creator_col.ty, type_defs);
+                    let inner_creator = match &resolved_creator {
+                        Type::Option(inner) => inner.as_ref(),
+                        other => other,
+                    };
+                    let is_identity = matches!(
+                        inner_creator,
+                        Type::Int | Type::UInt | Type::String
+                    ) || matches!(inner_creator, Type::Named(name) if matches!(name.as_str(), "Id" | "Uuid"));
+                    if !is_identity {
+                        errors.push(SchemaError {
+                            message: format!(
+                                "`four_eyes({creator_col_name})` on `{}.{}` requires an identity column (`Id`, `Int`, `UInt`, or `String`), found `{}`",
+                                table.name, machine.column, creator_col.ty
+                            ),
+                            span: rule.span,
+                        });
+                    }
+                } else {
+                    errors.push(SchemaError {
+                        message: format!(
+                            "`four_eyes({creator_col_name})` on `{}.{}` references unknown column `{creator_col_name}`",
+                            table.name, machine.column
+                        ),
+                        span: rule.span,
+                    });
+                }
+            }
             if let Some(limit) = column.length {
                 if rule.from.chars().count() > limit as usize {
                     errors.push(SchemaError {

@@ -476,6 +476,12 @@ fn module_declarations(program: &Program) -> Vec<String> {
     );
     declarations.extend(
         program
+            .workflows
+            .iter()
+            .map(|declaration| format!("workflow:{}", declaration.name)),
+    );
+    declarations.extend(
+        program
             .tests
             .iter()
             .map(|declaration| format!("test:{}", declaration.name)),
@@ -1040,6 +1046,27 @@ fn link_modules(
             schedule.name = internal_name(module_name, &schedule.name);
             schedule.command = internal_name(module_name, &schedule.command);
             linked.schedules.push(schedule);
+        }
+        for mut workflow in module.program.workflows.clone() {
+            workflow.name = internal_name(module_name, &workflow.name);
+            for hook in &mut workflow.hooks {
+                linker.rewrite_block_types(&mut hook.body)?;
+                rewrite_block(
+                    &mut hook.body,
+                    path,
+                    module_name,
+                    &module.imports,
+                    function_sets
+                        .get(path)
+                        .expect("current module functions are indexed"),
+                    &function_sets,
+                    &module_names,
+                    &root_functions,
+                    &module.relative_path,
+                    false,
+                )?;
+            }
+            linked.workflows.push(workflow);
         }
         for mut test in module.program.tests.clone() {
             linker.rewrite_block_types(&mut test.body)?;

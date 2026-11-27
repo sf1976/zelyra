@@ -5839,3 +5839,231 @@ test "undeclared filesystem read is rejected" {
 
     fs::remove_dir_all(directory).unwrap();
 }
+
+#[test]
+fn states_v2_four_eyes_and_workflows_verify_reflect_doc_and_reject_invalid_cases() {
+    let directory = temporary_directory("zelyra-150-workflows");
+    fs::create_dir_all(&directory).unwrap();
+    let valid_file = directory.join("main.zyl");
+    fs::write(
+        &valid_file,
+        r#"
+table purchase_orders {
+    id: Id primary auto
+    created_by: Id required
+    total_amount: Decimal(12, 2) required
+    status: String(24) default "draft"
+
+    states status {
+        draft -> submitted
+        submitted -> approved requires role("approver"), four_eyes(created_by) when total_amount > decimal("0") : "Amount must be positive."
+        submitted -> rejected requires role("approver")
+        approved -> final
+        rejected -> final
+    }
+}
+
+fn escalate_order() {
+    print("escalated")
+}
+
+fn notify_approved() {
+    print("approved")
+}
+
+fn release_budget() {
+    print("released")
+}
+
+workflow PurchaseApproval on purchase_orders.status {
+    after 72h in submitted -> escalate_order
+    on enter approved {
+        notify_approved()
+    }
+    compensate on rejected {
+        release_budget()
+    }
+}
+
+fn main() {}
+"#,
+    )
+    .unwrap();
+
+    // 1. zelyra check passes
+    let check_res = run(&["check", valid_file.to_str().unwrap()]);
+    assert!(
+        check_res.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&check_res.stderr)
+    );
+
+    // 2. zelyra verify --json proves both state machine and workflow
+    let verify_res = run(&["verify", valid_file.to_str().unwrap(), "--json"]);
+    assert!(
+        verify_res.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&verify_res.stderr)
+    );
+    let verify_json: serde_json::Value =
+        serde_json::from_slice(&verify_res.stdout).expect("valid verify JSON");
+    let results = verify_json.as_array().unwrap();
+    assert!(
+        results
+            .iter()
+            .any(|item| item["kind"] == "workflow" && item["status"] == "PROVEN"),
+        "{verify_json}"
+    );
+
+    // 3. zelyra reflect --format=json exports required_roles, four_eyes_column, and workflows
+    let reflect_res = run(&["reflect", valid_file.to_str().unwrap(), "--format=json"]);
+    assert!(
+        reflect_res.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&reflect_res.stderr)
+    );
+    let reflect_json: serde_json::Value =
+        serde_json::from_slice(&reflect_res.stdout).expect("valid reflect JSON");
+    let transitions = reflect_json["tables"][0]["state_machines"][0]["transitions"]
+        .as_array()
+        .unwrap();
+    assert!(
+        transitions.iter().any(|t| {
+            t["from"] == "submitted"
+                && t["four_eyes_column"] == "created_by"
+                && t["required_roles"] == serde_json::json!(["approver"])
+                && t["guarded"] == true
+        }),
+        "{reflect_json}"
+    );
+    assert_eq!(reflect_json["workflows"][0]["name"], "PurchaseApproval");
+    assert_eq!(reflect_json["workflows"][0]["timers"][0]["duration"], "72h");
+    assert_eq!(
+        reflect_json["workflows"][0]["timers"][0]["duration_seconds"],
+        259_200
+    );
+
+    // 4. zelyra doc --workflows emits Mermaid with role, four-eyes, guarded, timer, and hooks
+    let doc_res = run(&["doc", valid_file.to_str().unwrap(), "--workflows"]);
+    assert!(
+        doc_res.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&doc_res.stderr)
+    );
+    let doc_out = String::from_utf8_lossy(&doc_res.stdout);
+    assert!(
+        doc_out.contains("## PurchaseApproval (purchase_orders.status)"),
+        "{doc_out}"
+    );
+    assert!(doc_out.contains("[role: approver]"), "{doc_out}");
+    assert!(doc_out.contains("[four-eyes: created_by]"), "{doc_out}");
+    assert!(
+        doc_out.contains("[guarded] Amount must be positive."),
+        "{doc_out}"
+    );
+    assert!(
+        doc_out.contains("submitted --> escalate_order : [after 72h]"),
+        "{doc_out}"
+    );
+    assert!(
+        doc_out.contains("note right of approved : on enter"),
+        "{doc_out}"
+    );
+    assert!(
+        doc_out.contains("note right of rejected : compensate"),
+        "{doc_out}"
+    );
+
+    // Negative 1: four_eyes referencing non-identity Decimal column fails schema check
+    let bad_four_eyes = directory.join("bad_four_eyes.zyl");
+    fs::write(
+        &bad_four_eyes,
+        r#"
+table invoices {
+    id: Id primary auto
+    amount: Decimal(12, 2) required
+    status: String(24) default "draft"
+    states status {
+        draft -> approved requires four_eyes(amount)
+        approved -> final
+    }
+}
+fn main() {}
+"#,
+    )
+    .unwrap();
+    let bad_fe_res = run(&["check", bad_four_eyes.to_str().unwrap()]);
+    assert!(!bad_fe_res.status.success());
+    assert!(
+        String::from_utf8_lossy(&bad_fe_res.stderr).contains("requires an identity column"),
+        "{}",
+        String::from_utf8_lossy(&bad_fe_res.stderr)
+    );
+
+    // Negative 2: cyclic workflow timer is rejected by zelyra verify
+    let cyclic_workflow = directory.join("cyclic.zyl");
+    fs::write(
+        &cyclic_workflow,
+        r#"
+table jobs {
+    id: Id primary auto
+    status: String(24) default "pending"
+    states status {
+        pending -> retrying
+        retrying -> pending, done
+        done -> final
+    }
+}
+
+workflow RetryLoop on jobs.status {
+    after 1h in pending -> retrying
+    after 1h in retrying -> pending
+}
+
+fn main() {}
+"#,
+    )
+    .unwrap();
+    let cyclic_verify = run(&["verify", cyclic_workflow.to_str().unwrap(), "--json"]);
+    assert!(!cyclic_verify.status.success());
+    let cyclic_out = String::from_utf8_lossy(&cyclic_verify.stdout);
+    assert!(
+        cyclic_out.contains("timer cycle"),
+        "stdout: {cyclic_out}\nstderr: {}",
+        String::from_utf8_lossy(&cyclic_verify.stderr)
+    );
+
+    // Negative 3: workflow hook using undeclared capability fails capability check
+    let bad_cap = directory.join("bad_cap.zyl");
+    fs::write(
+        &bad_cap,
+        r#"
+table tickets {
+    id: Id primary auto
+    status: String(24) default "open"
+    states status {
+        open -> closed
+        closed -> final
+    }
+}
+
+workflow TicketFlow on tickets.status {
+    on enter closed {
+        _ = read_text("README.md")
+    }
+}
+
+fn main() {}
+"#,
+    )
+    .unwrap();
+    let bad_cap_res = run(&["check", bad_cap.to_str().unwrap()]);
+    assert!(!bad_cap_res.status.success());
+    assert!(
+        String::from_utf8_lossy(&bad_cap_res.stderr).contains("FileSystem"),
+        "{}",
+        String::from_utf8_lossy(&bad_cap_res.stderr)
+    );
+
+    fs::remove_dir_all(directory).unwrap();
+}

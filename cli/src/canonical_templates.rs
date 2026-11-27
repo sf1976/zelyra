@@ -158,6 +158,7 @@ pub(crate) fn canonical_template_modules(source: &str) -> Result<CanonicalTempla
     collect!(program.apis, false);
     collect!(program.commands, false);
     collect!(program.schedules, false);
+    collect!(program.workflows, false);
     collect!(program.tests, false);
     collect!(program.functions, false);
 

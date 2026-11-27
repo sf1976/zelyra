@@ -10,6 +10,7 @@ pub enum ContractKind {
     Ensures,
     LoopInvariant,
     StateMachine,
+    Workflow,
 }
 
 impl fmt::Display for ContractKind {
@@ -19,6 +20,7 @@ impl fmt::Display for ContractKind {
             Self::Ensures => write!(f, "ensures"),
             Self::LoopInvariant => write!(f, "invariant"),
             Self::StateMachine => write!(f, "state_machine"),
+            Self::Workflow => write!(f, "workflow"),
         }
     }
 }
@@ -174,7 +176,130 @@ pub fn verify(program: &Program) -> Vec<VerificationResult> {
             results.push(verify_table_state_machine(table, machine, index));
         }
     }
+    for (index, workflow) in program.workflows.iter().enumerate() {
+        results.push(verify_workflow(program, workflow, index));
+    }
     results
+}
+
+fn verify_workflow(program: &Program, workflow: &WorkflowDef, index: usize) -> VerificationResult {
+    let target_label = format!("{}.{}", workflow.table, workflow.column);
+    let Some(machine) = program
+        .tables
+        .iter()
+        .find(|table| table.name == workflow.table)
+        .and_then(|table| {
+            table
+                .state_machines
+                .iter()
+                .find(|machine| machine.column == workflow.column)
+        })
+    else {
+        return VerificationResult {
+            function: workflow.name.clone(),
+            kind: ContractKind::Workflow,
+            index,
+            status: VerificationStatus::Failed,
+            span: workflow.span,
+            message: format!(
+                "Workflow `{}` targets `{target_label}`, which has no declared state machine.",
+                workflow.name
+            ),
+            counterexample: None,
+        };
+    };
+
+    // Detect timer-driven state cycles (e.g. `after 1h in a -> b` and `after 1h in b -> a`).
+    let mut timer_edges: HashMap<&str, Vec<&str>> = HashMap::new();
+    for timer in &workflow.timers {
+        if machine.is_valid_state(&timer.target) {
+            timer_edges
+                .entry(timer.state.as_str())
+                .or_default()
+                .push(timer.target.as_str());
+        }
+    }
+    let mut visited = HashSet::new();
+    let mut stack = HashSet::new();
+    let mut path = Vec::new();
+    for &start in timer_edges.keys() {
+        if !visited.contains(start) {
+            if let Some(cycle) =
+                find_timer_cycle(start, &timer_edges, &mut visited, &mut stack, &mut path)
+            {
+                return VerificationResult {
+                    function: workflow.name.clone(),
+                    kind: ContractKind::Workflow,
+                    index,
+                    status: VerificationStatus::Failed,
+                    span: workflow.span,
+                    message: format!(
+                        "Workflow `{}` on `{target_label}` contains a timer cycle: {}.",
+                        workflow.name,
+                        cycle.join(" -> ")
+                    ),
+                    counterexample: None,
+                };
+            }
+        }
+    }
+
+    let four_eyes_count = machine
+        .transitions
+        .iter()
+        .filter(|rule| rule.four_eyes_column.is_some())
+        .count();
+    let role_count = machine
+        .transitions
+        .iter()
+        .filter(|rule| !rule.required_roles.is_empty())
+        .count();
+    VerificationResult {
+        function: workflow.name.clone(),
+        kind: ContractKind::Workflow,
+        index,
+        status: VerificationStatus::Proven,
+        span: workflow.span,
+        message: format!(
+            "Workflow `{}` on `{target_label}` is timer-acyclic ({} timer(s), {} hook(s); bound state machine enforces {} four-eyes and {} role-gated transition(s) at runtime).",
+            workflow.name,
+            workflow.timers.len(),
+            workflow.hooks.len(),
+            four_eyes_count,
+            role_count
+        ),
+        counterexample: None,
+    }
+}
+
+fn find_timer_cycle<'a>(
+    node: &'a str,
+    edges: &HashMap<&'a str, Vec<&'a str>>,
+    visited: &mut HashSet<&'a str>,
+    stack: &mut HashSet<&'a str>,
+    path: &mut Vec<&'a str>,
+) -> Option<Vec<&'a str>> {
+    visited.insert(node);
+    stack.insert(node);
+    path.push(node);
+    if let Some(neighbors) = edges.get(node) {
+        for &next in neighbors {
+            if stack.contains(next) {
+                let start_idx = path.iter().position(|&item| item == next).unwrap_or(0);
+                let mut cycle = path[start_idx..].to_vec();
+                cycle.push(next);
+                return Some(cycle);
+            }
+            if !visited.contains(next) {
+                if let Some(cycle) = find_timer_cycle(next, edges, visited, stack, path) {
+                    return Some(cycle);
+                }
+            }
+        }
+    }
+    stack.remove(node);
+    path.pop();
+    None
 }
 
 fn verify_table_state_machine(
@@ -367,6 +492,12 @@ fn verification_message(
         }
         (ContractKind::StateMachine, VerificationStatus::Failed, _) => {
             "The state machine failed static reachability or deadlock verification.".into()
+        }
+        (ContractKind::Workflow, VerificationStatus::RuntimeCheck, _) => {
+            "The workflow requires runtime policy or hook checks.".into()
+        }
+        (ContractKind::Workflow, VerificationStatus::Failed, _) => {
+            "The workflow failed static timer-cycle or target verification.".into()
         }
         (_, VerificationStatus::Unproven, false) => {
             "No proof target was declared for this function.".into()
