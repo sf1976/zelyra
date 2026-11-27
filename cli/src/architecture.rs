@@ -209,6 +209,7 @@ fn declaration_spans(
     add!(program.auth, "auth");
     add!(program.commands, "command");
     add!(program.schedules, "schedule");
+    add!(program.tests, "test");
     add!(program.functions, "function");
     for api in program.apis {
         declarations.insert(
@@ -1465,6 +1466,13 @@ fn declaration_plans(program: &Program, current_directory: Option<&str>) -> Vec<
         "domain"
     );
     add!(
+        program.tests,
+        "test",
+        |item: &zelyra_ast::TestDef| item.name.clone(),
+        |item: &zelyra_ast::TestDef| item.span,
+        "domain"
+    );
+    add!(
         program.functions,
         "function",
         |item: &zelyra_ast::Function| item.name.clone(),
@@ -1494,6 +1502,7 @@ fn first_declaration_span(program: &Program) -> Option<Span> {
         .chain(program.apis.iter().map(|item| item.span))
         .chain(program.commands.iter().map(|item| item.span))
         .chain(program.schedules.iter().map(|item| item.span))
+        .chain(program.tests.iter().map(|item| item.span))
         .chain(program.functions.iter().map(|item| item.span))
         .min_by_key(|span| span.start)
 }
@@ -1567,6 +1576,7 @@ fn destinations(program: &Program) -> Vec<&'static str> {
         || !program.enums.is_empty()
         || !program.commands.is_empty()
         || !program.schedules.is_empty()
+        || !program.tests.is_empty()
     {
         destinations.push("domain");
     }
@@ -1631,6 +1641,7 @@ mod tests {
             apis: Vec::new(),
             commands: Vec::new(),
             schedules: Vec::new(),
+            tests: Vec::new(),
             functions: Vec::new(),
         }
     }

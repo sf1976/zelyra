@@ -534,12 +534,28 @@ fn inspect_program(
             });
         }
     }
-    if !functions.contains_key("main") {
+    if !functions.contains_key("main") && program.tests.is_empty() {
         errors.push(TypeError {
             code: "E-TYPE-001",
             message: "program must define `fn main()`".into(),
             span: Span::default(),
         });
+    }
+    let mut test_names = HashSet::new();
+    for test in &program.tests {
+        if test.name.trim().is_empty() {
+            errors.push(TypeError {
+                code: "E-TEST-001",
+                message: "test name must not be empty".into(),
+                span: test.span,
+            });
+        } else if !test_names.insert(test.name.clone()) {
+            errors.push(TypeError {
+                code: "E-TEST-001",
+                message: format!("duplicate test `{}`", test.name),
+                span: test.span,
+            });
+        }
     }
     let mut checker = Checker {
         type_aliases: program
@@ -573,6 +589,10 @@ fn inspect_program(
     }
     let (computed_functions, _) = zelyra_ast::build_computed_column_functions(program);
     for function in &computed_functions {
+        checker.check_function(function);
+    }
+    let (test_functions, _) = zelyra_ast::build_test_functions(program);
+    for function in &test_functions {
         checker.check_function(function);
     }
     for (span, cycle) in zelyra_ast::computed_column_dependency_cycles(program) {

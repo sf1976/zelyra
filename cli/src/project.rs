@@ -474,6 +474,12 @@ fn module_declarations(program: &Program) -> Vec<String> {
             .iter()
             .map(|declaration| format!("schedule:{}", declaration.name)),
     );
+    declarations.extend(
+        program
+            .tests
+            .iter()
+            .map(|declaration| format!("test:{}", declaration.name)),
+    );
     declarations.sort();
     declarations
 }
@@ -1034,6 +1040,24 @@ fn link_modules(
             schedule.name = internal_name(module_name, &schedule.name);
             schedule.command = internal_name(module_name, &schedule.command);
             linked.schedules.push(schedule);
+        }
+        for mut test in module.program.tests.clone() {
+            linker.rewrite_block_types(&mut test.body)?;
+            rewrite_block(
+                &mut test.body,
+                path,
+                module_name,
+                &module.imports,
+                function_sets
+                    .get(path)
+                    .expect("current module functions are indexed"),
+                &function_sets,
+                &module_names,
+                &root_functions,
+                &module.relative_path,
+                false,
+            )?;
+            linked.tests.push(test);
         }
         for mut form in module.program.forms.clone() {
             for field in &mut form.fields {

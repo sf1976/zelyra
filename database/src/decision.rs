@@ -72,6 +72,47 @@ pub fn with_decision_transaction<T>(
     }
 }
 
+/// Run conditional reads/writes on one connection and ALWAYS roll back.
+/// Used by `zelyra test` to isolate `uses Database` tests without persisting mutations.
+pub fn with_rollback_transaction<T>(
+    database_url: &str,
+    operation: impl FnOnce(&mut DecisionTransaction<'_>) -> Result<T, DatabaseError>,
+) -> Result<T, DatabaseError> {
+    const ROLLBACK_SENTINEL: &str = "__zelyra_test_rollback_sandbox__";
+    remaining_query_budget()?;
+    if !is_postgres_url(database_url) {
+        let mut captured: Option<T> = None;
+        let outcome = with_mariadb_transaction(database_url, |transaction| {
+            let value = run_operation(transaction, operation)?;
+            captured = Some(value);
+            Err::<(), DatabaseError>(DatabaseError {
+                message: ROLLBACK_SENTINEL.into(),
+            })
+        });
+        return match outcome {
+            Err(error) if error.message == ROLLBACK_SENTINEL => Ok(captured.expect(
+                "rollback sentinel is only returned after capturing operation result",
+            )),
+            Err(error) => Err(error),
+            Ok(()) => unreachable!("rollback transaction must never commit"),
+        };
+    }
+    let settings = MariaDbTimeouts::from_env()?;
+    let tls = MariaDbTlsSettings::from_env()?;
+    let pool = postgres_pool(database_url, settings, tls)?;
+    let wait = postgres_pool_wait_timeout(settings)?;
+    match &pool {
+        PostgresPool::Plain(pool) => {
+            let mut client = pool.get_timeout(wait).map_err(postgres_pool_error)?;
+            on_postgres_client_rollback(&mut client, settings, operation)
+        }
+        PostgresPool::Tls(pool) => {
+            let mut client = pool.get_timeout(wait).map_err(postgres_pool_error)?;
+            on_postgres_client_rollback(&mut client, settings, operation)
+        }
+    }
+}
+
 fn run_operation<T>(
     executor: &mut dyn Executor,
     operation: impl FnOnce(&mut DecisionTransaction<'_>) -> Result<T, DatabaseError>,
@@ -127,6 +168,24 @@ fn on_postgres_client<T>(
     // postgres::Transaction rolls back on every uncommitted Drop, including unwind.
 }
 
+fn on_postgres_client_rollback<T>(
+    client: &mut PostgresClient,
+    settings: MariaDbTimeouts,
+    operation: impl FnOnce(&mut DecisionTransaction<'_>) -> Result<T, DatabaseError>,
+) -> Result<T, DatabaseError> {
+    remaining_query_budget()?;
+    let mut executor = PostgresDecision {
+        transaction: client.transaction().map_err(postgres_driver_error)?,
+        settings,
+    };
+    let value = run_operation(&mut executor, operation)?;
+    executor
+        .transaction
+        .rollback()
+        .map_err(postgres_driver_error)?;
+    Ok(value)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -140,6 +199,12 @@ mod tests {
                 panic!("must not run")
             });
         assert!(result.unwrap_err().message.contains("deadline"));
+
+        let rollback_result =
+            with_rollback_transaction::<()>("postgres://invalid@127.0.0.1:1/no_database", |_| {
+                panic!("must not run")
+            });
+        assert!(rollback_result.unwrap_err().message.contains("deadline"));
     }
 
     #[test]

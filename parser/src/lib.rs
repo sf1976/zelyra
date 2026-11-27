@@ -235,6 +235,7 @@ impl<'a> Parser<'a> {
         let mut apis = Vec::new();
         let mut commands = Vec::new();
         let mut schedules = Vec::new();
+        let mut tests = Vec::new();
         let mut functions = Vec::new();
         self.skip_newlines();
         let mut declarations_started = false;
@@ -308,6 +309,9 @@ impl<'a> Parser<'a> {
             } else if self.at_word("schedule") {
                 declarations_started = true;
                 schedules.push(self.schedule_definition()?);
+            } else if self.at_word("test") {
+                declarations_started = true;
+                tests.push(self.test_definition()?);
             } else {
                 declarations_started = true;
                 functions.push(self.function(false)?);
@@ -331,7 +335,49 @@ impl<'a> Parser<'a> {
             apis,
             commands,
             schedules,
+            tests,
             functions,
+        })
+    }
+
+    fn test_definition(&mut self) -> Result<zelyra_ast::TestDef, ParseError> {
+        let start = self.advance().span;
+        let name = match &self.current().kind {
+            TokenKind::String(value) => {
+                let value = value.clone();
+                self.advance();
+                value
+            }
+            _ => return self.error("expected string literal test name after `test`"),
+        };
+        self.skip_newlines();
+        let mut capabilities = Vec::new();
+        if self.at(&TokenKind::Uses) {
+            self.advance();
+            loop {
+                let (mut capability, _) = self.ident("capability name")?;
+                if capability == "Database" && self.at(&TokenKind::LParen) {
+                    self.advance();
+                    let (access, _) = self.ident("database access effect")?;
+                    self.expect(TokenKind::RParen, "`)` after database access effect")?;
+                    capability = format!("Database({access})");
+                }
+                capabilities.push(capability);
+                self.skip_newlines();
+                if !self.at(&TokenKind::Comma) {
+                    break;
+                }
+                self.advance();
+                self.skip_newlines();
+            }
+        }
+        self.skip_newlines();
+        let body = self.block()?;
+        Ok(zelyra_ast::TestDef {
+            name,
+            capabilities,
+            span: start.join(body.span),
+            body,
         })
     }
 

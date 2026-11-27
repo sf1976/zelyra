@@ -162,7 +162,63 @@ pub struct Program {
     pub apis: Vec<ApiDef>,
     pub commands: Vec<CommandDef>,
     pub schedules: Vec<ScheduleDef>,
+    pub tests: Vec<TestDef>,
     pub functions: Vec<Function>,
+}
+
+#[derive(Clone, Debug)]
+pub struct TestDef {
+    pub name: String,
+    pub capabilities: Vec<String>,
+    pub body: Block,
+    pub span: Span,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct TestFunction {
+    pub test_index: usize,
+    pub test_name: String,
+    pub function_name: String,
+}
+
+/// Lowers declarative `test "..." [uses ...] { ... }` blocks into private
+/// zero-argument functions so the type checker, capability checker, and
+/// test runner share one authoritative validation and execution path.
+pub fn build_test_functions(program: &Program) -> (Vec<Function>, Vec<TestFunction>) {
+    let mut names = program
+        .functions
+        .iter()
+        .map(|function| function.name.clone())
+        .collect::<std::collections::HashSet<_>>();
+    let mut functions = Vec::new();
+    let mut mappings = Vec::new();
+    for (test_index, test) in program.tests.iter().enumerate() {
+        let base_name = format!("__zelyra_test_{test_index}");
+        let mut function_name = base_name.clone();
+        let mut suffix = 0usize;
+        while !names.insert(function_name.clone()) {
+            suffix += 1;
+            function_name = format!("{base_name}_{suffix}");
+        }
+        functions.push(Function {
+            name: function_name.clone(),
+            is_public: false,
+            type_params: Vec::new(),
+            params: Vec::new(),
+            return_type: None,
+            capabilities: test.capabilities.clone(),
+            requires: Vec::new(),
+            ensures: Vec::new(),
+            body: test.body.clone(),
+            span: test.span,
+        });
+        mappings.push(TestFunction {
+            test_index,
+            test_name: test.name.clone(),
+            function_name,
+        });
+    }
+    (functions, mappings)
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]

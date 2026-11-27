@@ -1451,6 +1451,7 @@ mod tests {
             apis: Vec::new(),
             commands: Vec::new(),
             schedules: Vec::new(),
+            tests: Vec::new(),
             functions: Vec::new(),
         };
         let schema = build_schema(&program).unwrap();
@@ -1566,6 +1567,7 @@ mod tests {
             apis: Vec::new(),
             commands: Vec::new(),
             schedules: Vec::new(),
+            tests: Vec::new(),
             functions: Vec::new(),
         };
         check_program(&valid_program, &build_schema(&valid_program).unwrap())
@@ -1668,6 +1670,7 @@ mod tests {
             apis: Vec::new(),
             commands: Vec::new(),
             schedules: Vec::new(),
+            tests: Vec::new(),
             functions: Vec::new(),
         };
         let errors = check_program(&zero_limit, &build_schema(&zero_limit).unwrap())
@@ -1766,6 +1769,7 @@ mod tests {
             apis: Vec::new(),
             commands: Vec::new(),
             schedules: Vec::new(),
+            tests: Vec::new(),
             functions: Vec::new(),
         };
         let schema = zelyra_database::build_schema(&program).expect("valid table schema");
@@ -1910,6 +1914,7 @@ mod tests {
             apis: Vec::new(),
             commands: Vec::new(),
             schedules: Vec::new(),
+            tests: Vec::new(),
             functions: Vec::new(),
         };
         let errors = check_program(&program, &build_schema(&program).unwrap())
@@ -2221,6 +2226,7 @@ mod tests {
             apis: Vec::new(),
             commands: Vec::new(),
             schedules: Vec::new(),
+            tests: Vec::new(),
             functions: Vec::new(),
         };
         let errors = check_program(&program, &build_schema(&program).unwrap()).unwrap_err();
@@ -2282,6 +2288,7 @@ mod tests {
             apis: Vec::new(),
             commands: Vec::new(),
             schedules: Vec::new(),
+            tests: Vec::new(),
             functions: Vec::new(),
         };
         let errors = check_program(&program, &build_schema(&program).unwrap()).unwrap_err();
