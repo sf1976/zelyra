@@ -22,7 +22,7 @@ use std::time::{Duration, Instant};
 use zelyra_ast::*;
 
 mod decision;
-pub use decision::{with_decision_transaction, DecisionTransaction};
+pub use decision::{with_decision_transaction, with_rollback_transaction, DecisionTransaction};
 mod numeric;
 pub mod outbox;
 pub mod sql;

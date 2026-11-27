@@ -1,5 +1,48 @@
 ## Unreleased
 
+## 1.4.0 — Production Core & Developer Joy (`zelyra test`, rich assertions, DB rollback sandbox, LSP formatting & hover)
+
+- Add first-class declarative `test "description" [uses ...] { ... }` blocks and
+  the `zelyra test [path] [--filter <substring>] [--format human|json]` CLI
+  runner. Test blocks are statically type-checked and capability-checked through
+  the same compiler rules as regular functions, support standalone test files
+  without requiring `fn main()`, discover `tests/*.zyl`, `tests.zyl`, or
+  `main.zyl`, emit deterministic machine-readable JSON (`schema_version: "1"`),
+  and automatically wrap `uses Database` tests in a rollback-only transaction
+  sandbox (`with_rollback_transaction`) on MariaDB/MySQL and PostgreSQL so test
+  mutations are never persisted. / Erstklassige deklarative
+  `test "Beschreibung" [uses ...] { ... }`-Blöcke und den CLI-Runner
+  `zelyra test [pfad] [--filter <teilstring>] [--format human|json]` ergänzen.
+  Testblöcke durchlaufen dieselbe statische Typ- und Capability-Prüfung wie
+  reguläre Funktionen, funktionieren in eigenständigen Testdateien ohne
+  `fn main()`, entdecken `tests/*.zyl`, `tests.zyl` oder `main.zyl`, liefern
+  deterministisches JSON (`schema_version: "1"`) und kapseln `uses Database`-
+  Tests auf MariaDB/MySQL und PostgreSQL automatisch in einer reinen
+  Rollback-Transaktion (`with_rollback_transaction`), sodass Testdaten niemals
+  dauerhaft geschrieben werden.
+- Add `assert_eq`, `assert_ne`, `assert_ok`, and `assert_err` assertion builtins
+  with full parity across the type checker, AST runtime, HIR/MIR lowering, MIR
+  interpreter, and Bytecode v30 VM. `assert_ok` and `assert_err` return the
+  unwrapped `Ok`/`Err` payload directly for ergonomic test assertions. / Die
+  Assertions `assert_eq`, `assert_ne`, `assert_ok` und `assert_err` mit voller
+  Parität über Typechecker, AST-Laufzeit, HIR/MIR-Lowering, MIR-Interpreter und
+  Bytecode-v30-VM ergänzen. `assert_ok` und `assert_err` geben den entpackten
+  `Ok`- bzw. `Err`-Wert direkt zurück.
+- Upgrade `zelyra lsp` with `textDocument/formatting` (backed by the
+  deterministic token-based Zelyra formatter; syntactically invalid buffers
+  return empty edits without corrupting code), enriched `textDocument/hover`
+  displaying table `states` transitions (including `[guarded]` markers) and
+  function `uses`/`requires`/`ensures` metadata, `test` blocks in
+  `textDocument/documentSymbol`, and completions for `assert_eq`, `assert_ne`,
+  `assert_ok`, `assert_err`, `test`, `states`, and `when`. / `zelyra lsp` um
+  `textDocument/formatting` (auf Basis des deterministischen Zelyra-Formatters;
+  syntaktisch ungültige Puffer liefern leere Edits ohne Code zu beschädigen),
+  angereichertes `textDocument/hover` mit Tabellen-`states`-Übergängen (inkl.
+  `[guarded]`) und Funktions-`uses`/`requires`/`ensures`-Metadaten,
+  `test`-Blöcke in `textDocument/documentSymbol` sowie Completions für
+  `assert_eq`, `assert_ne`, `assert_ok`, `assert_err`, `test`, `states` und
+  `when` erweitern.
+
 ## 1.3.6 — `?` error propagation, guarded state transitions, and verified multi-table tenant SQL
 
 - Add the postfix `?` error-propagation operator for `Result<T, E>` and

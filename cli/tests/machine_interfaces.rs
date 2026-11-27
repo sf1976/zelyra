@@ -5703,3 +5703,139 @@ fn main() {{}}
 
     fs::remove_dir_all(directory).unwrap();
 }
+
+#[test]
+fn zelyra_test_runner_supports_declarative_tests_filter_json_and_failures() {
+    let directory = temporary_directory("zelyra-test-runner");
+    let tests_dir = directory.join("tests");
+    fs::create_dir_all(&tests_dir).unwrap();
+
+    let passing_file = tests_dir.join("invoice_test.zyl");
+    fs::write(
+        &passing_file,
+        r#"
+fn identity<T>(value: T) -> T {
+    return value
+}
+
+fn divide(a: Int, b: Int) -> Result<Int, String> {
+    if b == 0 {
+        return Err("division by zero")
+    }
+    return Ok(a / b)
+}
+
+test "calculates totals with generics and interpolation" {
+    net = identity<Int>(100)
+    tax = 19
+    total = net + tax
+    summary = "Total: {total} EUR"
+    assert_eq(total, 119)
+    assert_ne(total, 100)
+    assert_eq(summary, "Total: 119 EUR")
+}
+
+test "asserts Result ok and err variants" {
+    quotient = assert_ok(divide(20, 4))
+    assert_eq(quotient, 5)
+    message = assert_err(divide(20, 0))
+    assert_eq(message, "division by zero")
+}
+"#,
+    )
+    .unwrap();
+
+    // 1. Directory discovery + human output
+    let human = run(&["test", directory.to_str().unwrap()]);
+    assert!(
+        human.status.success(),
+        "stdout: {}\nstderr: {}",
+        String::from_utf8_lossy(&human.stdout),
+        String::from_utf8_lossy(&human.stderr)
+    );
+    let human_out = String::from_utf8_lossy(&human.stdout);
+    assert!(
+        human_out.contains("PASS calculates totals with generics and interpolation"),
+        "{human_out}"
+    );
+    assert!(
+        human_out.contains("PASS asserts Result ok and err variants"),
+        "{human_out}"
+    );
+    assert!(human_out.contains("2 passed; 0 failed"), "{human_out}");
+
+    // 2. --filter + --format json
+    let filtered = run(&[
+        "test",
+        directory.to_str().unwrap(),
+        "--filter",
+        "Result",
+        "--format",
+        "json",
+    ]);
+    assert!(
+        filtered.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&filtered.stderr)
+    );
+    let json_val: serde_json::Value =
+        serde_json::from_slice(&filtered.stdout).expect("valid JSON output");
+    assert_eq!(json_val["schema_version"], "1");
+    assert_eq!(json_val["status"], "passed");
+    assert_eq!(json_val["summary"]["total"], 1);
+    assert_eq!(json_val["summary"]["passed"], 1);
+    assert_eq!(json_val["summary"]["failed"], 0);
+    assert_eq!(json_val["summary"]["filtered_out"], 1);
+    assert_eq!(
+        json_val["tests"][0]["name"],
+        "asserts Result ok and err variants"
+    );
+    assert_eq!(json_val["tests"][0]["status"], "passed");
+
+    // 3. Failing test returns exit code 1 with diagnostic
+    let failing_file = directory.join("failing.zyl");
+    fs::write(
+        &failing_file,
+        r#"
+test "fails with clear diff" {
+    assert_eq(1 + 1, 3)
+}
+"#,
+    )
+    .unwrap();
+    let failed = run(&["test", failing_file.to_str().unwrap(), "--format", "json"]);
+    assert_eq!(failed.status.code(), Some(1));
+    let fail_json: serde_json::Value =
+        serde_json::from_slice(&failed.stdout).expect("valid JSON failure output");
+    assert_eq!(fail_json["status"], "failed");
+    assert_eq!(fail_json["summary"]["failed"], 1);
+    assert!(
+        fail_json["tests"][0]["error"]
+            .as_str()
+            .unwrap_or("")
+            .contains("expected `2` == `3`"),
+        "{fail_json}"
+    );
+
+    // 4. Capability discipline holds inside test blocks
+    let cap_fail_file = directory.join("cap_fail.zyl");
+    fs::write(
+        &cap_fail_file,
+        r#"
+test "undeclared filesystem read is rejected" {
+    content = read_text("README.md")
+    assert_ne(content, "")
+}
+"#,
+    )
+    .unwrap();
+    let cap_fail = run(&["test", cap_fail_file.to_str().unwrap()]);
+    assert!(!cap_fail.status.success());
+    assert!(
+        String::from_utf8_lossy(&cap_fail.stderr).contains("capability check failed"),
+        "{}",
+        String::from_utf8_lossy(&cap_fail.stderr)
+    );
+
+    fs::remove_dir_all(directory).unwrap();
+}

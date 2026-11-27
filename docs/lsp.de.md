@@ -6,7 +6,10 @@ Projektverzeichnis als Workspace, damit Zelyra Imports und Projektkonfiguration
 auflösen kann. Das Öffnen einer Quelldatei führt das Programm nicht aus.
 
 Unterstützt sind Initialisierung und Shutdown, versionierte Dokumentänderungen,
-Diagnosen, Completion, Hover, Definition, Referenzen, Rename, Dokumentensymbole
+Diagnosen, Formatierung (`textDocument/formatting`), Completion (inkl.
+`assert_eq`/`assert_ne`/`assert_ok`/`assert_err`, `test`, `states`, `when`),
+Hover (inkl. `states`-Übergängen sowie `uses`/`requires`/`ensures`),
+Definition, Referenzen, Rename, Dokumentensymbole (inkl. `test`-Blöcken)
 und Workspace-Symbole. Die Positionen folgen LSP UTF-16. Der Server prüft
 geöffnete Quelldateien aus dem Editorpuffer; Änderungen werden nicht auf die
 Festplatte geschrieben.

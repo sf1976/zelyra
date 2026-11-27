@@ -11,18 +11,20 @@ for database-backed business and web applications. It brings schema-aware SQL,
 forms, CRUD, views, and application logic together while keeping ordinary code
 and native SQL available.
 
-> **Release 1.3.6 · language compatibility line: 0.1** · [GitHub release](https://github.com/sf1976/zelyra/releases/tag/v1.3.6)
+> **Release 1.4.0 · language compatibility line: 0.1** · [GitHub release](https://github.com/sf1976/zelyra/releases/tag/v1.4.0)
 >
 > Compiler checks and the verifier cover defined scopes. They do not prove arbitrary applications correct. Review the documented support and limits for each workflow before deployment.
 
-Zelyra 1.3.6 adds the `?` error-propagation operator across AST, MIR, and
-Bytecode v30 (with automatic rollback inside `transaction { ... }`), guarded
-transitions (`when <expr> : "message"`) for declarative table state machines
-(`states`), compiler-verified multi-table tenant-scoped `SELECT` queries
-(`INNER JOIN` and `LEFT JOIN` with nominal `TenantId` safety), and internal
-modularization of `cli` and `web` hotspots. AST remains the default;
+Zelyra 1.4.0 adds first-class declarative `test "description" [uses ...] { ... }`
+blocks and the `zelyra test` CLI runner (with `--filter`, deterministic
+`--format json`, and automatic rollback-only database transaction sandboxes on
+MariaDB/MySQL and PostgreSQL), rich assertion builtins (`assert_eq`,
+`assert_ne`, `assert_ok`, `assert_err`) across AST, MIR, and Bytecode v30, and
+LSP upgrades including `textDocument/formatting`, enriched `states`/contract
+hover, and `test` document symbols. AST remains the default;
 experimental MIR and Bytecode remain opt-in and fail closed for unsupported
 constructs. The business starter is not a completed ERP. See the
+[1.4.0 release notes](docs/release-notes/1.4.0.en.md),
 [1.3.6 release notes](docs/release-notes/1.3.6.en.md),
 [1.3.5 release notes](docs/release-notes/1.3.5.en.md),
 [1.3.0 release notes](docs/release-notes/1.3.0.en.md),

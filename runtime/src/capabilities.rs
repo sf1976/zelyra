@@ -65,6 +65,7 @@ fn analyze_capabilities(
     let (state_guard_functions, _) = zelyra_ast::build_state_transition_guard_functions(program);
     let (computed_functions, _) = zelyra_ast::build_computed_column_functions(program);
     let (crud_policy_functions, _) = zelyra_ast::build_crud_policy_functions(program);
+    let (test_functions, _) = zelyra_ast::build_test_functions(program);
     let all_functions = program
         .functions
         .iter()
@@ -72,6 +73,7 @@ fn analyze_capabilities(
         .chain(state_guard_functions.iter())
         .chain(computed_functions.iter())
         .chain(crud_policy_functions.iter())
+        .chain(test_functions.iter())
         .collect::<Vec<_>>();
     let functions = all_functions
         .iter()

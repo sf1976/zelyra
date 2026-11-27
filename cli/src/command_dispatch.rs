@@ -177,6 +177,9 @@ pub(super) fn run() -> ExitCode {
     if command == "task" {
         return task_cli::task_command(args);
     }
+    if command == "test" {
+        return test_cli::command(args);
+    }
     if command == "schedule" {
         return task_cli::schedule_command(args);
     }

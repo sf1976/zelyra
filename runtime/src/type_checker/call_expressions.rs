@@ -109,6 +109,58 @@ impl Checker<'_> {
                 self.expect_type(&Type::String, &message_type, message.span);
             }
             Type::Unit
+        } else if name == "assert_eq" || name == "assert_ne" {
+            if !type_args.is_empty() {
+                self.error(span, format!("`{name}` does not accept type arguments"));
+            }
+            if !(2..=3).contains(&args.len()) {
+                self.error(
+                    span,
+                    format!("`{name}` expects two values and an optional String message"),
+                );
+                return Type::Unknown;
+            }
+            let left = self.check_expr(&args[0], scopes);
+            let right = self.check_expr(&args[1], scopes);
+            self.expect_type(&left, &right, args[1].span);
+            if let Some(message) = args.get(2) {
+                let message_type = self.check_expr(message, scopes);
+                self.expect_type(&Type::String, &message_type, message.span);
+            }
+            Type::Unit
+        } else if name == "assert_ok" || name == "assert_err" {
+            if !type_args.is_empty() {
+                self.error(span, format!("`{name}` does not accept type arguments"));
+            }
+            if !(1..=2).contains(&args.len()) {
+                self.error(
+                    span,
+                    format!("`{name}` expects a Result and an optional String message"),
+                );
+                return Type::Unknown;
+            }
+            let value = self.check_expr(&args[0], scopes);
+            if let Some(message) = args.get(1) {
+                let message_type = self.check_expr(message, scopes);
+                self.expect_type(&Type::String, &message_type, message.span);
+            }
+            match value {
+                Type::Result(ok, err) => {
+                    if name == "assert_ok" {
+                        *ok
+                    } else {
+                        *err
+                    }
+                }
+                Type::Unknown => Type::Unknown,
+                other => {
+                    self.error(
+                        args[0].span,
+                        format!("`{name}` expects Result, found `{other}`"),
+                    );
+                    Type::Unknown
+                }
+            }
         } else if name == "range" {
             if !type_args.is_empty() || !(2..=3).contains(&args.len()) {
                 self.error(

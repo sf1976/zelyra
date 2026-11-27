@@ -6900,3 +6900,121 @@ fn try_operator_type_checks_result_option_and_rejects_mismatched_return_types() 
         "{errors:?}"
     );
 }
+
+#[test]
+fn test_rich_assertion_builtins_pass_and_fail_cleanly() {
+    let program = parse(
+        &lex(r#"
+            fn parse_amount(flag: Bool) -> Result<Int, String> {
+                if flag {
+                    return Ok(42)
+                }
+                return Err("bad amount")
+            }
+
+            fn main() {
+                assert_eq(2 + 2, 4)
+                assert_eq("eur", "eur", "currency must match")
+                assert_ne(10, 20)
+                ok_val = assert_ok(parse_amount(true))
+                assert_eq(ok_val, 42)
+                err_val = assert_err(parse_amount(false))
+                assert_eq(err_val, "bad amount")
+                print(ok_val)
+            }
+        "#)
+        .unwrap(),
+    )
+    .unwrap();
+    check(&program).unwrap();
+    let result = execute(&program).unwrap();
+    assert_eq!(result, vec!["42"]);
+
+    let eq_fail = parse(
+        &lex(r#"
+            fn main() {
+                assert_eq(1, 2)
+            }
+        "#)
+        .unwrap(),
+    )
+    .unwrap();
+    check(&eq_fail).unwrap();
+    let err = execute(&eq_fail).unwrap_err();
+    assert!(
+        err.message.contains("expected `1` == `2`"),
+        "{}",
+        err.message
+    );
+
+    let ne_fail = parse(
+        &lex(r#"
+            fn main() {
+                assert_ne(5, 5, "must differ")
+            }
+        "#)
+        .unwrap(),
+    )
+    .unwrap();
+    check(&ne_fail).unwrap();
+    let err = execute(&ne_fail).unwrap_err();
+    assert_eq!(err.message, "must differ");
+
+    let ok_fail = parse(
+        &lex(r#"
+            fn fail() -> Result<Int, String> { return Err("boom") }
+            fn main() {
+                assert_ok(fail())
+            }
+        "#)
+        .unwrap(),
+    )
+    .unwrap();
+    check(&ok_fail).unwrap();
+    let err = execute(&ok_fail).unwrap_err();
+    assert!(
+        err.message.contains("expected Ok, found Err(boom)"),
+        "{}",
+        err.message
+    );
+
+    let err_fail = parse(
+        &lex(r#"
+            fn succeed() -> Result<Int, String> { return Ok(9) }
+            fn main() {
+                assert_err(succeed())
+            }
+        "#)
+        .unwrap(),
+    )
+    .unwrap();
+    check(&err_fail).unwrap();
+    let err = execute(&err_fail).unwrap_err();
+    assert!(
+        err.message.contains("expected Err, found Ok(9)"),
+        "{}",
+        err.message
+    );
+
+    let type_mismatch = parse(
+        &lex(r#"
+            fn main() {
+                assert_eq(1, "1")
+            }
+        "#)
+        .unwrap(),
+    )
+    .unwrap();
+    assert!(check(&type_mismatch).is_err());
+
+    let non_result_ok = parse(
+        &lex(r#"
+            fn main() {
+                assert_ok(123)
+            }
+        "#)
+        .unwrap(),
+    )
+    .unwrap();
+    assert!(check(&non_result_ok).is_err());
+}

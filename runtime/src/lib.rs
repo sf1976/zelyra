@@ -1126,6 +1126,10 @@ fn is_runtime_builtin(name: &str) -> bool {
         name,
         "print"
             | "assert"
+            | "assert_eq"
+            | "assert_ne"
+            | "assert_ok"
+            | "assert_err"
             | "render_markdown"
             | "markdown_toc"
             | "render_pdf"
