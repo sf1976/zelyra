@@ -161,10 +161,9 @@ impl<'program, 'services> Interpreter<'program, 'services> {
             }
             let raw = self.eval(&args[0], env)?;
             let Value::String(source) = raw else {
-                return Err(self.runtime_error(
-                    args[0].span,
-                    "`money` expects a String decimal amount",
-                ));
+                return Err(
+                    self.runtime_error(args[0].span, "`money` expects a String decimal amount")
+                );
             };
             let trimmed = source.trim();
             if let Some((_, frac)) = trimmed.split_once('.') {
@@ -175,13 +174,14 @@ impl<'program, 'services> Interpreter<'program, 'services> {
                     ));
                 }
             }
-            let scaled = zelyra_ast::decimal::parse_scaled(trimmed, zelyra_ast::decimal::SCALE_DIGITS)
-                .ok_or_else(|| {
-                    self.runtime_error(
-                        args[0].span,
-                        "`money` expects a valid base-10 decimal string",
-                    )
-                })?;
+            let scaled =
+                zelyra_ast::decimal::parse_scaled(trimmed, zelyra_ast::decimal::SCALE_DIGITS)
+                    .ok_or_else(|| {
+                        self.runtime_error(
+                            args[0].span,
+                            "`money` expects a valid base-10 decimal string",
+                        )
+                    })?;
             Ok(Value::Decimal(scaled))
         } else if name == "convert_money" {
             if type_args.len() != 2 || args.len() != 2 {
@@ -207,8 +207,7 @@ impl<'program, 'services> Interpreter<'program, 'services> {
                     let quotient = product / scale;
                     let remainder = product % scale;
                     let twice_rem = remainder.abs().saturating_mul(2);
-                    let rounded = if twice_rem > scale
-                        || (twice_rem == scale && quotient % 2 != 0)
+                    let rounded = if twice_rem > scale || (twice_rem == scale && quotient % 2 != 0)
                     {
                         if product >= 0 {
                             quotient + 1
@@ -220,10 +219,10 @@ impl<'program, 'services> Interpreter<'program, 'services> {
                     };
                     Ok(Value::Decimal(rounded))
                 }
-                _ => Err(self.runtime_error(
-                    span,
-                    "`convert_money` expects Money and Decimal arguments",
-                )),
+                _ => {
+                    Err(self
+                        .runtime_error(span, "`convert_money` expects Money and Decimal arguments"))
+                }
             }
         } else if name == "money_decimal" {
             if type_args.len() != 1 || args.len() != 1 {

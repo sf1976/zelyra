@@ -283,7 +283,9 @@ pub(crate) fn validate_type(
             message: format!("unknown type `{name}`"),
             span,
         }),
-        Type::Named(name) if generic_arities.get(name).is_some_and(|arity| *arity > 0) => {
+        Type::Named(name)
+            if name != "Money" && generic_arities.get(name).is_some_and(|arity| *arity > 0) =>
+        {
             errors.push(TypeError {
                 code: "E-TYPE-GENERIC-001",
                 message: format!("generic type `{name}` requires type arguments"),

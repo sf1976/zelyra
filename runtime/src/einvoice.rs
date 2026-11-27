@@ -29,7 +29,7 @@ fn format_money_2dp(scaled: i128) -> String {
     let mut cents = frac_9 / divisor;
     let rem = frac_9 % divisor;
     let twice = rem * 2;
-    if twice > divisor || (twice == divisor && cents % 2 != 0) {
+    if twice > divisor || (twice == divisor && !cents.is_multiple_of(2)) {
         cents += 1;
     }
     let (final_whole, final_cents) = if cents >= 100 {
@@ -171,7 +171,10 @@ fn extract_tag_text<'a>(xml: &'a str, open_prefix: &str, close_tag: &str) -> Opt
 pub fn validate_en16931_xml(xml: &str) -> Result<bool, String> {
     let upper = xml.to_ascii_uppercase();
     if upper.contains("<!DOCTYPE") || upper.contains("<!ENTITY") {
-        return Err("einvoice_validate: XML DOCTYPE/ENTITY declarations are forbidden (XXE protection)".into());
+        return Err(
+            "einvoice_validate: XML DOCTYPE/ENTITY declarations are forbidden (XXE protection)"
+                .into(),
+        );
     }
     if !xml.contains("<rsm:CrossIndustryInvoice") || !xml.contains("</rsm:CrossIndustryInvoice>") {
         return Err("einvoice_validate: missing CrossIndustryInvoice root element".into());
@@ -185,11 +188,17 @@ pub fn validate_en16931_xml(xml: &str) -> Result<bool, String> {
         ("<ram:InvoiceCurrencyCode", "InvoiceCurrencyCode"),
     ] {
         if !xml.contains(tag) {
-            return Err(format!("einvoice_validate: missing required element `{label}`"));
+            return Err(format!(
+                "einvoice_validate: missing required element `{label}`"
+            ));
         }
     }
-    let net_str = extract_tag_text(xml, "<ram:TaxBasisTotalAmount", "</ram:TaxBasisTotalAmount>")
-        .ok_or_else(|| "einvoice_validate: missing TaxBasisTotalAmount".to_owned())?;
+    let net_str = extract_tag_text(
+        xml,
+        "<ram:TaxBasisTotalAmount",
+        "</ram:TaxBasisTotalAmount>",
+    )
+    .ok_or_else(|| "einvoice_validate: missing TaxBasisTotalAmount".to_owned())?;
     let tax_str = extract_tag_text(xml, "<ram:TaxTotalAmount", "</ram:TaxTotalAmount>")
         .ok_or_else(|| "einvoice_validate: missing TaxTotalAmount".to_owned())?;
     let gross_str = extract_tag_text(xml, "<ram:GrandTotalAmount", "</ram:GrandTotalAmount>")

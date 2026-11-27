@@ -349,10 +349,7 @@ pub fn execute_pure_builtin(
                 "einvoice_xml expects 5 Strings and 3 Decimals",
             )),
         },
-        "einvoice_xml" => Err(builtin_error(
-            span,
-            "einvoice_xml expects 8 arguments",
-        )),
+        "einvoice_xml" => Err(builtin_error(span, "einvoice_xml expects 8 arguments")),
         "einvoice_validate" if arguments.len() == 1 => match &arguments[0] {
             Value::String(xml) => match crate::einvoice::validate_en16931_xml(xml) {
                 Ok(valid) => Ok(Value::Result(Ok(Box::new(Value::Bool(valid))))),

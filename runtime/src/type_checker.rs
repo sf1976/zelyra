@@ -928,10 +928,11 @@ impl<'a> Checker<'a> {
                 self.error(span, format!("unknown type `{name}`"));
             }
             Type::Named(name)
-                if self
-                    .generic_arities
-                    .get(name)
-                    .is_some_and(|arity| *arity > 0) =>
+                if name != "Money"
+                    && self
+                        .generic_arities
+                        .get(name)
+                        .is_some_and(|arity| *arity > 0) =>
             {
                 let arity = self.generic_arities[name];
                 self.error_with_code(

@@ -11,20 +11,21 @@ Business-, Datenbank- und Webanwendungen. Schemaabhängiges SQL, Formulare,
 CRUD, Views und Geschäftslogik greifen ineinander; gewöhnlicher Programmcode
 und natives SQL bleiben jederzeit möglich.
 
-> **Release 1.5.0 · Sprachkompatibilitätslinie: 0.1** · [GitHub-Release](https://github.com/sf1976/zelyra/releases/tag/v1.5.0)
+> **Release 1.6.0 · Sprachkompatibilitätslinie: 0.1** · [GitHub-Release](https://github.com/sf1976/zelyra/releases/tag/v1.6.0)
 >
 > Die Compilerprüfung und der Verifier decken klar abgegrenzte Bereiche ab. Sie beweisen nicht die Korrektheit beliebiger Anwendungen. Prüfe vor dem Einsatz die unterstützten Abläufe und Grenzen in der jeweiligen Dokumentation.
 
-Zelyra 1.5.0 ergänzt `states` v2 (`requires role(...)` und natives fail-closed
-`requires four_eyes(<ersteller_spalte>)` unter `SELECT ... FOR UPDATE`),
-deklarative `workflow <Name> on <Table>.<column>`-Blöcke (`after`, `on enter`,
-`compensate`) mit statischer Typ-/Capability-Prüfung und Timer-Zyklus-Verifikation
-in `zelyra verify`, deterministische Mermaid-Prozessdiagramme über
-`zelyra doc --workflows`, `workflows`-/`four_eyes`-Export in `zelyra reflect`
-sowie erweiterte `zelyra lsp`-Symbole und Hover-Details. AST bleibt
+Zelyra 1.6.0 ergänzt währungssicheres `Money<Currency>` (Mischen von Währungen
+ist Compile-Fehler, exakte `Decimal`-Umrechnung per `convert_money<Von, Nach>`),
+append-only `ledger`-Deklarationen (`UPDATE`/`DELETE` zur Compile-Zeit mit
+`E-LEDGER-001` verboten, plus `verify_ledger_balance`), bitemporale
+`auditable`-Tabellen (`valid_from`, `valid_to`, `recorded_at`, `recorded_by`)
+sowie abhängigkeitsfreie, XXE-sichere EN-16931-E-Rechnungs-XML-Erzeugung und
+-Prüfung (`einvoice_xml`, `einvoice_validate`). AST bleibt
 Standard; experimentelles MIR und Bytecode bleiben opt-in und weisen nicht
 unterstützte Konstrukte geschlossen ab. Der Business-Starter ist noch kein
 fertiges ERP. Siehe die
+[Release-Notizen 1.6.0](docs/release-notes/1.6.0.de.md),
 [Release-Notizen 1.5.0](docs/release-notes/1.5.0.de.md),
 [Release-Notizen 1.4.0](docs/release-notes/1.4.0.de.md),
 [Release-Notizen 1.3.6](docs/release-notes/1.3.6.de.md),

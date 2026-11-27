@@ -162,13 +162,13 @@ impl Checker<'_> {
                 );
                 return Type::Unknown;
             }
-            for idx in 0..5 {
-                let ty = self.check_expr(&args[idx], scopes);
-                self.expect_type(&Type::String, &ty, args[idx].span);
+            for arg in &args[..5] {
+                let ty = self.check_expr(arg, scopes);
+                self.expect_type(&Type::String, &ty, arg.span);
             }
-            for idx in 5..8 {
-                let ty = self.check_expr(&args[idx], scopes);
-                self.expect_type(&Type::Decimal, &ty, args[idx].span);
+            for arg in &args[5..8] {
+                let ty = self.check_expr(arg, scopes);
+                self.expect_type(&Type::Decimal, &ty, arg.span);
             }
             Type::Result(Box::new(Type::String), Box::new(Type::String))
         } else if name == "einvoice_validate" {
