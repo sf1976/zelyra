@@ -1131,7 +1131,8 @@ fn is_runtime_builtin(name: &str) -> bool {
             | "assert_ne"
             | "assert_ok"
             | "assert_err"
-            | "money"
+            // `money` is intentionally omitted here so legacy programs defining `fn money()`
+            // can shadow the `money<Currency>(amount)` builtin while keeping `money<C>(...)` working otherwise.
             | "convert_money"
             | "money_decimal"
             | "verify_ledger_balance"

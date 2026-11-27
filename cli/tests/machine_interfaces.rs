@@ -6252,5 +6252,29 @@ fn main() {}
         String::from_utf8_lossy(&delete_res.stderr)
     );
 
+    // Backward compatibility: user-defined `fn money() -> Money` shadows `money<C>(...)`
+    let shadow_money = directory.join("shadow_money.zyl");
+    fs::write(
+        &shadow_money,
+        r#"
+fn money() -> Money {
+    return json_decode<Money>("\"19.99\"")
+}
+
+fn main() {
+    print(money())
+}
+"#,
+    )
+    .unwrap();
+    let shadow_res = run(&["run", shadow_money.to_str().unwrap()]);
+    assert!(
+        shadow_res.status.success(),
+        "stdout: {}\nstderr: {}",
+        String::from_utf8_lossy(&shadow_res.stdout),
+        String::from_utf8_lossy(&shadow_res.stderr)
+    );
+    assert_eq!(String::from_utf8_lossy(&shadow_res.stdout).trim(), "19.99");
+
     fs::remove_dir_all(directory).unwrap();
 }
