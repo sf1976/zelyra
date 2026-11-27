@@ -1842,6 +1842,8 @@ pub struct TableDef {
     /// Declares a nominal tenant identity column. Until checked tenant-aware
     /// query expressions are available, raw SQL access to this table is denied.
     pub tenant_scope: Option<TenantScopeDef>,
+    pub is_ledger: bool,
+    pub is_auditable: bool,
     pub span: Span,
 }
 

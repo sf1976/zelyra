@@ -1701,6 +1701,8 @@ mod tests {
                 uniques: Vec::new(),
                 access: zelyra_ast::TableAccessDef::default(),
                 tenant_scope: None,
+                is_ledger: false,
+                is_auditable: false,
                 columns: vec![zelyra_ast::ColumnDef {
                     name: "document".into(),
                     ty: Type::String,
@@ -2351,6 +2353,8 @@ mod tests {
             validations: Vec::new(),
             state_machines: Vec::new(),
             tenant_scope: None,
+            is_ledger: false,
+            is_auditable: false,
             columns: vec![ColumnDef {
                 name: "name".into(),
                 ty: Type::String,

@@ -199,9 +199,15 @@ fn inspect_program(
             });
         }
     }
-    // Schema scalar domains also work in function/decoder annotations. Keep
-    // existing explicit definitions authoritative rather than reserving names.
-    known_types.extend(["Money", "Email", "Url", "Uuid", "FileRef"].map(String::from));
+    // Schema scalar domains and ISO-4217 currency tags for `Money<C>` also work
+    // in function/decoder annotations. Keep explicit definitions authoritative.
+    known_types.extend(
+        [
+            "Money", "Email", "Url", "Uuid", "FileRef", "EUR", "USD", "CHF", "GBP", "JPY", "CAD",
+            "AUD", "SEK", "NOK", "DKK", "PLN", "CZK",
+        ]
+        .map(String::from),
+    );
     let mut generic_arities = program
         .records
         .iter()
@@ -214,6 +220,7 @@ fn inspect_program(
         )
         .collect::<HashMap<_, _>>();
     generic_arities.insert("ApiResponse".into(), 1);
+    generic_arities.insert("Money".into(), 1);
     for table in &program.tables {
         known_types.insert(table.name.clone());
         if let Some(singular) = singular_table_type(&table.name) {

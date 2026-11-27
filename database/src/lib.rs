@@ -666,6 +666,49 @@ pub fn build_schema(program: &Program) -> Result<Schema, Vec<SchemaError>> {
                 });
             }
         }
+        if table.is_ledger {
+            let has_debit = table.columns.iter().any(|column| column.name == "debit");
+            let has_credit = table.columns.iter().any(|column| column.name == "credit");
+            if !has_debit || !has_credit {
+                errors.push(SchemaError {
+                    message: format!(
+                        "ledger `{}` must declare both `debit` and `credit` columns",
+                        table.name
+                    ),
+                    span: table.span,
+                });
+            }
+        }
+        if table.is_auditable {
+            let ts_type = match backend {
+                Backend::MariaDb => "DATETIME(3)",
+                Backend::Postgres => "TIMESTAMPTZ",
+                Backend::Sqlite => "TEXT",
+            };
+            let id_type = match backend {
+                Backend::MariaDb => "BIGINT",
+                Backend::Postgres => "BIGINT",
+                Backend::Sqlite => "INTEGER",
+            };
+            for (name, sql_type, nullable) in [
+                ("valid_from", ts_type, false),
+                ("valid_to", ts_type, true),
+                ("recorded_at", ts_type, false),
+                ("recorded_by", id_type, true),
+            ] {
+                if !columns.iter().any(|column| column.name == name) {
+                    columns.push(Column {
+                        name: name.into(),
+                        sql_type: sql_type.into(),
+                        nullable,
+                        primary_key: false,
+                        auto: false,
+                        unique: false,
+                        default: None,
+                    });
+                }
+            }
+        }
         tables.push(Table {
             name: table.name.clone(),
             tenant_scope_column: table

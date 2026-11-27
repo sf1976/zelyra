@@ -270,7 +270,10 @@ impl<'a> Parser<'a> {
                 databases.push(self.database_definition()?);
             } else if self.at(&TokenKind::Table) {
                 declarations_started = true;
-                tables.push(self.table_definition()?);
+                tables.push(self.table_definition(false)?);
+            } else if self.at_word("ledger") {
+                declarations_started = true;
+                tables.push(self.table_definition(true)?);
             } else if self.at(&TokenKind::Type) {
                 declarations_started = true;
                 types.push(self.type_definition(false)?);
@@ -2978,9 +2981,19 @@ impl<'a> Parser<'a> {
             _ => self.error(format!("expected {label}")),
         }
     }
-    fn table_definition(&mut self) -> Result<TableDef, ParseError> {
-        let start = self.expect(TokenKind::Table, "`table`")?;
+    fn table_definition(&mut self, is_ledger: bool) -> Result<TableDef, ParseError> {
+        let start = if is_ledger {
+            self.advance().span
+        } else {
+            self.expect(TokenKind::Table, "`table`")?
+        };
         let (name, _) = self.table_ident("table name")?;
+        let is_auditable = if !is_ledger && self.at_word("auditable") {
+            self.advance();
+            true
+        } else {
+            false
+        };
         let tenant_scope = if self.at_word("scoped") {
             let (_, scope_start) = self.ident("`scoped`")?;
             let (by, by_span) = self.ident("`by` after `scoped`")?;
@@ -3038,6 +3051,8 @@ impl<'a> Parser<'a> {
             uniques,
             access,
             tenant_scope,
+            is_ledger,
+            is_auditable,
             span: start.join(end),
         })
     }

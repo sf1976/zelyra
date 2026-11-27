@@ -422,10 +422,219 @@ pub fn check_program(program: &zelyra_ast::Program, schema: &Schema) -> Result<(
     }
     check_computed_column_sql_writes(program, &mut errors);
     check_state_machine_sql_literals(program, &mut errors);
+    check_ledger_immutability(program, &mut errors);
     if errors.is_empty() {
         Ok(())
     } else {
         Err(errors)
+    }
+}
+
+fn check_ledger_immutability(program: &zelyra_ast::Program, errors: &mut Vec<SqlError>) {
+    let ledger_tables = program
+        .tables
+        .iter()
+        .filter(|table| table.is_ledger)
+        .map(|table| table.name.clone())
+        .collect::<HashSet<_>>();
+    if ledger_tables.is_empty() {
+        return;
+    }
+    let known_tables = program
+        .tables
+        .iter()
+        .map(|table| table.name.clone())
+        .collect::<Vec<_>>();
+
+    fn check_query(
+        query: &str,
+        span: Span,
+        known_tables: &[String],
+        ledger_tables: &HashSet<String>,
+        errors: &mut Vec<SqlError>,
+    ) {
+        let (command, accesses) = analyze_table_access(query, known_tables);
+        if !matches!(command, Some("UPDATE" | "DELETE")) {
+            return;
+        }
+        let op = command.unwrap_or("WRITE");
+        for access in accesses {
+            if matches!(
+                access.mode,
+                SqlAccessMode::Write | SqlAccessMode::ReadWrite | SqlAccessMode::Unknown
+            ) && ledger_tables.contains(&access.table)
+            {
+                errors.push(sql_error(
+                    span,
+                    format!(
+                        "E-LEDGER-001: {op} is forbidden on append-only ledger table `{}`; record a reversing entry instead",
+                        access.table
+                    ),
+                ));
+            }
+        }
+    }
+
+    fn visit_expr(
+        expr: &Expr,
+        known_tables: &[String],
+        ledger_tables: &HashSet<String>,
+        errors: &mut Vec<SqlError>,
+    ) {
+        match &expr.kind {
+            ExprKind::Sql { query, .. } => {
+                check_query(query, expr.span, known_tables, ledger_tables, errors);
+            }
+            ExprKind::Array(items) => {
+                for item in items {
+                    visit_expr(item, known_tables, ledger_tables, errors);
+                }
+            }
+            ExprKind::Map(entries) => {
+                for (k, v) in entries {
+                    visit_expr(k, known_tables, ledger_tables, errors);
+                    visit_expr(v, known_tables, ledger_tables, errors);
+                }
+            }
+            ExprKind::Record { fields, .. } => {
+                for (_, value) in fields {
+                    visit_expr(value, known_tables, ledger_tables, errors);
+                }
+            }
+            ExprKind::Lambda { body, .. }
+            | ExprKind::Unary { expr: body, .. }
+            | ExprKind::Await(body)
+            | ExprKind::Try(body) => visit_expr(body, known_tables, ledger_tables, errors),
+            ExprKind::Index { target, index } => {
+                visit_expr(target, known_tables, ledger_tables, errors);
+                visit_expr(index, known_tables, ledger_tables, errors);
+            }
+            ExprKind::Field { target, .. } => {
+                visit_expr(target, known_tables, ledger_tables, errors);
+            }
+            ExprKind::Call { args, .. } => {
+                for arg in args {
+                    visit_expr(arg, known_tables, ledger_tables, errors);
+                }
+            }
+            ExprKind::Binary { left, right, .. } => {
+                visit_expr(left, known_tables, ledger_tables, errors);
+                visit_expr(right, known_tables, ledger_tables, errors);
+            }
+            ExprKind::Match { value, arms } => {
+                visit_expr(value, known_tables, ledger_tables, errors);
+                for arm in arms {
+                    if let Some(guard) = &arm.guard {
+                        visit_expr(guard, known_tables, ledger_tables, errors);
+                    }
+                    visit_expr(&arm.value, known_tables, ledger_tables, errors);
+                }
+            }
+            ExprKind::Int(_)
+            | ExprKind::UInt(_)
+            | ExprKind::Float(_)
+            | ExprKind::Bool(_)
+            | ExprKind::String(_)
+            | ExprKind::Char(_)
+            | ExprKind::FunctionValue(_)
+            | ExprKind::Variable(_) => {}
+        }
+    }
+
+    fn visit_block(
+        block: &Block,
+        known_tables: &[String],
+        ledger_tables: &HashSet<String>,
+        errors: &mut Vec<SqlError>,
+    ) {
+        for stmt in &block.statements {
+            match stmt {
+                Stmt::Let { value, .. }
+                | Stmt::BindOrAssign { value, .. }
+                | Stmt::TupleBindOrAssign { value, .. }
+                | Stmt::Expr(value) => visit_expr(value, known_tables, ledger_tables, errors),
+                Stmt::ArrayIndexAssign { index, value, .. } => {
+                    visit_expr(index, known_tables, ledger_tables, errors);
+                    visit_expr(value, known_tables, ledger_tables, errors);
+                }
+                Stmt::Return { value: Some(v), .. } => {
+                    visit_expr(v, known_tables, ledger_tables, errors);
+                }
+                Stmt::Return { value: None, .. } | Stmt::Break { .. } | Stmt::Continue { .. } => {}
+                Stmt::If {
+                    condition,
+                    then_block,
+                    else_block,
+                    ..
+                } => {
+                    visit_expr(condition, known_tables, ledger_tables, errors);
+                    visit_block(then_block, known_tables, ledger_tables, errors);
+                    if let Some(branch) = else_block {
+                        visit_block(branch, known_tables, ledger_tables, errors);
+                    }
+                }
+                Stmt::While {
+                    condition, body, ..
+                } => {
+                    visit_expr(condition, known_tables, ledger_tables, errors);
+                    visit_block(body, known_tables, ledger_tables, errors);
+                }
+                Stmt::For { iterable, body, .. } => {
+                    visit_expr(iterable, known_tables, ledger_tables, errors);
+                    visit_block(body, known_tables, ledger_tables, errors);
+                }
+                Stmt::Loop { body, .. }
+                | Stmt::Transaction { body, .. }
+                | Stmt::Parallel { body, .. } => {
+                    visit_block(body, known_tables, ledger_tables, errors);
+                }
+                Stmt::Match { value, arms, .. } => {
+                    visit_expr(value, known_tables, ledger_tables, errors);
+                    for arm in arms {
+                        if let Some(guard) = &arm.guard {
+                            visit_expr(guard, known_tables, ledger_tables, errors);
+                        }
+                        visit_block(&arm.body, known_tables, ledger_tables, errors);
+                    }
+                }
+            }
+        }
+    }
+
+    for function in &program.functions {
+        visit_block(&function.body, &known_tables, &ledger_tables, errors);
+    }
+    for test in &program.tests {
+        visit_block(&test.body, &known_tables, &ledger_tables, errors);
+    }
+    for workflow in &program.workflows {
+        for hook in &workflow.hooks {
+            visit_block(&hook.body, &known_tables, &ledger_tables, errors);
+        }
+    }
+    for form in &program.forms {
+        for action in &form.actions {
+            let block = Block {
+                statements: action.statements.clone(),
+                span: action.span,
+            };
+            visit_block(&block, &known_tables, &ledger_tables, errors);
+            if let Some(body) = &action.execute_body {
+                visit_block(body, &known_tables, &ledger_tables, errors);
+            }
+        }
+    }
+    for crud in &program.cruds {
+        for action in &crud.actions {
+            let block = Block {
+                statements: action.statements.clone(),
+                span: action.span,
+            };
+            visit_block(&block, &known_tables, &ledger_tables, errors);
+            if let Some(body) = &action.execute_body {
+                visit_block(body, &known_tables, &ledger_tables, errors);
+            }
+        }
     }
 }
 

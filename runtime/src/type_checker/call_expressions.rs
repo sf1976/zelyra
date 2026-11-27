@@ -91,6 +91,97 @@ impl Checker<'_> {
                 self.check_expr(arg, scopes);
             }
             Type::Unit
+        } else if name == "money" {
+            if type_args.len() != 1 || args.len() != 1 {
+                self.error(
+                    span,
+                    "`money<Currency>(amount)` expects one currency type argument and one String amount",
+                );
+                return Type::Unknown;
+            }
+            let amount = self.check_expr(&args[0], scopes);
+            self.expect_type(&Type::String, &amount, args[0].span);
+            Type::Applied {
+                name: "Money".into(),
+                args: vec![type_args[0].clone()],
+            }
+        } else if name == "convert_money" {
+            if type_args.len() != 2 || args.len() != 2 {
+                self.error(
+                    span,
+                    "`convert_money<From, To>(amount, rate)` expects two currency type arguments, a Money<From> value, and a Decimal rate",
+                );
+                return Type::Unknown;
+            }
+            let expected_from = Type::Applied {
+                name: "Money".into(),
+                args: vec![type_args[0].clone()],
+            };
+            let amount = self.check_expr(&args[0], scopes);
+            self.expect_type(&expected_from, &amount, args[0].span);
+            let rate = self.check_expr(&args[1], scopes);
+            self.expect_type(&Type::Decimal, &rate, args[1].span);
+            Type::Applied {
+                name: "Money".into(),
+                args: vec![type_args[1].clone()],
+            }
+        } else if name == "money_decimal" {
+            if type_args.len() != 1 || args.len() != 1 {
+                self.error(
+                    span,
+                    "`money_decimal<Currency>(amount)` expects one currency type argument and one Money<Currency> value",
+                );
+                return Type::Unknown;
+            }
+            let expected = Type::Applied {
+                name: "Money".into(),
+                args: vec![type_args[0].clone()],
+            };
+            let amount = self.check_expr(&args[0], scopes);
+            self.expect_type(&expected, &amount, args[0].span);
+            Type::Decimal
+        } else if name == "verify_ledger_balance" {
+            if !type_args.is_empty() || args.len() != 2 {
+                self.error(
+                    span,
+                    "`verify_ledger_balance(debits, credits)` expects two Decimal[] arrays and no type arguments",
+                );
+                return Type::Unknown;
+            }
+            let expected_arr = Type::Array(Box::new(Type::Decimal));
+            let debits = self.check_expr(&args[0], scopes);
+            let credits = self.check_expr(&args[1], scopes);
+            self.expect_type(&expected_arr, &debits, args[0].span);
+            self.expect_type(&expected_arr, &credits, args[1].span);
+            Type::Result(Box::new(Type::Decimal), Box::new(Type::String))
+        } else if name == "einvoice_xml" {
+            if !type_args.is_empty() || args.len() != 8 {
+                self.error(
+                    span,
+                    "`einvoice_xml` expects 8 arguments: (invoice_number, issue_date, currency, seller_name, buyer_name, net_total, tax_total, gross_total)",
+                );
+                return Type::Unknown;
+            }
+            for idx in 0..5 {
+                let ty = self.check_expr(&args[idx], scopes);
+                self.expect_type(&Type::String, &ty, args[idx].span);
+            }
+            for idx in 5..8 {
+                let ty = self.check_expr(&args[idx], scopes);
+                self.expect_type(&Type::Decimal, &ty, args[idx].span);
+            }
+            Type::Result(Box::new(Type::String), Box::new(Type::String))
+        } else if name == "einvoice_validate" {
+            if !type_args.is_empty() || args.len() != 1 {
+                self.error(
+                    span,
+                    "`einvoice_validate(xml)` expects one String argument and no type arguments",
+                );
+                return Type::Unknown;
+            }
+            let xml = self.check_expr(&args[0], scopes);
+            self.expect_type(&Type::String, &xml, args[0].span);
+            Type::Result(Box::new(Type::Bool), Box::new(Type::String))
         } else if name == "assert" {
             if !type_args.is_empty() {
                 self.error(span, "`assert` does not accept type arguments");

@@ -275,6 +275,7 @@ mod repl;
 pub use policies::{FileSystemPolicy, MailPolicy, NetworkPolicy, ProcessPolicy, RuntimePolicy};
 mod pdf;
 mod pdf_template;
+mod einvoice;
 mod pure_builtins;
 mod step_budget;
 pub use mail::{prepare_mail_queue_query, supports_mail_outbox_database};
@@ -1130,6 +1131,12 @@ fn is_runtime_builtin(name: &str) -> bool {
             | "assert_ne"
             | "assert_ok"
             | "assert_err"
+            | "money"
+            | "convert_money"
+            | "money_decimal"
+            | "verify_ledger_balance"
+            | "einvoice_xml"
+            | "einvoice_validate"
             | "render_markdown"
             | "markdown_toc"
             | "render_pdf"

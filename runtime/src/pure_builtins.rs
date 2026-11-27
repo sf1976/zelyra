@@ -17,6 +17,9 @@ pub fn is_pure_builtin(name: &str) -> bool {
             | "assert_ne"
             | "assert_ok"
             | "assert_err"
+            | "verify_ledger_balance"
+            | "einvoice_xml"
+            | "einvoice_validate"
             | "render_markdown"
             | "markdown_toc"
             | "Some"
@@ -264,6 +267,105 @@ pub fn execute_pure_builtin(
         "assert_ok" | "assert_err" => Err(builtin_error(
             span,
             format!("`{name}` expects a Result and an optional String message"),
+        )),
+        "verify_ledger_balance" if arguments.len() == 2 => match arguments.as_slice() {
+            [Value::Array(debits), Value::Array(credits)] => {
+                let mut debit_sum: i128 = 0;
+                for item in debits {
+                    match item {
+                        Value::Decimal(v) if *v >= 0 => {
+                            debit_sum = debit_sum.checked_add(*v).ok_or_else(|| {
+                                builtin_error(span, "verify_ledger_balance: debit sum overflow")
+                            })?;
+                        }
+                        Value::Decimal(_) => {
+                            return Ok(Value::Result(Err(Box::new(Value::String(
+                                "verify_ledger_balance: negative debit entry is forbidden".into(),
+                            )))));
+                        }
+                        other => {
+                            return Err(builtin_error(
+                                span,
+                                format!(
+                                    "verify_ledger_balance expects Decimal[], found {}",
+                                    other.ty()
+                                ),
+                            ));
+                        }
+                    }
+                }
+                let mut credit_sum: i128 = 0;
+                for item in credits {
+                    match item {
+                        Value::Decimal(v) if *v >= 0 => {
+                            credit_sum = credit_sum.checked_add(*v).ok_or_else(|| {
+                                builtin_error(span, "verify_ledger_balance: credit sum overflow")
+                            })?;
+                        }
+                        Value::Decimal(_) => {
+                            return Ok(Value::Result(Err(Box::new(Value::String(
+                                "verify_ledger_balance: negative credit entry is forbidden".into(),
+                            )))));
+                        }
+                        other => {
+                            return Err(builtin_error(
+                                span,
+                                format!(
+                                    "verify_ledger_balance expects Decimal[], found {}",
+                                    other.ty()
+                                ),
+                            ));
+                        }
+                    }
+                }
+                if debit_sum == credit_sum {
+                    Ok(Value::Result(Ok(Box::new(Value::Decimal(debit_sum)))))
+                } else {
+                    Ok(Value::Result(Err(Box::new(Value::String(
+                        "ledger imbalance: sum(debit) != sum(credit)".into(),
+                    )))))
+                }
+            }
+            _ => Err(builtin_error(
+                span,
+                "verify_ledger_balance expects two Decimal[] arrays",
+            )),
+        },
+        "verify_ledger_balance" => Err(builtin_error(
+            span,
+            "verify_ledger_balance expects exactly two Decimal[] arrays",
+        )),
+        "einvoice_xml" if arguments.len() == 8 => match arguments.as_slice() {
+            [Value::String(inv), Value::String(date), Value::String(curr), Value::String(seller), Value::String(buyer), Value::Decimal(net), Value::Decimal(tax), Value::Decimal(gross)] => {
+                match crate::einvoice::generate_en16931_xml(
+                    inv, date, curr, seller, buyer, *net, *tax, *gross,
+                ) {
+                    Ok(xml) => Ok(Value::Result(Ok(Box::new(Value::String(xml))))),
+                    Err(err) => Ok(Value::Result(Err(Box::new(Value::String(err))))),
+                }
+            }
+            _ => Err(builtin_error(
+                span,
+                "einvoice_xml expects 5 Strings and 3 Decimals",
+            )),
+        },
+        "einvoice_xml" => Err(builtin_error(
+            span,
+            "einvoice_xml expects 8 arguments",
+        )),
+        "einvoice_validate" if arguments.len() == 1 => match &arguments[0] {
+            Value::String(xml) => match crate::einvoice::validate_en16931_xml(xml) {
+                Ok(valid) => Ok(Value::Result(Ok(Box::new(Value::Bool(valid))))),
+                Err(err) => Ok(Value::Result(Err(Box::new(Value::String(err))))),
+            },
+            other => Err(builtin_error(
+                span,
+                format!("einvoice_validate expects String, found {}", other.ty()),
+            )),
+        },
+        "einvoice_validate" => Err(builtin_error(
+            span,
+            "einvoice_validate expects exactly one String",
         )),
         "None" if arguments.is_empty() => Ok(Value::Option(None)),
         "Some" if arguments.len() == 1 => Ok(Value::Option(Some(Box::new(arguments[0].clone())))),

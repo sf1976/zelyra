@@ -94,6 +94,8 @@ fn number_series_allocator_is_atomic_and_scoped_per_tenant() {
         uniques: Vec::new(),
         access: zelyra_ast::TableAccessDef::default(),
         tenant_scope: None,
+        is_ledger: false,
+        is_auditable: false,
         span: zelyra_ast::Span::default(),
     });
     let action = zelyra_ast::FormAction {
@@ -1232,6 +1234,8 @@ fn child_collection_form_route() -> FormRoute {
             uniques: Vec::new(),
             access: Default::default(),
             tenant_scope: None,
+            is_ledger: false,
+            is_auditable: false,
             span: zelyra_ast::Span::default(),
         },
         fields,
@@ -1366,6 +1370,8 @@ fn legacy_invoice_number_generation_remains_for_fields_without_a_sequence() {
         uniques: Vec::new(),
         access: zelyra_ast::TableAccessDef::default(),
         tenant_scope: None,
+        is_ledger: false,
+        is_auditable: false,
         span: zelyra_ast::Span::default(),
     });
     assert!(!is_automatic_invoice_number_form(&route));
@@ -2406,6 +2412,8 @@ fn relation_form_route() -> FormRoute {
         validations: Vec::new(),
         state_machines: Vec::new(),
         tenant_scope: None,
+        is_ledger: false,
+        is_auditable: false,
         columns: vec![zelyra_ast::ColumnDef {
             name: "department".into(),
             ty: Type::Named("Department".into()),
@@ -2473,6 +2481,8 @@ fn formats_crud_audit_changes_without_exposing_sensitive_values() {
         validations: Vec::new(),
         state_machines: Vec::new(),
         tenant_scope: None,
+        is_ledger: false,
+        is_auditable: false,
         columns: Vec::new(),
         indexes: Vec::new(),
         uniques: Vec::new(),
