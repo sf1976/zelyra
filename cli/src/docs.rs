@@ -26,17 +26,28 @@ pub(super) fn format_state_diagrams(program: &zelyra_ast::Program) -> String {
                         .expect("writing to String cannot fail");
                 } else {
                     for target in &rule.to {
+                        let mut tags = Vec::new();
+                        if !rule.required_roles.is_empty() {
+                            tags.push(format!("[role: {}]", rule.required_roles.join("|")));
+                        }
+                        if let Some(creator_col) = &rule.four_eyes_column {
+                            tags.push(format!("[four-eyes: {creator_col}]"));
+                        }
                         if let Some(guard) = &rule.guard {
                             let label = guard.message.replace('\n', " ").replace(':', " -");
-                            writeln!(
-                                output,
-                                "    {from_id} --> {} : [guarded] {label}",
-                                mermaid_state_id(target)
-                            )
-                            .expect("writing to String cannot fail");
-                        } else {
+                            tags.push(format!("[guarded] {label}"));
+                        }
+                        if tags.is_empty() {
                             writeln!(output, "    {from_id} --> {}", mermaid_state_id(target))
                                 .expect("writing to String cannot fail");
+                        } else {
+                            writeln!(
+                                output,
+                                "    {from_id} --> {} : {}",
+                                mermaid_state_id(target),
+                                tags.join(" ")
+                            )
+                            .expect("writing to String cannot fail");
                         }
                     }
                 }
@@ -46,6 +57,105 @@ pub(super) fn format_state_diagrams(program: &zelyra_ast::Program) -> String {
     }
     if count == 0 {
         output.push_str("No declarative table state machines (`states`) declared.\n");
+    }
+    output
+}
+
+pub(super) fn format_workflow_diagrams(program: &zelyra_ast::Program) -> String {
+    let mut output = String::new();
+    if program.workflows.is_empty() {
+        output.push_str("No declarative workflows (`workflow`) declared.\n");
+        return output;
+    }
+    let mut workflows = program.workflows.iter().collect::<Vec<_>>();
+    workflows.sort_by(|left, right| left.name.cmp(&right.name));
+    for workflow in workflows {
+        writeln!(
+            output,
+            "## {} ({}.{})\n",
+            workflow.name, workflow.table, workflow.column
+        )
+        .expect("writing to String cannot fail");
+        output.push_str("```mermaid\nstateDiagram-v2\n");
+        if let Some(table) = program
+            .tables
+            .iter()
+            .find(|table| table.name == workflow.table)
+        {
+            if let Some(machine) = table
+                .state_machines
+                .iter()
+                .find(|machine| machine.column == workflow.column)
+            {
+                if let Some(initial) = machine.initial_state(table) {
+                    writeln!(output, "    [*] --> {}", mermaid_state_id(initial))
+                        .expect("writing to String cannot fail");
+                }
+                for rule in &machine.transitions {
+                    let from_id = mermaid_state_id(&rule.from);
+                    if rule.is_final {
+                        writeln!(output, "    {from_id} --> [*]")
+                            .expect("writing to String cannot fail");
+                    } else {
+                        for target in &rule.to {
+                            let mut tags = Vec::new();
+                            if !rule.required_roles.is_empty() {
+                                tags.push(format!("[role: {}]", rule.required_roles.join("|")));
+                            }
+                            if let Some(creator_col) = &rule.four_eyes_column {
+                                tags.push(format!("[four-eyes: {creator_col}]"));
+                            }
+                            if let Some(guard) = &rule.guard {
+                                let label = guard.message.replace('\n', " ").replace(':', " -");
+                                tags.push(format!("[guarded] {label}"));
+                            }
+                            if tags.is_empty() {
+                                writeln!(output, "    {from_id} --> {}", mermaid_state_id(target))
+                                    .expect("writing to String cannot fail");
+                            } else {
+                                writeln!(
+                                    output,
+                                    "    {from_id} --> {} : {}",
+                                    mermaid_state_id(target),
+                                    tags.join(" ")
+                                )
+                                .expect("writing to String cannot fail");
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        for timer in &workflow.timers {
+            writeln!(
+                output,
+                "    {} --> {} : [after {}]",
+                mermaid_state_id(&timer.state),
+                mermaid_state_id(&timer.target),
+                timer.duration_label
+            )
+            .expect("writing to String cannot fail");
+        }
+        for hook in &workflow.hooks {
+            let kind = match hook.kind {
+                zelyra_ast::WorkflowHookKind::OnEnter => "on enter",
+                zelyra_ast::WorkflowHookKind::Compensate => "compensate",
+            };
+            let caps = if hook.capabilities.is_empty() {
+                String::new()
+            } else {
+                format!(" uses {}", hook.capabilities.join(", "))
+            };
+            if let Some(state) = &hook.state {
+                writeln!(
+                    output,
+                    "    note right of {} : {kind}{caps}",
+                    mermaid_state_id(state)
+                )
+                .expect("writing to String cannot fail");
+            }
+        }
+        output.push_str("```\n\n");
     }
     output
 }

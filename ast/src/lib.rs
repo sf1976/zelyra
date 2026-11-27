@@ -162,8 +162,96 @@ pub struct Program {
     pub apis: Vec<ApiDef>,
     pub commands: Vec<CommandDef>,
     pub schedules: Vec<ScheduleDef>,
+    pub workflows: Vec<WorkflowDef>,
     pub tests: Vec<TestDef>,
     pub functions: Vec<Function>,
+}
+
+#[derive(Clone, Debug)]
+pub struct WorkflowDef {
+    pub name: String,
+    pub table: String,
+    pub column: String,
+    pub timers: Vec<WorkflowTimerDef>,
+    pub hooks: Vec<WorkflowHookDef>,
+    pub span: Span,
+}
+
+#[derive(Clone, Debug)]
+pub struct WorkflowTimerDef {
+    pub duration_label: String,
+    pub duration_seconds: u64,
+    pub state: String,
+    pub target: String,
+    pub span: Span,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum WorkflowHookKind {
+    OnEnter,
+    Compensate,
+}
+
+#[derive(Clone, Debug)]
+pub struct WorkflowHookDef {
+    pub kind: WorkflowHookKind,
+    pub state: Option<String>,
+    pub capabilities: Vec<String>,
+    pub body: Block,
+    pub span: Span,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct WorkflowHookFunction {
+    pub workflow_index: usize,
+    pub hook_index: usize,
+    pub function_name: String,
+}
+
+/// Lowers declarative `workflow` hook blocks (`on enter`, `compensate`) into
+/// private zero-argument functions so the type checker and capability checker
+/// enforce the same rules as regular functions.
+pub fn build_workflow_functions(program: &Program) -> (Vec<Function>, Vec<WorkflowHookFunction>) {
+    let mut names = program
+        .functions
+        .iter()
+        .map(|function| function.name.clone())
+        .collect::<std::collections::HashSet<_>>();
+    let mut functions = Vec::new();
+    let mut mappings = Vec::new();
+    for (workflow_index, workflow) in program.workflows.iter().enumerate() {
+        for (hook_index, hook) in workflow.hooks.iter().enumerate() {
+            let kind_tag = match hook.kind {
+                WorkflowHookKind::OnEnter => "enter",
+                WorkflowHookKind::Compensate => "compensate",
+            };
+            let base_name = format!("__zelyra_workflow_{workflow_index}_{kind_tag}_{hook_index}");
+            let mut function_name = base_name.clone();
+            let mut suffix = 0usize;
+            while !names.insert(function_name.clone()) {
+                suffix += 1;
+                function_name = format!("{base_name}_{suffix}");
+            }
+            functions.push(Function {
+                name: function_name.clone(),
+                is_public: false,
+                type_params: Vec::new(),
+                params: Vec::new(),
+                return_type: None,
+                capabilities: hook.capabilities.clone(),
+                requires: Vec::new(),
+                ensures: Vec::new(),
+                body: hook.body.clone(),
+                span: hook.span,
+            });
+            mappings.push(WorkflowHookFunction {
+                workflow_index,
+                hook_index,
+                function_name,
+            });
+        }
+    }
+    (functions, mappings)
 }
 
 #[derive(Clone, Debug)]
@@ -1777,6 +1865,8 @@ pub struct TableStateTransitionDef {
     pub to: Vec<String>,
     pub is_final: bool,
     pub guard: Option<TableStateTransitionGuardDef>,
+    pub required_roles: Vec<String>,
+    pub four_eyes_column: Option<String>,
     pub span: Span,
 }
 

@@ -1451,6 +1451,7 @@ mod tests {
             apis: Vec::new(),
             commands: Vec::new(),
             schedules: Vec::new(),
+            workflows: Vec::new(),
             tests: Vec::new(),
             functions: Vec::new(),
         };
@@ -1567,6 +1568,7 @@ mod tests {
             apis: Vec::new(),
             commands: Vec::new(),
             schedules: Vec::new(),
+            workflows: Vec::new(),
             tests: Vec::new(),
             functions: Vec::new(),
         };
@@ -1670,6 +1672,7 @@ mod tests {
             apis: Vec::new(),
             commands: Vec::new(),
             schedules: Vec::new(),
+            workflows: Vec::new(),
             tests: Vec::new(),
             functions: Vec::new(),
         };
@@ -1769,6 +1772,7 @@ mod tests {
             apis: Vec::new(),
             commands: Vec::new(),
             schedules: Vec::new(),
+            workflows: Vec::new(),
             tests: Vec::new(),
             functions: Vec::new(),
         };
@@ -1914,6 +1918,7 @@ mod tests {
             apis: Vec::new(),
             commands: Vec::new(),
             schedules: Vec::new(),
+            workflows: Vec::new(),
             tests: Vec::new(),
             functions: Vec::new(),
         };
@@ -2226,6 +2231,7 @@ mod tests {
             apis: Vec::new(),
             commands: Vec::new(),
             schedules: Vec::new(),
+            workflows: Vec::new(),
             tests: Vec::new(),
             functions: Vec::new(),
         };
@@ -2288,6 +2294,7 @@ mod tests {
             apis: Vec::new(),
             commands: Vec::new(),
             schedules: Vec::new(),
+            workflows: Vec::new(),
             tests: Vec::new(),
             functions: Vec::new(),
         };

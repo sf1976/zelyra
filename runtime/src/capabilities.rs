@@ -66,6 +66,7 @@ fn analyze_capabilities(
     let (computed_functions, _) = zelyra_ast::build_computed_column_functions(program);
     let (crud_policy_functions, _) = zelyra_ast::build_crud_policy_functions(program);
     let (test_functions, _) = zelyra_ast::build_test_functions(program);
+    let (workflow_functions, _) = zelyra_ast::build_workflow_functions(program);
     let all_functions = program
         .functions
         .iter()
@@ -74,6 +75,7 @@ fn analyze_capabilities(
         .chain(computed_functions.iter())
         .chain(crud_policy_functions.iter())
         .chain(test_functions.iter())
+        .chain(workflow_functions.iter())
         .collect::<Vec<_>>();
     let functions = all_functions
         .iter()

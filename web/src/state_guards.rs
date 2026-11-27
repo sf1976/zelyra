@@ -7,6 +7,63 @@ use crate::{
     tenant_access_queries, FormRoute, TenantContext,
 };
 
+/// Enforce `requires role(...)` and `requires four_eyes(<creator_col>)` rules
+/// on a declarative `states` transition under the `SELECT ... FOR UPDATE` lock.
+/// Fails closed when authentication, creator identity, or required role is absent.
+pub(crate) fn evaluate_state_transition_policy(
+    machine: &zelyra_ast::TableStateMachineDef,
+    from_state: &str,
+    to_state: &str,
+    row_values: &HashMap<String, String>,
+    actor_user_id: Option<i64>,
+    actor_roles: &[String],
+) -> Option<String> {
+    let rule = machine.transitions.iter().find(|rule| {
+        rule.from == from_state && rule.to.iter().any(|target| target == to_state)
+    })?;
+    if !rule.required_roles.is_empty() {
+        let has_role = rule
+            .required_roles
+            .iter()
+            .any(|required| actor_roles.iter().any(|role| role == required));
+        if !has_role {
+            return Some(format!(
+                "state transition from `{from_state}` to `{to_state}` requires role: {}",
+                rule.required_roles.join(" or ")
+            ));
+        }
+    }
+    if let Some(creator_col) = &rule.four_eyes_column {
+        let Some(actor_id) = actor_user_id else {
+            return Some(format!(
+                "four-eyes transition from `{from_state}` to `{to_state}` requires an authenticated user"
+            ));
+        };
+        let Some(creator_value) = row_values
+            .get(creator_col)
+            .map(String::as_str)
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+        else {
+            return Some(format!(
+                "four-eyes check failed: creator column `{creator_col}` is missing on this record"
+            ));
+        };
+        let actor_str = actor_id.to_string();
+        if creator_value == actor_str
+            || creator_value
+                .parse::<i64>()
+                .ok()
+                .is_some_and(|creator_id| creator_id == actor_id)
+        {
+            return Some(format!(
+                "four-eyes violation: user `{actor_id}` cannot approve their own record (`{creator_col}`)"
+            ));
+        }
+    }
+    None
+}
+
 pub(crate) fn evaluate_state_transition_guard(
     program: &Program,
     mappings: &[zelyra_ast::StateTransitionGuardFunction],
@@ -253,4 +310,130 @@ pub(crate) fn execute_typed_form_action(
         Ok(())
     })
     .map_err(|error| error.message)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use zelyra_ast::{Span, TableStateMachineDef, TableStateTransitionDef};
+
+    fn sample_machine() -> TableStateMachineDef {
+        TableStateMachineDef {
+            column: "status".into(),
+            transitions: vec![
+                TableStateTransitionDef {
+                    from: "draft".into(),
+                    to: vec!["submitted".into()],
+                    is_final: false,
+                    guard: None,
+                    required_roles: Vec::new(),
+                    four_eyes_column: None,
+                    span: Span::default(),
+                },
+                TableStateTransitionDef {
+                    from: "submitted".into(),
+                    to: vec!["approved".into()],
+                    is_final: false,
+                    guard: None,
+                    required_roles: vec!["approver".into()],
+                    four_eyes_column: Some("created_by".into()),
+                    span: Span::default(),
+                },
+                TableStateTransitionDef {
+                    from: "approved".into(),
+                    to: Vec::new(),
+                    is_final: true,
+                    guard: None,
+                    required_roles: Vec::new(),
+                    four_eyes_column: None,
+                    span: Span::default(),
+                },
+            ],
+            span: Span::default(),
+        }
+    }
+
+    #[test]
+    fn four_eyes_rejects_self_approval_unauthenticated_and_missing_creator_and_allows_second_approver()
+    {
+        let machine = sample_machine();
+        let mut row = HashMap::new();
+        row.insert("created_by".into(), "42".into());
+
+        // Self-approval by creator (user 42) with approver role -> REJECTED!
+        let self_approval = evaluate_state_transition_policy(
+            &machine,
+            "submitted",
+            "approved",
+            &row,
+            Some(42),
+            &["approver".into()],
+        );
+        assert!(
+            self_approval
+                .as_deref()
+                .is_some_and(|msg| msg.contains("four-eyes violation")),
+            "{self_approval:?}"
+        );
+
+        // Missing role for user 99 -> REJECTED!
+        let missing_role = evaluate_state_transition_policy(
+            &machine,
+            "submitted",
+            "approved",
+            &row,
+            Some(99),
+            &["viewer".into()],
+        );
+        assert!(
+            missing_role
+                .as_deref()
+                .is_some_and(|msg| msg.contains("requires role: approver")),
+            "{missing_role:?}"
+        );
+
+        // Unauthenticated actor with role -> REJECTED!
+        let unauth = evaluate_state_transition_policy(
+            &machine,
+            "submitted",
+            "approved",
+            &row,
+            None,
+            &["approver".into()],
+        );
+        assert!(
+            unauth
+                .as_deref()
+                .is_some_and(|msg| msg.contains("requires an authenticated user")),
+            "{unauth:?}"
+        );
+
+        // Missing creator column on record -> REJECTED fail-closed!
+        let empty_row = HashMap::new();
+        let missing_creator = evaluate_state_transition_policy(
+            &machine,
+            "submitted",
+            "approved",
+            &empty_row,
+            Some(99),
+            &["approver".into()],
+        );
+        assert!(
+            missing_creator
+                .as_deref()
+                .is_some_and(|msg| msg.contains("creator column `created_by` is missing")),
+            "{missing_creator:?}"
+        );
+
+        // Second authorized user (user 99 with approver role) -> ALLOWED!
+        let allowed = evaluate_state_transition_policy(
+            &machine,
+            "submitted",
+            "approved",
+            &row,
+            Some(99),
+            &["approver".into()],
+        );
+        assert!(allowed.is_none(), "{allowed:?}");
+    }
 }

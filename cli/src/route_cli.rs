@@ -408,6 +408,7 @@ mod tests {
             apis: vec![],
             commands: vec![],
             schedules: vec![],
+            workflows: vec![],
             tests: vec![],
             functions: vec![],
             imports: vec![],

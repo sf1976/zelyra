@@ -125,6 +125,8 @@ fn build(program: &zelyra_ast::Program, sources: &[project::ProjectSource]) -> V
                 "to": rule.to,
                 "final": rule.is_final,
                 "guarded": rule.guard.is_some(),
+                "required_roles": rule.required_roles,
+                "four_eyes_column": rule.four_eyes_column,
                 "source": source_location(rule.span, sources),
             })).collect::<Vec<_>>(),
             "source": source_location(machine.span, sources),
@@ -194,6 +196,36 @@ fn build(program: &zelyra_ast::Program, sources: &[project::ProjectSource]) -> V
     let mut modules = modules;
     modules.sort_by(|a, b| a["file"].as_str().cmp(&b["file"].as_str()));
 
+    let mut workflows = program
+        .workflows
+        .iter()
+        .map(|workflow| {
+            json!({
+                "name": workflow.name,
+                "table": workflow.table,
+                "column": workflow.column,
+                "timers": workflow.timers.iter().map(|timer| json!({
+                    "duration": timer.duration_label,
+                    "duration_seconds": timer.duration_seconds,
+                    "state": timer.state,
+                    "target": timer.target,
+                    "source": source_location(timer.span, sources),
+                })).collect::<Vec<_>>(),
+                "hooks": workflow.hooks.iter().map(|hook| json!({
+                    "kind": match hook.kind {
+                        zelyra_ast::WorkflowHookKind::OnEnter => "on_enter",
+                        zelyra_ast::WorkflowHookKind::Compensate => "compensate",
+                    },
+                    "state": hook.state,
+                    "capabilities": sorted_strings(&hook.capabilities),
+                    "source": source_location(hook.span, sources),
+                })).collect::<Vec<_>>(),
+                "source": source_location(workflow.span, sources),
+            })
+        })
+        .collect::<Vec<_>>();
+    workflows.sort_by(|a, b| a["name"].as_str().cmp(&b["name"].as_str()));
+
     json!({
         "reflect_schema_version": REFLECT_SCHEMA_VERSION,
         "compiler_version": env!("CARGO_PKG_VERSION"),
@@ -203,6 +235,7 @@ fn build(program: &zelyra_ast::Program, sources: &[project::ProjectSource]) -> V
         "modules": modules,
         "symbols": symbols,
         "tables": tables,
+        "workflows": workflows,
         "routes": routes,
         "apis": apis,
         "forms": forms,
