@@ -127,6 +127,7 @@ fn serve<R: BufRead + Send + 'static, W: Write>(mut input: R, mut output: W) -> 
                 | "textDocument/references"
                 | "textDocument/prepareRename"
                 | "textDocument/rename"
+                | "textDocument/formatting"
         ) {
             if let Some(id) = id {
                 if workers.len() >= 4 {
@@ -192,7 +193,8 @@ fn serve<R: BufRead + Send + 'static, W: Write>(mut input: R, mut output: W) -> 
                                 "hoverProvider": true,
                                 "definitionProvider": true,
                                 "referencesProvider": true,
-                                "renameProvider": {"prepareProvider": true}
+                                "renameProvider": {"prepareProvider": true},
+                                "documentFormattingProvider": true
                                 },
                                 "serverInfo": {"name": "zelyra", "version": env!("CARGO_PKG_VERSION")}
                             }
@@ -337,7 +339,8 @@ fn serve<R: BufRead + Send + 'static, W: Write>(mut input: R, mut output: W) -> 
             | "textDocument/definition"
             | "textDocument/references"
             | "textDocument/prepareRename"
-            | "textDocument/rename" => {}
+            | "textDocument/rename"
+            | "textDocument/formatting" => {}
             "$/cancelRequest" => {
                 if let Some(cancelled_id) = params.get("id") {
                     let key = cancelled_id.to_string();
@@ -376,6 +379,14 @@ fn handle_request(server: &Server, method: &str, params: &Value, id: &Value) -> 
     #[cfg(test)]
     if let Some(delay_ms) = params.get("__testDelayMs").and_then(Value::as_u64) {
         std::thread::sleep(Duration::from_millis(delay_ms.min(250)));
+    }
+    if method == "textDocument/formatting" {
+        return match server.formatting_response(params) {
+            Ok(result) => json!({"jsonrpc":"2.0","id":id,"result":result}),
+            Err(message) => json!({
+                "jsonrpc":"2.0","id":id,"error":{"code":-32602,"message":message}
+            }),
+        };
     }
     if matches!(
         method,
@@ -656,6 +667,17 @@ impl Server {
                 12,
             );
         }
+        for test in &program.tests {
+            let name = format!("test \"{}\"", test.name);
+            push_outline_symbol(
+                &mut symbols,
+                &self.root,
+                &analysis.sources,
+                &name,
+                test.span,
+                12,
+            );
+        }
         match method {
             "textDocument/completion" => {
                 let uri = params
@@ -712,6 +734,21 @@ impl Server {
                             );
                         }
                     }
+                }
+                for (label, kind, detail) in [
+                    ("assert_eq", 3, "assert_eq(left, right[, message]) -> Unit"),
+                    ("assert_ne", 3, "assert_ne(left, right[, message]) -> Unit"),
+                    ("assert_ok", 3, "assert_ok(result[, message]) -> T"),
+                    ("assert_err", 3, "assert_err(result[, message]) -> E"),
+                    ("test", 14, "test \"description\" [uses ...] { ... }"),
+                    ("states", 14, "states <column> { <from> -> <to> [when ...] }"),
+                    ("when", 14, "transition guard predicate"),
+                ] {
+                    completions.push(json!({
+                        "label": label,
+                        "kind": kind,
+                        "detail": detail,
+                    }));
                 }
                 json!(completions)
             }
@@ -777,10 +814,13 @@ impl Server {
         };
         let declaration = occurrence_location(&self.root, &symbol.declaration, &analysis.sources);
         match method {
-            "textDocument/hover" => Ok(json!({
-                "contents":{"kind":"plaintext","value":symbol.detail},
-                "range": occurrence_range(occurrence, &source.text),
-            })),
+            "textDocument/hover" => {
+                let hover_value = enriched_hover_detail(analysis.program.as_ref(), symbol);
+                Ok(json!({
+                    "contents":{"kind":"plaintext","value":hover_value},
+                    "range": occurrence_range(occurrence, &source.text),
+                }))
+            }
             "textDocument/definition" => Ok(declaration),
             "textDocument/references" => {
                 let include_declaration = params
@@ -842,6 +882,102 @@ impl Server {
             })
         }).collect::<Vec<_>>()}))
     }
+
+    fn formatting_response(&self, params: &Value) -> Result<Value, String> {
+        let uri = params
+            .pointer("/textDocument/uri")
+            .and_then(Value::as_str)
+            .ok_or("textDocument.uri is required")?;
+        let relative = self
+            .safe_relative(uri)
+            .ok_or("source is outside the Zelyra workspace")?;
+        let source = if let Some(document) = self.documents.get(uri) {
+            document.text.clone()
+        } else {
+            fs::read_to_string(self.root.join(&relative))
+                .map_err(|error| format!("cannot read document: {error}"))?
+        };
+        let Ok(tokens) = zelyra_lexer::lex(&source) else {
+            return Ok(json!([]));
+        };
+        if zelyra_parser::parse(&tokens).is_err() {
+            return Ok(json!([]));
+        }
+        let formatted = crate::formatter::format_source(&source, &tokens);
+        if formatted == source {
+            return Ok(json!([]));
+        }
+        Ok(json!([{
+            "range": {
+                "start": {"line": 0, "character": 0},
+                "end": offset_position(&source, source.len()),
+            },
+            "newText": formatted,
+        }]))
+    }
+}
+
+fn enriched_hover_detail(
+    program: Option<&zelyra_ast::Program>,
+    symbol: &semantic_index::Symbol,
+) -> String {
+    let Some(program) = program else {
+        return symbol.detail.clone();
+    };
+    let mut detail = symbol.detail.clone();
+    if symbol.detail.starts_with("table ") || symbol.key.starts_with("table:") {
+        if let Some(table) = program
+            .tables
+            .iter()
+            .find(|table| table.name == symbol.name)
+        {
+            for machine in &table.state_machines {
+                let transitions = machine
+                    .transitions
+                    .iter()
+                    .map(|transition| {
+                        let guard = if transition.guard.is_some() {
+                            " [guarded]"
+                        } else {
+                            ""
+                        };
+                        format!(
+                            "{} -> {}{guard}",
+                            transition.from,
+                            transition.to.join(" | ")
+                        )
+                    })
+                    .collect::<Vec<_>>()
+                    .join(", ");
+                detail.push_str(&format!("\nstates {}: {transitions}", machine.column));
+            }
+        }
+    } else if symbol.detail.starts_with("fn ")
+        || symbol.detail.starts_with("function ")
+        || symbol.key.starts_with("function:")
+    {
+        if let Some(function) = program.functions.iter().find(|function| {
+            function.name == symbol.name
+                || function.name.ends_with(&format!("__{}", symbol.name))
+        }) {
+            if !function.capabilities.is_empty() {
+                detail.push_str(&format!("\nuses {}", function.capabilities.join(", ")));
+            }
+            if !function.requires.is_empty() {
+                detail.push_str(&format!(
+                    "\nrequires: {} condition(s)",
+                    function.requires.len()
+                ));
+            }
+            if !function.ensures.is_empty() {
+                detail.push_str(&format!(
+                    "\nensures: {} condition(s)",
+                    function.ensures.len()
+                ));
+            }
+        }
+    }
+    detail
 }
 
 /// Resolve the existing portion of a new document path before accepting it.
@@ -1720,6 +1856,112 @@ mod tests {
             .unwrap()
             .iter()
             .any(|item| item["label"] == "total"));
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn lsp_formatting_enriched_hover_and_test_symbols() {
+        let root = std::env::temp_dir().join(format!(
+            "zelyra-lsp-140-{}-{:?}",
+            std::process::id(),
+            std::thread::current().id()
+        ));
+        fs::create_dir_all(&root).unwrap();
+        let main = root.join("main.zyl");
+        let unformatted = "table Invoice {\n  id: Id primary auto\n  status: String(24)\n  total: Int\n  states status {\n    draft -> sent when total > 0 : \"total must be positive\"\n    sent -> paid\n  }\n}\n\nfn approve(amount: Int) -> Int\nrequires {\n  amount > 0\n}\nensures {\n  result >= amount\n}\n{\n  return amount\n}\n\ntest \"approves positive invoice\" {\n  assert_eq(approve(10), 10)\n}\n\nfn main(){print(approve(1))}\n";
+        fs::write(&main, unformatted).unwrap();
+        let uri = Url::from_file_path(&main).unwrap().to_string();
+        let mut server = Server {
+            root: fs::canonicalize(&root).unwrap(),
+            documents: HashMap::new(),
+            shutdown: false,
+        };
+        server.documents.insert(
+            uri.clone(),
+            Document {
+                uri: uri.clone(),
+                relative: "main.zyl".into(),
+                text: unformatted.into(),
+                version: 1,
+            },
+        );
+
+        // 1. textDocument/formatting produces a clean whole-document TextEdit
+        let edits = server
+            .formatting_response(&json!({"textDocument":{"uri":uri}}))
+            .unwrap();
+        let edits_array = edits.as_array().unwrap();
+        assert_eq!(edits_array.len(), 1);
+        let formatted = edits_array[0]["newText"].as_str().unwrap();
+        assert!(formatted.contains("fn main() {"), "{formatted}");
+        assert!(formatted.contains("test \"approves positive invoice\" {"), "{formatted}");
+
+        // 2. Formatting an already-formatted document returns empty edits
+        server.documents.get_mut(&uri).unwrap().text = formatted.to_owned();
+        let noop_edits = server
+            .formatting_response(&json!({"textDocument":{"uri":uri}}))
+            .unwrap();
+        assert!(noop_edits.as_array().unwrap().is_empty());
+
+        // 3. Enriched hover for table with states and function with contracts
+        let table_offset = formatted.find("Invoice").unwrap();
+        let table_hover = server
+            .semantic_response(
+                "textDocument/hover",
+                &json!({
+                    "textDocument":{"uri":uri},
+                    "position":offset_position(formatted, table_offset)
+                }),
+            )
+            .unwrap();
+        let table_hover_text = table_hover["contents"]["value"].as_str().unwrap();
+        assert!(
+            table_hover_text.contains("states status: draft -> sent [guarded], sent -> paid"),
+            "{table_hover_text}"
+        );
+
+        let fn_offset = formatted.find("approve(amount").unwrap();
+        let fn_hover = server
+            .semantic_response(
+                "textDocument/hover",
+                &json!({
+                    "textDocument":{"uri":uri},
+                    "position":offset_position(formatted, fn_offset)
+                }),
+            )
+            .unwrap();
+        let fn_hover_text = fn_hover["contents"]["value"].as_str().unwrap();
+        assert!(fn_hover_text.contains("requires: 1 condition(s)"), "{fn_hover_text}");
+        assert!(fn_hover_text.contains("ensures: 1 condition(s)"), "{fn_hover_text}");
+
+        // 4. Document symbols include test blocks and completion includes assert_eq
+        let doc_symbols = server.symbol_response(
+            "textDocument/documentSymbol",
+            &json!({"textDocument":{"uri":uri}}),
+        );
+        assert!(doc_symbols
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|item| item["name"] == "test \"approves positive invoice\""));
+
+        let completions = server.symbol_response(
+            "textDocument/completion",
+            &json!({"textDocument":{"uri":uri}}),
+        );
+        assert!(completions
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|item| item["label"] == "assert_eq"));
+
+        // 5. Negative: invalid syntax returns empty formatting edits without erroring
+        server.documents.get_mut(&uri).unwrap().text = "fn broken( {".into();
+        let invalid_edits = server
+            .formatting_response(&json!({"textDocument":{"uri":uri}}))
+            .unwrap();
+        assert!(invalid_edits.as_array().unwrap().is_empty());
+
         fs::remove_dir_all(root).unwrap();
     }
 }
