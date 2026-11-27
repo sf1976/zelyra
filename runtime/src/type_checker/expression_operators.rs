@@ -2,6 +2,10 @@
 
 use super::*;
 
+fn is_money_applied(ty: &Type) -> bool {
+    matches!(ty, Type::Applied { name, args } if name == "Money" && args.len() == 1)
+}
+
 impl Checker<'_> {
     pub(super) fn check_binary_chain(
         &mut self,
@@ -27,6 +31,8 @@ impl Checker<'_> {
                         Type::String
                     } else if left_type == Type::Duration && right_type == Type::Duration {
                         Type::Duration
+                    } else if is_money_applied(&left_type) || is_money_applied(&right_type) {
+                        self.money_binary_result(&left_type, &right_type, span)
                     } else if let (Type::Array(left), Type::Array(right)) =
                         (&left_type, &right_type)
                     {
@@ -45,6 +51,10 @@ impl Checker<'_> {
                         && right_type == Type::Duration
                     {
                         Type::Duration
+                    } else if op == BinaryOp::Subtract
+                        && (is_money_applied(&left_type) || is_money_applied(&right_type))
+                    {
+                        self.money_binary_result(&left_type, &right_type, span)
                     } else {
                         self.numeric_result(&left_type, &right_type, span)
                     }
@@ -66,7 +76,10 @@ impl Checker<'_> {
                 | BinaryOp::LessEqual
                 | BinaryOp::Greater
                 | BinaryOp::GreaterEqual => {
-                    if left_type == right_type
+                    if is_money_applied(&left_type) || is_money_applied(&right_type) {
+                        self.money_binary_result(&left_type, &right_type, span);
+                        Type::Bool
+                    } else if left_type == right_type
                         && matches!(
                             left_type,
                             Type::String
@@ -90,6 +103,23 @@ impl Checker<'_> {
             };
         }
         left_type
+    }
+
+    fn money_binary_result(&mut self, left: &Type, right: &Type, span: Span) -> Type {
+        if left == &Type::Unknown || right == &Type::Unknown {
+            return Type::Unknown;
+        }
+        if is_money_applied(left) && left == right {
+            left.clone()
+        } else {
+            self.error(
+                span,
+                format!(
+                    "cannot mix currencies `{left}` and `{right}`; convert explicitly with `convert_money`"
+                ),
+            );
+            Type::Unknown
+        }
     }
 
     fn numeric_result(&mut self, left: &Type, right: &Type, span: Span) -> Type {

@@ -152,6 +152,93 @@ impl<'program, 'services> Interpreter<'program, 'services> {
             )?;
             self.output.push(value.output());
             Ok(Value::Unit)
+        } else if name == "money" && !self.program_context.functions.contains_key("money") {
+            if type_args.len() != 1 || args.len() != 1 {
+                return Err(self.runtime_error(
+                    span,
+                    "`money<Currency>(amount)` expects one currency type argument and one String amount",
+                ));
+            }
+            let raw = self.eval(&args[0], env)?;
+            let Value::String(source) = raw else {
+                return Err(
+                    self.runtime_error(args[0].span, "`money` expects a String decimal amount")
+                );
+            };
+            let trimmed = source.trim();
+            if let Some((_, frac)) = trimmed.split_once('.') {
+                if frac.len() > 4 {
+                    return Err(self.runtime_error(
+                        args[0].span,
+                        "`money` allows at most 4 fractional digits",
+                    ));
+                }
+            }
+            let scaled =
+                zelyra_ast::decimal::parse_scaled(trimmed, zelyra_ast::decimal::SCALE_DIGITS)
+                    .ok_or_else(|| {
+                        self.runtime_error(
+                            args[0].span,
+                            "`money` expects a valid base-10 decimal string",
+                        )
+                    })?;
+            Ok(Value::Decimal(scaled))
+        } else if name == "convert_money" {
+            if type_args.len() != 2 || args.len() != 2 {
+                return Err(self.runtime_error(
+                    span,
+                    "`convert_money<From, To>(amount, rate)` expects two currency type arguments, a Money value, and a Decimal rate",
+                ));
+            }
+            let amount = self.eval(&args[0], env)?;
+            let rate = self.eval(&args[1], env)?;
+            match (amount, rate) {
+                (Value::Decimal(amount), Value::Decimal(rate)) => {
+                    if rate <= 0 {
+                        return Err(self.runtime_error(
+                            args[1].span,
+                            "`convert_money` requires a positive exchange rate",
+                        ));
+                    }
+                    let product = amount.checked_mul(rate).ok_or_else(|| {
+                        self.runtime_error(span, "`convert_money` overflowed Decimal range")
+                    })?;
+                    let scale = 10_i128.pow(zelyra_ast::decimal::SCALE_DIGITS);
+                    let quotient = product / scale;
+                    let remainder = product % scale;
+                    let twice_rem = remainder.abs().saturating_mul(2);
+                    let rounded = if twice_rem > scale || (twice_rem == scale && quotient % 2 != 0)
+                    {
+                        if product >= 0 {
+                            quotient + 1
+                        } else {
+                            quotient - 1
+                        }
+                    } else {
+                        quotient
+                    };
+                    Ok(Value::Decimal(rounded))
+                }
+                _ => {
+                    Err(self
+                        .runtime_error(span, "`convert_money` expects Money and Decimal arguments"))
+                }
+            }
+        } else if name == "money_decimal" {
+            if type_args.len() != 1 || args.len() != 1 {
+                return Err(self.runtime_error(
+                    span,
+                    "`money_decimal<Currency>(amount)` expects one currency type argument and one Money value",
+                ));
+            }
+            let amount = self.eval(&args[0], env)?;
+            match amount {
+                Value::Decimal(scaled) => Ok(Value::Decimal(scaled)),
+                other => Err(self.runtime_error(
+                    args[0].span,
+                    format!("`money_decimal` expects Money, found {}", other.ty()),
+                )),
+            }
         } else if name == "assert" {
             if !(1..=2).contains(&args.len()) {
                 return Err(self.runtime_error(

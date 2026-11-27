@@ -1,5 +1,45 @@
 ## Unreleased
 
+## 1.6.0 — Financial & Temporal Integrity (`Money<Currency>`, append-only `ledger`, `auditable` tables, and EN 16931 E-Invoicing)
+
+- Add currency-safe `Money<Currency>` parameterized by ISO-4217 currency tags
+  (`EUR`, `USD`, `CHF`, `GBP`, `JPY`, `CAD`, `AUD`, `SEK`, `NOK`, `DKK`, `PLN`,
+  `CZK`, or user-defined types) with `money<C>(amount)`, `convert_money<From, To>(amount, rate)`
+  (exact `Decimal` half-even rounding), and `money_decimal<C>(amount)`.
+  Addition, subtraction, and comparisons require matching currencies; mixing
+  currencies (e.g. `Money<EUR> + Money<USD>`) fails at compile time. /
+  Währungssicheres `Money<Currency>` mit ISO-4217-Währungs-Tags (`EUR`, `USD`,
+  `CHF`, `GBP`, `JPY`, `CAD`, `AUD`, `SEK`, `NOK`, `DKK`, `PLN`, `CZK` oder
+  eigene Typen) inkl. `money<C>(betrag)`, `convert_money<Von, Nach>(betrag, kurs)`
+  (exakte `Decimal`-Half-Even-Rundung) und `money_decimal<C>(betrag)` ergänzen.
+  Addition, Subtraktion und Vergleiche erfordern identische Währungen; das
+  Mischen von Währungen (z. B. `Money<EUR> + Money<USD>`) schlägt zur
+  Compile-Zeit fehl.
+- Add append-only `ledger <name> { ... }` declarations and bitemporal
+  `table <name> auditable { ... }` modifiers. Schema validation requires `debit`
+  and `credit` columns on `ledger` tables and synthesizes `valid_from`,
+  `valid_to`, `recorded_at`, and `recorded_by` columns on `auditable` tables.
+  Any SQL `UPDATE` or `DELETE` targeting a `ledger` table is rejected at
+  compile time with **`E-LEDGER-001`**. Add `verify_ledger_balance(debits, credits)`
+  across AST, MIR, and Bytecode v30, and export `is_ledger` and `is_auditable`
+  in `zelyra reflect --format=json`. / Append-only `ledger <name> { ... }`-Deklarationen
+  und bitemporale `table <name> auditable { ... }`-Tabellen ergänzen. Die
+  Schemaprüfung verlangt `debit`- und `credit`-Spalten bei `ledger`-Tabellen
+  und erzeugt `valid_from`, `valid_to`, `recorded_at` und `recorded_by` bei
+  `auditable`-Tabellen. Jedes SQL-`UPDATE` oder `-DELETE` auf einer
+  `ledger`-Tabelle schlägt zur Compile-Zeit mit **`E-LEDGER-001`** fehl.
+  `verify_ledger_balance(debits, credits)` läuft über AST, MIR und Bytecode v30;
+  `zelyra reflect --format=json` exportiert `is_ledger` und `is_auditable`.
+- Add typed, zero-dependency, XXE-safe EN 16931 / Factur-X / XRechnung
+  CrossIndustryInvoice XML generation (`einvoice_xml(...)`) and validation
+  (`einvoice_validate(xml)`) across AST, MIR, and Bytecode v30, enforcing XML
+  escaping, ISO date/currency validation, `net + tax == gross` arithmetic
+  consistency, and `<!DOCTYPE`/`<!ENTITY` rejection. / Typisierte,
+  abhängigkeitsfreie und XXE-sichere EN-16931-/Factur-X-/XRechnung-XML-Erzeugung
+  (`einvoice_xml(...)`) und -Prüfung (`einvoice_validate(xml)`) über AST, MIR
+  und Bytecode v30 ergänzen (inkl. XML-Escaping, ISO-Datums-/Währungsprüfung,
+  `net + tax == gross`-Invariante und Abweisung von `<!DOCTYPE`/`<!ENTITY`).
+
 ## 1.5.0 — Living Business Processes (`states` v2, `four_eyes`, declarative `workflow`, and `zelyra doc --workflows`)
 
 - Extend declarative table state machines (`states` v2) with per-transition role

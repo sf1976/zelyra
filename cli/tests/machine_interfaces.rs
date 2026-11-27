@@ -6067,3 +6067,214 @@ fn main() {}
 
     fs::remove_dir_all(directory).unwrap();
 }
+
+#[test]
+fn financial_integrity_money_ledger_auditable_and_einvoice_work_and_fail_closed() {
+    let directory = temporary_directory("zelyra-160-financial");
+    fs::create_dir_all(&directory).unwrap();
+
+    // 1. Positive suite: Money<C>, ledger, auditable, verify_ledger_balance, einvoice_xml + einvoice_validate
+    let valid_file = directory.join("main.zyl");
+    fs::write(
+        &valid_file,
+        r#"
+ledger journal_entries {
+    id: Id primary auto
+    journal_id: Id required
+    account: String(64) required
+    debit: Decimal(12, 2) required
+    credit: Decimal(12, 2) required
+}
+
+table contracts auditable {
+    id: Id primary auto
+    title: String(120) required
+}
+
+test "currency-safe Money arithmetic, conversion, ledger balance, and EN 16931 e-invoice" {
+    a = money<EUR>("100.00")
+    b = money<EUR>("19.00")
+    gross_eur = a + b
+    assert_eq(money_decimal<EUR>(gross_eur), decimal("119.00"))
+    assert(gross_eur > a)
+
+    usd = convert_money<EUR, USD>(money<EUR>("100.00"), decimal("1.10"))
+    assert_eq(money_decimal<USD>(usd), decimal("110.00"))
+
+    balanced = assert_ok(verify_ledger_balance([decimal("100.00"), decimal("19.00")], [decimal("119.00")]))
+    assert_eq(balanced, decimal("119.00"))
+    imbalance = assert_err(verify_ledger_balance([decimal("100.00")], [decimal("99.00")]))
+    assert_eq(imbalance, "ledger imbalance: sum(debit) != sum(credit)")
+
+    xml = assert_ok(einvoice_xml(
+        "RE-2026-001",
+        "2026-11-27",
+        "EUR",
+        "Muster & Partner GmbH",
+        "Kunde <Nord> AG",
+        decimal("100.00"),
+        decimal("19.00"),
+        decimal("119.00")
+    ))
+    assert(text_contains(xml, "urn:cen.eu:en16931:2017"))
+    assert(text_contains(xml, "Muster &amp; Partner GmbH"))
+    assert(text_contains(xml, "Kunde &lt;Nord&gt; AG"))
+    assert_eq(assert_ok(einvoice_validate(xml)), true)
+
+    bad_math = assert_err(einvoice_xml(
+        "RE-2026-002",
+        "2026-11-27",
+        "EUR",
+        "Seller",
+        "Buyer",
+        decimal("100.00"),
+        decimal("19.00"),
+        decimal("120.00")
+    ))
+    assert(text_contains(bad_math, "arithmetic mismatch"))
+
+    xxe_err = assert_err(einvoice_validate("<!DOCTYPE foo><rsm:CrossIndustryInvoice/>"))
+    assert(text_contains(xxe_err, "XXE"))
+}
+
+fn main() {}
+"#,
+    )
+    .unwrap();
+
+    let test_res = run(&["test", valid_file.to_str().unwrap()]);
+    assert!(
+        test_res.status.success(),
+        "stdout: {}\nstderr: {}",
+        String::from_utf8_lossy(&test_res.stdout),
+        String::from_utf8_lossy(&test_res.stderr)
+    );
+
+    // Check bitemporal auditable columns in `zelyra db create`
+    let ddl_res = run(&["db", "create", valid_file.to_str().unwrap()]);
+    assert!(ddl_res.status.success());
+    let ddl = String::from_utf8_lossy(&ddl_res.stdout);
+    assert!(ddl.contains("valid_from"), "{ddl}");
+    assert!(ddl.contains("valid_to"), "{ddl}");
+    assert!(ddl.contains("recorded_at"), "{ddl}");
+    assert!(ddl.contains("recorded_by"), "{ddl}");
+
+    // Check `zelyra reflect --format=json` exports is_ledger & is_auditable
+    let reflect_res = run(&["reflect", valid_file.to_str().unwrap(), "--format=json"]);
+    assert!(reflect_res.status.success());
+    let reflect_json: serde_json::Value = serde_json::from_slice(&reflect_res.stdout).unwrap();
+    let tables = reflect_json["tables"].as_array().unwrap();
+    assert!(
+        tables
+            .iter()
+            .any(|t| t["name"] == "journal_entries" && t["is_ledger"] == true),
+        "{reflect_json}"
+    );
+    assert!(
+        tables
+            .iter()
+            .any(|t| t["name"] == "contracts" && t["is_auditable"] == true),
+        "{reflect_json}"
+    );
+
+    // Negative 1: Mixing Money<EUR> + Money<USD> fails at compile time
+    let mixed_currency = directory.join("mixed_currency.zyl");
+    fs::write(
+        &mixed_currency,
+        r#"
+fn main() {
+    a = money<EUR>("10.00")
+    b = money<USD>("10.00")
+    _ = a + b
+}
+"#,
+    )
+    .unwrap();
+    let mixed_res = run(&["check", mixed_currency.to_str().unwrap()]);
+    assert!(!mixed_res.status.success());
+    assert!(
+        String::from_utf8_lossy(&mixed_res.stderr).contains("cannot mix currencies"),
+        "{}",
+        String::from_utf8_lossy(&mixed_res.stderr)
+    );
+
+    // Negative 2: UPDATE on ledger fails at compile time with E-LEDGER-001
+    let ledger_update = directory.join("ledger_update.zyl");
+    fs::write(
+        &ledger_update,
+        r#"
+ledger journal_entries {
+    id: Id primary auto
+    debit: Decimal(12, 2) required
+    credit: Decimal(12, 2) required
+}
+
+fn tamper(entry_id: Id) uses Database(write) {
+    sql { UPDATE journal_entries SET debit = 0 WHERE id = :entry_id }
+}
+
+fn main() {}
+"#,
+    )
+    .unwrap();
+    let update_res = run(&["check", ledger_update.to_str().unwrap()]);
+    assert!(!update_res.status.success());
+    assert!(
+        String::from_utf8_lossy(&update_res.stderr).contains("E-LEDGER-001"),
+        "{}",
+        String::from_utf8_lossy(&update_res.stderr)
+    );
+
+    // Negative 3: DELETE on ledger fails at compile time with E-LEDGER-001
+    let ledger_delete = directory.join("ledger_delete.zyl");
+    fs::write(
+        &ledger_delete,
+        r#"
+ledger journal_entries {
+    id: Id primary auto
+    debit: Decimal(12, 2) required
+    credit: Decimal(12, 2) required
+}
+
+fn wipe(entry_id: Id) uses Database(write) {
+    sql { DELETE FROM journal_entries WHERE id = :entry_id }
+}
+
+fn main() {}
+"#,
+    )
+    .unwrap();
+    let delete_res = run(&["check", ledger_delete.to_str().unwrap()]);
+    assert!(!delete_res.status.success());
+    assert!(
+        String::from_utf8_lossy(&delete_res.stderr).contains("E-LEDGER-001"),
+        "{}",
+        String::from_utf8_lossy(&delete_res.stderr)
+    );
+
+    // Backward compatibility: user-defined `fn money() -> Money` shadows `money<C>(...)`
+    let shadow_money = directory.join("shadow_money.zyl");
+    fs::write(
+        &shadow_money,
+        r#"
+fn money() -> Money {
+    return json_decode<Money>("\"19.99\"")
+}
+
+fn main() {
+    print(money())
+}
+"#,
+    )
+    .unwrap();
+    let shadow_res = run(&["run", shadow_money.to_str().unwrap()]);
+    assert!(
+        shadow_res.status.success(),
+        "stdout: {}\nstderr: {}",
+        String::from_utf8_lossy(&shadow_res.stdout),
+        String::from_utf8_lossy(&shadow_res.stderr)
+    );
+    assert_eq!(String::from_utf8_lossy(&shadow_res.stdout).trim(), "19.99");
+
+    fs::remove_dir_all(directory).unwrap();
+}

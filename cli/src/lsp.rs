@@ -762,6 +762,13 @@ impl Server {
                     ("four_eyes", 14, "requires four_eyes(<creator_column>)"),
                     ("after", 14, "after <duration> in <state> -> <target>"),
                     ("compensate", 14, "compensate [on <state>] [uses ...] { ... }"),
+                    ("ledger", 14, "ledger <name> { ... } (append-only zero-sum ledger)"),
+                    ("auditable", 14, "table <name> auditable { ... } (bitemporal history)"),
+                    ("money", 3, "money<Currency>(amount) -> Money<Currency>"),
+                    ("convert_money", 3, "convert_money<From, To>(amount, rate) -> Money<To>"),
+                    ("verify_ledger_balance", 3, "verify_ledger_balance(debits, credits) -> Result<Decimal, String>"),
+                    ("einvoice_xml", 3, "einvoice_xml(...) -> Result<String, String>"),
+                    ("einvoice_validate", 3, "einvoice_validate(xml) -> Result<Bool, String>"),
                 ] {
                     completions.push(json!({
                         "label": label,

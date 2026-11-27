@@ -273,6 +273,7 @@ mod package_settings;
 mod policies;
 mod repl;
 pub use policies::{FileSystemPolicy, MailPolicy, NetworkPolicy, ProcessPolicy, RuntimePolicy};
+mod einvoice;
 mod pdf;
 mod pdf_template;
 mod pure_builtins;
@@ -1130,6 +1131,13 @@ fn is_runtime_builtin(name: &str) -> bool {
             | "assert_ne"
             | "assert_ok"
             | "assert_err"
+            // `money` is intentionally omitted here so legacy programs defining `fn money()`
+            // can shadow the `money<Currency>(amount)` builtin while keeping `money<C>(...)` working otherwise.
+            | "convert_money"
+            | "money_decimal"
+            | "verify_ledger_balance"
+            | "einvoice_xml"
+            | "einvoice_validate"
             | "render_markdown"
             | "markdown_toc"
             | "render_pdf"

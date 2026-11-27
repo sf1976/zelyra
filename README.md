@@ -11,19 +11,20 @@ for database-backed business and web applications. It brings schema-aware SQL,
 forms, CRUD, views, and application logic together while keeping ordinary code
 and native SQL available.
 
-> **Release 1.5.0 · language compatibility line: 0.1** · [GitHub release](https://github.com/sf1976/zelyra/releases/tag/v1.5.0)
+> **Release 1.6.0 · language compatibility line: 0.1** · [GitHub release](https://github.com/sf1976/zelyra/releases/tag/v1.6.0)
 >
 > Compiler checks and the verifier cover defined scopes. They do not prove arbitrary applications correct. Review the documented support and limits for each workflow before deployment.
 
-Zelyra 1.5.0 adds `states` v2 (`requires role(...)` and native fail-closed
-`requires four_eyes(<creator_col>)` enforced under `SELECT ... FOR UPDATE`),
-declarative `workflow <Name> on <Table>.<column>` blocks (`after`, `on enter`,
-`compensate`) with static type/capability checking and timer-cycle verification
-in `zelyra verify`, deterministic Mermaid process diagrams via
-`zelyra doc --workflows`, `workflows`/`four_eyes` export in `zelyra reflect`,
-and enriched `zelyra lsp` symbols and hover. AST remains the default;
+Zelyra 1.6.0 adds currency-safe `Money<Currency>` (compile-time rejection of
+mixed currencies, exact `Decimal` `convert_money<From, To>`), append-only
+`ledger` declarations (`UPDATE`/`DELETE` rejected at compile time with
+`E-LEDGER-001`, plus `verify_ledger_balance`), bitemporal `auditable` tables
+(`valid_from`, `valid_to`, `recorded_at`, `recorded_by`), and zero-dependency,
+XXE-safe EN 16931 e-invoice XML generation and validation (`einvoice_xml`,
+`einvoice_validate`). AST remains the default;
 experimental MIR and Bytecode remain opt-in and fail closed for unsupported
 constructs. The business starter is not a completed ERP. See the
+[1.6.0 release notes](docs/release-notes/1.6.0.en.md),
 [1.5.0 release notes](docs/release-notes/1.5.0.en.md),
 [1.4.0 release notes](docs/release-notes/1.4.0.en.md),
 [1.3.6 release notes](docs/release-notes/1.3.6.en.md),

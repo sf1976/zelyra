@@ -115,6 +115,8 @@ fn build(program: &zelyra_ast::Program, sources: &[project::ProjectSource]) -> V
             "storage_name": column.storage_name,
         })).collect::<Vec<_>>(),
         "tenant_scope": table.tenant_scope.as_ref().map(|scope| json!({ "column": scope.column, "type": scope.tenant_type.to_string() })),
+        "is_ledger": table.is_ledger,
+        "is_auditable": table.is_auditable,
         "state_machines": table.state_machines.iter().map(|machine| json!({
             "column": machine.column,
             "initial": machine.initial_state(table),
