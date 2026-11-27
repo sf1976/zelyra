@@ -6941,7 +6941,11 @@ fn test_rich_assertion_builtins_pass_and_fail_cleanly() {
     .unwrap();
     check(&eq_fail).unwrap();
     let err = execute(&eq_fail).unwrap_err();
-    assert!(err.message.contains("expected `1` == `2`"), "{}", err.message);
+    assert!(
+        err.message.contains("expected `1` == `2`"),
+        "{}",
+        err.message
+    );
 
     let ne_fail = parse(
         &lex(r#"
@@ -6968,7 +6972,11 @@ fn test_rich_assertion_builtins_pass_and_fail_cleanly() {
     .unwrap();
     check(&ok_fail).unwrap();
     let err = execute(&ok_fail).unwrap_err();
-    assert!(err.message.contains("expected Ok, found Err(boom)"), "{}", err.message);
+    assert!(
+        err.message.contains("expected Ok, found Err(boom)"),
+        "{}",
+        err.message
+    );
 
     let err_fail = parse(
         &lex(r#"
@@ -6982,7 +6990,11 @@ fn test_rich_assertion_builtins_pass_and_fail_cleanly() {
     .unwrap();
     check(&err_fail).unwrap();
     let err = execute(&err_fail).unwrap_err();
-    assert!(err.message.contains("expected Err, found Ok(9)"), "{}", err.message);
+    assert!(
+        err.message.contains("expected Err, found Ok(9)"),
+        "{}",
+        err.message
+    );
 
     let type_mismatch = parse(
         &lex(r#"

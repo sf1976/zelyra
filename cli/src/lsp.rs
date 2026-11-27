@@ -741,7 +741,11 @@ impl Server {
                     ("assert_ok", 3, "assert_ok(result[, message]) -> T"),
                     ("assert_err", 3, "assert_err(result[, message]) -> E"),
                     ("test", 14, "test \"description\" [uses ...] { ... }"),
-                    ("states", 14, "states <column> { <from> -> <to> [when ...] }"),
+                    (
+                        "states",
+                        14,
+                        "states <column> { <from> -> <to> [when ...] }",
+                    ),
                     ("when", 14, "transition guard predicate"),
                 ] {
                     completions.push(json!({
@@ -957,8 +961,7 @@ fn enriched_hover_detail(
         || symbol.key.starts_with("function:")
     {
         if let Some(function) = program.functions.iter().find(|function| {
-            function.name == symbol.name
-                || function.name.ends_with(&format!("__{}", symbol.name))
+            function.name == symbol.name || function.name.ends_with(&format!("__{}", symbol.name))
         }) {
             if !function.capabilities.is_empty() {
                 detail.push_str(&format!("\nuses {}", function.capabilities.join(", ")));
@@ -1894,7 +1897,10 @@ mod tests {
         assert_eq!(edits_array.len(), 1);
         let formatted = edits_array[0]["newText"].as_str().unwrap();
         assert!(formatted.contains("fn main() {"), "{formatted}");
-        assert!(formatted.contains("test \"approves positive invoice\" {"), "{formatted}");
+        assert!(
+            formatted.contains("test \"approves positive invoice\" {"),
+            "{formatted}"
+        );
 
         // 2. Formatting an already-formatted document returns empty edits
         server.documents.get_mut(&uri).unwrap().text = formatted.to_owned();
@@ -1931,8 +1937,14 @@ mod tests {
             )
             .unwrap();
         let fn_hover_text = fn_hover["contents"]["value"].as_str().unwrap();
-        assert!(fn_hover_text.contains("requires: 1 condition(s)"), "{fn_hover_text}");
-        assert!(fn_hover_text.contains("ensures: 1 condition(s)"), "{fn_hover_text}");
+        assert!(
+            fn_hover_text.contains("requires: 1 condition(s)"),
+            "{fn_hover_text}"
+        );
+        assert!(
+            fn_hover_text.contains("ensures: 1 condition(s)"),
+            "{fn_hover_text}"
+        );
 
         // 4. Document symbols include test blocks and completion includes assert_eq
         let doc_symbols = server.symbol_response(

@@ -350,8 +350,8 @@ fn discover_test_targets(path: &Path) -> Result<Vec<PathBuf>, String> {
 }
 
 fn collect_zyl_files(dir: &Path, out: &mut Vec<PathBuf>) -> Result<(), String> {
-    let entries = fs::read_dir(dir)
-        .map_err(|error| format!("cannot read `{}`: {error}", dir.display()))?;
+    let entries =
+        fs::read_dir(dir).map_err(|error| format!("cannot read `{}`: {error}", dir.display()))?;
     for entry in entries {
         let entry = entry.map_err(|error| format!("cannot read directory entry: {error}"))?;
         let path = entry.path();

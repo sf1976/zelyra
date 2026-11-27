@@ -90,9 +90,8 @@ pub fn with_rollback_transaction<T>(
             })
         });
         return match outcome {
-            Err(error) if error.message == ROLLBACK_SENTINEL => Ok(captured.expect(
-                "rollback sentinel is only returned after capturing operation result",
-            )),
+            Err(error) if error.message == ROLLBACK_SENTINEL => Ok(captured
+                .expect("rollback sentinel is only returned after capturing operation result")),
             Err(error) => Err(error),
             Ok(()) => unreachable!("rollback transaction must never commit"),
         };

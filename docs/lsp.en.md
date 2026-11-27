@@ -6,9 +6,13 @@ folder as a workspace so Zelyra can resolve imports and project configuration.
 Opening a source file does not run the program.
 
 Supported features include initialization and shutdown, versioned document
-changes, diagnostics, completion, hover, definition, references, rename,
-document symbols, and workspace symbols. Positions use LSP UTF-16. The server
-analyzes open source buffers without writing their contents to disk.
+changes, diagnostics, formatting (`textDocument/formatting`), completion
+(including `assert_eq`/`assert_ne`/`assert_ok`/`assert_err`, `test`, `states`,
+and `when`), hover (including table `states` transitions and function
+`uses`/`requires`/`ensures` metadata), definition, references, rename,
+document symbols (including `test` blocks), and workspace symbols. Positions
+use LSP UTF-16. The server analyzes open source buffers without writing their
+contents to disk.
 
 ## VS Code and Cursor
 

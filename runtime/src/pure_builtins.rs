@@ -245,20 +245,14 @@ pub fn execute_pure_builtin(
                 Value::Result(Err(err)) if name == "assert_ok" => Err(builtin_error(
                     span,
                     message.unwrap_or_else(|| {
-                        format!(
-                            "assertion failed: expected Ok, found Err({})",
-                            err.output()
-                        )
+                        format!("assertion failed: expected Ok, found Err({})", err.output())
                     }),
                 )),
                 Value::Result(Err(inner)) if name == "assert_err" => Ok((**inner).clone()),
                 Value::Result(Ok(val)) if name == "assert_err" => Err(builtin_error(
                     span,
                     message.unwrap_or_else(|| {
-                        format!(
-                            "assertion failed: expected Err, found Ok({})",
-                            val.output()
-                        )
+                        format!("assertion failed: expected Err, found Ok({})", val.output())
                     }),
                 )),
                 other => Err(builtin_error(
