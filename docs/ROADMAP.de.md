@@ -35,55 +35,63 @@ Abschnitte bleiben als historische Planung und Nachweise erhalten; sie legen
 für sich keine aktuellen Releaseziele fest. Langfristige Ideen stehen im
 Abschnitt zur Weiterentwicklung nach 1.0.0.
 
-## Releasefolge bis 2.0.0
+## Releasefolge bis 2.0.0 — Die *Proof-Carrying Business Language*
 
-Diese Folge ist der verbindliche Plan für aktive Arbeiten. Jedes aktive offene
-Ziel ist einem Release zugeordnet; historische Backlog-Einträge bleiben als
-Kontext erhalten und sind keine zusätzlichen, unversionierten Zusagen. Ein
-Release gilt erst nach Implementierung, Dokumentation, positiven und negativen
-Tests sowie den jeweiligen Sicherheits- und Kompatibilitätsprüfungen als
-abgeschlossen.
+Diese Folge ist der verbindliche Plan für aktive Arbeiten ab **Zelyra 1.3.6**.
+Die vollständige strategische Positionierung, die 5 einzigartigen Säulen,
+Syntaxentwürfe und detaillierten Abnahmekriterien jeder Version stehen in der
+[Vision & Anforderungsspezifikation 2.0](VISION-2.0.de.md).
+
+> **Strategische Leitlinie:** Zelyra baut kein weiteres generisches
+> Web-Framework nach, sondern entwickelt sich zur weltweit ersten
+> **Proof-Carrying Business Language**: Geschäftsprozesse (`states` + `workflow`
+> + `four_eyes`), Finanz- und Zeit-Integrität (`Money<C>`, `ledger`,
+> `auditable`), Zero-Leak-Datenflüsse (Mandanten-SQL, `@pii`/`@secret`,
+> feingranulare Capabilities) und KI-Änderungen werden vom Compiler geprüft und
+> per `zelyra certify` als kryptografisch nachprüfbares Zertifikat ausgeliefert.
+
+Jedes aktive offene Ziel ist einem Release zugeordnet; historische
+Backlog-Einträge bleiben als Kontext erhalten und sind keine zusätzlichen,
+unversionierten Zusagen. Ein Release gilt erst nach Implementierung,
+Dokumentation, positiven und negativen Tests sowie den jeweiligen Sicherheits-
+und Kompatibilitätsprüfungen als abgeschlossen.
 
 ### Produktetappen
 
 | Version | Schwerpunkt | Abschlusskriterium |
 | --- | --- | --- |
-| 1.2.56 | Studio-Menüs Datei/Bearbeiten, lesbare UI und SQL-Arbeitsplatz | Als [v1.2.56](https://github.com/sf1976/zelyra/releases/tag/v1.2.56) veröffentlicht; vollständige PR-CI, reproduzierbare Linux-/Windows-Pakete, Prüfsummen und SPDX-SBOMs bestanden. |
-| 1.3.0 | Compiler- und Studio-Grundlage | Veröffentlicht mit kanonischen Datenbankvorlagen, Architekturprüfung und deklarationsbezogener Migrationsvorschau sowie compilergeführten Studio-Abläufen. AST bleibt Standard; MIR/Bytecode bleiben optional und nicht unterstützte Pfade scheitern geschlossen. |
-| 1.3.1–1.3.50 | Härtung anhand zweier nativer Zelyra-Projekte | Nach Veröffentlichung von 1.3.0 werden breite neue Features eingefroren. Zuerst werden der Passwortgenerator im Work-Modus und der manuell verwaltete Kundenbereich ausschließlich mit Zelyra umgesetzt und geprüft. Erst wenn der Passwortgenerator funktioniert, beginnt Mini-ERP Benchmark 01 als erste integrierte Geschäftsanwendung; dabei entdeckte Sprachlücken werden in Zelyra selbst behoben. 1.3.50 wird an den Abnahmekriterien des Benchmarks gemessen; Unvollständiges wird klar ausgewiesen. |
-| 1.4.0 | Zelyra Visual Design Platform | Ein produktiver erster Schnitt mit gemeinsamem Komponentenregister und Vorschau, Zelyra-Quellcode als einziger maßgeblicher Beschreibung, Theme-/Style-Core, visueller Formularbearbeitung und sicherer Quellsynchronisierung. Phase 0 beginnt nach 1.3.0 mit Bestandsanalyse und Spezifikation. |
-| 1.5.0 | Bytecode-Reife und Standard-Gate | Bytecode wird nur bei belegter Parität, sicherem fail-closed Verhalten, geprüften Artefakt-Upgrades und messbarem Nutzen Standard. Andernfalls bleibt AST Standard und Bytecode optional. |
-| 1.6.0 | Pakete, Module und Deployment | Wiederverwendbare, vertrauensgeprüfte Module und reproduzierbare Offline-/Deployment-Bundles werden an realen Verbraucherprojekten abgenommen; keine stabile native ABI wird vorausgesetzt. |
-| 1.7.0 | Geprüfte Geschäftsabläufe | Ausgewählte Abläufe aus realen Geschäftsanwendungen werden funktional nachgewiesen. Dazu gehören sichere mandantengefilterte Abfragen über verbundene Tabellen, Kampagnenausschlüsse und der kontrollierte Versand strukturierter E-Rechnungsdokumente. |
-| 1.8.0 | Kontrollierte Integrationen | Optionale Erweiterungen wie Wasm oder Sidecars kommen nur mit expliziter Capability-, Vertrauens-, Update- und Ressourcenprüfung hinzu. Ungeprüfte Plugins werden kein Standard. |
-| 1.9.0 | 2.0-Härtung | Feature-Freeze, Kompatibilitäts- und Migrationsregeln, Sicherheits-/Performancebelege, Installations- und Upgradeprüfungen sowie vollständige zweisprachige Handbücher. Keine neuen Großfeatures. |
-| 2.0.0 | Stabile Plattform | Veröffentlichte Sprach-, Paket-, Laufzeit-, CSS- und Artefaktverträge samt Upgradepfad und Supportmatrix sind festgelegt und geprüft. Offene optionale Backends werden nicht als fertig vorausgesetzt. |
+| 1.2.56 ✅ | Studio-Menüs Datei/Bearbeiten, lesbare UI und SQL-Arbeitsplatz | Als [v1.2.56](https://github.com/sf1976/zelyra/releases/tag/v1.2.56) veröffentlicht; vollständige PR-CI, reproduzierbare Linux-/Windows-Pakete, Prüfsummen und SPDX-SBOMs bestanden. |
+| 1.3.0 ✅ | Compiler- und Studio-Grundlage | Veröffentlicht mit kanonischen Datenbankvorlagen, Architekturprüfung, Migrationsvorschau und compilergeführten Studio-Abläufen. |
+| 1.3.5–1.3.6 ✅ | Sprach- & Invarianten-Durchbruch (`states`, `transaction`, `?`, Mandanten-Joins) | Als [v1.3.5](https://github.com/sf1976/zelyra/releases/tag/v1.3.5) und [v1.3.6](https://github.com/sf1976/zelyra/releases/tag/v1.3.6) veröffentlicht: deklarative Tabellen-Zustandsmaschinen (`states` + `when`-Guards), Kontrollfluss-Entscheidungstransaktionen, Postfix-`?` über AST/MIR/Bytecode v30 (inkl. Transaktions-Rollback), SQL-Upserts/Row-Locks und compilergeprüfte Mehrtabellen-Mandanten-`SELECT`-Abfragen (`INNER`/`LEFT JOIN`). |
+| 1.4.0 🗺️ | **Production Core & Developer Joy** | Native gepoolte DB-Treiber für MariaDB/MySQL und PostgreSQL auf voller Laufzeitparität, erstklassiges `zelyra test` (mit automatischer DB-Rollback-Sandbox & Contract-/Property-Fuzzing), String-Interpolation (strikt außerhalb von SQL), generische Funktionen, produktionsreifer `zelyra lsp` (VS Code/Zed/Neovim/JetBrains) sowie Härtung über Passwortgenerator und Mini-ERP Benchmark 01. |
+| 1.5.0 🗺️ | **Living Business Processes (`states` v2, `four_eyes` & `workflow`)** | Rollen- und Kind-Aggregat-Guards an Zustandsübergängen, natives Vier-Augen-Prinzip (`requires four_eyes`) unter `SELECT ... FOR UPDATE`, zeitgebundene deklarative Workflows & Kompensations-Sagas (`after ... in ...`, `on enter`, `compensate`) über Outbox/Scheduler sowie statische Deadlock-/Prozess-Verifikation (`zelyra verify`, `zelyra doc --workflows`). |
+| 1.6.0 🗺️ | **Financial & Temporal Integrity (`Money<C>`, `ledger`, `auditable`, E-Invoicing)** | Währungssicheres `Money<EUR>` (Mischen von Währungen ist Compile-Fehler), deklaratives append-only Nullsummen-`ledger` (`sum(debit) == sum(credit)`, `UPDATE`/`DELETE` via `E-LEDGER-001` verboten, kryptografische Hash-Kette), bitemporale Tabellen (`auditable` + `AS OF`) sowie typisiertes EN-16931-/Factur-X-/XRechnung-XML + PDF/A-3 in der Outbox. |
+| 1.7.0 🗺️ | **Zero-Leak Information Flow & Fine-Grained Capabilities** | Erweiterte fail-closed Mandanten-SQL-Algebra (nicht-rekursive `WITH`-CTEs, `GROUP BY`/`HAVING`, mandantensichere Batch-Writes), statisches Datenschutz-Taint-Tracking (`@pii`, `@secret`, `@redact` mit `E-PRIVACY-001`), compiler-generierter DSGVO-Katalog (`zelyra privacy map\|export-plan\|erase-plan`) und ressourcengenaue Capabilities (`Database(read/write)`, `Network(allow: [...])`, `FileSystem(scope: ...)`). |
+| 1.8.0 🗺️ | **Proof-Carrying Software, AI-Verified Engineering & Sovereign Deployment** | Kryptografisch signiertes Compiler-Zertifikat (`zelyra certify` → `zelyra-proof.json`), semantische PR-/KI-Diff-Verifikation (`zelyra diff-verify --fail-on-privilege-escalation`), reproduzierbares Single-Binary-Deployment (`zelyra build --bundle`), Bytecode-Standard-Gate (nur bei belegter Parität & gemessenem Nutzen) sowie opt-in Wasm-Erweiterungen unter Capability-Sandbox. |
+| 1.9.0 🗺️ | **2.0 Hardening, Zero-Downtime Migrations & Studio Polish** | Feature-Freeze, Zero-Downtime-Schema-Migrationen (`zelyra db plan --zero-downtime`: `expand -> backfill -> contract`), Zelyra Studio 2.0 (interaktiver Schema-, State-Machine-, Workflow- & `@pii`-Explorer mit Quelltext als einziger Source of Truth), lokale telemetriefreie Observability (`/__zelyra/metrics`), No-Telemetry-CI-Gate und vollständige zweisprachige Handbücher. |
+| 2.0.0 🗺️ | **The Proof-Carrying Business Language (LTS)** | Stabile Sprachlinie `1.0` (3-Jahres-LTS-Pflege), verbindliche Verträge für `reflect`, `certify`, `diff-verify`, `lsp`, `zelyra.lock` und Zelyra-UI-CSS, vollständige MariaDB-/PostgreSQL-Parität und reproduzierbare Mini-ERP-Referenz mit signiertem `zelyra-proof.json`. |
 
-Die Ziele 1.6.0 bis 1.8.0 sind eine priorisierte Planungsfolge, keine pauschale
-Vollständigkeitszusage für sämtliche denkbaren Funktionen. Nach jedem Release
-werden Umfang und Nachweise gegen reale Zelyra-Anwendungen überprüft. Offene
-1.3.0- oder 1.4.0-Abnahmekriterien werden nicht stillschweigend auf spätere
-Versionen verschoben.
+Die Ziele `1.4.0` bis `2.0.0` sind eine priorisierte, verbindliche Planungsfolge
+mit klaren Exit-Kriterien (Details siehe [VISION-2.0.de.md](VISION-2.0.de.md)),
+keine pauschale Zusage für unbewiesene Funktionen. Nach jedem Release werden
+Umfang und Nachweise gegen reale Zelyra-Anwendungen überprüft.
 
-Der erste Abgleich hat zwei konkrete Fähigkeitslücken offengelegt. Erstens
-weist Zelyras Compiler benutzerdefinierte SQL-Abfragen über mandantengeschützte
-Tabellen mit `E-TENANT-003` zurück. Der Versuch, Empfänger für eine Kampagne
-über Kunden, Abmeldungen und kampagnenspezifische Ausschlüsse zu bestimmen,
-konnte deshalb nicht sicher als Zelyra-Ablauf umgesetzt werden. Das ist eine
-bewusste Schutzgrenze und darf nicht durch Entfernen der Mandantenmarkierung
-umgangen werden. 1.7.0 muss einen geprüften, compilergebundenen Weg für solche
-mandantengefilterten Mehrtabellenabfragen samt Isolationstests bereitstellen.
+**Aktueller Abgleich der realen Fähigkeitslücken (Stand `1.3.6`):**
+- ✅ **Mehrtabellen-Mandanten-`SELECT` (Kampagnenausschlüsse):** Seit `1.3.6`
+  durch `verify_tenant_scoped_select` fail-closed für `INNER JOIN` und
+  `LEFT [OUTER] JOIN` über `tenant_scope`-Tabellen in typisierten
+  `program.functions` mit einem gemeinsamen nominalen `TenantId`-Parameter
+  gelöst und getestet. Erweiterungen (nicht-rekursive `WITH`-CTEs,
+  Aggregationen, mandantensichere Batch-Writes) sind verbindliches Ziel für
+  `1.7.0`.
+- 🗺️ **Typisierte E-Rechnung (Factur-X / ZUGFeRD / XRechnung XML + PDF/A-3):**
+  Zelyras transaktionale Outbox hängt aktuell erzeugte PDF-Dateien an;
+  schemageprüftes, typisiertes Erzeugen und Anhängen validierter
+  EN-16931-XML-Dokumente ist verbindlicher Abnahmepunkt für `1.6.0`. Bis zur
+  Implementierung und Prüfung wird diese Fähigkeit nicht als unterstützt
+  dargestellt.
 
-Zweitens kann Zelyras transaktionale Outbox derzeit erzeugte PDF-Dateien
-anhängen; die Referenzanwendung hängt Rechnungen zusätzlich als Factur-X-XML
-an. Sicheres, typisiertes Anhängen validierter XML-Dokumente ist deshalb
-ebenfalls ein Abnahmepunkt für 1.7.0. Bis zur Implementierung und Prüfung wird
-keine dieser beiden Fähigkeiten als unterstützt dargestellt. Weitere noch
-nicht geprüfte Geschäftsabläufe sind keine bestätigte Sprachlücke; sie bleiben
-als „nicht bewertet“ markiert, bis ein reproduzierbarer Zelyra-Versuch das
-Ergebnis belegt.
-
-### Härtung 1.3.1–1.3.50: Passwortgenerator, danach Mini-ERP Benchmark 01
+### Praxis-Härtung (eingebunden in 1.4.0): Passwortgenerator, danach Mini-ERP Benchmark 01
 
 Diese Phase beginnt nach Abschluss von 1.3.0. Zelyra selbst wird unter
 `/opt/` installiert und betreibt einen Kundenbereich ohne öffentliche
