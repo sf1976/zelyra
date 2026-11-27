@@ -152,7 +152,7 @@ impl<'program, 'services> Interpreter<'program, 'services> {
             )?;
             self.output.push(value.output());
             Ok(Value::Unit)
-        } else if name == "money" {
+        } else if name == "money" && !self.program_context.functions.contains_key("money") {
             if type_args.len() != 1 || args.len() != 1 {
                 return Err(self.runtime_error(
                     span,

@@ -91,7 +91,7 @@ impl Checker<'_> {
                 self.check_expr(arg, scopes);
             }
             Type::Unit
-        } else if name == "money" {
+        } else if name == "money" && !self.functions.contains_key("money") {
             if type_args.len() != 1 || args.len() != 1 {
                 self.error(
                     span,
