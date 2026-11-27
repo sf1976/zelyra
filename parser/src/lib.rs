@@ -381,9 +381,8 @@ impl<'a> Parser<'a> {
                         ));
                     }
                 };
-                let duration_seconds = amount
-                    .checked_mul(multiplier)
-                    .ok_or_else(|| ParseError {
+                let duration_seconds =
+                    amount.checked_mul(multiplier).ok_or_else(|| ParseError {
                         message: "workflow duration overflowed u64 seconds".into(),
                         span: timer_start,
                     })?;
@@ -3069,121 +3068,119 @@ impl<'a> Parser<'a> {
         while !self.at(&TokenKind::RBrace) && !self.at(&TokenKind::Eof) {
             let (from, from_span) = self.state_label("state name")?;
             self.expect(TokenKind::Arrow, "`->` after state name")?;
-            let (to, is_final, guard, required_roles, four_eyes_column, rule_end) =
-                if self.at_word("final") {
-                    let (_, final_span) = self.ident("`final`")?;
-                    if self.at(&TokenKind::Comma)
-                        || self.at_word("when")
-                        || self.at(&TokenKind::Requires)
-                    {
-                        return self.error(
+            let (to, is_final, guard, required_roles, four_eyes_column, rule_end) = if self
+                .at_word("final")
+            {
+                let (_, final_span) = self.ident("`final`")?;
+                if self.at(&TokenKind::Comma)
+                    || self.at_word("when")
+                    || self.at(&TokenKind::Requires)
+                {
+                    return self.error(
                             "`final` cannot be combined with outgoing state transitions, roles, four_eyes, or guards",
                         );
-                    }
-                    (Vec::new(), true, None, Vec::new(), None, final_span)
-                } else {
-                    let mut targets = Vec::new();
-                    let (first, mut last_span) = self.state_label("target state name")?;
-                    if first == "final" {
-                        return self.error("`final` cannot be used as a transition target");
-                    }
-                    targets.push(first);
-                    if self.at(&TokenKind::Comma) {
-                        while self.at(&TokenKind::Comma) {
-                            self.advance();
-                            self.skip_newlines();
-                            let (target, target_span) = self.state_label("target state name")?;
-                            if target == "final" {
-                                return self.error(
-                                    "`final` cannot be combined with outgoing state transitions",
-                                );
-                            }
-                            last_span = target_span;
-                            targets.push(target);
-                        }
-                        if self.at_word("when") || self.at(&TokenKind::Requires) {
+                }
+                (Vec::new(), true, None, Vec::new(), None, final_span)
+            } else {
+                let mut targets = Vec::new();
+                let (first, mut last_span) = self.state_label("target state name")?;
+                if first == "final" {
+                    return self.error("`final` cannot be used as a transition target");
+                }
+                targets.push(first);
+                if self.at(&TokenKind::Comma) {
+                    while self.at(&TokenKind::Comma) {
+                        self.advance();
+                        self.skip_newlines();
+                        let (target, target_span) = self.state_label("target state name")?;
+                        if target == "final" {
                             return self.error(
-                                "guarded or policy-checked transitions (`when`/`requires`) must specify a single target state per line",
+                                "`final` cannot be combined with outgoing state transitions",
                             );
                         }
-                        (targets, false, None, Vec::new(), None, last_span)
-                    } else {
-                        let mut required_roles = Vec::new();
-                        let mut four_eyes_column: Option<String> = None;
-                        let mut guard: Option<zelyra_ast::TableStateTransitionGuardDef> = None;
-                        loop {
-                            if self.at(&TokenKind::Requires) {
-                                self.advance();
-                                loop {
-                                    if self.at_word("role") {
-                                        self.advance();
-                                        self.expect(TokenKind::LParen, "`(` after `role`")?;
-                                        let role = self.string_value("role name")?;
-                                        let end_paren =
-                                            self.expect(TokenKind::RParen, "`)` after role name")?;
-                                        last_span = end_paren;
-                                        required_roles.push(role);
-                                    } else if self.at_word("four_eyes") {
-                                        if four_eyes_column.is_some() {
-                                            return self.error(
+                        last_span = target_span;
+                        targets.push(target);
+                    }
+                    if self.at_word("when") || self.at(&TokenKind::Requires) {
+                        return self.error(
+                                "guarded or policy-checked transitions (`when`/`requires`) must specify a single target state per line",
+                            );
+                    }
+                    (targets, false, None, Vec::new(), None, last_span)
+                } else {
+                    let mut required_roles = Vec::new();
+                    let mut four_eyes_column: Option<String> = None;
+                    let mut guard: Option<zelyra_ast::TableStateTransitionGuardDef> = None;
+                    loop {
+                        if self.at(&TokenKind::Requires) {
+                            self.advance();
+                            loop {
+                                if self.at_word("role") {
+                                    self.advance();
+                                    self.expect(TokenKind::LParen, "`(` after `role`")?;
+                                    let role = self.string_value("role name")?;
+                                    let end_paren =
+                                        self.expect(TokenKind::RParen, "`)` after role name")?;
+                                    last_span = end_paren;
+                                    required_roles.push(role);
+                                } else if self.at_word("four_eyes") {
+                                    if four_eyes_column.is_some() {
+                                        return self.error(
                                                 "`four_eyes(...)` can only be declared once per state transition",
                                             );
-                                        }
-                                        self.advance();
-                                        self.expect(TokenKind::LParen, "`(` after `four_eyes`")?;
-                                        let (creator_col, _) =
-                                            self.field_ident("creator column name")?;
-                                        let end_paren = self.expect(
-                                            TokenKind::RParen,
-                                            "`)` after four_eyes column name",
-                                        )?;
-                                        last_span = end_paren;
-                                        four_eyes_column = Some(creator_col);
-                                    } else {
-                                        return self.error(
+                                    }
+                                    self.advance();
+                                    self.expect(TokenKind::LParen, "`(` after `four_eyes`")?;
+                                    let (creator_col, _) =
+                                        self.field_ident("creator column name")?;
+                                    let end_paren = self.expect(
+                                        TokenKind::RParen,
+                                        "`)` after four_eyes column name",
+                                    )?;
+                                    last_span = end_paren;
+                                    four_eyes_column = Some(creator_col);
+                                } else {
+                                    return self.error(
                                             "expected `role(\"...\")` or `four_eyes(<column>)` after `requires`",
                                         );
-                                    }
-                                    if self.at(&TokenKind::Comma) {
-                                        self.advance();
-                                        continue;
-                                    }
-                                    break;
                                 }
-                            } else if self.at_word("when") {
-                                if guard.is_some() {
-                                    return self.error(
-                                        "`when` guard can only be declared once per state transition",
-                                    );
+                                if self.at(&TokenKind::Comma) {
+                                    self.advance();
+                                    continue;
                                 }
-                                let (_, when_span) = self.ident("`when`")?;
-                                let condition = self.expression()?;
-                                self.expect(
-                                    TokenKind::Colon,
-                                    "`:` after transition guard condition",
-                                )?;
-                                let message_span = self.current().span;
-                                let message = self.string_value("transition guard message")?;
-                                last_span = message_span;
-                                guard = Some(zelyra_ast::TableStateTransitionGuardDef {
-                                    condition,
-                                    message,
-                                    span: when_span.join(message_span),
-                                });
-                            } else {
                                 break;
                             }
+                        } else if self.at_word("when") {
+                            if guard.is_some() {
+                                return self.error(
+                                    "`when` guard can only be declared once per state transition",
+                                );
+                            }
+                            let (_, when_span) = self.ident("`when`")?;
+                            let condition = self.expression()?;
+                            self.expect(TokenKind::Colon, "`:` after transition guard condition")?;
+                            let message_span = self.current().span;
+                            let message = self.string_value("transition guard message")?;
+                            last_span = message_span;
+                            guard = Some(zelyra_ast::TableStateTransitionGuardDef {
+                                condition,
+                                message,
+                                span: when_span.join(message_span),
+                            });
+                        } else {
+                            break;
                         }
-                        (
-                            targets,
-                            false,
-                            guard,
-                            required_roles,
-                            four_eyes_column,
-                            last_span,
-                        )
                     }
-                };
+                    (
+                        targets,
+                        false,
+                        guard,
+                        required_roles,
+                        four_eyes_column,
+                        last_span,
+                    )
+                }
+            };
             transitions.push(zelyra_ast::TableStateTransitionDef {
                 from,
                 to,

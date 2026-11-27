@@ -13821,17 +13821,13 @@ fn execute_form_action_with_children(
                                 merged.extend(
                                     values.iter().map(|(k, v)| (k.clone(), v.clone())),
                                 );
-                                let actor_roles = granted_permissions
-                                    .iter()
-                                    .cloned()
-                                    .collect::<Vec<_>>();
                                 if let Some(policy_rejection) = evaluate_state_transition_policy(
                                     machine,
                                     current,
                                     next,
                                     &merged,
                                     actor_user_id,
-                                    &actor_roles,
+                                    granted_permissions,
                                 ) {
                                     return Err(zelyra_database::DatabaseError {
                                         message: format!(

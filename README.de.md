@@ -11,20 +11,21 @@ Business-, Datenbank- und Webanwendungen. Schemaabhängiges SQL, Formulare,
 CRUD, Views und Geschäftslogik greifen ineinander; gewöhnlicher Programmcode
 und natives SQL bleiben jederzeit möglich.
 
-> **Release 1.4.0 · Sprachkompatibilitätslinie: 0.1** · [GitHub-Release](https://github.com/sf1976/zelyra/releases/tag/v1.4.0)
+> **Release 1.5.0 · Sprachkompatibilitätslinie: 0.1** · [GitHub-Release](https://github.com/sf1976/zelyra/releases/tag/v1.5.0)
 >
 > Die Compilerprüfung und der Verifier decken klar abgegrenzte Bereiche ab. Sie beweisen nicht die Korrektheit beliebiger Anwendungen. Prüfe vor dem Einsatz die unterstützten Abläufe und Grenzen in der jeweiligen Dokumentation.
 
-Zelyra 1.4.0 ergänzt erstklassige deklarative `test "Beschreibung" [uses ...] { ... }`-Blöcke
-und den CLI-Runner `zelyra test` (mit `--filter`, deterministischem
-`--format json` und automatischer Rollback-Datenbank-Sandbox für MariaDB/MySQL
-und PostgreSQL), ausdrucksstarke Assertions (`assert_eq`, `assert_ne`,
-`assert_ok`, `assert_err`) über AST, MIR und Bytecode v30 sowie
-LSP-Erweiterungen inkl. `textDocument/formatting`, angereichertem
-`states`-/Contract-Hover und `test`-Dokumentensymbolen. AST bleibt
+Zelyra 1.5.0 ergänzt `states` v2 (`requires role(...)` und natives fail-closed
+`requires four_eyes(<ersteller_spalte>)` unter `SELECT ... FOR UPDATE`),
+deklarative `workflow <Name> on <Table>.<column>`-Blöcke (`after`, `on enter`,
+`compensate`) mit statischer Typ-/Capability-Prüfung und Timer-Zyklus-Verifikation
+in `zelyra verify`, deterministische Mermaid-Prozessdiagramme über
+`zelyra doc --workflows`, `workflows`-/`four_eyes`-Export in `zelyra reflect`
+sowie erweiterte `zelyra lsp`-Symbole und Hover-Details. AST bleibt
 Standard; experimentelles MIR und Bytecode bleiben opt-in und weisen nicht
 unterstützte Konstrukte geschlossen ab. Der Business-Starter ist noch kein
 fertiges ERP. Siehe die
+[Release-Notizen 1.5.0](docs/release-notes/1.5.0.de.md),
 [Release-Notizen 1.4.0](docs/release-notes/1.4.0.de.md),
 [Release-Notizen 1.3.6](docs/release-notes/1.3.6.de.md),
 [Release-Notizen 1.3.5](docs/release-notes/1.3.5.de.md),

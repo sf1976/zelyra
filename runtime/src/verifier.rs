@@ -182,11 +182,7 @@ pub fn verify(program: &Program) -> Vec<VerificationResult> {
     results
 }
 
-fn verify_workflow(
-    program: &Program,
-    workflow: &WorkflowDef,
-    index: usize,
-) -> VerificationResult {
+fn verify_workflow(program: &Program, workflow: &WorkflowDef, index: usize) -> VerificationResult {
     let target_label = format!("{}.{}", workflow.table, workflow.column);
     let Some(machine) = program
         .tables

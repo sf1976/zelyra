@@ -5951,13 +5951,28 @@ fn main() {}
         String::from_utf8_lossy(&doc_res.stderr)
     );
     let doc_out = String::from_utf8_lossy(&doc_res.stdout);
-    assert!(doc_out.contains("## PurchaseApproval (purchase_orders.status)"), "{doc_out}");
+    assert!(
+        doc_out.contains("## PurchaseApproval (purchase_orders.status)"),
+        "{doc_out}"
+    );
     assert!(doc_out.contains("[role: approver]"), "{doc_out}");
     assert!(doc_out.contains("[four-eyes: created_by]"), "{doc_out}");
-    assert!(doc_out.contains("[guarded] Amount must be positive."), "{doc_out}");
-    assert!(doc_out.contains("submitted --> escalate_order : [after 72h]"), "{doc_out}");
-    assert!(doc_out.contains("note right of approved : on enter"), "{doc_out}");
-    assert!(doc_out.contains("note right of rejected : compensate"), "{doc_out}");
+    assert!(
+        doc_out.contains("[guarded] Amount must be positive."),
+        "{doc_out}"
+    );
+    assert!(
+        doc_out.contains("submitted --> escalate_order : [after 72h]"),
+        "{doc_out}"
+    );
+    assert!(
+        doc_out.contains("note right of approved : on enter"),
+        "{doc_out}"
+    );
+    assert!(
+        doc_out.contains("note right of rejected : compensate"),
+        "{doc_out}"
+    );
 
     // Negative 1: four_eyes referencing non-identity Decimal column fails schema check
     let bad_four_eyes = directory.join("bad_four_eyes.zyl");

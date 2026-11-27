@@ -18,9 +18,10 @@ pub(crate) fn evaluate_state_transition_policy(
     actor_user_id: Option<i64>,
     actor_roles: &[String],
 ) -> Option<String> {
-    let rule = machine.transitions.iter().find(|rule| {
-        rule.from == from_state && rule.to.iter().any(|target| target == to_state)
-    })?;
+    let rule = machine
+        .transitions
+        .iter()
+        .find(|rule| rule.from == from_state && rule.to.iter().any(|target| target == to_state))?;
     if !rule.required_roles.is_empty() {
         let has_role = rule
             .required_roles
@@ -354,8 +355,8 @@ mod tests {
     }
 
     #[test]
-    fn four_eyes_rejects_self_approval_unauthenticated_and_missing_creator_and_allows_second_approver()
-    {
+    fn four_eyes_rejects_self_approval_unauthenticated_and_missing_creator_and_allows_second_approver(
+    ) {
         let machine = sample_machine();
         let mut row = HashMap::new();
         row.insert("created_by".into(), "42".into());

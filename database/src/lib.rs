@@ -1391,8 +1391,10 @@ fn validate_table_state_machines(
                         Type::Option(inner) => inner.as_ref(),
                         other => other,
                     };
-                    let is_identity = matches!(inner_creator, Type::Int | Type::UInt | Type::String)
-                        || matches!(inner_creator, Type::Named(name) if matches!(name.as_str(), "Id" | "Uuid"));
+                    let is_identity = matches!(
+                        inner_creator,
+                        Type::Int | Type::UInt | Type::String
+                    ) || matches!(inner_creator, Type::Named(name) if matches!(name.as_str(), "Id" | "Uuid"));
                     if !is_identity {
                         errors.push(SchemaError {
                             message: format!(
