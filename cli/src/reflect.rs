@@ -243,6 +243,12 @@ fn build(program: &zelyra_ast::Program, sources: &[project::ProjectSource]) -> V
     workflows.sort_by(|a, b| a["name"].as_str().cmp(&b["name"].as_str()));
 
     let authorization = json!({
+        "matrix": zelyra_runtime::authorization_matrix(program).iter().map(|finding| json!({
+            "target": finding.function,
+            "evidence_class": finding.evidence_class().as_str(),
+            "reason": finding.message,
+            "source": source_location(finding.span, sources),
+        })).collect::<Vec<_>>(),
         "auth_configured": !program.auth.is_empty(),
         "protected_apis": program.apis.iter().filter(|a| a.requires_auth).count(),
         "public_apis": program.apis.iter().filter(|a| !a.requires_auth).count(),

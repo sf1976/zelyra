@@ -105,7 +105,7 @@ impl TaintVal {
 struct SinkFlags {
     log_sink: bool,
     error_sink: bool,
-    network_sink: bool,
+    external_sink: bool,
     redact_sink: bool,
 }
 
@@ -123,7 +123,7 @@ impl FunctionSummary {
         for (current, previous) in self.param_sinks.iter_mut().zip(&previous.param_sinks) {
             current.log_sink |= previous.log_sink;
             current.error_sink |= previous.error_sink;
-            current.network_sink |= previous.network_sink;
+            current.external_sink |= previous.external_sink;
             current.redact_sink |= previous.redact_sink;
         }
         self
@@ -153,10 +153,26 @@ fn unwrap_inner_type_name(ty: &Type) -> Option<&str> {
     }
 }
 
+pub(crate) fn program_uses_privacy(program: &Program) -> bool {
+    program.tables.iter().any(|t| {
+        t.columns
+            .iter()
+            .any(|c| c.privacy != PrivacyClass::Public || c.redact)
+    }) || program.records.iter().any(|r| {
+        r.fields
+            .iter()
+            .any(|f| f.privacy != PrivacyClass::Public || f.redact)
+    }) || program
+        .functions
+        .iter()
+        .any(|f| f.params.iter().any(|p| p.privacy != PrivacyClass::Public))
+}
+
 struct PrivacySchemaIndex<'a> {
     tables: HashMap<String, &'a TableDef>,
     records: HashMap<String, &'a RecordDef>,
     known_tables: Vec<String>,
+    has_classified_data: bool,
 }
 
 impl<'a> PrivacySchemaIndex<'a> {
@@ -175,6 +191,7 @@ impl<'a> PrivacySchemaIndex<'a> {
             tables,
             records,
             known_tables,
+            has_classified_data: program_uses_privacy(program),
         }
     }
 
@@ -246,16 +263,13 @@ impl<'a> PrivacySchemaIndex<'a> {
         }
         let mut summary = PrivacyClass::Public;
         for col in &projected.columns {
-            if let Some(p) = fields.get(col) {
-                summary = max_privacy(summary, *p);
-            } else {
-                // Case-insensitive lookup fallback
-                for (k, p) in &fields {
-                    if k.eq_ignore_ascii_case(col) {
-                        summary = max_privacy(summary, *p);
-                    }
-                }
-            }
+            let projected_class = fields
+                .iter()
+                .filter(|(name, _)| name.eq_ignore_ascii_case(col))
+                .map(|(_, class)| *class)
+                .reduce(max_privacy)
+                .unwrap_or(all_table_summary);
+            summary = max_privacy(summary, projected_class);
         }
         TaintVal {
             summary,
@@ -391,17 +405,12 @@ fn split_top_level_commas(input: &str) -> Vec<&str> {
 }
 
 fn trailing_column_ident(expr: &str) -> Option<String> {
-    let clean = expr.trim();
-    let candidate = clean.rsplit('.').next()?.trim();
-    if !candidate.is_empty()
-        && candidate
-            .bytes()
-            .all(|b| b.is_ascii_alphanumeric() || b == b'_')
-    {
-        Some(candidate.to_owned())
-    } else {
-        None
-    }
+    let mut parts = expr.trim().split('.').map(str::trim);
+    let candidate = parts.next_back()?;
+    let is_ident = |name: &str| {
+        !name.is_empty() && name.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'_')
+    };
+    (is_ident(candidate) && parts.all(is_ident)).then(|| candidate.to_owned())
 }
 
 fn summarize_functions(
@@ -502,6 +511,23 @@ pub fn check_privacy(program: &Program) -> Result<(), Vec<PrivacyError>> {
                     span: data.span,
                 });
             }
+        }
+    }
+    for view in &program.tableviews {
+        let level = max_privacy(
+            schema.sql_query_taint(&view.source).summary,
+            schema.type_taint(&view.result_type).summary,
+        );
+        let protected = view.requires_auth || !view.permissions.is_empty();
+        if level == PrivacyClass::Secret || (level == PrivacyClass::Pii && !protected) {
+            errors.push(PrivacyError {
+                code: "E-PRIVACY-001",
+                message: format!(
+                    "tableview `{}` exposes classified data outside its permitted route scope",
+                    view.name
+                ),
+                span: view.span,
+            });
         }
     }
 
@@ -770,9 +796,14 @@ fn check_sink(
             match sink_kind {
                 "print" => flags.log_sink = true,
                 "Err" => flags.error_sink = true,
-                "http_get" | "http_request" | "http_json" | "http_result" | "http" => {
-                    flags.network_sink = true
-                }
+                "http_get"
+                | "http_request"
+                | "http_json"
+                | "http_result"
+                | "mail_queue"
+                | "mail_queue_template"
+                | "mail_deliver"
+                | "external delivery" => flags.external_sink = true,
                 "redact" => flags.redact_sink = true,
                 _ => {}
             }
@@ -948,6 +979,19 @@ fn analyze_expr(
                 .map(|arg| analyze_expr(arg, schema, summaries, env, out_summary, errors))
                 .collect::<Vec<_>>();
 
+            if schema.has_classified_data
+                && (env.contains_key(name)
+                    || matches!(name.as_str(), "map" | "filter" | "find" | "reduce"))
+            {
+                errors.push(PrivacyError {
+                    code: "E-PRIVACY-001",
+                    message: format!(
+                        "privacy checks cannot verify indirect call `{name}`; use a named helper"
+                    ),
+                    span: expr.span,
+                });
+            }
+
             match name.as_str() {
                 "print" => {
                     if let Some(t) = arg_taints.first() {
@@ -971,7 +1015,13 @@ fn analyze_expr(
                             .map_or(PrivacyClass::Public, |t| t.summary),
                     );
                 }
-                "http_get" | "http_request" | "http_json" | "http_result" => {
+                "http_get"
+                | "http_request"
+                | "http_json"
+                | "http_result"
+                | "mail_queue"
+                | "mail_queue_template"
+                | "mail_deliver" => {
                     for (arg, taint) in args.iter().zip(&arg_taints) {
                         check_sink(taint, name, true, true, arg.span, out_summary, errors);
                     }
@@ -1010,8 +1060,16 @@ fn analyze_expr(
                         if flags.redact_sink {
                             check_sink(arg_taint, "redact", false, true, span, out_summary, errors);
                         }
-                        if flags.network_sink {
-                            check_sink(arg_taint, "http", true, true, span, out_summary, errors);
+                        if flags.external_sink {
+                            check_sink(
+                                arg_taint,
+                                "external delivery",
+                                true,
+                                true,
+                                span,
+                                out_summary,
+                                errors,
+                            );
                         }
                     }
                 }

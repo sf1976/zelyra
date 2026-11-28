@@ -224,28 +224,11 @@ pub fn verify(program: &Program) -> Vec<VerificationResult> {
     for (index, workflow) in program.workflows.iter().enumerate() {
         results.push(verify_workflow(program, workflow, index));
     }
-    if program_uses_privacy(program) {
+    if crate::privacy::program_uses_privacy(program) {
         results.push(verify_privacy(program));
     }
-    if program_uses_authorization(program) {
-        results.extend(verify_authorization_gates(program, &functions));
-    }
+    results.extend(authorization_matrix(program));
     results
-}
-
-fn program_uses_privacy(program: &Program) -> bool {
-    program.tables.iter().any(|t| {
-        t.columns
-            .iter()
-            .any(|c| c.privacy != PrivacyClass::Public || c.redact)
-    }) || program.records.iter().any(|r| {
-        r.fields
-            .iter()
-            .any(|f| f.privacy != PrivacyClass::Public || f.redact)
-    }) || program
-        .functions
-        .iter()
-        .any(|f| f.params.iter().any(|p| p.privacy != PrivacyClass::Public))
 }
 
 fn verify_privacy(program: &Program) -> VerificationResult {
@@ -330,11 +313,17 @@ fn handler_writes_database(function: &Function) -> bool {
     })
 }
 
-fn verify_authorization_gates(
-    program: &Program,
-    functions: &HashMap<String, &Function>,
-) -> Vec<VerificationResult> {
-    let mut violations = Vec::new();
+/// Authorization findings for the declarative API, generated CRUD, and state policies.
+pub fn authorization_matrix(program: &Program) -> Vec<VerificationResult> {
+    if !program_uses_authorization(program) {
+        return Vec::new();
+    }
+    let functions = program
+        .functions
+        .iter()
+        .map(|function| (function.name.as_str(), function))
+        .collect::<HashMap<_, _>>();
+    let mut results = Vec::new();
     let strict_auth_context = !program.auth.is_empty()
         || program
             .tables
@@ -345,10 +334,10 @@ fn verify_authorization_gates(
             let writes_db = api
                 .handler
                 .as_ref()
-                .and_then(|name| functions.get(name))
+                .and_then(|name| functions.get(name.as_str()))
                 .is_some_and(|func| handler_writes_database(func));
             if writes_db {
-                violations.push(VerificationResult {
+                results.push(VerificationResult {
                     function: api
                         .handler
                         .clone()
@@ -366,9 +355,111 @@ fn verify_authorization_gates(
                 });
             }
         }
+        if let Some(scope) = api.validates_table.as_ref().and_then(|name| {
+            program
+                .tables
+                .iter()
+                .find(|table| table.name == *name)?
+                .tenant_scope
+                .as_ref()
+        }) {
+            let membership_configured = program.auth.iter().any(|auth| {
+                auth.membership_table.is_some()
+                    || (auth.tenant_owner_table.is_some() && auth.tenant_owner_column.is_some())
+            });
+            let authenticated = api.requires_auth && membership_configured;
+            results.push(VerificationResult {
+                function: format!("{} {}", api.method, api.path),
+                kind: ContractKind::Authorization,
+                index: idx,
+                status: if authenticated { VerificationStatus::RuntimeCheck } else { VerificationStatus::Failed },
+                span: api.span,
+                message: if authenticated {
+                    format!("Tenant entry `{}` is supplied by verified session membership or ownership. Checked SQL requires the same tenant throughout the API call.", scope.column)
+                } else {
+                    "Scoped API validation requires authentication and a configured tenant membership or ownership source.".into()
+                },
+                counterexample: None,
+            });
+        }
     }
-    if !violations.is_empty() {
-        return violations;
+
+    for (index, crud) in program.cruds.iter().enumerate() {
+        let expected_tenant = program
+            .tables
+            .iter()
+            .find(|table| table.name == crud.table)
+            .and_then(|table| table.tenant_scope.as_ref())
+            .map(|scope| scope.column.as_str());
+        let expected_recipient = program.cruds.iter().find_map(|other| {
+            (other.table == crud.table)
+                .then_some(other.recipient_column.as_deref())
+                .flatten()
+        });
+        if expected_tenant.is_some_and(|column| crud.tenant_column.as_deref() != Some(column))
+            || expected_recipient
+                .is_some_and(|column| crud.recipient_column.as_deref() != Some(column))
+        {
+            results.push(VerificationResult {
+                function: format!("CRUD {}", crud.name),
+                kind: ContractKind::Authorization,
+                index,
+                status: VerificationStatus::Failed,
+                span: crud.span,
+                message: format!("Generated CRUD for `{}` must retain its declared tenant and recipient boundaries.", crud.table),
+                counterexample: None,
+            });
+            continue;
+        }
+        if crud.tenant_column.is_some()
+            || crud.recipient_column.is_some()
+            || !crud.permissions.is_empty()
+            || !crud.create_permissions.is_empty()
+            || !crud.edit_permissions.is_empty()
+            || !crud.delete_permissions.is_empty()
+            || !crud.conditional_permissions.is_empty()
+            || !crud.guards.is_empty()
+        {
+            results.push(VerificationResult {
+                function: format!("CRUD {}", crud.name),
+                kind: ContractKind::Authorization,
+                index,
+                status: VerificationStatus::RuntimeCheck,
+                span: crud.span,
+                message: format!(
+                    "Generated object `{}` checks tenant field {:?}, recipient field {:?}, access permissions {:?}, create/edit/delete permissions {:?}/{:?}/{:?}, and {} conditional permission(s) and {} lifecycle guard(s) at runtime.",
+                    crud.table, crud.tenant_column, crud.recipient_column, crud.permissions,
+                    crud.create_permissions, crud.edit_permissions, crud.delete_permissions,
+                    crud.conditional_permissions.len(), crud.guards.len()
+                ),
+                counterexample: None,
+            });
+        }
+    }
+
+    for table in &program.tables {
+        for machine in &table.state_machines {
+            for (index, transition) in machine.transitions.iter().enumerate() {
+                if transition.required_roles.is_empty() && transition.four_eyes_column.is_none() {
+                    continue;
+                }
+                results.push(VerificationResult {
+                    function: format!("{}.{}:{}", table.name, machine.column, transition.from),
+                    kind: ContractKind::Authorization,
+                    index,
+                    status: VerificationStatus::RuntimeCheck,
+                    span: transition.span,
+                    message: format!("Generated transitions to {:?} check actor roles {:?} and the four-eyes column {:?} before a state change. Role provisioning and writers outside generated routes are assumed.", transition.to, transition.required_roles, transition.four_eyes_column),
+                    counterexample: None,
+                });
+            }
+        }
+    }
+    if results
+        .iter()
+        .any(|entry| entry.status == VerificationStatus::Failed)
+    {
+        return results;
     }
 
     let protected_apis = program.apis.iter().filter(|a| a.requires_auth).count();
@@ -399,7 +490,7 @@ fn verify_authorization_gates(
         .or_else(|| program.tables.first().map(|t| t.span))
         .unwrap_or_default();
 
-    vec![VerificationResult {
+    results.push(VerificationResult {
         function: "__authorization__".into(),
         kind: ContractKind::Authorization,
         index: 0,
@@ -409,7 +500,8 @@ fn verify_authorization_gates(
             "API authentication gate verified for database-write declarations in protected, tenant, or ledger projects. Declarations include {protected_apis} auth-gated API(s), {tenant_tables} tenant-scoped table(s), {role_transitions} role-gated and {four_eyes_transitions} four-eyes transition(s). Identity provisioning and session secrets remain ASSUMED."
         ),
         counterexample: None,
-    }]
+    });
+    results
 }
 
 fn verify_workflow(program: &Program, workflow: &WorkflowDef, index: usize) -> VerificationResult {

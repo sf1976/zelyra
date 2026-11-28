@@ -4813,6 +4813,11 @@ fn mail_queue_creates_a_validated_outbox_row_inside_one_database_batch() {
     let source = r#"
 database main { engine: mariadb database: "outbox_test" }
 table accounts { id: Id primary auto balance: Int required }
+struct Receipt { description: String }
+view ReceiptMail {
+    props { description: String }
+    html { <p>{description}</p> }
+}
 fn enqueue() uses Email, Database(write) {
     transaction {
         mail_queue("customer@example.test", "Invoice ready", "Your invoice is ready.")
@@ -4821,6 +4826,12 @@ fn enqueue() uses Email, Database(write) {
 }
 fn invalid_recipient() uses Email, Database(write) {
     transaction { mail_queue("not-an-email", "Invoice ready", "Your invoice is ready.") }
+}
+fn enqueue_template() uses Email(templates: ["ReceiptMail"]), Database(write: [_zelyra_outbox]) {
+    receipt = Receipt { description: "<receipt>" }
+    transaction {
+        mail_queue_template("ReceiptMail", "customer@example.test", "Receipt ready", receipt)
+    }
 }
 fn main() {}
 "#;
@@ -4876,6 +4887,57 @@ fn main() {}
     .unwrap_err();
     assert!(invalid.message.contains("invalid message"));
     assert_eq!(host.calls.load(Ordering::Relaxed), 1);
+
+    let approved = HashSet::from([
+        "Email(templates: [ReceiptMail])".to_owned(),
+        "Database(write: [_zelyra_outbox])".to_owned(),
+    ]);
+    execute_function_with_host_services_and_capabilities_and_policies(
+        &program,
+        "enqueue_template",
+        Vec::new(),
+        Some(database_url),
+        Some(&approved),
+        None,
+        host.clone(),
+    )
+    .unwrap();
+    let batches = host.batches.lock().unwrap();
+    assert!(batches[1].1);
+    assert_eq!(batches[1].0.len(), 1);
+    let zelyra_database::QueryValue::String(payload) = &batches[1].0[0].params[2].1 else {
+        panic!("expected a JSON mail payload");
+    };
+    let payload: serde_json::Value = serde_json::from_str(payload).unwrap();
+    assert_eq!(payload["text"], "Receipt ready");
+    assert!(payload["html"]
+        .as_str()
+        .unwrap()
+        .contains("<p>&lt;receipt&gt;</p>"));
+    drop(batches);
+
+    let unapproved = source.replace(
+        "Email(templates: [\"ReceiptMail\"])",
+        "Email(templates: [\"OtherMail\"])",
+    );
+    let unapproved = parse(&lex(&unapproved).unwrap()).unwrap();
+    check(&unapproved).unwrap();
+    assert!(check_capabilities(&unapproved)
+        .unwrap_err()
+        .iter()
+        .any(|error| error.message.contains("Email(templates: [ReceiptMail])")));
+    let error = execute_function_with_host_services_and_capabilities_and_policies(
+        &unapproved,
+        "enqueue_template",
+        Vec::new(),
+        Some(database_url),
+        None,
+        None,
+        host.clone(),
+    )
+    .unwrap_err();
+    assert!(error.message.contains("Email(templates: [ReceiptMail])"));
+    assert_eq!(host.calls.load(Ordering::Relaxed), 2);
 }
 
 #[test]

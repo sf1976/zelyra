@@ -995,6 +995,7 @@ impl<'a> Resolver<'a> {
                             | "http_json"
                             | "http_result"
                             | "mail_queue"
+                            | "mail_queue_template"
                             | "render_markdown"
                             | "markdown_toc"
                             | "render_pdf"

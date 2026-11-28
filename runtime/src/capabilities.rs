@@ -1087,6 +1087,19 @@ fn check_capability_expr(
                         }
                     }
                 }
+                if name == "mail_queue_template" {
+                    if let Some(ExprKind::String(template)) = args.first().map(|arg| &arg.kind) {
+                        require_capability(
+                            &format!("Email(templates: [{template}])"),
+                            "mail template",
+                            expression.span,
+                            function,
+                            declared,
+                            errors,
+                            uses,
+                        );
+                    }
+                }
                 if let Some(callee) = functions.get(name.as_str()) {
                     for capability in &callee.capabilities {
                         if parse_capability_spec(capability).is_some() {
@@ -1183,6 +1196,10 @@ pub fn builtin_capability_requirements(name: &str) -> &'static [(&'static str, &
             ("Email", "email delivery"),
             ("Database(write)", "transactional mail queue write"),
         ],
+        "mail_queue_template" => &[(
+            "Database(write: [_zelyra_outbox])",
+            "transactional mail queue write",
+        )],
         "mail_deliver" => &[("Email", "email delivery")],
         "run_process" | "run_process_piped" => &[("Process", "process execution")],
         "read_text" | "read_text_result" | "file_exists" | "dir_exists" | "file_size"

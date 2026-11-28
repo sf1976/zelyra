@@ -1,6 +1,85 @@
 use super::*;
 
 impl<'program, 'services> Interpreter<'program, 'services> {
+    pub(crate) fn prepare_template_mail(
+        &mut self,
+        args: &[Expr],
+        env: &mut Environment,
+        span: Span,
+    ) -> Result<zelyra_database::Query, RuntimeError> {
+        let [template, recipient, subject, data] = args else {
+            return Err(self.runtime_error(
+                span,
+                "mail_queue_template expects a view name, recipient, subject, and record",
+            ));
+        };
+        let ExprKind::String(template_name) = &template.kind else {
+            return Err(self.runtime_error(
+                template.span,
+                "mail_queue_template requires a literal view name",
+            ));
+        };
+        let view = self
+            .program_context
+            .view_definitions
+            .get(template_name)
+            .copied()
+            .ok_or_else(|| {
+                self.runtime_error(template.span, "mail_queue_template names an unknown view")
+            })?;
+        self.require_runtime_capability(
+            &format!("Email(templates: [{template_name}])"),
+            "mail template",
+            template.span,
+        )?;
+        self.require_runtime_capability(
+            "Database(write: [_zelyra_outbox])",
+            "transactional mail queue write",
+            span,
+        )?;
+        if !self
+            .database_url
+            .as_deref()
+            .is_some_and(supports_mail_outbox_database)
+        {
+            return Err(self.runtime_error(
+                span,
+                "mail_queue_template requires a MariaDB or MySQL outbox",
+            ));
+        }
+        if ![recipient, subject, data]
+            .into_iter()
+            .all(is_pure_mail_expression)
+        {
+            return Err(self.runtime_error(
+                span,
+                "mail_queue_template arguments must be values or pure expressions",
+            ));
+        }
+        let recipient_value = self.eval(recipient, env)?;
+        let subject_value = self.eval(subject, env)?;
+        let data_value = self.eval(data, env)?;
+        if !matches!(&data_value, Value::Object { .. }) {
+            return Err(self.runtime_error(
+                data.span,
+                "mail_queue_template expects a record for the view",
+            ));
+        }
+        let html = interpolate_pdf_data(&view.html, &data_value)
+            .map_err(|_| self.runtime_error(template.span, "could not render the mail template"))?;
+        prepare_mail_queue_query(
+            &[
+                recipient_value,
+                subject_value.clone(),
+                subject_value,
+                Value::String(html),
+            ],
+            &[recipient.span, subject.span, subject.span, template.span],
+            span,
+            self.execution_context.host_services.as_ref(),
+        )
+    }
+
     pub(crate) fn require_runtime_capability(
         &self,
         capability: &str,

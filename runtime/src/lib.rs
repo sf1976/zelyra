@@ -172,7 +172,10 @@ pub use api_validation::{check_apis, ApiDiagnostic};
 pub(crate) use value::RuntimeClassObject;
 pub use value::{normalize_map_entries, ClassObjectRef, FunctionValue, SqlRowsMetadata, Value};
 mod verifier;
-pub use verifier::{verify, ContractKind, EvidenceClass, VerificationResult, VerificationStatus};
+pub use verifier::{
+    authorization_matrix, verify, ContractKind, EvidenceClass, VerificationResult,
+    VerificationStatus,
+};
 mod type_checker;
 pub use type_checker::{
     check, check_with_inferred_types, inspect_expression_types, substitute_generic_type,
@@ -1149,6 +1152,7 @@ fn is_runtime_builtin(name: &str) -> bool {
             | "render_markdown"
             | "markdown_toc"
             | "render_pdf"
+            | "mail_queue_template"
             | "api_response"
             | "len"
             | "range"
@@ -1506,6 +1510,11 @@ fn transaction_queries(
                     sql: query.clone(),
                     params: query_parameters(query, env, expression.span)?,
                 });
+            }
+            ExprKind::Call { name, args, .. }
+                if name == "mail_queue_template" && allow_mail_queue =>
+            {
+                queries.push(interpreter.prepare_template_mail(args, env, expression.span)?);
             }
             ExprKind::Call { name, args, .. } if name == "mail_queue" => {
                 if !allow_mail_queue {

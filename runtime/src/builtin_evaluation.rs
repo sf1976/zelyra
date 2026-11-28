@@ -1579,59 +1579,62 @@ impl<'program, 'services> Interpreter<'program, 'services> {
                 }
             };
             self.http_request(&method, &url, &header_strings, body.as_deref(), span)
-        } else if name == "mail_queue" {
+        } else if matches!(name, "mail_queue" | "mail_queue_template") {
             if self.transactional_query.is_none() && self.database_transaction.is_none() {
-                return Err(
-                    self.runtime_error(span, "mail_queue is only allowed inside a transaction")
-                );
+                return Err(self
+                    .runtime_error(span, format!("{name} is only allowed inside a transaction")));
             }
-            if !matches!(args.len(), 3..=6) {
-                return Err(self.runtime_error(
+            let query = if name == "mail_queue_template" {
+                self.prepare_template_mail(args, env, span)?
+            } else {
+                if !matches!(args.len(), 3..=6) {
+                    return Err(self.runtime_error(
+                        span,
+                        "mail_queue expects recipient, subject, text body, optional HTML body, and optional PDF filename and Bytes",
+                    ));
+                }
+                if args
+                    .iter()
+                    .any(|argument| !is_pure_mail_expression(argument))
+                {
+                    return Err(self.runtime_error(
+                        span,
+                        "mail_queue arguments must be values or pure expressions; PDF attachments must use render_pdf",
+                    ));
+                }
+                self.require_runtime_capability("Email", "email delivery", span)?;
+                self.require_runtime_capability(
+                    "Database(write)",
+                    "transactional mail queue write",
                     span,
-                    "mail_queue expects recipient, subject, text body, optional HTML body, and optional PDF filename and Bytes",
-                ));
-            }
-            if args
-                .iter()
-                .any(|argument| !is_pure_mail_expression(argument))
-            {
-                return Err(self.runtime_error(
+                )?;
+                let database_url = self.database_url.as_deref().ok_or_else(|| {
+                    self.runtime_error(
+                        span,
+                        "mail_queue requires a MariaDB or MySQL database runtime",
+                    )
+                })?;
+                if !supports_mail_outbox_database(database_url) {
+                    return Err(self.runtime_error(
+                        span,
+                        "mail_queue currently requires MariaDB or MySQL; PostgreSQL outbox support is not available",
+                    ));
+                }
+                let mut evaluated = Vec::with_capacity(args.len());
+                for argument in args {
+                    evaluated.push(self.eval(argument, env)?);
+                }
+                let argument_spans = args
+                    .iter()
+                    .map(|argument| argument.span)
+                    .collect::<Vec<_>>();
+                prepare_mail_queue_query(
+                    &evaluated,
+                    &argument_spans,
                     span,
-                    "mail_queue arguments must be values or pure expressions; PDF attachments must use render_pdf",
-                ));
-            }
-            self.require_runtime_capability("Email", "email delivery", span)?;
-            self.require_runtime_capability(
-                "Database(write)",
-                "transactional mail queue write",
-                span,
-            )?;
-            let database_url = self.database_url.as_deref().ok_or_else(|| {
-                self.runtime_error(
-                    span,
-                    "mail_queue requires a MariaDB or MySQL database runtime",
-                )
-            })?;
-            if !supports_mail_outbox_database(database_url) {
-                return Err(self.runtime_error(
-                    span,
-                    "mail_queue currently requires MariaDB or MySQL; PostgreSQL outbox support is not available",
-                ));
-            }
-            let mut evaluated = Vec::with_capacity(args.len());
-            for argument in args {
-                evaluated.push(self.eval(argument, env)?);
-            }
-            let argument_spans = args
-                .iter()
-                .map(|argument| argument.span)
-                .collect::<Vec<_>>();
-            let query = prepare_mail_queue_query(
-                &evaluated,
-                &argument_spans,
-                span,
-                self.execution_context.host_services.as_ref(),
-            )?;
+                    self.execution_context.host_services.as_ref(),
+                )?
+            };
             if let Some(query_executor) = &mut self.transactional_query {
                 query_executor(&query).map_err(|error| {
                     self.runtime_error(span, format!("database transaction failed: {error}"))

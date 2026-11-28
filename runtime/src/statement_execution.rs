@@ -377,7 +377,7 @@ impl<'program, 'services> Interpreter<'program, 'services> {
                     Stmt::Expr(Expr {
                         kind: ExprKind::Call { name, .. },
                         ..
-                    }) => name == "mail_queue",
+                    }) => matches!(name.as_str(), "mail_queue" | "mail_queue_template"),
                     _ => false,
                 });
                 if simple_batch {

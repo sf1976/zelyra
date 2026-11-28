@@ -6782,6 +6782,50 @@ fn submit(body: String @pii) uses Network(allow: ["example.test"]) {
 fn main() {}
 "#,
         ),
+        (
+            "pii_on_public_page",
+            r#"
+table contacts { id: Id primary auto email: String(255) required @pii }
+page "/contact" {
+    load contact = sql<Contact> { SELECT id, email FROM contacts }
+    html { <p>{contact.email}</p> }
+}
+fn main() {}
+"#,
+        ),
+        (
+            "secret_in_tableview",
+            r#"
+table settings { id: Id primary auto token: String(64) required @secret }
+tableview SettingsView {
+    source sql<Settings[]> { SELECT id, token FROM settings }
+    columns { id token }
+}
+fn main() {}
+"#,
+        ),
+        (
+            "classified_record_copy",
+            r#"
+struct Contact { email: String }
+fn log_copy(email: String @pii) {
+    contact = Contact { email: "placeholder@example.test" }
+    updated = record_with(contact, "email", email)
+    print(updated.email)
+}
+fn main() {}
+"#,
+        ),
+        (
+            "unresolved_privacy_callable",
+            r#"
+fn format_email(email: String @pii) -> String {
+    callback: Function<(String) -> String> = |value| value
+    return callback(email)
+}
+fn main() {}
+"#,
+        ),
     ] {
         let neg = directory.join(format!("{name}.zyl"));
         fs::write(&neg, snippet).unwrap();
