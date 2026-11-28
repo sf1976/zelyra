@@ -144,6 +144,7 @@ impl<'program, 'services> Interpreter<'program, 'services> {
             for contract in &function.requires {
                 let value = self.eval(contract, &mut env)?;
                 let condition = self.expect_bool(value, contract.span)?;
+                self.trace_rule(DecisionRule::Requires, contract.span, condition);
                 if !condition {
                     return Err(self.runtime_error(
                         contract.span,
@@ -180,6 +181,7 @@ impl<'program, 'services> Interpreter<'program, 'services> {
                 for contract in &function.ensures {
                     let value = self.eval(contract, &mut env)?;
                     let condition = self.expect_bool(value, contract.span)?;
+                    self.trace_rule(DecisionRule::Ensures, contract.span, condition);
                     if !condition {
                         return Err(self.runtime_error(
                             contract.span,

@@ -6947,3 +6947,416 @@ fn main() {}
 
     fs::remove_dir_all(directory).unwrap();
 }
+
+#[test]
+fn certify_binds_the_checked_source_closure_and_checker_denies_forged_evidence() {
+    use zelyra_proof::Proof;
+
+    let (root, entry) = temporary_project_source(
+        "certify",
+        r#"
+import "rules.zyl" as rules
+fn main() { assert_eq(rules::price(4), 4) }
+"#,
+    );
+    let rules = root.join("rules.zyl");
+    let rule_source = "pub fn price(qty: Int) -> Int requires { qty >= 0 } { return qty }\n";
+    fs::write(&rules, rule_source).unwrap();
+    let first = root.join("first.json");
+    let second = root.join("second.json");
+    for output in [&first, &second] {
+        let result = run(&[
+            "certify",
+            entry.to_str().unwrap(),
+            "--output",
+            output.to_str().unwrap(),
+        ]);
+        assert!(
+            result.status.success(),
+            "{}",
+            String::from_utf8_lossy(&result.stderr)
+        );
+    }
+    let bytes = fs::read(&first).unwrap();
+    assert_eq!(bytes, fs::read(&second).unwrap());
+    assert!(!String::from_utf8_lossy(&bytes).contains(root.to_str().unwrap()));
+    let proof: Proof = serde_json::from_slice(&bytes).unwrap();
+    proof.check(&root).unwrap();
+    let document: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+    assert_eq!(
+        document["evidence_classes"],
+        serde_json::json!([
+            "PROVEN",
+            "ENFORCED",
+            "TESTED",
+            "ATTESTED",
+            "ASSUMED",
+            "UNVERIFIED"
+        ])
+    );
+    assert_eq!(document["language_version"], "0.1");
+    assert_eq!(
+        document["boundaries"]["general_semantic_proof"],
+        "UNVERIFIED"
+    );
+
+    for outcome in ["unknown", "undecidable", "timeout", "unproven"] {
+        let mut tampered = document.clone();
+        tampered["observations"][0]["outcome"] = serde_json::json!(outcome);
+        tampered["observations"][0]["evidence"] = serde_json::json!("PROVEN");
+        let tampered: Proof = serde_json::from_value(tampered).unwrap();
+        assert!(tampered.check(&root).is_err());
+    }
+    let mut tampered = document;
+    tampered["schema_version"] = serde_json::json!(2);
+    assert!(serde_json::from_value::<Proof>(tampered)
+        .unwrap()
+        .check(&root)
+        .is_err());
+
+    fs::write(&rules, "pub fn price(qty: Int) -> Int { return qty + 1 }").unwrap();
+    assert!(proof.check(&root).is_err());
+    fs::write(&rules, rule_source).unwrap();
+    fs::remove_file(root.join("zelyra.toml")).unwrap();
+    assert!(proof.check(&root).is_err());
+
+    let invalid = root.join("invalid.zyl");
+    fs::write(&invalid, "fn bad() -> Int ensures { false } { return 1 }").unwrap();
+    let bad_proof = root.join("bad.json");
+    assert!(!run(&[
+        "certify",
+        invalid.to_str().unwrap(),
+        "--output",
+        bad_proof.to_str().unwrap()
+    ])
+    .status
+    .success());
+    assert!(!bad_proof.exists());
+    fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
+fn deployment_bundle_is_reproducible_runnable_and_requires_a_trusted_signature() {
+    use zelyra_proof::deployment;
+
+    let (root, entry) =
+        temporary_project_source("signed-deployment", "fn main() { print(\"ready\") }\n");
+    fs::write(root.join(".env"), "SECRET=fixture-value\n").unwrap();
+    let key =
+        ring::signature::Ed25519KeyPair::generate_pkcs8(&ring::rand::SystemRandom::new()).unwrap();
+    let key_path = root.join("signing.pkcs8");
+    fs::write(&key_path, key.as_ref()).unwrap();
+    let first = root.join("deploy-one");
+    let second = root.join("deploy-two");
+    let build = |output: &Path| {
+        run(&[
+            "build",
+            entry.to_str().unwrap(),
+            "--bundle",
+            "--output",
+            output.to_str().unwrap(),
+            "--signing-key",
+            key_path.to_str().unwrap(),
+        ])
+    };
+    let result = build(&first);
+    assert!(
+        result.status.success(),
+        "{}",
+        String::from_utf8_lossy(&result.stderr)
+    );
+    let result2 = build(&second);
+    assert!(
+        result2.status.success(),
+        "{}",
+        String::from_utf8_lossy(&result2.stderr)
+    );
+    assert_eq!(result.stdout, result2.stdout);
+    let result: serde_json::Value = serde_json::from_slice(&result.stdout).unwrap();
+    let trusted = result["public_key"].as_str().unwrap();
+    let files = [
+        deployment::ATTESTATION,
+        deployment::MANIFEST,
+        deployment::CHECKSUM,
+        deployment::SBOM,
+        zelyra_proof::PROOF_NAME,
+        "project/main.zyl",
+        "project/zelyra.toml",
+    ];
+    for path in files {
+        assert_eq!(
+            fs::read(first.join(path)).unwrap(),
+            fs::read(second.join(path)).unwrap()
+        );
+    }
+    assert!(!first.join("project/.env").exists());
+    assert!(!first.join("project/signing.pkcs8").exists());
+    deployment::check(&first, trusted).unwrap();
+    assert!(!build(&first).status.success());
+    deployment::check(&first, trusted).unwrap();
+    assert!(deployment::check(&first, &"00".repeat(32)).is_err());
+
+    let deployed = first.join(result["entry"].as_str().unwrap());
+    let output = run(&["run", deployed.to_str().unwrap()]);
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert_eq!(String::from_utf8_lossy(&output.stdout).trim(), "ready");
+    for file in [
+        "project/main.zyl",
+        deployment::SBOM,
+        deployment::MANIFEST,
+        deployment::ATTESTATION,
+        deployment::CHECKSUM,
+    ] {
+        let path = first.join(file);
+        let original = fs::read(&path).unwrap();
+        fs::write(&path, "tampered").unwrap();
+        assert!(deployment::check(&first, trusted).is_err(), "{file}");
+        fs::write(path, original).unwrap();
+    }
+    fs::write(first.join("project/.env"), "INJECTED=1\n").unwrap();
+    assert!(deployment::check(&first, trusted).is_err());
+    fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
+fn diff_verify_reports_weaker_contracts_roles_four_eyes_auth_privacy_and_scope() {
+    let fixture = r#"
+table users {
+    id: Id primary auto
+    email: Email required unique
+    password_hash: String(255) required
+    active: Bool default true
+}
+table auth_sessions {
+    id: Id primary auto
+    user: User required
+    token_hash: String(64) required unique
+    expires_at: Timestamp required
+}
+auth AppAuth { table: users sessions: auth_sessions }
+table orders {
+    id: Id primary auto
+    created_by: Id required
+    email: String(128) required @pii @redact
+    token: String(128) required @secret
+    status: String(20) default "draft"
+    states status {
+        draft -> approved requires role("approver"), four_eyes(created_by)
+        approved -> final
+    }
+}
+page "/approval" {
+    requires auth
+    html { <p>Approvals</p> }
+}
+fn send() uses Network(allow: ["old.example"]) {}
+fn discount(n: Int) -> Int ensures { result == n } { return n }
+fn main() {}
+"#;
+    let root = temporary_directory("diff-verify");
+    let config = "[capabilities]\nnetwork = true\n";
+    for (name, source) in [
+        ("before", fixture.to_owned()),
+        (
+            "formatting",
+            format!("# comment\n{}", fixture.replace("result == n", "result==n")),
+        ),
+        (
+            "after",
+            fixture
+                .replace("@pii @redact", "")
+                .replace("@secret", "@pii")
+                .replace(" requires role(\"approver\"), four_eyes(created_by)", "")
+                .replace("    requires auth\n", "")
+                .replace("\"old.example\"", "\"old.example\", \"new.example\"")
+                .replace(" ensures { result == n }", ""),
+        ),
+        ("invalid", "fn malformed(".into()),
+    ] {
+        let directory = root.join(name);
+        fs::create_dir_all(&directory).unwrap();
+        fs::write(directory.join("zelyra.toml"), config).unwrap();
+        fs::write(directory.join("main.zyl"), source).unwrap();
+    }
+    let before_path = root.join("before/main.zyl");
+    let before = before_path.to_str().unwrap();
+    let strict = "--fail-on-privilege-escalation";
+    let formatting = run(&[
+        "diff-verify",
+        before,
+        root.join("formatting/main.zyl").to_str().unwrap(),
+        strict,
+    ]);
+    assert!(
+        formatting.status.success(),
+        "{}",
+        String::from_utf8_lossy(&formatting.stderr)
+    );
+    assert_eq!(
+        serde_json::from_slice::<serde_json::Value>(&formatting.stdout).unwrap()["status"],
+        "pass"
+    );
+    let after = root.join("after/main.zyl");
+    let after = after.to_str().unwrap();
+    let output = run(&["diff-verify", before, after, strict]);
+    assert!(
+        !output.status.success(),
+        "weaker rules must block strict checking"
+    );
+    let report = run(&["diff-verify", before, after]);
+    assert!(
+        report.status.success(),
+        "{}",
+        String::from_utf8_lossy(&report.stderr)
+    );
+    assert_eq!(output.stdout, report.stdout);
+    let report: serde_json::Value = serde_json::from_slice(&report.stdout).unwrap();
+    assert_eq!(report["privilege_escalation"], true);
+    let findings = report["findings"].as_array().unwrap();
+    for (kind, subject) in [
+        ("boundary_weakened", "page:/approval"),
+        ("boundary_weakened", "table:orders.status:draft->approved"),
+        ("capability_expanded", "function:send"),
+        ("classification_weakened", "table:orders.email"),
+        ("classification_weakened", "table:orders.token"),
+        ("verification_weakened", "discount"),
+    ] {
+        assert!(
+            findings
+                .iter()
+                .any(|finding| finding["kind"] == kind && finding["subject"] == subject),
+            "missing {kind} for {subject}: {report}"
+        );
+    }
+    let invalid = run(&[
+        "diff-verify",
+        before,
+        root.join("invalid/main.zyl").to_str().unwrap(),
+        strict,
+    ]);
+    assert!(!invalid.status.success());
+    assert_eq!(
+        serde_json::from_slice::<serde_json::Value>(&invalid.stdout).unwrap()["status"],
+        "unverified"
+    );
+    fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
+fn explain_traces_public_rules_and_suppresses_classified_control_flow() {
+    let (root, entry) = temporary_project_source(
+        "explain-decision",
+        r#"
+fn price(qty: Int) -> Int requires { qty >= 0 } ensures { result > 0 } {
+    if qty >= 10 { return 80 }
+    return 100
+}
+fn main() {}
+fn classified(qty: Int @secret) -> Int {
+    if qty == 72349 { return 80 }
+    return 100
+}
+"#,
+    );
+    let text = fs::read_to_string(&entry).unwrap();
+    fs::write(&entry, text.split("fn classified").next().unwrap()).unwrap();
+    let path = entry.to_str().unwrap();
+    let explain = |args| run(&["explain", path, "--entry", "price", "--entry-args", args]);
+    let first = explain("[12]");
+    assert!(
+        first.status.success(),
+        "{}",
+        String::from_utf8_lossy(&first.stderr)
+    );
+    assert_eq!(first.stdout, explain("[12]").stdout);
+    let report: serde_json::Value = serde_json::from_slice(&first.stdout).unwrap();
+    assert_eq!(report["status"], "completed");
+    assert_eq!(report["events"][1]["rule"], "if");
+    assert_eq!(report["events"][1]["accepted"], true);
+    let opposite = explain("[2]");
+    assert_eq!(
+        serde_json::from_slice::<serde_json::Value>(&opposite.stdout).unwrap()["events"][1]
+            ["accepted"],
+        false
+    );
+    let denied = explain("[-1]");
+    assert!(!denied.status.success());
+    let report: serde_json::Value = serde_json::from_slice(&denied.stdout).unwrap();
+    assert_eq!(report["status"], "aborted");
+    assert_eq!(report["events"][0]["rule"], "requires");
+    assert_eq!(report["events"][0]["accepted"], false);
+
+    for privacy in ["@secret", "@pii"] {
+        fs::write(&entry, text.replace("@secret", privacy)).unwrap();
+        let secret = run(&[
+            "explain",
+            path,
+            "--entry",
+            "classified",
+            "--entry-args",
+            "[72349]",
+        ]);
+        assert!(!secret.status.success());
+        let report: serde_json::Value = serde_json::from_slice(&secret.stdout).unwrap();
+        assert_eq!(report["status"], "suppressed");
+        assert_eq!(report["events"], serde_json::json!([]));
+        assert!(!String::from_utf8_lossy(&secret.stdout).contains("72349"));
+        assert!(secret.stderr.is_empty());
+    }
+    fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
+fn wasm_extension_executes_only_the_opted_in_pure_profile() {
+    let root = temporary_directory("wasm-extension");
+    fs::create_dir_all(&root).unwrap();
+    let path = root.join("extension.wasm");
+    let add: &[u8] = b"\0asm\x01\0\0\0\x01\x07\x01\x60\x02\x7f\x7f\x01\x7f\x03\x02\x01\0\x07\x07\x01\x03add\0\0\x0a\x09\x01\x07\0\x20\0\x20\x01\x6a\x0b";
+    fs::write(&path, add).unwrap();
+    let output = run(&["wasm", "run", path.to_str().unwrap(), "add", "42", "-15"]);
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert_eq!(
+        serde_json::from_slice::<serde_json::Value>(&output.stdout).unwrap()["value"],
+        27
+    );
+    assert!(!run(&["run", path.to_str().unwrap()]).status.success());
+
+    let mut importing = add.to_vec();
+    importing.splice(17..17, [2, 7, 1, 1, b'h', 1, b'f', 0, 0]);
+    fs::write(&path, importing).unwrap();
+    let output = run(&["wasm", "run", path.to_str().unwrap(), "add", "42", "-15"]);
+    assert!(!output.status.success());
+    assert!(output.stdout.is_empty());
+    assert!(String::from_utf8_lossy(&output.stderr).contains("E-WASM-001"));
+    fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
+fn ast_stays_default_when_an_opt_in_backend_cannot_lower_the_program() {
+    let (root, entry) = temporary_project_source(
+        "default-backend",
+        "fn unused() { transaction {} }\nfn main() { print(\"AST reference\") }\n",
+    );
+    let entry = entry.to_str().unwrap();
+    let default = run(&["run", entry]);
+    let ast = run(&["run", entry, "--backend", "ast"]);
+    let bytecode = run(&["run", entry, "--backend", "bytecode"]);
+    assert!(
+        default.status.success(),
+        "{}",
+        String::from_utf8_lossy(&default.stderr)
+    );
+    assert!(ast.status.success());
+    assert_eq!(default.stdout, ast.stdout);
+    assert!(!bytecode.status.success());
+    assert!(String::from_utf8_lossy(&bytecode.stderr).contains("E-MIR-UNSUPPORTED-001"));
+    fs::remove_dir_all(root).unwrap();
+}

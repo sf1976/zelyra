@@ -288,10 +288,13 @@ impl<'program, 'services> Interpreter<'program, 'services> {
                             }
                             if let Some(guard) = &arm.guard {
                                 let guard_value = self.eval(guard, env)?;
-                                if !self.expect_bool(guard_value, guard.span)? {
+                                let accepted = self.expect_bool(guard_value, guard.span)?;
+                                self.trace_rule(DecisionRule::MatchGuard, guard.span, accepted);
+                                if !accepted {
                                     return Ok(None);
                                 }
                             }
+                            self.trace_rule(DecisionRule::MatchArm, arm.pattern.span, true);
                             self.eval(&arm.value, env).map(Some)
                         })?;
                         if let Some(value) = arm_result {

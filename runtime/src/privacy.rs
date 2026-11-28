@@ -153,7 +153,7 @@ fn unwrap_inner_type_name(ty: &Type) -> Option<&str> {
     }
 }
 
-pub(crate) fn program_uses_privacy(program: &Program) -> bool {
+pub fn program_uses_privacy(program: &Program) -> bool {
     program.tables.iter().any(|t| {
         t.columns
             .iter()

@@ -10,7 +10,14 @@ impl<'program, 'services> Interpreter<'program, 'services> {
     ) -> Result<(), RuntimeError> {
         for invariant in invariants {
             let value = self.eval(invariant, env)?;
-            if !self.expect_bool(value, invariant.span)? {
+            let accepted = self.expect_bool(value, invariant.span)?;
+            let kind = if phase == "before" {
+                DecisionRule::InvariantBefore
+            } else {
+                DecisionRule::InvariantAfter
+            };
+            self.trace_rule(kind, invariant.span, accepted);
+            if !accepted {
                 return Err(self.runtime_error(
                     span,
                     format!("loop invariant failed {phase} loop iteration"),
@@ -165,7 +172,9 @@ impl<'program, 'services> Interpreter<'program, 'services> {
                 span,
             } => {
                 let condition_value = self.eval(condition, env)?;
-                if self.expect_bool(condition_value, *span)? {
+                let accepted = self.expect_bool(condition_value, *span)?;
+                self.trace_rule(DecisionRule::If, condition.span, accepted);
+                if accepted {
                     self.exec_block(then_block, env)
                 } else if let Some(block) = else_block {
                     self.exec_block(block, env)
@@ -183,7 +192,9 @@ impl<'program, 'services> Interpreter<'program, 'services> {
                     self.consume_step(*span)?;
                     self.check_loop_invariants(invariants, env, *span, "before")?;
                     let condition_value = self.eval(condition, env)?;
-                    if !self.expect_bool(condition_value, *span)? {
+                    let accepted = self.expect_bool(condition_value, *span)?;
+                    self.trace_rule(DecisionRule::While, condition.span, accepted);
+                    if !accepted {
                         break;
                     }
                     let flow = self.exec_block(body, env)?;
@@ -339,10 +350,13 @@ impl<'program, 'services> Interpreter<'program, 'services> {
                             }
                             if let Some(guard) = &arm.guard {
                                 let guard_value = self.eval(guard, env)?;
-                                if !self.expect_bool(guard_value, guard.span)? {
+                                let accepted = self.expect_bool(guard_value, guard.span)?;
+                                self.trace_rule(DecisionRule::MatchGuard, guard.span, accepted);
+                                if !accepted {
                                     return Ok(None);
                                 }
                             }
+                            self.trace_rule(DecisionRule::MatchArm, arm.pattern.span, true);
                             self.exec_block(&arm.body, env).map(Some)
                         })?;
                         if let Some(flow) = arm_result {
@@ -486,6 +500,7 @@ impl<'program, 'services> Interpreter<'program, 'services> {
                             &mut self.active_type_substitutions,
                         ),
                         early_return: None,
+                        decision_trace: None,
                     };
                     let flow = child.exec_block(body, env);
                     self.output = child.output;
@@ -533,6 +548,12 @@ impl<'program, 'services> Interpreter<'program, 'services> {
                 }
             }
             Stmt::Parallel { body, span } => {
+                if self.decision_trace.is_some() {
+                    return Err(self.runtime_error(
+                        *span,
+                        "parallel execution is unavailable in decision tracing",
+                    ));
+                }
                 if self.transactional_query.is_some() {
                     return Err(self.runtime_error(
                         *span,

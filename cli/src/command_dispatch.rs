@@ -1,6 +1,6 @@
 use super::*;
 
-fn parse_entry_arguments(
+pub(super) fn parse_entry_arguments(
     entry: &str,
     parameters: &[zelyra_ast::Param],
     raw_arguments: Option<&str>,
@@ -137,6 +137,21 @@ pub(super) fn run() -> ExitCode {
     let arguments = args.collect::<Vec<_>>();
     if help::print_if_requested(&command, &arguments) {
         return ExitCode::SUCCESS;
+    }
+    if command == "wasm" {
+        return wasm_cli::command(&arguments);
+    }
+    if command == "explain" {
+        return decision_cli::command(&arguments);
+    }
+    if command == "diff-verify" {
+        return diff_verify::command(&arguments);
+    }
+    if command == "certify" {
+        return proof_cli::certify(&arguments);
+    }
+    if command == "build" && arguments.iter().any(|argument| argument == "--bundle") {
+        return proof_cli::build_bundle(&arguments);
     }
     let mut args = arguments.into_iter();
     if command == "update" {

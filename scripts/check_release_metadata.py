@@ -19,6 +19,7 @@ WORKSPACE_PACKAGES = (
     "zelyra-lexer",
     "zelyra-mail",
     "zelyra-parser",
+    "zelyra-proof",
     "zelyra-runtime",
     "zelyra-web",
 )

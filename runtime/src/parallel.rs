@@ -45,6 +45,7 @@ impl Interpreter<'_, '_> {
                     let mut child = Interpreter {
                         program_context: Arc::clone(&self.program_context),
                         output: Vec::new(),
+                        decision_trace: None,
                         next_class_object_id: Arc::clone(&self.next_class_object_id),
                         parallel_worker: true,
                         step_budget: self.step_budget.clone(),

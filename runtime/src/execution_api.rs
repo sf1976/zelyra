@@ -706,7 +706,7 @@ fn execute_internal_on_runtime_stack(
     }
 }
 
-fn run_on_runtime_stack<T: Send>(
+pub(crate) fn run_on_runtime_stack<T: Send>(
     stack_size: usize,
     action: impl FnOnce() -> Result<T, RuntimeError> + Send,
 ) -> Result<T, RuntimeError> {
