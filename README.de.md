@@ -11,14 +11,14 @@ Business-, Datenbank- und Webanwendungen. Schemaabhängiges SQL, Formulare,
 CRUD, Views und Geschäftslogik greifen ineinander; gewöhnlicher Programmcode
 und natives SQL bleiben jederzeit möglich.
 
-> **Stabiles Release 1.7.0 · Sprachkompatibilitätslinie: 0.1** · [GitHub-Release](https://github.com/sf1976/zelyra/releases/tag/v1.7.0)
+> **Stabiles Release 1.8.0 · Sprachkompatibilitätslinie: 0.1** · [GitHub-Release](https://github.com/sf1976/zelyra/releases/tag/v1.8.0)
 >
 > Die Compilerprüfung und der Verifier decken klar abgegrenzte Bereiche ab. Sie beweisen nicht die Korrektheit beliebiger Anwendungen oder rechtliche Konformität (`ASSUMED`). Prüfe vor dem Einsatz die unterstützten Abläufe und Grenzen in der jeweiligen Dokumentation.
 
-Der Stand für 1.8.0 ergänzt quellgebundene Nachweise mit unabhängigem Checker,
+Zelyra 1.8.0 ergänzt quellgebundene Nachweise mit unabhängigem Checker,
 semantische Sicherheitsvergleiche, signierte Deployments und Entscheidungsprotokolle
-ohne Eingabe- oder Rückgabewerte. AST bleibt Standard. Beispiele, Nachweisgrenzen und
-Freigabestand stehen in den [Release-Notizen zu 1.8.0](docs/release-notes/1.8.0.de.md).
+ohne Eingabe- oder Rückgabewerte. AST bleibt Standard. Bytecode und reine
+Ganzzahl-WebAssembly-Erweiterungen sind opt-in. [Release-Notizen und Beispiele zu 1.8.0](docs/release-notes/1.8.0.de.md).
 
 Das Release 1.7.0 ergänzt statische Informationsflusskontrolle (`@pii`, `@secret`,
 `@redact`, `redact(...)` mit `E-PRIVACY-001`), den compiler-abgeleiteten

@@ -11,14 +11,14 @@ for database-backed business and web applications. It brings schema-aware SQL,
 forms, CRUD, views, and application logic together while keeping ordinary code
 and native SQL available.
 
-> **Stable release 1.7.0 · language compatibility line: 0.1** · [GitHub release](https://github.com/sf1976/zelyra/releases/tag/v1.7.0)
+> **Stable release 1.8.0 · language compatibility line: 0.1** · [GitHub release](https://github.com/sf1976/zelyra/releases/tag/v1.8.0)
 >
 > Compiler checks and the verifier cover defined scopes. They do not prove arbitrary applications correct or establish legal compliance (`ASSUMED`). Review the documented support and limits for each workflow before deployment.
 
-Work on 1.8.0 adds source-bound proof documents with an independent checker,
+Zelyra 1.8.0 adds source-bound proof documents with an independent checker,
 semantic security diffs, signed deployment bundles, and value-free decision
-traces. AST remains the default. See the [1.8.0 release notes](docs/release-notes/1.8.0.en.md)
-for examples, evidence boundaries and release gate status.
+traces. AST remains the default. Bytecode and pure integer WebAssembly
+extensions are opt-in. [1.8.0 release notes and examples](docs/release-notes/1.8.0.en.md).
 
 The 1.7.0 release adds static information flow control (`@pii`,
 `@secret`, `@redact`, `redact(...)` with `E-PRIVACY-001`), the compiler-derived GDPR catalog
