@@ -31,6 +31,7 @@ zelyra-database.workspace = true
 zelyra-hir.workspace = true
 zelyra-lexer.workspace = true
 zelyra-parser.workspace = true
+zelyra-proof = { path = "../proof", version = "1.0" }
 zelyra-runtime.workspace = true
 zeroize.workspace = true
 zelyra-mir.workspace = true

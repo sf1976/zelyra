@@ -1,5 +1,19 @@
 ## Unreleased
 
+## 1.8.0 — Independent Proof Verification, Proof-Carrying Deployment & Explainable Decisions
+
+- Add deterministic source-bound evidence documents and the standalone
+  `zelyra-proof-check` checker. / Deterministische quellgebundene
+  Evidenzdokumente und eigenständigen Checker ergänzen.
+- Add `zelyra diff-verify` and the strict privilege-escalation gate. /
+  Semantischen Vergleich mit striktem Gate für Rechteausweitungen ergänzen.
+- Add reproducible source deployment bundles with an SPDX SBOM, SHA-256
+  checksums and Ed25519 attestation. / Reproduzierbare Quellcode-Deployments
+  mit SPDX-SBOM, SHA-256-Prüfsummen und Ed25519-Attestierung ergänzen.
+- Add value-free `zelyra explain` trace and a capability-free opt-in Wasm
+  profile. AST stays the default. / Wertefreie Entscheidungsprotokolle und
+  explizit aktiviertes Wasm-Profil ohne Host-Capabilities ergänzen. AST bleibt Standard.
+
 ## 1.7.0 — Information Flow Control, Tenant SQL & Verified Authorization v1
 
 - Add language-wide sensitivity annotations (`@pii`, `@secret`, `@redact`) and

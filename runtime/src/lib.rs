@@ -171,6 +171,10 @@ pub(crate) use api_validation::contains_class_reference_type;
 pub use api_validation::{check_apis, ApiDiagnostic};
 pub(crate) use value::RuntimeClassObject;
 pub use value::{normalize_map_entries, ClassObjectRef, FunctionValue, SqlRowsMetadata, Value};
+mod wasm_extension;
+pub use wasm_extension::{run_wasm_extension, MAX_WASM_EXTENSION_BYTES};
+mod decision_trace;
+pub use decision_trace::{explain_decision, DecisionEvent, DecisionRule, DecisionTrace};
 mod verifier;
 pub use verifier::{
     authorization_matrix, verify, ContractKind, EvidenceClass, VerificationResult,
@@ -1024,6 +1028,7 @@ fn json_codec_interpreter<'program>(
             records, aliases, enums,
         )),
         output: Vec::new(),
+        decision_trace: None,
         next_class_object_id: Arc::new(AtomicU64::new(1)),
         parallel_worker: false,
         step_budget: StepBudget::new(None),

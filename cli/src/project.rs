@@ -19,6 +19,7 @@ pub struct ProjectSource {
 pub struct LoadedProject {
     pub program: Program,
     pub sources: Vec<ProjectSource>,
+    pub input_paths: Vec<Option<String>>,
     pub modules: Vec<ProjectModule>,
 }
 
@@ -62,6 +63,7 @@ struct Loader {
     root: PathBuf,
     standard_layout: bool,
     sources: Vec<ProjectSource>,
+    input_paths: Vec<Option<String>>,
     modules: HashMap<PathBuf, Module>,
     order: Vec<PathBuf>,
     visiting: Vec<PathBuf>,
@@ -250,6 +252,7 @@ fn load_with_overrides(
         root,
         standard_layout,
         sources: Vec::new(),
+        input_paths: Vec::new(),
         modules: HashMap::new(),
         order: Vec::new(),
         visiting: Vec::new(),
@@ -372,6 +375,7 @@ fn load_with_overrides(
     Ok(LoadedProject {
         program,
         sources: loader.sources,
+        input_paths: loader.input_paths,
         modules,
     })
 }
@@ -648,6 +652,8 @@ impl Loader {
         } else {
             relative_path.clone()
         };
+        self.input_paths
+            .push((!builtin_ui).then(|| relative_path.clone()));
         self.sources.push(ProjectSource {
             path: display_path.clone(),
             text: text.clone(),

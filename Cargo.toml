@@ -1,9 +1,9 @@
 [workspace]
-members = ["ast", "lexer", "parser", "hir", "mir", "database", "mail", "runtime", "web", "forms", "cli"]
+members = ["ast", "lexer", "parser", "hir", "mir", "database", "mail", "runtime", "web", "forms", "proof", "cli"]
 resolver = "2"
 
 [workspace.package]
-version = "1.7.0"
+version = "1.8.0"
 edition = "2021"
 license = "MIT OR Apache-2.0"
 

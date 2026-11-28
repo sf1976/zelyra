@@ -860,6 +860,24 @@ impl PackageGraph {
         )
     }
 
+    /// Files contributing to the lock checksums, retaining their installation
+    /// paths so a deployment can use the existing manifest and lock unchanged.
+    pub(crate) fn locked_source_paths(&self) -> Result<BTreeSet<PathBuf>, PackageError> {
+        let mut files = BTreeSet::new();
+        for package in self.packages.values() {
+            let relative_root = package
+                .root
+                .strip_prefix(&self.workspace_root)
+                .expect("resolved package remains in the workspace");
+            files.extend(
+                package_source_files(&package.root)?
+                    .into_iter()
+                    .map(|path| relative_root.join(path)),
+            );
+        }
+        Ok(files)
+    }
+
     /// Return a minimal package graph needed by a module source closure.
     /// Package source files are copied as package content so the generated
     /// lockfile continues to cover each included package deterministically.

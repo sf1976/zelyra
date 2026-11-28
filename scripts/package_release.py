@@ -15,6 +15,9 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 RELEASE_FILES = ("LICENSE", "LICENSE-MIT", "README.de.md", "README.md")
+PROOF_FILE = "zelyra-proof.json"
+PROOF_EXAMPLE = "proof-example"
+PROOF_SOURCES = ("main.zyl", "zelyra.toml")
 TARGETS = {
     "linux": "x86_64-unknown-linux-gnu",
     "windows": "x86_64-pc-windows-msvc",
@@ -29,7 +32,8 @@ def _sha256_sidecar(path: Path) -> None:
 
 
 def _archive_entries(
-    project_root: Path, binary: Path, platform: str, package_name: str
+    project_root: Path, binary: Path, platform: str, package_name: str,
+    proof: Path | None, checker: Path | None,
 ) -> list[tuple[str, bytes, int]]:
     executable_name = "zelyra.exe" if platform == "windows" else "zelyra"
     entries = [
@@ -39,7 +43,21 @@ def _archive_entries(
         (f"{package_name}/{name}", (project_root / name).read_bytes(), 0o644)
         for name in RELEASE_FILES
     )
+    if proof is not None and checker is not None:
+        entries.extend([
+            (f"{package_name}/{proof_checker_name(platform)}", checker.read_bytes(), 0o755),
+            (f"{package_name}/{PROOF_FILE}", proof.read_bytes(), 0o644),
+        ])
+        entries.extend(
+            (f"{package_name}/{PROOF_EXAMPLE}/{name}",
+             (project_root / "examples/proof_decision" / name).read_bytes(), 0o644)
+            for name in PROOF_SOURCES
+        )
     return sorted(entries, key=lambda entry: entry[0])
+
+
+def proof_checker_name(platform: str) -> str:
+    return "zelyra-proof-check.exe" if platform == "windows" else "zelyra-proof-check"
 
 
 def _tar_gz(entries: list[tuple[str, bytes, int]], epoch: int) -> bytes:
@@ -97,6 +115,8 @@ def package_release(
     tag: str,
     target: str,
     source_date_epoch: int,
+    proof: Path | None = None,
+    checker: Path | None = None,
 ) -> list[Path]:
     if platform not in TARGETS:
         raise ValueError(f"unsupported platform: {platform}")
@@ -112,17 +132,19 @@ def package_release(
     if missing:
         raise ValueError("required release files are missing: " + ", ".join(missing))
 
-    output_dir.mkdir(parents=True, exist_ok=True)
+    if (proof is None) != (checker is None):
+        raise ValueError("release proof and checker must be supplied together")
     package_name = f"zelyra-{tag}-{target}"
+    entries = _archive_entries(project_root, binary, platform, package_name, proof, checker)
+
+    output_dir.mkdir(parents=True, exist_ok=True)
     extension = ".exe" if platform == "windows" else ".bin"
-    executable_name = "zelyra.exe" if platform == "windows" else "zelyra"
     standalone = output_dir / f"{package_name}{extension}"
     shutil.copyfile(binary, standalone)
     if platform == "linux":
         standalone.chmod(0o755)
     _sha256_sidecar(standalone)
 
-    entries = _archive_entries(project_root, binary, platform, package_name)
     archive_extension = ".zip" if platform == "windows" else ".tar.gz"
     archive_path = output_dir / f"{package_name}{archive_extension}"
     archive_bytes = (
@@ -144,6 +166,8 @@ def main() -> int:
     parser.add_argument("--tag", required=True)
     parser.add_argument("--target", required=True)
     parser.add_argument("--source-date-epoch", type=int, required=True)
+    parser.add_argument("--proof", type=Path)
+    parser.add_argument("--checker", type=Path)
     args = parser.parse_args()
     try:
         outputs = package_release(
@@ -154,6 +178,8 @@ def main() -> int:
             tag=args.tag,
             target=args.target,
             source_date_epoch=args.source_date_epoch,
+            proof=args.proof,
+            checker=args.checker,
         )
     except (OSError, ValueError, tarfile.TarError, zipfile.BadZipFile) as error:
         parser.error(str(error))

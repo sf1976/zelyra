@@ -49,6 +49,7 @@ enum Flow {
 pub(super) struct AstInterpreter<'program, 'services> {
     pub(super) program_context: Arc<ProgramContext<'program>>,
     pub(super) output: Vec<String>,
+    pub(super) decision_trace: Option<Vec<DecisionEvent>>,
     pub(super) next_class_object_id: Arc<AtomicU64>,
     pub(super) parallel_worker: bool,
     pub(super) step_budget: StepBudget,
@@ -264,6 +265,7 @@ impl<'program, 'services> AstInterpreter<'program, 'services> {
         Self {
             program_context: Arc::new(ProgramContext::from_program(program)),
             output: Vec::new(),
+            decision_trace: None,
             next_class_object_id: Arc::new(AtomicU64::new(1)),
             parallel_worker: false,
             step_budget: StepBudget::new(policy.as_ref().and_then(|policy| policy.step_budget)),

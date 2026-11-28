@@ -1,0 +1,15 @@
+fn unit_price(quantity: Int) -> Int requires {
+    quantity > 0
+}
+ensures {
+    result > 0
+}
+{
+    if quantity >= 10 {
+        return 80
+    }
+    return 100
+}
+fn main() {
+    assert_eq(unit_price(12), 80)
+}

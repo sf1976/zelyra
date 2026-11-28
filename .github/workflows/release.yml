@@ -66,6 +66,11 @@ on:
       - 'docs/release-notes/1.2.22.en.md'
       - 'docs/release-notes/1.2.22.de.md'
       - 'docs/release-notes/1.7.0.*.md'
+      - 'docs/release-notes/1.8.0.*.md'
+      - 'examples/proof_decision/**'
+      - 'scripts/package_release.py'
+      - 'scripts/verify_release_artifacts.py'
+      - 'scripts/test_package_release.py'
       - 'docs/packages.*.md'
       - 'docs/handbook/en/textbook-foundations.md'
       - 'docs/handbook/de/lehrbuch-grundlagen.md'
@@ -186,10 +191,10 @@ jobs:
         if: runner.os == 'Windows'
         env:
           RUSTFLAGS: -C link-arg=/Brepro
-        run: cargo build --locked --release --package zelyra-cli --target ${{ matrix.target }}
+        run: cargo build --locked --release --package zelyra-cli --package zelyra-proof --target ${{ matrix.target }}
       - name: Build release binary
         if: runner.os == 'Linux'
-        run: cargo build --locked --release --package zelyra-cli --target ${{ matrix.target }}
+        run: cargo build --locked --release --package zelyra-cli --package zelyra-proof --target ${{ matrix.target }}
       - name: Verify repeated release binary build
         if: runner.os == 'Linux'
         shell: bash
@@ -199,8 +204,9 @@ jobs:
         run: |
           first_binary="target/${TARGET}/release/zelyra"
           second_binary="${CARGO_TARGET_DIR}/${TARGET}/release/zelyra"
-          cargo build --locked --release --package zelyra-cli --target "${TARGET}"
+          cargo build --locked --release --package zelyra-cli --package zelyra-proof --target "${TARGET}"
           cmp "${first_binary}" "${second_binary}"
+          cmp "target/${TARGET}/release/zelyra-proof-check" "${CARGO_TARGET_DIR}/${TARGET}/release/zelyra-proof-check"
       - name: Verify repeated release binary build
         if: runner.os == 'Windows'
         shell: pwsh
@@ -211,11 +217,16 @@ jobs:
         run: |
           $firstBuild = "target/$env:TARGET/release/zelyra.exe"
           $secondBuild = "$env:CARGO_TARGET_DIR/$env:TARGET/release/zelyra.exe"
-          cargo build --locked --release --package zelyra-cli --target $env:TARGET
+          cargo build --locked --release --package zelyra-cli --package zelyra-proof --target $env:TARGET
           $firstHash = (Get-FileHash $firstBuild -Algorithm SHA256).Hash
           $secondHash = (Get-FileHash $secondBuild -Algorithm SHA256).Hash
           if ($firstHash -ne $secondHash) {
             throw "Release binary differs between repeated builds (first: $firstHash; second: $secondHash)."
+          }
+          $firstProofChecker = (Get-FileHash "target/$env:TARGET/release/zelyra-proof-check.exe" -Algorithm SHA256).Hash
+          $secondProofChecker = (Get-FileHash "$env:CARGO_TARGET_DIR/$env:TARGET/release/zelyra-proof-check.exe" -Algorithm SHA256).Hash
+          if ($firstProofChecker -ne $secondProofChecker) {
+            throw "Proof checker differs between repeated builds."
           }
       - name: Package Linux release
         if: runner.os == 'Linux'
@@ -225,7 +236,10 @@ jobs:
           TARGET: ${{ matrix.target }}
         run: |
           source_date_epoch="$(git log -1 --format=%ct)"
+          proof="${RUNNER_TEMP}/zelyra-proof.json"
+          "target/${TARGET}/release/zelyra" certify examples/proof_decision/main.zyl --output "${proof}"
           python3 scripts/package_release.py \
+            --proof "${proof}" --checker "target/${TARGET}/release/zelyra-proof-check" \
             --project-root . \
             --binary "target/${TARGET}/release/zelyra" \
             --output-dir release-out \
@@ -244,7 +258,7 @@ jobs:
             --platform linux \
             --tag "${RELEASE_TAG}" \
             --target "${TARGET}" \
-            --run-binary
+            --require-proof --run-binary
       - name: Generate and verify Linux SBOM
         if: runner.os == 'Linux'
         shell: bash
@@ -253,7 +267,7 @@ jobs:
           TARGET: ${{ matrix.target }}
         run: |
           source_date_epoch="$(git log -1 --format=%ct)"
-          cargo metadata --locked --format-version 1 > "${RUNNER_TEMP}/zelyra-cargo-metadata.json"
+          cargo metadata --locked --filter-platform "${TARGET}" --format-version 1 > "${RUNNER_TEMP}/zelyra-cargo-metadata.json"
           sbom="release-out/zelyra-${RELEASE_TAG}-${TARGET}.spdx.json"
           python3 scripts/generate_sbom.py \
             --metadata "${RUNNER_TEMP}/zelyra-cargo-metadata.json" \
@@ -270,7 +284,10 @@ jobs:
           TARGET: ${{ matrix.target }}
         run: |
           $sourceDateEpoch = [long](git log -1 --format=%ct)
+          $proof = "$env:RUNNER_TEMP/zelyra-proof.json"
+          & "target/$env:TARGET/release/zelyra.exe" certify examples/proof_decision/main.zyl --output $proof
           python scripts/package_release.py `
+            --proof $proof --checker "target/$env:TARGET/release/zelyra-proof-check.exe" `
             --project-root . `
             --binary "target/$env:TARGET/release/zelyra.exe" `
             --output-dir release-out `
@@ -290,7 +307,7 @@ jobs:
             --platform windows `
             --tag $env:RELEASE_TAG `
             --target $env:TARGET `
-            --run-binary
+            --require-proof --run-binary
       - name: Generate and verify Windows SBOM
         if: runner.os == 'Windows'
         shell: pwsh
@@ -299,7 +316,7 @@ jobs:
           TARGET: ${{ matrix.target }}
         run: |
           $sourceDateEpoch = [long](git log -1 --format=%ct)
-          cargo metadata --locked --format-version 1 | Set-Content -Path "$env:RUNNER_TEMP/zelyra-cargo-metadata.json" -Encoding utf8NoBOM
+          cargo metadata --locked --filter-platform $env:TARGET --format-version 1 | Set-Content -Path "$env:RUNNER_TEMP/zelyra-cargo-metadata.json" -Encoding utf8NoBOM
           $sbom = "release-out/zelyra-$env:RELEASE_TAG-$env:TARGET.spdx.json"
           python scripts/generate_sbom.py `
             --metadata "$env:RUNNER_TEMP/zelyra-cargo-metadata.json" `
@@ -361,6 +378,8 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ needs.validate.outputs.release_tag }}
+          draft: false
+          fail_on_unmatched_files: true
           prerelease: ${{ contains(needs.validate.outputs.release_tag, '-') }}
           generate_release_notes: true
           body: |
@@ -388,6 +407,8 @@ jobs:
             ${{ needs.validate.outputs.release_tag == 'v1.2.51' && 'Zelyra Studio now summarizes compiler-resolved project structure, recommends a contextual next action, and completes SQL from declared tables and unambiguous columns/aliases without querying a live database. See [English release notes](https://github.com/sf1976/zelyra/blob/v1.2.51/docs/release-notes/1.2.51.en.md).' || '' }}
             ${{ needs.validate.outputs.release_tag == 'v1.2.51' && 'Install on Linux/macOS: `./install.sh --release v1.2.51`. Install on Windows: `.\install.ps1 -Release v1.2.51`. Release archives, checksums, SPDX SBOMs, and attestations are attached below.' || '' }}
 
+            ${{ needs.validate.outputs.release_tag == 'v1.8.0' && '[1.8.0 release notes](https://github.com/sf1976/zelyra/blob/v1.8.0/docs/release-notes/1.8.0.en.md)' || '' }}
+
             ## Zelyra ${{ needs.validate.outputs.release_tag }} (Deutsch)
 
             ${{ startsWith(needs.validate.outputs.release_tag, 'v1.') && !contains(needs.validate.outputs.release_tag, '-') && 'Dies ist ein stabiles Release der 1.x-Serie.' || 'Dies ist eine experimentelle Version. Nicht für Produktivsysteme verwenden.' }}
@@ -411,6 +432,8 @@ jobs:
             ${{ needs.validate.outputs.release_tag == 'v1.2.51' && 'Zelyra Studio zeigt jetzt die compileraufgelöste Projektstruktur, empfiehlt den passenden nächsten Schritt und vervollständigt SQL aus deklarierten Tabellen und eindeutigen Spalten/Aliasen, ohne eine Live-Datenbank abzufragen. Siehe die [deutschen Release-Hinweise](https://github.com/sf1976/zelyra/blob/v1.2.51/docs/release-notes/1.2.51.de.md).' || '' }}
             ${{ needs.validate.outputs.release_tag == 'v1.2.51' && 'Installation unter Linux/macOS: `./install.sh --release v1.2.51`. Installation unter Windows: `.\install.ps1 -Release v1.2.51`. Release-Archive, Prüfsummen, SPDX-SBOMs und Attestierungen sind unten angehängt.' || '' }}
 
+            ${{ needs.validate.outputs.release_tag == 'v1.8.0' && '[Release-Notizen zu 1.8.0](https://github.com/sf1976/zelyra/blob/v1.8.0/docs/release-notes/1.8.0.de.md)' || '' }}
+
             ${{ needs.validate.outputs.release_tag == 'v0.3.0' && 'No independent human onboarding study was conducted for 0.3.0. The project owner explicitly deferred it to 0.4.0; this is not usability evidence. See the [decision record](https://github.com/sf1976/zelyra/blob/v0.3.0/docs/release-readiness/0.3.0-human-gate-decision.en.md).' || '' }}
 
             ${{ needs.validate.outputs.release_tag == 'v0.3.0' && 'Für 0.3.0 wurde keine unabhängige menschliche Einsteigerstudie durchgeführt. Der Projektverantwortliche hat sie ausdrücklich auf 0.4.0 vertagt; dies ist kein Nachweis der Nutzerfreundlichkeit. Siehe das [Entscheidungsprotokoll](https://github.com/sf1976/zelyra/blob/v0.3.0/docs/release-readiness/0.3.0-human-gate-decision.de.md).' || '' }}
@@ -421,3 +444,19 @@ jobs:
             ${{ needs.validate.outputs.release_tag == 'v1.0.0' && 'Independent human acceptance was completed against the published 1.0.0 candidate. See the [tag-pinned acceptance record](https://github.com/sf1976/zelyra/blob/v1.0.0/docs/release-readiness/1.0.0-human-acceptance.en.md).' || '' }}
             ${{ needs.validate.outputs.release_tag == 'v1.0.0' && 'Die unabhängige menschliche Abnahme wurde anhand des veröffentlichten 1.0.0-Kandidaten abgeschlossen. Siehe das [taggebundene Abnahmeprotokoll](https://github.com/sf1976/zelyra/blob/v1.0.0/docs/release-readiness/1.0.0-human-acceptance.de.md).' || '' }}
           files: release-assets/*
+      - name: Verify published release assets
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ needs.validate.outputs.release_tag }}
+        run: |
+          linux="zelyra-${RELEASE_TAG}-x86_64-unknown-linux-gnu"
+          windows="zelyra-${RELEASE_TAG}-x86_64-pc-windows-msvc"
+          gh release view "${RELEASE_TAG}" --repo "${GITHUB_REPOSITORY}" --json isDraft,assets \
+            | jq -e --arg l "$linux" --arg w "$windows" '
+              .isDraft == false and ([.assets[].name] | sort) == ([
+                ($l + ".bin"), ($l + ".bin.sha256"), ($l + ".tar.gz"),
+                ($l + ".tar.gz.sha256"), ($l + ".spdx.json"),
+                ($w + ".exe"), ($w + ".exe.sha256"), ($w + ".zip"),
+                ($w + ".zip.sha256"), ($w + ".spdx.json")
+              ] | sort)'

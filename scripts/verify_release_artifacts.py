@@ -8,10 +8,13 @@ import hashlib
 import re
 import subprocess
 import tarfile
+import tempfile
 import zipfile
 from pathlib import Path, PurePosixPath, PureWindowsPath
 
-from package_release import RELEASE_FILES, TARGETS
+from package_release import (
+    PROOF_EXAMPLE, PROOF_FILE, PROOF_SOURCES, RELEASE_FILES, TARGETS, proof_checker_name,
+)
 
 
 def _expected_names(platform: str, tag: str, target: str) -> tuple[str, str, str, str]:
@@ -61,9 +64,14 @@ def _validate_archive_paths(names: list[str], archive_type: str) -> None:
             raise ValueError(f"unsafe {archive_type} path: {name}")
 
 
-def _verify_archive(path: Path, platform: str, package: str) -> None:
+def _verify_archive(path: Path, platform: str, package: str, *, require_proof: bool = False) -> None:
     executable = "zelyra.exe" if platform == "windows" else "zelyra"
     expected = _expected_archive_entries(package, executable)
+    if require_proof:
+        expected.update(
+            [f"{package}/{PROOF_FILE}", f"{package}/{proof_checker_name(platform)}"]
+            + [f"{package}/{PROOF_EXAMPLE}/{name}" for name in PROOF_SOURCES]
+        )
     if platform == "windows":
         with zipfile.ZipFile(path) as archive:
             entries = archive.infolist()
@@ -86,8 +94,38 @@ def _verify_archive(path: Path, platform: str, package: str) -> None:
                     raise ValueError(f"non-regular TAR entry: {entry.name}")
 
 
+def _run_archive_checker(path: Path, platform: str, package: str) -> None:
+    checker_name = proof_checker_name(platform)
+    names = [PROOF_FILE, checker_name, *(f"{PROOF_EXAMPLE}/{name}" for name in PROOF_SOURCES)]
+    with tempfile.TemporaryDirectory(prefix="zelyra-release-check-") as temporary:
+        root = Path(temporary)
+        (root / PROOF_EXAMPLE).mkdir()
+        if platform == "windows":
+            with zipfile.ZipFile(path) as archive:
+                for name in names:
+                    (root / name).write_bytes(archive.read(f"{package}/{name}"))
+        else:
+            with tarfile.open(path, "r:gz") as archive:
+                for name in names:
+                    member = f"{package}/{name}"
+                    content = archive.extractfile(member)
+                    if content is None:
+                        raise ValueError(f"missing proof archive entry: {member}")
+                    with content:
+                        (root / name).write_bytes(content.read())
+        checker = root / checker_name
+        checker.chmod(0o755)
+        result = subprocess.run(
+            [str(checker), str(root / PROOF_FILE), str(root / PROOF_EXAMPLE)],
+            capture_output=True, text=True, check=False,
+        )
+        if result.returncode:
+            raise ValueError(f"independent archive proof check failed: {result.stderr.strip()}")
+
+
 def verify_release_artifacts(
-    *, directory: Path, platform: str, tag: str, target: str, run_binary: bool = False
+    *, directory: Path, platform: str, tag: str, target: str, run_binary: bool = False,
+    require_proof: bool = False
 ) -> None:
     standalone_name, standalone_checksum, archive_name, archive_checksum = _expected_names(
         platform, tag, target
@@ -101,9 +139,12 @@ def verify_release_artifacts(
     archive = directory / archive_name
     _verify_checksum(standalone)
     _verify_checksum(archive)
-    _verify_archive(archive, platform, f"zelyra-{tag}-{target}")
+    package = f"zelyra-{tag}-{target}"
+    _verify_archive(archive, platform, package, require_proof=require_proof)
 
     if run_binary:
+        if require_proof:
+            _run_archive_checker(archive, platform, package)
         result = subprocess.run(
             [str(standalone), "--version"], capture_output=True, text=True, check=False
         )
@@ -121,6 +162,7 @@ def main() -> int:
     parser.add_argument("--tag", required=True)
     parser.add_argument("--target", required=True)
     parser.add_argument("--run-binary", action="store_true")
+    parser.add_argument("--require-proof", action="store_true")
     args = parser.parse_args()
     try:
         verify_release_artifacts(
@@ -129,6 +171,7 @@ def main() -> int:
             tag=args.tag,
             target=args.target,
             run_binary=args.run_binary,
+            require_proof=args.require_proof,
         )
     except (OSError, ValueError, tarfile.TarError, zipfile.BadZipFile) as error:
         parser.error(str(error))
