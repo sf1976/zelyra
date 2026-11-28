@@ -12,6 +12,7 @@ from check_release_readiness import (
     REQUIRED_GATES_040,
     REQUIRED_GATES_050,
     REQUIRED_GATES_100,
+    REQUIRED_RELEASE_GATE_IDS,
     candidate_tag,
     unfinished_gates,
 )
@@ -33,6 +34,32 @@ class ReleaseReadinessTests(unittest.TestCase):
             self.assertTrue(
                 any("release gate is incomplete" in item for item in unfinished_gates(root, version))
             )
+
+    def test_180_requires_each_named_gate_in_both_languages(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            plans = RELEASE_PLAN_CHECKLISTS["1.8.0"]
+            gates = sorted(REQUIRED_RELEASE_GATE_IDS["1.8.0"])
+            items = "".join(f"- [x] `{gate}` Verified evidence\n" for gate in gates)
+            for relative_path, heading in plans:
+                path = root / relative_path
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text(f"{heading}\n\n{items}", encoding="utf-8")
+            self.assertEqual(unfinished_gates(root, "1.8.0"), [])
+
+            german_path, german_heading = plans[1]
+            document = root / german_path
+            for altered, expected in [
+                (items.replace("- [x] `ci`", "- [ ] `ci`"), "release gate is incomplete"),
+                (items.replace("- [x] `ci` Verified evidence\n", ""), "release gate ci missing"),
+                (items + "- [x] `ci` Second entry\n", "duplicate release gate id"),
+                (items + "- [x] `phony` Made up gate\n", "unknown release gate id"),
+            ]:
+                document.write_text(f"{german_heading}\n\n{altered}", encoding="utf-8")
+                self.assertTrue(
+                    any(expected in failure and german_path in failure
+                        for failure in unfinished_gates(root, "1.8.0"))
+                )
 
     def test_non_030_version_has_no_final_gate(self) -> None:
         self.assertEqual(unfinished_gates(Path("."), "0.2.0"), [])

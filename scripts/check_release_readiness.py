@@ -222,6 +222,19 @@ RELEASE_PLAN_CHECKLISTS = {
         ("docs/release-notes/1.7.0.en.md", "## Release gates"),
         ("docs/release-notes/1.7.0.de.md", "## Release-Gates"),
     ),
+    "1.8.0": (
+        ("docs/release-notes/1.8.0.en.md", "## Release gates"),
+        ("docs/release-notes/1.8.0.de.md", "## Release-Gates"),
+    ),
+}
+
+
+REQUIRED_RELEASE_GATE_IDS = {
+    "1.8.0": frozenset({
+        "ci", "security", "non-regression", "database-parity", "artifacts",
+        "benchmarks", "documentation", "compatibility", "proof-boundaries",
+        "fail-closed", "exit-criteria", "external-effects", "legal-scope",
+    }),
 }
 
 
@@ -232,7 +245,9 @@ def _checkbox_is_checked(text: str, marker: str) -> bool:
     return False
 
 
-def _unfinished_release_plan_checklist(root: Path, relative_path: str, heading: str) -> list[str]:
+def _unfinished_release_plan_checklist(
+    root: Path, relative_path: str, heading: str, required_ids: frozenset[str] = frozenset(),
+) -> list[str]:
     path = root / relative_path
     try:
         lines = path.read_text(encoding="utf-8").splitlines()
@@ -255,12 +270,23 @@ def _unfinished_release_plan_checklist(root: Path, relative_path: str, heading: 
         return [f"release gate checklist is empty ({relative_path})"]
 
     failures = []
+    seen_ids = set()
     for line_number, item in section:
         match = re.match(r"^- \[([ xX~])\] .+", item)
         if match is None:
             failures.append(f"release gate is not a checklist item ({relative_path}:{line_number})")
         elif match.group(1).casefold() != "x":
             failures.append(f"release gate is incomplete ({relative_path}:{line_number})")
+        if required_ids:
+            marker = re.match(r"^- \[[ xX~]\] `([a-z-]+)` \S", item)
+            if marker is None or marker.group(1) not in required_ids:
+                failures.append(f"unknown release gate id ({relative_path}:{line_number})")
+            elif marker.group(1) in seen_ids:
+                failures.append(f"duplicate release gate id ({relative_path}:{line_number})")
+            else:
+                seen_ids.add(marker.group(1))
+    for missing in sorted(required_ids - seen_ids):
+        failures.append(f"release gate {missing} missing ({relative_path})")
     return failures
 
 
@@ -270,7 +296,9 @@ def unfinished_gates(
     if version in RELEASE_PLAN_CHECKLISTS:
         failures = []
         for relative_path, heading in RELEASE_PLAN_CHECKLISTS[version]:
-            failures.extend(_unfinished_release_plan_checklist(root, relative_path, heading))
+            failures.extend(_unfinished_release_plan_checklist(
+                root, relative_path, heading, REQUIRED_RELEASE_GATE_IDS.get(version, frozenset()),
+            ))
         return failures
 
     if version not in {"0.3.0", "0.4.0", "0.5.0", "1.0.0"}:

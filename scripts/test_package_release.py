@@ -17,7 +17,9 @@ import warnings
 from datetime import datetime, timezone
 from pathlib import Path
 
-from package_release import RELEASE_FILES, package_release
+from package_release import (
+    PROOF_EXAMPLE, PROOF_FILE, PROOF_SOURCES, RELEASE_FILES, package_release, proof_checker_name,
+)
 from verify_release_artifacts import (
     _stable_version_from_tag,
     _verify_archive,
@@ -116,6 +118,46 @@ class ReleasePackageTests(unittest.TestCase):
             )
             for member in zipped.infolist():
                 self.assertEqual(member.date_time, expected_time.timetuple()[:6])
+
+    def test_proof_and_standalone_checker_do_not_add_release_assets(self) -> None:
+        example = self.project / "examples/proof_decision"
+        example.mkdir(parents=True)
+        for name in PROOF_SOURCES:
+            (example / name).write_text(f"fixture: {name}\n", encoding="utf-8")
+        proof = self.root / PROOF_FILE
+        proof.write_bytes(b'{"schema_version":1}\n')
+        checker = self.root / "checker"
+        checker.write_bytes(b"checker executable fixture")
+        for platform, target in (
+            ("linux", "x86_64-unknown-linux-gnu"),
+            ("windows", "x86_64-pc-windows-msvc"),
+        ):
+            output = self.root / platform
+            options = dict(
+                project_root=self.project, binary=self.binary, output_dir=output,
+                platform=platform, tag=self.tag, target=target, source_date_epoch=1_800_000_000,
+            )
+            with self.assertRaisesRegex(ValueError, "must be supplied together"):
+                package_release(**options, proof=proof)
+            package_release(**options)
+            verification = dict(directory=output, platform=platform, tag=self.tag, target=target)
+            with self.assertRaisesRegex(ValueError, "unexpected .* entries"):
+                verify_release_artifacts(**verification, require_proof=True)
+            paths = package_release(**options, proof=proof, checker=checker)
+            self.assertEqual(len(paths), 4)
+            verify_release_artifacts(**verification, require_proof=True)
+            package = f"zelyra-{self.tag}-{target}"
+            archive = paths[2]
+            if platform == "windows":
+                with zipfile.ZipFile(archive) as content:
+                    self.assertEqual(content.read(f"{package}/{PROOF_FILE}"), proof.read_bytes())
+                    self.assertEqual(content.read(f"{package}/{proof_checker_name(platform)}"), checker.read_bytes())
+            else:
+                with tarfile.open(archive, "r:gz") as content:
+                    source = content.extractfile(f"{package}/{PROOF_EXAMPLE}/main.zyl")
+                    assert source is not None
+                    with source:
+                        self.assertEqual(source.read(), (example / "main.zyl").read_bytes())
 
     def test_archive_verifier_rejects_traversal_and_windows_absolute_paths(self) -> None:
         package = f"zelyra-{self.tag}-x86_64-pc-windows-msvc"
