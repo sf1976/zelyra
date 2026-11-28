@@ -667,6 +667,8 @@ jobs:
           key: ${{ runner.os }}-cargo-docker-e2e-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: |
             ${{ runner.os }}-cargo-docker-e2e-
+      - name: Install database clients and curl
+        run: sudo apt-get update && sudo apt-get install --yes mariadb-client curl
       - name: Build CLI for Docker E2E
         run: cargo build -p zelyra-cli
       - name: Cache Docker Official Images, falling back to Docker Hub
