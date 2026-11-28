@@ -82,6 +82,17 @@ jobs:
         uses: actions/checkout@v4
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
+      - name: Cache Cargo registry and target
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+          key: ${{ runner.os }}-cargo-win-updater-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-win-updater-
       - name: Check Windows CLI updater
         run: cargo check --locked -p zelyra-cli --all-targets
       - name: Test updater logic
@@ -133,6 +144,17 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt, clippy
+      - name: Cache Cargo registry and target
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+          key: ${{ runner.os }}-cargo-test-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-test-
       - name: Install database clients and curl
         run: sudo apt-get update && sudo apt-get install --yes mariadb-client postgresql-client sqlite3 curl openssl
       - name: Verify PostgreSQL server version
@@ -148,33 +170,6 @@ jobs:
           docker image inspect postgres:16.15 --format '{{json .RepoDigests}}'
       - name: Check formatting
         run: cargo fmt --all -- --check
-      - name: Validate source installer
-        run: |
-          bash -n install.sh
-          ./install.sh --dry-run --no-rustup --no-path --root "$RUNNER_TEMP/zelyra-install"
-          release_tag="$(python3 scripts/check_release_metadata.py --print-tag)"
-          ./install.sh --release "$release_tag" --dry-run --no-path --root "$RUNNER_TEMP/zelyra-release-install"
-      - name: Run source installer end-to-end test
-        env:
-          CARGO_TERM_COLOR: always
-        run: ./tests/installer-e2e.sh
-      - name: Run clean onboarding end-to-end test
-        env:
-          ZELYRA_CLEAN_ONBOARDING_ROOT_PASSWORD: root
-          ZELYRA_CLEAN_ONBOARDING_DB_PORT: 3306
-          ZELYRA_CLEAN_ONBOARDING_HOST_PORT: 18083
-          ZELYRA_CLEAN_ONBOARDING_GENERATED_DB_HOST_PORT: 3311
-          ZELYRA_CLEAN_ONBOARDING_ADDRESS: 127.0.0.1:38521
-        run: ./tests/clean-onboarding-e2e.sh
-      - name: Verify missing cargo installer error
-        run: |
-          set +e
-          PATH=/usr/bin:/bin ./install.sh --no-rustup --no-path --root "$RUNNER_TEMP/zelyra-no-cargo" >"$RUNNER_TEMP/zelyra-no-cargo.log" 2>&1
-          status=$?
-          set -e
-          test "$status" -eq 1
-          grep -Fq "cargo is missing" "$RUNNER_TEMP/zelyra-no-cargo.log"
-          ! grep -Fq "No such file or directory" "$RUNNER_TEMP/zelyra-no-cargo.log"
       - name: Test deterministic release packaging
         run: |
           python3 scripts/check_release_metadata.py
@@ -182,17 +177,15 @@ jobs:
           python3 scripts/test_release_readiness.py
           python3 scripts/test_sbom.py
       - name: Build CLI for tests
-        run: cargo build -p zelyra-cli
+        run: |
+          cargo build -p zelyra-cli
+          python3 scripts/check_release_metadata.py --binary target/debug/zelyra
       - name: Run workspace tests
         env:
           ZELYRA_DB_TIMEOUT_TEST_URL: mariadb://root:root@127.0.0.1:3306/zelyra_ci
         run: cargo test --workspace
       - name: Run Clippy
         run: cargo clippy --workspace --all-targets -- -D warnings
-      - name: Build CLI for integration test
-        run: |
-          cargo build -p zelyra-cli
-          python3 scripts/check_release_metadata.py --binary target/debug/zelyra
       - name: Verify scoped SQL on MariaDB and PostgreSQL
         run: |
           MYSQL_PWD=root mariadb --host=127.0.0.1 --user=root --execute='CREATE DATABASE zelyra_tenant_sql_ci'
@@ -249,10 +242,6 @@ jobs:
         env:
           ZELYRA_MODULE_IMPORTS_DATABASE_URL: mariadb://root:root@127.0.0.1:3306/zelyra_ci
         run: cargo test -p zelyra-cli --test module_imports imported_tableviews_are_type_checked_and_served_from_the_composed_schema -- --nocapture
-      - name: Run Linux release artifact smoke test
-        env:
-          ZELYRA_RELEASE_BINARY: target/release/zelyra
-        run: ./tests/release-artifact-smoke.sh
       - name: Validate combined view showcase
         run: |
           target/debug/zelyra check examples/view_showcase.zyl --format=json > /tmp/zelyra-view-showcase.json
@@ -304,34 +293,6 @@ jobs:
           ZELYRA_GENERATED_E2E_ADDRESS: 127.0.0.1:38520
           ZELYRA_BIN: target/debug/zelyra
         run: ./tests/generated-project-mariadb-e2e.sh
-      - name: Cache Docker Official Images, falling back to Docker Hub
-        run: |
-          cache_image() {
-            image="$1"
-            mirror_image="mirror.gcr.io/library/${image}"
-            if docker pull "$mirror_image"; then
-              docker tag "$mirror_image" "$image"
-            else
-              echo "Google mirror unavailable for ${image}; pulling from Docker Hub"
-              docker pull "$image"
-            fi
-          }
-
-          cache_image rust:1-bookworm
-          cache_image debian:bookworm-slim
-          cache_image mariadb:11
-      - name: Run generated-project Docker end-to-end test
-        env:
-          ZELYRA_DOCKER_E2E_DB_HOST_PORT: 3309
-          ZELYRA_DOCKER_E2E_HOST_PORT: 18082
-          ZELYRA_DOCKER_E2E_WEB_PORT: 8081
-          ZELYRA_DOCKER_E2E_BUNDLE_HOST_PORT: 18083
-          ZELYRA_DOCKER_E2E_SECOND_BUNDLE_HOST_PORT: 18084
-          ZELYRA_DOCKER_E2E_ADDRESS: 127.0.0.1:18082
-          ZELYRA_DOCKER_E2E_REF: ${{ github.head_ref || github.ref_name }}
-          ZELYRA_DOCKER_E2E_MODULE_COMMIT: ${{ github.event.pull_request.head.sha || github.sha }}
-          ZELYRA_BIN: target/debug/zelyra
-        run: ./tests/generated-project-docker-e2e.sh
       - name: Run generated authentication project end-to-end test
         env:
           ZELYRA_GENERATED_AUTH_ROOT_PASSWORD: root
@@ -621,12 +582,129 @@ jobs:
           path: editor/tests/visual-baselines/*.actual*.png
           if-no-files-found: ignore
           retention-days: 7
+  installer-e2e:
+    name: Source installer and clean onboarding E2E
+    runs-on: ubuntu-24.04
+    services:
+      mariadb:
+        image: mariadb:11
+        env:
+          MARIADB_DATABASE: zelyra_ci
+          MARIADB_ROOT_PASSWORD: root
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="healthcheck.sh --connect --innodb_initialized"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=30
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+      - name: Cache Cargo registry and target
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+          key: ${{ runner.os }}-cargo-installer-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-installer-
+      - name: Install database clients and curl
+        run: sudo apt-get update && sudo apt-get install --yes mariadb-client curl openssl
+      - name: Validate source installer
+        run: |
+          bash -n install.sh
+          ./install.sh --dry-run --no-rustup --no-path --root "$RUNNER_TEMP/zelyra-install"
+          release_tag="$(python3 scripts/check_release_metadata.py --print-tag)"
+          ./install.sh --release "$release_tag" --dry-run --no-path --root "$RUNNER_TEMP/zelyra-release-install"
+      - name: Run source installer end-to-end test
+        env:
+          CARGO_TERM_COLOR: always
+        run: ./tests/installer-e2e.sh
+      - name: Run clean onboarding end-to-end test
+        env:
+          ZELYRA_CLEAN_ONBOARDING_ROOT_PASSWORD: root
+          ZELYRA_CLEAN_ONBOARDING_DB_PORT: 3306
+          ZELYRA_CLEAN_ONBOARDING_HOST_PORT: 18083
+          ZELYRA_CLEAN_ONBOARDING_GENERATED_DB_HOST_PORT: 3311
+          ZELYRA_CLEAN_ONBOARDING_ADDRESS: 127.0.0.1:38521
+        run: ./tests/clean-onboarding-e2e.sh
+      - name: Verify missing cargo installer error
+        run: |
+          set +e
+          PATH=/usr/bin:/bin ./install.sh --no-rustup --no-path --root "$RUNNER_TEMP/zelyra-no-cargo" >"$RUNNER_TEMP/zelyra-no-cargo.log" 2>&1
+          status=$?
+          set -e
+          test "$status" -eq 1
+          grep -Fq "cargo is missing" "$RUNNER_TEMP/zelyra-no-cargo.log"
+          ! grep -Fq "No such file or directory" "$RUNNER_TEMP/zelyra-no-cargo.log"
+      - name: Run Linux release artifact smoke test
+        env:
+          ZELYRA_RELEASE_BINARY: target/release/zelyra
+        run: ./tests/release-artifact-smoke.sh
+
+  docker-e2e:
+    name: Generated-project Docker E2E
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+      - name: Cache Cargo registry and target
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+          key: ${{ runner.os }}-cargo-docker-e2e-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-docker-e2e-
+      - name: Install database clients and curl
+        run: sudo apt-get update && sudo apt-get install --yes mariadb-client curl
+      - name: Build CLI for Docker E2E
+        run: cargo build -p zelyra-cli
+      - name: Cache Docker Official Images, falling back to Docker Hub
+        run: |
+          cache_image() {
+            image="$1"
+            mirror_image="mirror.gcr.io/library/${image}"
+            if docker pull "$mirror_image"; then
+              docker tag "$mirror_image" "$image"
+            else
+              echo "Google mirror unavailable for ${image}; pulling from Docker Hub"
+              docker pull "$image"
+            fi
+          }
+
+          cache_image rust:1-bookworm
+          cache_image debian:bookworm-slim
+          cache_image mariadb:11
+      - name: Run generated-project Docker end-to-end test
+        env:
+          ZELYRA_DOCKER_E2E_DB_HOST_PORT: 3309
+          ZELYRA_DOCKER_E2E_HOST_PORT: 18082
+          ZELYRA_DOCKER_E2E_WEB_PORT: 8081
+          ZELYRA_DOCKER_E2E_BUNDLE_HOST_PORT: 18083
+          ZELYRA_DOCKER_E2E_SECOND_BUNDLE_HOST_PORT: 18084
+          ZELYRA_DOCKER_E2E_ADDRESS: 127.0.0.1:18082
+          ZELYRA_DOCKER_E2E_REF: ${{ github.head_ref || github.ref_name }}
+          ZELYRA_DOCKER_E2E_MODULE_COMMIT: ${{ github.event.pull_request.head.sha || github.sha }}
+          ZELYRA_BIN: target/debug/zelyra
+        run: ./tests/generated-project-docker-e2e.sh
+
   mariadb-compatibility:
     name: MariaDB ${{ matrix.version }} compatibility
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
-      max-parallel: 1
       matrix:
         version: ["10.11.19", "11.4.13", "11.8.9", "12.3.3"]
     services:
@@ -648,6 +726,18 @@ jobs:
         uses: actions/checkout@v4
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
+      - name: Cache Cargo registry and target
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+          key: ${{ runner.os }}-cargo-mariadb-${{ matrix.version }}-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-mariadb-${{ matrix.version }}-
+            ${{ runner.os }}-cargo-mariadb-
       - name: Install MariaDB client and curl
         run: sudo apt-get update && sudo apt-get install --yes mariadb-client curl
       - name: Build Zelyra CLI
@@ -727,6 +817,17 @@ jobs:
         uses: actions/checkout@v4
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
+      - name: Cache Cargo registry and target
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+          key: ${{ runner.os }}-cargo-mysql-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-mysql-
       - name: Install MySQL client
         run: sudo apt-get update && sudo apt-get install --yes default-mysql-client
       - name: Verify MySQL server version
