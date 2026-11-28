@@ -6313,6 +6313,8 @@ fn redact_builtin_preserves_existing_function_names_across_backends() {
 #[test]
 #[ignore = "requires ZELYRA_TEST_DATABASE_URL pointing to a disposable MariaDB or PostgreSQL database"]
 fn scoped_sql_reads_and_writes_preserve_tenant_boundaries_on_live_databases() {
+    use zelyra_runtime::{execute_api_function_with_capabilities_and_policies, Value};
+
     let database_url = std::env::var("ZELYRA_TEST_DATABASE_URL")
         .expect("ignored integration test needs a disposable database URL");
     let engine = if zelyra_database::is_postgres_url(&database_url) {
@@ -6356,6 +6358,10 @@ fn count_all(tid: TenantId) -> Int uses Database(read: [{table}]) {{
     return sql_decode<Int>(sql<Int> {{ SELECT COUNT(*) FROM {table} WHERE tenant_id = :tid }})
 }}
 
+fn count_for_api(tid: TenantId) -> Int uses Database(read: [{table}]) {{
+    return count_all(tid)
+}}
+
 fn main() uses Database(read: [{table}]), Database(write: [{table}]) {{
     first = json_decode<TenantId>("1")
     second = json_decode<TenantId>("2")
@@ -6375,7 +6381,7 @@ fn main() uses Database(read: [{table}]), Database(write: [{table}]) {{
     let directory = temporary_directory("zelyra-live-tenant-sql");
     fs::create_dir_all(&directory).unwrap();
     let entry = directory.join("main.zyl");
-    fs::write(&entry, source).unwrap();
+    fs::write(&entry, &source).unwrap();
 
     for arguments in [&["check"][..], &["db", "apply"], &["run"]] {
         let output = Command::new(binary())
@@ -6388,6 +6394,26 @@ fn main() uses Database(read: [{table}]), Database(write: [{table}]) {{
             output.status.success(),
             "{engine} {arguments:?}: {}",
             String::from_utf8_lossy(&output.stderr).replace(&database_url, "[database URL]")
+        );
+    }
+    let program = zelyra_parser::parse(&zelyra_lexer::lex(&source).unwrap()).unwrap();
+    let call_api = |query_tenant, session_tenant| {
+        execute_api_function_with_capabilities_and_policies(
+            &program,
+            "count_for_api",
+            vec![Value::Int(query_tenant)],
+            Some(&database_url),
+            None,
+            None,
+            session_tenant,
+        )
+    };
+    assert_eq!(call_api(1, Some(1)).unwrap(), Value::Int(1));
+    assert_eq!(call_api(2, Some(2)).unwrap(), Value::Int(2));
+    for session in [None, Some(2)] {
+        assert_eq!(
+            call_api(1, session).unwrap_err().message,
+            "tenant-scoped API SQL requires the verified session tenant"
         );
     }
     fs::remove_dir_all(directory).unwrap();

@@ -233,11 +233,19 @@ pub(super) struct ExecutionContext {
     pub(super) mail_policy: Option<MailPolicy>,
     pub(super) package_settings: Option<PackageSettings>,
     pub(super) host_services: Arc<dyn HostServices>,
+    pub(super) sql_tenant: SqlTenantContext,
+}
+
+#[derive(Clone, Copy)]
+pub(super) enum SqlTenantContext {
+    Caller,
+    ApiSession(Option<i64>),
 }
 
 /// Per-execution host resources shared by every AST entry point.
 pub(super) struct RuntimeServices<'services> {
     pub(super) host_services: Arc<dyn HostServices>,
+    pub(super) sql_tenant: SqlTenantContext,
     pub(super) database_transaction:
         Option<Arc<Mutex<zelyra_database::MariaDbInteractiveTransaction>>>,
     pub(super) transactional_query: Option<&'services mut TransactionalQuery<'services>>,
@@ -275,6 +283,7 @@ impl<'program, 'services> AstInterpreter<'program, 'services> {
                 mail_policy: policy.as_ref().and_then(|policy| policy.mail.clone()),
                 package_settings: policy.and_then(|policy| policy.package_settings),
                 host_services: services.host_services,
+                sql_tenant: services.sql_tenant,
             },
             active_capabilities: Vec::new(),
             active_type_substitutions: Vec::new(),

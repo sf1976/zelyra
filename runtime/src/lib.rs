@@ -226,7 +226,8 @@ pub fn check_scoped_sql_with_requirements(
 }
 mod ast_interpreter;
 pub use ast_interpreter::execution_api::{
-    execute, execute_captured_with_capabilities_and_policies,
+    execute, execute_api_function_with_capabilities_and_policies,
+    execute_captured_with_capabilities_and_policies,
     execute_captured_with_database_and_capabilities_and_policies,
     execute_captured_with_database_and_host_services, execute_captured_with_host_services,
     execute_function, execute_function_captured_with_capabilities_and_policies,
@@ -1037,6 +1038,7 @@ fn json_codec_interpreter<'program>(
             mail_policy: None,
             package_settings: None,
             host_services: Arc::new(SystemHostServices),
+            sql_tenant: ast_interpreter::SqlTenantContext::Caller,
         },
         active_capabilities: Vec::new(),
         active_type_substitutions: Vec::new(),

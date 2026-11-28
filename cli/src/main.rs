@@ -34,6 +34,7 @@ use zelyra_lexer::{lex, TokenKind};
 use zelyra_parser::parse;
 use zelyra_runtime::{
     check, check_apis, check_capabilities_with_grants, check_privacy,
+    execute_api_function_with_capabilities_and_policies,
     execute_function_captured_with_capabilities_and_policies,
     execute_function_with_capabilities_and_policies, verify as verify_program, FileSystemPolicy,
     HostFileMetadata, HostHttpResponse, HostServices, MailPolicy, NetworkPolicy, ProcessPolicy,
@@ -12203,13 +12204,14 @@ fn dispatch_api_with_capabilities(
             }
         }
     }
-    match execute_function_with_capabilities_and_policies(
+    match execute_api_function_with_capabilities_and_policies(
         program,
         handler,
         arguments,
         context.database_url,
         context.capability_grants,
         context.runtime_policy,
+        context.verified_tenant_id,
     ) {
         Ok(value) => api_result_response(api, &value),
         Err(error) => api_error_response(500, "InternalServerError", &error.message),

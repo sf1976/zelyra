@@ -200,16 +200,25 @@ impl<'program, 'services> Interpreter<'program, 'services> {
                 };
                 let params = query_parameters(query, env, expr.span)?;
                 if let Some(tenant_param) = bound_tenant_param.as_deref() {
-                    let valid_tenant = params.iter().any(|(name, value)| {
-                        name == tenant_param && matches!(value, zelyra_database::QueryValue::Int(_))
-                    });
-                    if !valid_tenant {
+                    let Some((_, zelyra_database::QueryValue::Int(tenant_id))) =
+                        params.iter().find(|(name, _)| name == tenant_param)
+                    else {
                         return Err(self.runtime_error(
                             expr.span,
                             format!(
                                 "tenant-scoped SQL requires a non-null integer value for `:{tenant_param}`"
                             ),
                         ));
+                    };
+                    if let SqlTenantContext::ApiSession(verified) =
+                        self.execution_context.sql_tenant
+                    {
+                        if verified != Some(*tenant_id) {
+                            return Err(self.runtime_error(
+                                expr.span,
+                                "tenant-scoped API SQL requires the verified session tenant",
+                            ));
+                        }
                     }
                 }
                 self.ensure_database_storage(expr.span)?;
