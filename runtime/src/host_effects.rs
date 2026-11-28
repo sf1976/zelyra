@@ -74,21 +74,50 @@ impl<'program, 'services> Interpreter<'program, 'services> {
         span: Span,
         allow_missing: bool,
     ) -> Result<PathBuf, RuntimeError> {
-        if let Some(capabilities) = self.active_capabilities.last() {
-            let declared = capabilities.iter().map(String::as_str).collect::<Vec<_>>();
-            crate::capabilities::check_filesystem_path_scope(path, &declared).map_err(
-                |reason| self.runtime_error(span, format!("runtime capability denied: {reason}")),
-            )?;
+        let declared = self
+            .active_capabilities
+            .last()
+            .map_or_else(Vec::new, |capabilities| {
+                capabilities.iter().map(String::as_str).collect::<Vec<_>>()
+            });
+        let scoped = crate::capabilities::filesystem_path_is_scoped(&declared);
+        if scoped {
+            crate::capabilities::check_filesystem_path_scope(path, &declared)
+                .map_err(|reason| self.runtime_error(span, reason))?;
         }
-        resolve_filesystem_path_rule(
-            self.execution_context.filesystem_policy.as_ref(),
-            path,
-            roots,
-            operation,
-            allow_missing,
-            Some(self.execution_context.host_services.as_ref()),
-        )
-        .map_err(|message| self.runtime_error(span, message))
+        let policy = self.execution_context.filesystem_policy.as_ref();
+        let host = self.execution_context.host_services.as_ref();
+        let resolved =
+            resolve_filesystem_path_rule(policy, path, roots, operation, allow_missing, Some(host))
+                .map_err(|message| self.runtime_error(span, message))?;
+        if !scoped {
+            return Ok(resolved);
+        }
+
+        let base = policy.map_or(Path::new("."), |policy| policy.base_dir.as_path());
+        let base = host
+            .canonicalize_path(base, false)
+            .map_err(|error| self.runtime_error(span, error))?;
+        let resolved = if policy.is_some() {
+            resolved
+        } else {
+            host.canonicalize_path(&resolved, allow_missing)
+                .map_err(|error| self.runtime_error(span, error))?
+        };
+        let relative = resolved
+            .strip_prefix(&base)
+            .ok()
+            .and_then(Path::to_str)
+            .ok_or_else(|| {
+                self.runtime_error(
+                    span,
+                    "resolved path is outside the declared `FileSystem(scope: ...)`",
+                )
+            })?;
+        let relative = relative.replace(std::path::MAIN_SEPARATOR, "/");
+        crate::capabilities::check_filesystem_path_scope(&relative, &declared)
+            .map_err(|reason| self.runtime_error(span, reason))?;
+        Ok(resolved)
     }
 
     pub(crate) fn http_request(

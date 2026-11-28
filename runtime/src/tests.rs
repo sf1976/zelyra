@@ -5176,6 +5176,56 @@ fn writes_lists_and_deletes_with_a_file_system_policy() {
 }
 
 #[test]
+#[cfg(unix)]
+fn scoped_filesystem_reads_use_the_resolved_path() {
+    let root = std::env::temp_dir().join(format!(
+        "zelyra-scoped-filesystem-{}",
+        SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos()
+    ));
+    let exports = root.join("exports");
+    std::fs::create_dir_all(&exports).unwrap();
+    std::fs::write(exports.join("summary.txt"), "summary").unwrap();
+    std::fs::write(root.join("internal.txt"), "internal").unwrap();
+    std::os::unix::fs::symlink(root.join("internal.txt"), exports.join("link.txt")).unwrap();
+    let source = r#"
+        fn read_export(path: String) -> String uses FileSystem(scope: "exports/") {
+            return read_text(path)
+        }
+        fn main() {}
+    "#;
+    let program = parse(&lex(source).unwrap()).unwrap();
+    check_capabilities(&program).unwrap();
+    let policy = FileSystemPolicy {
+        base_dir: root.clone(),
+        read_roots: vec![root.clone()],
+        write_roots: Vec::new(),
+    };
+    let grants = HashSet::from([String::from("FileSystem")]);
+    let read = |path: &str| {
+        execute_function_with_capabilities_and_filesystem_policy(
+            &program,
+            "read_export",
+            vec![Value::String(path.into())],
+            None,
+            Some(&grants),
+            Some(&policy),
+        )
+    };
+    assert_eq!(
+        read("exports/summary.txt").unwrap(),
+        Value::String("summary".into())
+    );
+    assert!(read("exports/link.txt")
+        .unwrap_err()
+        .message
+        .contains("FileSystem(scope:"));
+    std::fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
 fn safe_text_file_apis_preserve_utf8_and_reject_overwrites_and_path_escape() {
     let root = std::env::temp_dir().join(format!(
         "zelyra-safe-text-files-{}",

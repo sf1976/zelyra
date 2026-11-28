@@ -19,10 +19,11 @@
   `WITH RECURSIVE`, subqueries, `UNION`, `OR`, and mismatched `TenantId` bindings. /
   Erweiterte Mandanten-SQL-Algebra (nicht-rekursive `WITH`-CTEs, `GROUP BY`/`HAVING`,
   mandantensichere `UPDATE`/`DELETE`/Batch-`INSERT`).
-- Add resource-scoped capabilities (`Database(read: [...])`,
-  `Database(write: [...])`, `Network(allow: [...])`, `FileSystem(scope: "...")`,
-  `Email(templates: [...])`) enforced statically (`E-CAP-001`) and at runtime. /
-  Ressourcengenaue Capabilities mit statischer Subsumtion und Laufzeitdurchsetzung.
+- Add resource-scoped capabilities for `Database(read: [...])`,
+  `Database(write: [...])`, `Network(allow: [...])`, and `FileSystem(scope: "...")`, checked statically
+  (`E-CAP-001`) and at runtime. Template-bound mail delivery remains open. /
+  Ressourcengenaue Capabilities mit statischer und Laufzeitprüfung. Der
+  vorlagengebundene Mailversand ist offen.
 - Add Verified Authorization v1 (`zelyra verify` privacy and authorization checks
   with all six binding evidence classes `PROVEN`–`UNVERIFIED`) and export
   `privacy`/`redact` metadata plus `authorization` summary in `zelyra reflect`. /

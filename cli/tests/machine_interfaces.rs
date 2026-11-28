@@ -6280,6 +6280,89 @@ fn main() {
 }
 
 #[test]
+#[ignore = "requires ZELYRA_TEST_DATABASE_URL pointing to a disposable MariaDB or PostgreSQL database"]
+fn scoped_sql_reads_and_writes_preserve_tenant_boundaries_on_live_databases() {
+    let database_url = std::env::var("ZELYRA_TEST_DATABASE_URL")
+        .expect("ignored integration test needs a disposable database URL");
+    let engine = if zelyra_database::is_postgres_url(&database_url) {
+        "postgres"
+    } else {
+        "mariadb"
+    };
+    let table = format!("tenant_sql_release_{}", std::process::id());
+    let source = format!(
+        r#"
+database main {{ engine: {engine} }}
+
+type TenantId = Id
+
+table {table} scoped by tenant_id: TenantId {{
+    id: Id primary auto
+    tenant_id: TenantId required
+    label: String(32) required
+}}
+
+fn seed(tid: TenantId, left: String, right: String) uses Database(write: [{table}]) {{
+    sql {{ INSERT INTO {table} (tenant_id, label) VALUES (:tid, :left), (:tid, :right) }}
+}}
+
+fn count_matches(tid: TenantId, label: String, expected: Int) -> Int uses Database(read: [{table}]) {{
+    return sql_decode<Int>(sql<Int> {{
+        WITH entries AS (SELECT tenant_id, label FROM {table} WHERE tenant_id = :tid)
+        SELECT COUNT(*) FROM entries WHERE label = :label GROUP BY tenant_id HAVING COUNT(*) = :expected
+    }})
+}}
+
+fn rename(tid: TenantId) uses Database(write: [{table}]) {{
+    sql {{ UPDATE {table} SET label = 'renamed' WHERE tenant_id = :tid AND label = 'shared' }}
+}}
+
+fn remove(tid: TenantId) uses Database(write: [{table}]) {{
+    sql {{ DELETE FROM {table} WHERE tenant_id = :tid AND label = 'renamed' }}
+}}
+
+fn count_all(tid: TenantId) -> Int uses Database(read: [{table}]) {{
+    return sql_decode<Int>(sql<Int> {{ SELECT COUNT(*) FROM {table} WHERE tenant_id = :tid }})
+}}
+
+fn main() uses Database(read: [{table}]), Database(write: [{table}]) {{
+    first = json_decode<TenantId>("1")
+    second = json_decode<TenantId>("2")
+    seed(first, "shared", "first only")
+    seed(second, "shared", "second only")
+    assert_eq(count_matches(first, "shared", 1), 1)
+    rename(first)
+    assert_eq(count_matches(first, "renamed", 1), 1)
+    assert_eq(count_matches(second, "shared", 1), 1)
+    remove(first)
+    assert_eq(count_all(first), 1)
+    assert_eq(count_all(second), 2)
+    assert_eq(count_matches(second, "shared", 1), 1)
+}}
+"#,
+    );
+    let directory = temporary_directory("zelyra-live-tenant-sql");
+    fs::create_dir_all(&directory).unwrap();
+    let entry = directory.join("main.zyl");
+    fs::write(&entry, source).unwrap();
+
+    for arguments in [&["check"][..], &["db", "apply"], &["run"]] {
+        let output = Command::new(binary())
+            .args(arguments)
+            .arg(&entry)
+            .env("ZELYRA_DATABASE_MAIN_URL", &database_url)
+            .output()
+            .unwrap();
+        assert!(
+            output.status.success(),
+            "{engine} {arguments:?}: {}",
+            String::from_utf8_lossy(&output.stderr).replace(&database_url, "[database URL]")
+        );
+    }
+    fs::remove_dir_all(directory).unwrap();
+}
+
+#[test]
 fn privacy_information_flow_scoped_capabilities_and_verified_auth_v1() {
     let directory = temporary_directory("zelyra-170-privacy-auth");
     fs::create_dir_all(&directory).unwrap();
@@ -6555,6 +6638,15 @@ fn fail(s: String @secret) -> Result<Int, String> {
 fn main() {}
 "#,
         ),
+        (
+            "classified_http_body",
+            r#"
+fn submit(body: String @pii) uses Network(allow: ["example.test"]) {
+    _ = http_request("POST", "https://example.test/", [], Some(body))
+}
+fn main() {}
+"#,
+        ),
     ] {
         let neg = directory.join(format!("{name}.zyl"));
         fs::write(&neg, snippet).unwrap();
@@ -6598,6 +6690,21 @@ fn main() {}
     assert!(!host_res.status.success());
     assert!(String::from_utf8_lossy(&host_res.stderr).contains("E-CAP-001"));
 
+    let unscoped_mail = directory.join("unscoped_mail.zyl");
+    fs::write(
+        &unscoped_mail,
+        r#"
+fn deliver(event_id: String, payload: String) uses Email(templates: ["invoice"]) {
+    _ = mail_deliver(event_id, payload)
+}
+fn main() {}
+"#,
+    )
+    .unwrap();
+    let mail_res = run(&["check", unscoped_mail.to_str().unwrap()]);
+    assert!(!mail_res.status.success());
+    assert!(String::from_utf8_lossy(&mail_res.stderr).contains("E-CAP-001"));
+
     // Dynamic host escaping Network(allow: [...]) caught at runtime too
     let dyn_host = directory.join("dyn_bad_host.zyl");
     fs::write(
@@ -6620,7 +6727,7 @@ fn main() uses Network(allow: ["api.datev.de"]) {
         String::from_utf8_lossy(&dyn_res.stderr)
     );
 
-    // 4. Negative Verified Authorization v1: unauthenticated POST Database(write) fails zelyra verify
+    // 4. API authentication is required for write capabilities regardless of the HTTP method.
     let bad_auth = directory.join("bad_auth.zyl");
     fs::write(
         &bad_auth,
@@ -6643,7 +6750,7 @@ fn create_inv() -> Int uses Database(write: [invoices]) {
     sql { INSERT INTO invoices (total) VALUES (100) }
     return 1
 }
-api POST "/api/invoices" {
+api GET "/api/invoices" {
     handler create_inv
     output Int
 }

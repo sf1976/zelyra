@@ -21,7 +21,7 @@ The 1.7.0 release candidate adds static information flow control (`@pii`,
 algebra (non-recursive `WITH` CTEs, `GROUP BY`/`HAVING`, tenant-safe
 `UPDATE`/`DELETE`/batch `INSERT`), resource-scoped capabilities
 (`Database(read/write: [...])`, `Network(allow: [...])`,
-`FileSystem(scope: "...")`, `Email(templates: [...])`), and **Verified
+`FileSystem(scope: "...")`), and **Verified
 Authorization v1**. `zelyra verify` reports evidence classes (`PROVEN`–`UNVERIFIED`)
 and `zelyra reflect` exports privacy and authorization metadata. AST remains the default;
 experimental MIR and Bytecode remain opt-in and fail closed for unsupported

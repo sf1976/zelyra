@@ -228,7 +228,7 @@ pub fn verify(program: &Program) -> Vec<VerificationResult> {
         results.push(verify_privacy(program));
     }
     if program_uses_authorization(program) {
-        results.extend(verify_authorization_matrix(program, &functions));
+        results.extend(verify_authorization_gates(program, &functions));
     }
     results
 }
@@ -330,7 +330,7 @@ fn handler_writes_database(function: &Function) -> bool {
     })
 }
 
-fn verify_authorization_matrix(
+fn verify_authorization_gates(
     program: &Program,
     functions: &HashMap<String, &Function>,
 ) -> Vec<VerificationResult> {
@@ -341,11 +341,7 @@ fn verify_authorization_matrix(
             .iter()
             .any(|t| t.tenant_scope.is_some() || t.is_ledger);
     for (idx, api) in program.apis.iter().enumerate() {
-        let mutating = matches!(
-            api.method.to_ascii_uppercase().as_str(),
-            "POST" | "PUT" | "PATCH" | "DELETE"
-        );
-        if mutating && !api.requires_auth && strict_auth_context {
+        if !api.requires_auth && strict_auth_context {
             let writes_db = api
                 .handler
                 .as_ref()
@@ -362,7 +358,7 @@ fn verify_authorization_matrix(
                     status: VerificationStatus::Failed,
                     span: api.span,
                     message: format!(
-                        "Mutating API `{} {}` writes to the database without `requires auth` in a protected/tenant/ledger project.",
+                        "API `{} {}` declares database write capability without `requires auth` in a protected/tenant/ledger project.",
                         api.method.to_ascii_uppercase(),
                         api.path
                     ),
@@ -410,7 +406,7 @@ fn verify_authorization_matrix(
         status: VerificationStatus::Proven,
         span,
         message: format!(
-            "Authorization matrix v1 verified: {protected_apis} auth-gated API(s), {tenant_tables} tenant-scoped table(s), {role_transitions} role-gated and {four_eyes_transitions} four-eyes transition(s); external identity provisioning and session secrets remain ASSUMED."
+            "API authentication gate verified for database-write declarations in protected, tenant, or ledger projects. Declarations include {protected_apis} auth-gated API(s), {tenant_tables} tenant-scoped table(s), {role_transitions} role-gated and {four_eyes_transitions} four-eyes transition(s). Identity provisioning and session secrets remain ASSUMED."
         ),
         counterexample: None,
     }]

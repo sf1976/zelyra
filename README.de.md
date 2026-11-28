@@ -21,7 +21,7 @@ DSGVO-Katalog (`zelyra privacy map|export-plan|erase-plan`), erweiterte
 fail-closed Mandanten-SQL-Algebra (nicht-rekursive `WITH`-CTEs,
 `GROUP BY`/`HAVING`, mandantensichere `UPDATE`/`DELETE`/Batch-`INSERT`),
 ressourcengenaue Capabilities (`Database(read/write: [...])`,
-`Network(allow: [...])`, `FileSystem(scope: "...")`, `Email(templates: [...])`)
+`Network(allow: [...])`, `FileSystem(scope: "...")`)
 sowie **Verified Authorization v1**. `zelyra verify` meldet Evidenzklassen
 (`PROVEN`–`UNVERIFIED`) und `zelyra reflect` exportiert Datenschutz- und
 Berechtigungsmetadaten. AST bleibt

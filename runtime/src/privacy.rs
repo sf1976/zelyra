@@ -105,7 +105,7 @@ impl TaintVal {
 struct SinkFlags {
     log_sink: bool,
     error_sink: bool,
-    url_sink: bool,
+    network_sink: bool,
     redact_sink: bool,
 }
 
@@ -114,6 +114,20 @@ struct FunctionSummary {
     return_intrinsic: PrivacyClass,
     return_param_deps: HashSet<usize>,
     param_sinks: Vec<SinkFlags>,
+}
+
+impl FunctionSummary {
+    fn join(mut self, previous: &Self) -> Self {
+        self.return_intrinsic = max_privacy(self.return_intrinsic, previous.return_intrinsic);
+        self.return_param_deps.extend(&previous.return_param_deps);
+        for (current, previous) in self.param_sinks.iter_mut().zip(&previous.param_sinks) {
+            current.log_sink |= previous.log_sink;
+            current.error_sink |= previous.error_sink;
+            current.network_sink |= previous.network_sink;
+            current.redact_sink |= previous.redact_sink;
+        }
+        self
+    }
 }
 
 fn max_privacy(a: PrivacyClass, b: PrivacyClass) -> PrivacyClass {
@@ -390,13 +404,13 @@ fn trailing_column_ident(expr: &str) -> Option<String> {
     }
 }
 
-/// Check static information-flow rules (`@pii`, `@secret`, `@redact`) across all
-/// functions, APIs, and pages. Fails closed with `E-PRIVACY-001`.
-pub fn check_privacy(program: &Program) -> Result<(), Vec<PrivacyError>> {
-    let schema = PrivacySchemaIndex::new(program);
+fn summarize_functions(
+    program: &Program,
+    schema: &PrivacySchemaIndex<'_>,
+) -> (HashMap<String, FunctionSummary>, Vec<PrivacyError>) {
     let mut fn_summaries: HashMap<String, FunctionSummary> = HashMap::new();
     for func in &program.functions {
-        let mut init = FunctionSummary {
+        let init = FunctionSummary {
             return_intrinsic: func
                 .return_type
                 .as_ref()
@@ -404,28 +418,34 @@ pub fn check_privacy(program: &Program) -> Result<(), Vec<PrivacyError>> {
             return_param_deps: HashSet::new(),
             param_sinks: vec![SinkFlags::default(); func.params.len()],
         };
-        if init.return_intrinsic == PrivacyClass::Public {
-            init.return_param_deps = HashSet::new();
-        }
         fn_summaries.insert(func.name.clone(), init);
     }
 
-    // Fixed-point summary pass for inter-procedural propagation.
+    // Summaries only gain facts. The lattice is finite, and the final pass
+    // checks every function against the same set of converged summaries.
     let mut errors = Vec::new();
-    for _pass in 0..8 {
+    loop {
         let mut changed = false;
         errors.clear();
         for func in &program.functions {
-            let summary = analyze_function_privacy(func, &schema, &fn_summaries, &mut errors);
-            if fn_summaries.get(&func.name) != Some(&summary) {
-                fn_summaries.insert(func.name.clone(), summary);
+            let summary = analyze_function_privacy(func, schema, &fn_summaries, &mut errors);
+            let previous = fn_summaries.get_mut(&func.name).expect("indexed function");
+            let summary = summary.join(previous);
+            if *previous != summary {
+                *previous = summary;
                 changed = true;
             }
         }
         if !changed {
-            break;
+            return (fn_summaries, errors);
         }
     }
+}
+
+/// Check the modeled information-flow rules in functions, APIs, and pages.
+pub fn check_privacy(program: &Program) -> Result<(), Vec<PrivacyError>> {
+    let schema = PrivacySchemaIndex::new(program);
+    let (fn_summaries, mut errors) = summarize_functions(program, &schema);
 
     // Check APIs (handler return taint & output DTO schema).
     for api in &program.apis {
@@ -622,10 +642,15 @@ fn analyze_block(
             Stmt::While {
                 condition, body, ..
             } => {
-                for _ in 0..3 {
-                    analyze_expr(condition, schema, summaries, env, out_summary, errors);
-                    analyze_block(body, schema, summaries, env, out_summary, errors);
-                }
+                analyze_loop(
+                    Some(condition),
+                    body,
+                    schema,
+                    summaries,
+                    env,
+                    out_summary,
+                    errors,
+                );
             }
             Stmt::For {
                 name,
@@ -640,14 +665,10 @@ fn analyze_block(
                 for extra in additional_names {
                     env.insert(extra.clone(), iter_taint.clone());
                 }
-                for _ in 0..3 {
-                    analyze_block(body, schema, summaries, env, out_summary, errors);
-                }
+                analyze_loop(None, body, schema, summaries, env, out_summary, errors);
             }
             Stmt::Loop { body, .. } => {
-                for _ in 0..3 {
-                    analyze_block(body, schema, summaries, env, out_summary, errors);
-                }
+                analyze_loop(None, body, schema, summaries, env, out_summary, errors);
             }
             Stmt::Match { value, arms, .. } => {
                 let subj = analyze_expr(value, schema, summaries, env, out_summary, errors);
@@ -672,6 +693,38 @@ fn analyze_block(
             Stmt::Transaction { body, .. } | Stmt::Parallel { body, .. } => {
                 analyze_block(body, schema, summaries, env, out_summary, errors);
             }
+        }
+    }
+}
+
+fn analyze_loop(
+    condition: Option<&Expr>,
+    body: &Block,
+    schema: &PrivacySchemaIndex<'_>,
+    summaries: &HashMap<String, FunctionSummary>,
+    env: &mut HashMap<String, TaintVal>,
+    out_summary: &mut FunctionSummary,
+    errors: &mut Vec<PrivacyError>,
+) {
+    loop {
+        if let Some(condition) = condition {
+            analyze_expr(condition, schema, summaries, env, out_summary, errors);
+        }
+        let mut next = env.clone();
+        analyze_block(body, schema, summaries, &mut next, out_summary, errors);
+        let mut changed = false;
+        for (name, value) in next {
+            let merged = match env.get(&name) {
+                Some(previous) => TaintVal::join(previous, &value),
+                None => value,
+            };
+            if env.get(&name) != Some(&merged) {
+                env.insert(name, merged);
+                changed = true;
+            }
+        }
+        if !changed {
+            break;
         }
     }
 }
@@ -717,8 +770,8 @@ fn check_sink(
             match sink_kind {
                 "print" => flags.log_sink = true,
                 "Err" => flags.error_sink = true,
-                "http_get" | "http_request" | "http_json" | "http_result" | "http" | "url" => {
-                    flags.url_sink = true
+                "http_get" | "http_request" | "http_json" | "http_result" | "http" => {
+                    flags.network_sink = true
                 }
                 "redact" => flags.redact_sink = true,
                 _ => {}
@@ -910,7 +963,7 @@ fn analyze_expr(
                 }
                 "Err" => {
                     if let Some(t) = arg_taints.first() {
-                        check_sink(t, "Err", false, true, args[0].span, out_summary, errors);
+                        check_sink(t, "Err", true, true, args[0].span, out_summary, errors);
                     }
                     return TaintVal::of(
                         arg_taints
@@ -918,23 +971,9 @@ fn analyze_expr(
                             .map_or(PrivacyClass::Public, |t| t.summary),
                     );
                 }
-                "http_get" => {
-                    if let Some(t) = arg_taints.first() {
-                        check_sink(
-                            t,
-                            "http_get",
-                            false,
-                            true,
-                            args[0].span,
-                            out_summary,
-                            errors,
-                        );
-                    }
-                    return TaintVal::clean();
-                }
-                "http_request" | "http_json" | "http_result" => {
-                    if let Some(t) = arg_taints.get(1) {
-                        check_sink(t, name, false, true, args[1].span, out_summary, errors);
+                "http_get" | "http_request" | "http_json" | "http_result" => {
+                    for (arg, taint) in args.iter().zip(&arg_taints) {
+                        check_sink(taint, name, true, true, arg.span, out_summary, errors);
                     }
                     return TaintVal::clean();
                 }
@@ -966,13 +1005,13 @@ fn analyze_expr(
                             check_sink(arg_taint, "print", true, true, span, out_summary, errors);
                         }
                         if flags.error_sink {
-                            check_sink(arg_taint, "Err", false, true, span, out_summary, errors);
+                            check_sink(arg_taint, "Err", true, true, span, out_summary, errors);
                         }
                         if flags.redact_sink {
                             check_sink(arg_taint, "redact", false, true, span, out_summary, errors);
                         }
-                        if flags.url_sink {
-                            check_sink(arg_taint, "http", false, true, span, out_summary, errors);
+                        if flags.network_sink {
+                            check_sink(arg_taint, "http", true, true, span, out_summary, errors);
                         }
                     }
                 }
@@ -1255,5 +1294,49 @@ fn collect_expr_tables(expr: &Expr, known: &[String], out: &mut HashSet<String>)
             }
         }
         _ => {}
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::fmt::Write;
+
+    #[test]
+    fn function_summaries_converge_across_call_chains_and_loops() {
+        let mut source = String::new();
+        for index in 0..12 {
+            writeln!(
+                source,
+                "fn step_{index}(value: String) -> String {{ return step_{}(value) }}",
+                index + 1
+            )
+            .unwrap();
+        }
+        source.push_str(
+            r#"
+            fn step_12(value: String) -> String { return value }
+
+            fn propagate(repeat: Bool, value: String) -> String {
+                first = ""
+                second = ""
+                third = ""
+                fourth = ""
+                while repeat {
+                    first = second
+                    second = third
+                    third = fourth
+                    fourth = value
+                }
+                return first
+            }
+            "#,
+        );
+        let program = zelyra_parser::parse(&zelyra_lexer::lex(&source).unwrap()).unwrap();
+        let schema = PrivacySchemaIndex::new(&program);
+        let (summaries, errors) = summarize_functions(&program, &schema);
+        assert!(errors.is_empty());
+        assert_eq!(summaries["step_0"].return_param_deps, HashSet::from([0]));
+        assert_eq!(summaries["propagate"].return_param_deps, HashSet::from([1]));
     }
 }

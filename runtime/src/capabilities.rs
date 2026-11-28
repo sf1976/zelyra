@@ -210,7 +210,6 @@ pub fn capability_set_satisfies_primitive<'a>(
                     | (ParsedCapability::DatabaseWriteTables(_), "Database(write)")
                     | (ParsedCapability::NetworkAllow(_), "Network")
                     | (ParsedCapability::FileSystemScope(_), "FileSystem")
-                    | (ParsedCapability::EmailTemplates(_), "Email")
             )
         })
 }
@@ -362,6 +361,16 @@ pub(crate) fn check_network_url_scope(url: &str, declared: &[&str]) -> Result<()
         ));
     }
     Ok(())
+}
+
+pub(crate) fn filesystem_path_is_scoped(declared: &[&str]) -> bool {
+    !declared.contains(&"FileSystem")
+        && declared.iter().any(|capability| {
+            matches!(
+                parse_capability_spec(capability),
+                Some(ParsedCapability::FileSystemScope(_))
+            )
+        })
 }
 
 pub(crate) fn check_filesystem_path_scope(path: &str, declared: &[&str]) -> Result<(), String> {
