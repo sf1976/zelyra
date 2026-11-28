@@ -2074,7 +2074,7 @@ Klicke in der Seitenleiste von Studio auf das Datenbanksymbol (**Datenbank**). D
 ## Anhang J: Weiterführende Ressourcen und Community
 
 - **Offizielles GitHub-Repository:** [https://github.com/sf1976/zelyra](https://github.com/sf1976/zelyra)
-- **Dokumentation & Online-Handbuch:** [https://siedelmann.com/handbuch](https://siedelmann.com/handbuch) / [https://siedelmann.com/handbook](https://siedelmann.com/handbook)
+- **Dokumentation & Online-Handbuch:** [https://zelyra.eu/handbuch](https://zelyra.eu/handbuch) / [https://zelyra.eu/handbook](https://zelyra.eu/handbook)
 - **Beispiele & Vorlagen:** Im Verzeichnis `examples/` des Repositories findest du lauffähige Vorlagen für Authentifizierung, CRUD-Ansichten, APIs und Datenbanken.
 
 ---

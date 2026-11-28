@@ -2531,7 +2531,7 @@ basics](#5-variables-types-and-functions), [MariaDB](#7-mariadb-and-tables),
 [CRUD](#12-crud), [contracts](#15-contracts-and-verification),
 [capabilities](#14-capabilities), [implementation status](#17-diagnostics-and-troubleshooting),
 and [roadmap](#22-support-and-technical-evidence). The live repository status is also shown on
-the [status page](https://siedelmann.com/en/status).
+the [status page](https://zelyra.eu/en/status).
 
 ## 21. Positioning and current development status
 

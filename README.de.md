@@ -4,7 +4,7 @@
 
 **Von der Datenbank zur Anwendung.** · **Die KI schreibt. Zelyra prüft.**
 
-Deutsch · [English](README.md)
+Deutsch · [English](README.md) · [Website](https://zelyra.eu) · [Handbuch](https://zelyra.eu/handbuch) · [Playground](https://zelyra.eu/playground)
 
 Zelyra ist eine eigenständige, statisch typisierte Sprache und Plattform für
 Business-, Datenbank- und Webanwendungen. Schemaabhängiges SQL, Formulare,

@@ -594,7 +594,7 @@ fn main() {
 ## Appendix J: Next Resources and Community
 
 - **Official GitHub Repository:** [https://github.com/sf1976/zelyra](https://github.com/sf1976/zelyra)
-- **Documentation & Online Handbook:** [https://siedelmann.com/handbook](https://siedelmann.com/handbook) / [https://siedelmann.com/handbuch](https://siedelmann.com/handbuch)
+- **Documentation & Online Handbook:** [https://zelyra.eu/handbook](https://zelyra.eu/handbook) / [https://zelyra.eu/handbuch](https://zelyra.eu/handbuch)
 - **Examples & Templates:** Check the `examples/` directory in the official repository for runnable templates covering authentication, CRUD views, REST APIs, and database migrations.
 
 ---

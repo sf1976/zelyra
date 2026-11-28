@@ -5,7 +5,7 @@
 [English edition](../en/README.md) · Deutsch
 
 > 📖 **Suchst du das vollständige Lehrbuch und technische Referenzhandbuch?**
-> Dies ist das praxisorientierte 30-Minuten-Tutorial (Maschinenverwaltung). Das vollständige Lehrbuch und Referenzwerk findest du unter **[handbuch.md](handbuch.md)** sowie online mit Volltextsuche auf **[siedelmann.com/handbuch](https://siedelmann.com/handbuch)**.
+> Dies ist das praxisorientierte 30-Minuten-Tutorial (Maschinenverwaltung). Das vollständige Lehrbuch und Referenzwerk findest du unter **[handbuch.md](handbuch.md)** sowie online mit Volltextsuche auf **[zelyra.eu/handbuch](https://zelyra.eu/handbuch)**.
 
 Willkommen bei Zelyra, der Programmiersprache für Menschen, die eine
 Kundenverwaltung bauen wollten und plötzlich sieben Frameworks, drei
@@ -2520,4 +2520,4 @@ Du hast die 21 Kern-Kapitel des Zelyra-Praxistutorials durchlaufen!
 
 Für alle weiteren Sprachkonstrukte, vollständige Typgarantien, Compiler-Interna und die vollständige Standardbibliothek:
 - **[Vollständiges Zelyra-Handbuch (75 Kapitel)](handbuch.md)**
-- **[Online-Ausgabe mit Suche und dunklem Modus auf siedelmann.com/handbuch](https://siedelmann.com/handbuch)**
+- **[Online-Ausgabe mit Suche und dunklem Modus auf zelyra.eu/handbuch](https://zelyra.eu/handbuch)**

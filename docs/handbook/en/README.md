@@ -5,7 +5,7 @@
 English · [Deutsche Ausgabe](../de/README.md)
 
 > 📖 **Looking for the complete textbook and technical reference?**
-> This is the guided 30-minute introductory tutorial (machine-management app). For the complete textbook and technical reference, see **[handbook.md](handbook.md)** or read it online at **[siedelmann.com/handbook](https://siedelmann.com/handbook)**.
+> This is the guided 30-minute introductory tutorial (machine-management app). For the complete textbook and technical reference, see **[handbook.md](handbook.md)** or read it online at **[zelyra.eu/handbook](https://zelyra.eu/handbook)**.
 
 Welcome to Zelyra, the programming language for people who wanted to build a
 customer database and somehow ended up maintaining seven frameworks, three
@@ -2352,4 +2352,4 @@ You have completed the 21 core chapters of the Zelyra practical tutorial!
 
 For all advanced language features, type safety guarantees, compiler architecture, and standard library reference:
 - **[Complete Zelyra Handbook (75 chapters)](handbook.md)**
-- **[Interactive web edition with search at siedelmann.com/handbook](https://siedelmann.com/handbook)**
+- **[Interactive web edition with search at zelyra.eu/handbook](https://zelyra.eu/handbook)**

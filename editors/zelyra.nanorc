@@ -1,6 +1,6 @@
 ## Syntax highlighting for Zelyra (.zyl) in GNU nano
 ## Language: Zelyra
-## Website: https://siedelmann.com
+## Website: https://zelyra.eu
 
 syntax zelyra "\.zyl$"
 comment "#"

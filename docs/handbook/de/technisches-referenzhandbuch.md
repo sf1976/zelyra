@@ -2705,7 +2705,7 @@ Weiterführend: [Einführung](#1-was-zelyra-anders-macht),
 [Contracts](#15-contracts-und-verify),
 [Capabilities](#14-capabilities), [Implementierungsstatus](#17-diagnosen-und-fehlersuche)
 und [Roadmap](#22-unterstutzung-und-technische-nachweise). Der laufende Repository-Stand steht
-zusätzlich auf der [Statusseite](https://siedelmann.com/status).
+zusätzlich auf der [Statusseite](https://zelyra.eu/status).
 
 ## 21. Positionierung und aktueller Entwicklungsstand
 

@@ -4,7 +4,7 @@
 
 **From database to application.** · **AI writes. Zelyra verifies.**
 
-[Deutsch](README.de.md) · English
+[Deutsch](README.de.md) · English · [Website](https://zelyra.eu/en) · [Handbook](https://zelyra.eu/handbook) · [Playground](https://zelyra.eu/en/playground)
 
 Zelyra is an independent, statically typed language and application platform
 for database-backed business and web applications. It brings schema-aware SQL,
