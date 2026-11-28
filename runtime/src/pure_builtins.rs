@@ -20,6 +20,7 @@ pub fn is_pure_builtin(name: &str) -> bool {
             | "verify_ledger_balance"
             | "einvoice_xml"
             | "einvoice_validate"
+            | "redact"
             | "render_markdown"
             | "markdown_toc"
             | "Some"
@@ -364,6 +365,14 @@ pub fn execute_pure_builtin(
             span,
             "einvoice_validate expects exactly one String",
         )),
+        "redact" if arguments.len() == 1 => match &arguments[0] {
+            Value::String(_) => Ok(Value::String("[REDACTED]".into())),
+            other => Err(builtin_error(
+                span,
+                format!("redact expects String, found {}", other.ty()),
+            )),
+        },
+        "redact" => Err(builtin_error(span, "redact expects exactly one String")),
         "None" if arguments.is_empty() => Ok(Value::Option(None)),
         "Some" if arguments.len() == 1 => Ok(Value::Option(Some(Box::new(arguments[0].clone())))),
         "Ok" if arguments.len() == 1 => Ok(Value::Result(Ok(Box::new(arguments[0].clone())))),

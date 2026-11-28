@@ -676,7 +676,12 @@ impl Loader {
                 function
                     .capabilities
                     .iter()
-                    .find(|capability| !allowed_effects.contains(*capability))
+                    .find(|capability| {
+                        !zelyra_runtime::capability_set_satisfies(
+                            allowed_effects.iter().map(String::as_str),
+                            capability,
+                        )
+                    })
                     .map(|capability| {
                         (
                             package_name.to_owned(),
@@ -3089,6 +3094,69 @@ mod tests {
         )
         .expect("bytecode executes the linked package graph");
         assert_eq!(bytecode_result.value, ast_value);
+        cleanup(&directory);
+    }
+
+    #[test]
+    fn locked_package_effect_scopes_allow_only_approved_resources() {
+        let directory = project(&[
+            (
+                "zelyra.toml",
+                r#"
+[package]
+name = "app"
+version = "1.0.0"
+entry = "main.zyl"
+
+[dependencies.client]
+path = "packages/client"
+version = "1.0.0"
+"#,
+            ),
+            (
+                "main.zyl",
+                "import \"pkg:client\" as client\nfn main() {}\n",
+            ),
+            (
+                "packages/client/zelyra.toml",
+                r#"
+[package]
+name = "client"
+version = "1.0.0"
+entry = "lib.zyl"
+effects = ['Network(allow: [one.example, two.example])', 'FileSystem(scope: exports/)']
+"#,
+            ),
+            (
+                "packages/client/lib.zyl",
+                r#"
+pub fn one() uses Network(allow: ["one.example"]), FileSystem(scope: "exports/reports/") {}
+"#,
+            ),
+        ]);
+        let lock = || {
+            let graph = crate::packages::PackageGraph::load(&directory)
+                .unwrap()
+                .unwrap();
+            crate::packages::write_lockfile(&graph, true).unwrap();
+        };
+        let entry = directory.join("main.zyl");
+        let load = || super::load(entry.to_str().unwrap());
+        lock();
+        assert!(load().is_ok());
+
+        let source = directory.join("packages/client/lib.zyl");
+        for effect in [
+            "Network",
+            "Network(allow: [\"outside.example\"])",
+            "FileSystem(scope: \"elsewhere/\")",
+        ] {
+            fs::write(&source, format!("pub fn one() uses {effect} {{}}\n")).unwrap();
+            assert!(load().is_err(), "changed source must invalidate the lock");
+            lock();
+            let error = load().expect_err("scope outside the manifest ceiling must fail");
+            assert_eq!(error.code, "E-PKG-003");
+        }
         cleanup(&directory);
     }
 

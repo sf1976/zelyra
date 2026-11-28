@@ -3944,11 +3944,15 @@ fn shared_json_codec_handles_checked_record_definitions() {
             zelyra_ast::RecordField {
                 name: "name".into(),
                 ty: Type::String,
+                privacy: zelyra_ast::PrivacyClass::Public,
+                redact: false,
                 span,
             },
             zelyra_ast::RecordField {
                 name: "id".into(),
                 ty: Type::Int,
+                privacy: zelyra_ast::PrivacyClass::Public,
+                redact: false,
                 span,
             },
         ],
@@ -4809,6 +4813,11 @@ fn mail_queue_creates_a_validated_outbox_row_inside_one_database_batch() {
     let source = r#"
 database main { engine: mariadb database: "outbox_test" }
 table accounts { id: Id primary auto balance: Int required }
+struct Receipt { description: String }
+view ReceiptMail {
+    props { description: String }
+    html { <p>{description}</p> }
+}
 fn enqueue() uses Email, Database(write) {
     transaction {
         mail_queue("customer@example.test", "Invoice ready", "Your invoice is ready.")
@@ -4817,6 +4826,12 @@ fn enqueue() uses Email, Database(write) {
 }
 fn invalid_recipient() uses Email, Database(write) {
     transaction { mail_queue("not-an-email", "Invoice ready", "Your invoice is ready.") }
+}
+fn enqueue_template() uses Email(templates: ["ReceiptMail"]), Database(write: [_zelyra_outbox]) {
+    receipt = Receipt { description: "<receipt>" }
+    transaction {
+        mail_queue_template("ReceiptMail", "customer@example.test", "Receipt ready", receipt)
+    }
 }
 fn main() {}
 "#;
@@ -4872,6 +4887,57 @@ fn main() {}
     .unwrap_err();
     assert!(invalid.message.contains("invalid message"));
     assert_eq!(host.calls.load(Ordering::Relaxed), 1);
+
+    let approved = HashSet::from([
+        "Email(templates: [ReceiptMail])".to_owned(),
+        "Database(write: [_zelyra_outbox])".to_owned(),
+    ]);
+    execute_function_with_host_services_and_capabilities_and_policies(
+        &program,
+        "enqueue_template",
+        Vec::new(),
+        Some(database_url),
+        Some(&approved),
+        None,
+        host.clone(),
+    )
+    .unwrap();
+    let batches = host.batches.lock().unwrap();
+    assert!(batches[1].1);
+    assert_eq!(batches[1].0.len(), 1);
+    let zelyra_database::QueryValue::String(payload) = &batches[1].0[0].params[2].1 else {
+        panic!("expected a JSON mail payload");
+    };
+    let payload: serde_json::Value = serde_json::from_str(payload).unwrap();
+    assert_eq!(payload["text"], "Receipt ready");
+    assert!(payload["html"]
+        .as_str()
+        .unwrap()
+        .contains("<p>&lt;receipt&gt;</p>"));
+    drop(batches);
+
+    let unapproved = source.replace(
+        "Email(templates: [\"ReceiptMail\"])",
+        "Email(templates: [\"OtherMail\"])",
+    );
+    let unapproved = parse(&lex(&unapproved).unwrap()).unwrap();
+    check(&unapproved).unwrap();
+    assert!(check_capabilities(&unapproved)
+        .unwrap_err()
+        .iter()
+        .any(|error| error.message.contains("Email(templates: [ReceiptMail])")));
+    let error = execute_function_with_host_services_and_capabilities_and_policies(
+        &unapproved,
+        "enqueue_template",
+        Vec::new(),
+        Some(database_url),
+        None,
+        None,
+        host.clone(),
+    )
+    .unwrap_err();
+    assert!(error.message.contains("Email(templates: [ReceiptMail])"));
+    assert_eq!(host.calls.load(Ordering::Relaxed), 2);
 }
 
 #[test]
@@ -5169,6 +5235,56 @@ fn writes_lists_and_deletes_with_a_file_system_policy() {
     .unwrap();
     assert!(!root.join("note.txt").exists());
     std::fs::remove_dir(&root).unwrap();
+}
+
+#[test]
+#[cfg(unix)]
+fn scoped_filesystem_reads_use_the_resolved_path() {
+    let root = std::env::temp_dir().join(format!(
+        "zelyra-scoped-filesystem-{}",
+        SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos()
+    ));
+    let exports = root.join("exports");
+    std::fs::create_dir_all(&exports).unwrap();
+    std::fs::write(exports.join("summary.txt"), "summary").unwrap();
+    std::fs::write(root.join("internal.txt"), "internal").unwrap();
+    std::os::unix::fs::symlink(root.join("internal.txt"), exports.join("link.txt")).unwrap();
+    let source = r#"
+        fn read_export(path: String) -> String uses FileSystem(scope: "exports/") {
+            return read_text(path)
+        }
+        fn main() {}
+    "#;
+    let program = parse(&lex(source).unwrap()).unwrap();
+    check_capabilities(&program).unwrap();
+    let policy = FileSystemPolicy {
+        base_dir: root.clone(),
+        read_roots: vec![root.clone()],
+        write_roots: Vec::new(),
+    };
+    let grants = HashSet::from([String::from("FileSystem")]);
+    let read = |path: &str| {
+        execute_function_with_capabilities_and_filesystem_policy(
+            &program,
+            "read_export",
+            vec![Value::String(path.into())],
+            None,
+            Some(&grants),
+            Some(&policy),
+        )
+    };
+    assert_eq!(
+        read("exports/summary.txt").unwrap(),
+        Value::String("summary".into())
+    );
+    assert!(read("exports/link.txt")
+        .unwrap_err()
+        .message
+        .contains("FileSystem(scope:"));
+    std::fs::remove_dir_all(root).unwrap();
 }
 
 #[test]

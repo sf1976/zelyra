@@ -37,7 +37,16 @@ fn build(program: &zelyra_ast::Program, sources: &[project::ProjectSource]) -> V
             "name": record.name,
             "public": record.is_public,
             "type_parameters": record.type_params,
-            "fields": record.fields.iter().map(|item| field(&item.name, Some(&item.ty), item.span, sources)).collect::<Vec<_>>(),
+            "fields": record.fields.iter().map(|item| json!({
+                "name": item.name,
+                "type": item.ty.to_string(),
+                "privacy": match item.privacy {
+                    zelyra_ast::PrivacyClass::Public => Value::Null,
+                    other => json!(other.as_str()),
+                },
+                "redact": item.redact,
+                "source": source_location(item.span, sources),
+            })).collect::<Vec<_>>(),
             "source": source_location(record.span, sources),
         }));
     }
@@ -113,6 +122,11 @@ fn build(program: &zelyra_ast::Program, sources: &[project::ProjectSource]) -> V
             "auto": column.auto,
             "unique": column.unique,
             "storage_name": column.storage_name,
+            "privacy": match column.privacy {
+                zelyra_ast::PrivacyClass::Public => Value::Null,
+                other => json!(other.as_str()),
+            },
+            "redact": column.redact,
         })).collect::<Vec<_>>(),
         "tenant_scope": table.tenant_scope.as_ref().map(|scope| json!({ "column": scope.column, "type": scope.tenant_type.to_string() })),
         "is_ledger": table.is_ledger,
@@ -228,6 +242,21 @@ fn build(program: &zelyra_ast::Program, sources: &[project::ProjectSource]) -> V
         .collect::<Vec<_>>();
     workflows.sort_by(|a, b| a["name"].as_str().cmp(&b["name"].as_str()));
 
+    let authorization = json!({
+        "matrix": zelyra_runtime::authorization_matrix(program).iter().map(|finding| json!({
+            "target": finding.function,
+            "evidence_class": finding.evidence_class().as_str(),
+            "reason": finding.message,
+            "source": source_location(finding.span, sources),
+        })).collect::<Vec<_>>(),
+        "auth_configured": !program.auth.is_empty(),
+        "protected_apis": program.apis.iter().filter(|a| a.requires_auth).count(),
+        "public_apis": program.apis.iter().filter(|a| !a.requires_auth).count(),
+        "tenant_scoped_tables": program.tables.iter().filter(|t| t.tenant_scope.is_some()).map(|t| t.name.clone()).collect::<Vec<_>>(),
+        "four_eyes_transitions": program.tables.iter().flat_map(|t| t.state_machines.iter()).flat_map(|m| m.transitions.iter()).filter(|r| r.four_eyes_column.is_some()).count(),
+        "role_gated_transitions": program.tables.iter().flat_map(|t| t.state_machines.iter()).flat_map(|m| m.transitions.iter()).filter(|r| !r.required_roles.is_empty()).count(),
+    });
+
     json!({
         "reflect_schema_version": REFLECT_SCHEMA_VERSION,
         "compiler_version": env!("CARGO_PKG_VERSION"),
@@ -238,6 +267,7 @@ fn build(program: &zelyra_ast::Program, sources: &[project::ProjectSource]) -> V
         "symbols": symbols,
         "tables": tables,
         "workflows": workflows,
+        "authorization": authorization,
         "routes": routes,
         "apis": apis,
         "forms": forms,

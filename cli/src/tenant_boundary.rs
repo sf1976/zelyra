@@ -142,7 +142,7 @@ pub(crate) fn validate_tenant_access_boundaries(
                     .any(|req| req.table.eq_ignore_ascii_case(&access.table))
             });
             if touches_any_scoped && touches_only_verifiable_scoped {
-                match zelyra_database::sql::verify_tenant_scoped_select(
+                match zelyra_database::sql::verify_tenant_scoped_sql(
                     query,
                     &tenant_requirements,
                     Some(params),

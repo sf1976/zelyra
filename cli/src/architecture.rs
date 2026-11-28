@@ -1631,6 +1631,7 @@ fn print_human(plan: &MigrationPlan) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::atomic::{AtomicUsize, Ordering};
     use std::time::{SystemTime, UNIX_EPOCH};
 
     fn empty_program() -> Program {
@@ -1661,12 +1662,16 @@ mod tests {
 
     impl TempProject {
         fn new() -> Self {
+            static NEXT_PROJECT: AtomicUsize = AtomicUsize::new(0);
             let nonce = SystemTime::now()
                 .duration_since(UNIX_EPOCH)
                 .unwrap()
                 .as_nanos();
-            let root = std::env::temp_dir().join(format!("zelyra-layout-preview-{nonce}"));
-            fs::create_dir_all(&root).unwrap();
+            let pid = std::process::id();
+            let sequence = NEXT_PROJECT.fetch_add(1, Ordering::Relaxed);
+            let root = std::env::temp_dir()
+                .join(format!("zelyra-layout-preview-{pid}-{nonce}-{sequence}"));
+            fs::create_dir(&root).unwrap();
             fs::write(root.join("main.zyl"), "fn main() {}\n").unwrap();
             Self(root)
         }

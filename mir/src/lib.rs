@@ -944,7 +944,7 @@ fn verify_capability_call_edges(program: &MirProgram, errors: &mut Vec<MirError>
             .collect::<HashSet<_>>();
         let mut declared = HashSet::new();
         for capability in &caller.declared_capabilities {
-            if !zelyra_runtime::KNOWN_CAPABILITIES.contains(&capability.as_str()) {
+            if zelyra_runtime::parse_capability_spec(capability).is_none() {
                 errors.push(MirError {
                     code: "E-MIR-EFFECT-001",
                     message: format!(
@@ -1149,13 +1149,18 @@ fn verify_capability_call_edges(program: &MirProgram, errors: &mut Vec<MirError>
                     for (capability, operation) in
                         zelyra_runtime::builtin_capability_requirements(name)
                     {
-                        verify_required_capability(
-                            &declared,
+                        if !zelyra_runtime::capability_set_satisfies_primitive(
+                            declared.iter().copied(),
                             capability,
-                            format!("function `{}` uses {operation}", caller.name),
-                            expression.span,
-                            errors,
-                        );
+                        ) {
+                            verify_required_capability(
+                                &declared,
+                                capability,
+                                format!("function `{}` uses {operation}", caller.name),
+                                expression.span,
+                                errors,
+                            );
+                        }
                     }
                     if matches!(name.as_str(), "map" | "filter" | "find" | "reduce") {
                         let callback_index = if name == "reduce" { 2 } else { 1 };
@@ -1181,13 +1186,18 @@ fn verify_capability_call_edges(program: &MirProgram, errors: &mut Vec<MirError>
                 }
                 MirExpressionKind::Sql { query, .. } => {
                     let capability = zelyra_runtime::sql_required_capability(query);
-                    verify_required_capability(
-                        &declared,
+                    if !zelyra_runtime::capability_set_satisfies_primitive(
+                        declared.iter().copied(),
                         capability,
-                        format!("function `{}` executes SQL", caller.name),
-                        expression.span,
-                        errors,
-                    );
+                    ) {
+                        verify_required_capability(
+                            &declared,
+                            capability,
+                            format!("function `{}` executes SQL", caller.name),
+                            expression.span,
+                            errors,
+                        );
+                    }
                 }
                 MirExpressionKind::Lambda { .. } => {
                     if let Type::Function { capabilities, .. } = &expression.ty {
@@ -1261,7 +1271,7 @@ fn verify_required_capability(
     span: Span,
     errors: &mut Vec<MirError>,
 ) {
-    if !zelyra_runtime::KNOWN_CAPABILITIES.contains(&required)
+    if zelyra_runtime::parse_capability_spec(required).is_none()
         || !mir_has_capability(declared, required)
     {
         errors.push(MirError {
@@ -1273,8 +1283,7 @@ fn verify_required_capability(
 }
 
 fn mir_has_capability(declared: &HashSet<&str>, required: &str) -> bool {
-    declared.contains(required)
-        || (required.starts_with("Database(") && declared.contains("Database"))
+    zelyra_runtime::capability_set_satisfies(declared.iter().copied(), required)
         || (required == "Database"
             && declared.contains("Database(read)")
             && declared.contains("Database(write)"))

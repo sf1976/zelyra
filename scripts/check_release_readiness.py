@@ -161,7 +161,7 @@ REQUIRED_CANDIDATE_RECORD_040 = (
     "rollback smoke:",
 )
 
-# Later pre-production milestones use bilingual, reviewable checklists. Every
+# Release milestones use bilingual, reviewable checklists. Every
 # item must be completed before a stable tag is allowed to publish.
 RELEASE_PLAN_CHECKLISTS = {
     "0.7.0": (
@@ -217,6 +217,10 @@ RELEASE_PLAN_CHECKLISTS = {
     "1.1.5": (
         ("docs/release-plans/1.1.5.en.md", "## Release gates"),
         ("docs/release-plans/1.1.5.de.md", "## Release-Gates"),
+    ),
+    "1.7.0": (
+        ("docs/release-notes/1.7.0.en.md", "## Release gates"),
+        ("docs/release-notes/1.7.0.de.md", "## Release-Gates"),
     ),
 }
 

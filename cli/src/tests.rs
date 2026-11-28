@@ -1906,7 +1906,7 @@ fn formats_verification_results_as_json() {
     };
     assert_eq!(
         format_verification_json("src/file.zyl", "first\nsecond value\n", &[result]),
-        r#"[{"status":"RUNTIME_CHECK","code":"V-002","message":"This postcondition needs a runtime check because not all return paths are symbolically modeled.","function":"say\"hello","kind":"ensures","index":1,"counterexample":{"value":0},"location":{"file":"src/file.zyl","start":{"line":2,"column":1},"end":{"line":2,"column":7}}}]"#
+        r#"[{"status":"RUNTIME_CHECK","evidence_class":"ENFORCED","code":"V-002","message":"This postcondition needs a runtime check because not all return paths are symbolically modeled.","function":"say\"hello","kind":"ensures","index":1,"counterexample":{"value":0},"location":{"file":"src/file.zyl","start":{"line":2,"column":1},"end":{"line":2,"column":7}}}]"#
     );
 }
 

@@ -492,6 +492,7 @@ fn visible_functions(program: &zelyra_ast::Program) -> Vec<String> {
         "verify_ledger_balance",
         "einvoice_xml",
         "einvoice_validate",
+        "redact",
         "now",
         "date",
         "decimal",

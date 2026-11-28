@@ -224,6 +224,33 @@ pub fn execute_function_with_capabilities_and_policies(
     )
 }
 
+/// Execute an API handler with the verified tenant supplied by the web host.
+/// Tenant-scoped SQL requires this identity throughout the handler's call tree.
+pub fn execute_api_function_with_capabilities_and_policies(
+    program: &Program,
+    name: &str,
+    args: Vec<Value>,
+    database_url: Option<&str>,
+    grants: Option<&HashSet<String>>,
+    policy: Option<&RuntimePolicy>,
+    verified_tenant_id: Option<i64>,
+) -> Result<Value, RuntimeError> {
+    execute_function_with_services(
+        program,
+        name,
+        args,
+        database_url,
+        grants,
+        policy,
+        RuntimeServices {
+            host_services: Arc::new(SystemHostServices),
+            sql_tenant: SqlTenantContext::ApiSession(verified_tenant_id),
+            database_transaction: None,
+            transactional_query: None,
+        },
+    )
+}
+
 /// Execute a function using caller-supplied host services.
 pub fn execute_function_with_host_services_and_capabilities_and_policies(
     program: &Program,
@@ -234,6 +261,31 @@ pub fn execute_function_with_host_services_and_capabilities_and_policies(
     policy: Option<&RuntimePolicy>,
     host_services: Arc<dyn HostServices>,
 ) -> Result<Value, RuntimeError> {
+    execute_function_with_services(
+        program,
+        name,
+        args,
+        database_url,
+        grants,
+        policy,
+        RuntimeServices {
+            host_services,
+            sql_tenant: SqlTenantContext::Caller,
+            database_transaction: None,
+            transactional_query: None,
+        },
+    )
+}
+
+fn execute_function_with_services(
+    program: &Program,
+    name: &str,
+    args: Vec<Value>,
+    database_url: Option<&str>,
+    grants: Option<&HashSet<String>>,
+    policy: Option<&RuntimePolicy>,
+    services: RuntimeServices<'_>,
+) -> Result<Value, RuntimeError> {
     let depth = effective_function_call_depth(policy.and_then(|policy| policy.max_stack_depth));
     run_on_runtime_stack(runtime_stack_size_for_depth(depth), || {
         let (result, _) = execute_function_on_runtime_stack(
@@ -243,11 +295,7 @@ pub fn execute_function_with_host_services_and_capabilities_and_policies(
             database_url,
             grants,
             policy,
-            RuntimeServices {
-                host_services,
-                database_transaction: None,
-                transactional_query: None,
-            },
+            services,
         );
         result
     })
@@ -296,6 +344,7 @@ pub fn execute_function_captured_with_host_services_and_capabilities_and_policie
             policy,
             RuntimeServices {
                 host_services,
+                sql_tenant: SqlTenantContext::Caller,
                 database_transaction: None,
                 transactional_query: None,
             },
@@ -346,6 +395,7 @@ pub fn execute_function_captured_with_transactional_query<'services>(
             policy,
             RuntimeServices {
                 host_services: Arc::new(SystemHostServices),
+                sql_tenant: SqlTenantContext::Caller,
                 database_transaction: None,
                 transactional_query: Some(query),
             },
@@ -396,6 +446,7 @@ pub fn execute_guarded_function_captured_with_transactional_query<'services>(
             policy.cloned(),
             RuntimeServices {
                 host_services: Arc::new(SystemHostServices),
+                sql_tenant: SqlTenantContext::Caller,
                 database_transaction: None,
                 transactional_query: None,
             },
@@ -469,6 +520,7 @@ pub fn execute_function_captured_with_mariadb_transaction(
             policy,
             RuntimeServices {
                 host_services: Arc::new(SystemHostServices),
+                sql_tenant: SqlTenantContext::Caller,
                 database_transaction: Some(transaction),
                 transactional_query: None,
             },
@@ -642,6 +694,7 @@ fn execute_internal_on_runtime_stack(
         policy,
         RuntimeServices {
             host_services,
+            sql_tenant: SqlTenantContext::Caller,
             database_transaction: None,
             transactional_query: None,
         },

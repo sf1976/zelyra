@@ -11,20 +11,24 @@ Business-, Datenbank- und Webanwendungen. Schemaabhängiges SQL, Formulare,
 CRUD, Views und Geschäftslogik greifen ineinander; gewöhnlicher Programmcode
 und natives SQL bleiben jederzeit möglich.
 
-> **Release 1.6.0 · Sprachkompatibilitätslinie: 0.1** · [GitHub-Release](https://github.com/sf1976/zelyra/releases/tag/v1.6.0)
+> **Stabiles Release 1.6.0 · Sprachkompatibilitätslinie: 0.1** · [GitHub-Release](https://github.com/sf1976/zelyra/releases/tag/v1.6.0)
 >
-> Die Compilerprüfung und der Verifier decken klar abgegrenzte Bereiche ab. Sie beweisen nicht die Korrektheit beliebiger Anwendungen. Prüfe vor dem Einsatz die unterstützten Abläufe und Grenzen in der jeweiligen Dokumentation.
+> Die Compilerprüfung und der Verifier decken klar abgegrenzte Bereiche ab. Sie beweisen nicht die Korrektheit beliebiger Anwendungen oder rechtliche Konformität (`ASSUMED`). Prüfe vor dem Einsatz die unterstützten Abläufe und Grenzen in der jeweiligen Dokumentation.
 
-Zelyra 1.6.0 ergänzt währungssicheres `Money<Currency>` (Mischen von Währungen
-ist Compile-Fehler, exakte `Decimal`-Umrechnung per `convert_money<Von, Nach>`),
-append-only `ledger`-Deklarationen (`UPDATE`/`DELETE` zur Compile-Zeit mit
-`E-LEDGER-001` verboten, plus `verify_ledger_balance`), bitemporale
-`auditable`-Tabellen (`valid_from`, `valid_to`, `recorded_at`, `recorded_by`)
-sowie abhängigkeitsfreie, XXE-sichere EN-16931-E-Rechnungs-XML-Erzeugung und
--Prüfung (`einvoice_xml`, `einvoice_validate`). AST bleibt
+Der Release-Kandidat 1.7.0 ergänzt statische Informationsflusskontrolle (`@pii`, `@secret`,
+`@redact`, `redact(...)` mit `E-PRIVACY-001`), den compiler-abgeleiteten
+DSGVO-Katalog (`zelyra privacy map|export-plan|erase-plan`), erweiterte
+fail-closed Mandanten-SQL-Algebra (nicht-rekursive `WITH`-CTEs,
+`GROUP BY`/`HAVING`, mandantensichere `UPDATE`/`DELETE`/Batch-`INSERT`),
+ressourcengenaue Capabilities (`Database(read/write: [...])`,
+`Network(allow: [...])`, `FileSystem(scope: "...")`)
+sowie **Verified Authorization v1**. `zelyra verify` meldet Evidenzklassen
+(`PROVEN`–`UNVERIFIED`) und `zelyra reflect` exportiert Datenschutz- und
+Berechtigungsmetadaten. AST bleibt
 Standard; experimentelles MIR und Bytecode bleiben opt-in und weisen nicht
 unterstützte Konstrukte geschlossen ab. Der Business-Starter ist noch kein
 fertiges ERP. Siehe die
+[Release-Notizen 1.7.0](docs/release-notes/1.7.0.de.md),
 [Release-Notizen 1.6.0](docs/release-notes/1.6.0.de.md),
 [Release-Notizen 1.5.0](docs/release-notes/1.5.0.de.md),
 [Release-Notizen 1.4.0](docs/release-notes/1.4.0.de.md),

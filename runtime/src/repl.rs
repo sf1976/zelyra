@@ -120,6 +120,8 @@ impl ReplSession {
             fields: vec![RecordField {
                 name: "tenant_id".into(),
                 ty: Type::Option(Box::new(Type::Int)),
+                privacy: PrivacyClass::Public,
+                redact: false,
                 span: Span::default(),
             }],
             span: Span::default(),
@@ -250,6 +252,7 @@ impl ReplSession {
             params.push(Param {
                 name: argument.clone(),
                 ty: binding.ty.clone(),
+                privacy: PrivacyClass::Public,
                 span,
             });
             prefix.push(Stmt::Let {
@@ -371,6 +374,8 @@ impl ReplSession {
                     Ok(RecordField {
                         name: name.clone(),
                         ty,
+                        privacy: PrivacyClass::Public,
+                        redact: false,
                         span: *binding_span,
                     })
                 })
@@ -421,6 +426,8 @@ impl ReplSession {
                         fields.push(RecordField {
                             name: candidate.clone(),
                             ty,
+                            privacy: PrivacyClass::Public,
+                            redact: false,
                             span: expression.span,
                         });
                         fields

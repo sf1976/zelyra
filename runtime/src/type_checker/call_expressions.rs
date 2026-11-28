@@ -182,6 +182,20 @@ impl Checker<'_> {
             let xml = self.check_expr(&args[0], scopes);
             self.expect_type(&Type::String, &xml, args[0].span);
             Type::Result(Box::new(Type::Bool), Box::new(Type::String))
+        } else if name == "redact"
+            && !self.functions.contains_key(name)
+            && self.lookup(scopes, name).is_none()
+        {
+            if !type_args.is_empty() || args.len() != 1 {
+                self.error(
+                    span,
+                    "`redact(value)` expects one String argument and no type arguments",
+                );
+                return Type::Unknown;
+            }
+            let value = self.check_expr(&args[0], scopes);
+            self.expect_type(&Type::String, &value, args[0].span);
+            Type::String
         } else if name == "assert" {
             if !type_args.is_empty() {
                 self.error(span, "`assert` does not accept type arguments");
@@ -2201,6 +2215,78 @@ impl Checker<'_> {
             self.expect_type(&Type::Array(Box::new(Type::String)), &headers, args[2].span);
             self.expect_type(&Type::Option(Box::new(Type::String)), &body, args[3].span);
             Type::Named("HttpResponse".into())
+        } else if name == "mail_queue_template" {
+            let [template, recipient, subject, data] = args else {
+                self.error(
+                    span,
+                    "mail_queue_template expects a view name, recipient, subject, and record",
+                );
+                return Type::Unknown;
+            };
+            if !type_args.is_empty() || self.transaction_depth == 0 {
+                self.error(
+                    span,
+                    "mail_queue_template requires a transaction and accepts no type arguments",
+                );
+            }
+            let ExprKind::String(template_name) = &template.kind else {
+                self.error(
+                    template.span,
+                    "mail_queue_template requires a literal view name",
+                );
+                return Type::Unknown;
+            };
+            let Some(view) = self
+                ._program
+                .views
+                .iter()
+                .find(|view| view.name == *template_name)
+            else {
+                self.error(template.span, "mail_queue_template names an unknown view");
+                return Type::Unknown;
+            };
+            let props = view.props.clone();
+            for argument in [recipient, subject] {
+                let actual = self.check_expr(argument, scopes);
+                self.expect_type(&Type::String, &actual, argument.span);
+            }
+            let data_type = self.check_expr(data, scopes);
+            let record = match data_type {
+                Type::Named(name) => self
+                    ._program
+                    .records
+                    .iter()
+                    .find(|record| record.name == name),
+                _ => None,
+            };
+            if let Some(record) = record {
+                for prop in props {
+                    if let Some(field) = record.fields.iter().find(|field| field.name == prop.name)
+                    {
+                        self.expect_type(&prop.ty, &field.ty, data.span);
+                    } else {
+                        self.error(
+                            data.span,
+                            format!("mail template record is missing `{}`", prop.name),
+                        );
+                    }
+                }
+            } else {
+                self.error(
+                    data.span,
+                    "mail_queue_template expects a record for the view",
+                );
+            }
+            if ![recipient, subject, data]
+                .into_iter()
+                .all(is_pure_mail_expression)
+            {
+                self.error(
+                    span,
+                    "mail_queue_template arguments must be values or pure expressions",
+                );
+            }
+            Type::Unit
         } else if name == "mail_queue" {
             if !type_args.is_empty() {
                 self.error(span, "mail_queue does not accept type arguments");

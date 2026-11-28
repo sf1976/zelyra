@@ -376,6 +376,7 @@ pub fn build_computed_column_functions(
                     .map(|candidate| Param {
                         name: candidate.name.clone(),
                         ty: candidate.ty.clone(),
+                        privacy: candidate.privacy,
                         span: candidate.span,
                     })
                     .collect(),
@@ -594,6 +595,7 @@ pub fn build_table_validation_functions(
                     .map(|column| Param {
                         name: column.name.clone(),
                         ty: table_validation_storage_type(program, &column.ty),
+                        privacy: column.privacy,
                         span: column.span,
                     })
                     .collect(),
@@ -667,6 +669,7 @@ pub fn build_state_transition_guard_functions(
                         .map(|column| Param {
                             name: column.name.clone(),
                             ty: table_validation_storage_type(program, &column.ty),
+                            privacy: column.privacy,
                             span: column.span,
                         })
                         .collect(),
@@ -1185,11 +1188,13 @@ pub fn build_crud_action_functions(program: &Program) -> (Vec<Function>, Vec<Cru
                 Param {
                     name: "row".into(),
                     ty: row_type,
+                    privacy: PrivacyClass::Public,
                     span: action.span,
                 },
                 Param {
                     name: "session".into(),
                     ty: session_type,
+                    privacy: PrivacyClass::Public,
                     span: action.span,
                 },
             ];
@@ -1203,6 +1208,7 @@ pub fn build_crud_action_functions(program: &Program) -> (Vec<Function>, Vec<Cru
                 params.push(Param {
                     name: field.name.clone(),
                     ty: ty.clone(),
+                    privacy: PrivacyClass::Public,
                     span: field.span,
                 });
                 field_params.push((field.name.clone(), ty));
@@ -1340,6 +1346,9 @@ pub fn build_form_action_functions(program: &Program) -> (Vec<Function>, Vec<For
                 params.push(Param {
                     name: field.name.clone(),
                     ty: ty.clone(),
+                    privacy: table
+                        .and_then(|t| t.columns.iter().find(|c| c.name == field.name))
+                        .map_or(PrivacyClass::Public, |c| c.privacy),
                     span: field.span,
                 });
                 field_params.push((field.name.clone(), ty));
@@ -1360,6 +1369,7 @@ pub fn build_form_action_functions(program: &Program) -> (Vec<Function>, Vec<For
                 params.push(Param {
                     name: param_name.clone(),
                     ty: ty.clone(),
+                    privacy: PrivacyClass::Public,
                     span: action.span,
                 });
                 path_params.push((param_name.clone(), ty));
@@ -1373,6 +1383,7 @@ pub fn build_form_action_functions(program: &Program) -> (Vec<Function>, Vec<For
                 params.push(Param {
                     name: "session".into(),
                     ty: Type::Named(session_type_name.clone()),
+                    privacy: PrivacyClass::Public,
                     span: action.span,
                 });
             }
@@ -1434,11 +1445,15 @@ pub fn lower_form_action_functions_owned(
                 RecordField {
                     name: "tenant_id".into(),
                     ty: Type::Option(Box::new(tenant_type)),
+                    privacy: PrivacyClass::Public,
+                    redact: false,
                     span: action.span,
                 },
                 RecordField {
                     name: "user_id".into(),
                     ty: Type::Option(Box::new(Type::Named("Id".into()))),
+                    privacy: PrivacyClass::Public,
+                    redact: false,
                     span: action.span,
                 },
             ],
@@ -1486,6 +1501,8 @@ pub fn lower_crud_action_functions_owned(
                 .map(|column| RecordField {
                     name: column.name.clone(),
                     ty: column.ty.clone(),
+                    privacy: column.privacy,
+                    redact: column.redact,
                     span: column.span,
                 })
                 .collect(),
@@ -1506,11 +1523,15 @@ pub fn lower_crud_action_functions_owned(
                 RecordField {
                     name: "tenant_id".into(),
                     ty: Type::Option(Box::new(tenant_type)),
+                    privacy: PrivacyClass::Public,
+                    redact: false,
                     span: action.span,
                 },
                 RecordField {
                     name: "user_id".into(),
                     ty: Type::Option(Box::new(Type::Named("Id".into()))),
+                    privacy: PrivacyClass::Public,
+                    redact: false,
                     span: action.span,
                 },
             ],
@@ -1570,6 +1591,7 @@ pub fn build_crud_policy_functions(program: &Program) -> (Vec<Function>, Vec<Cru
                         .map(|column| Param {
                             name: column.name.clone(),
                             ty: column.ty.clone(),
+                            privacy: column.privacy,
                             span: column.span,
                         })
                         .collect(),
@@ -1969,6 +1991,24 @@ pub struct TableAccessDef {
     pub span: Option<Span>,
 }
 
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum PrivacyClass {
+    #[default]
+    Public,
+    Pii,
+    Secret,
+}
+
+impl PrivacyClass {
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Public => "public",
+            Self::Pii => "pii",
+            Self::Secret => "secret",
+        }
+    }
+}
+
 #[derive(Clone, Debug)]
 pub struct ColumnDef {
     pub name: String,
@@ -1993,6 +2033,8 @@ pub struct ColumnDef {
     pub computed: Option<Expr>,
     /// Upload constraints for an opaque FileRef column exposed by generated CRUD.
     pub attachment: Option<FileUploadOptions>,
+    pub privacy: PrivacyClass,
+    pub redact: bool,
     pub required: bool,
     pub primary_key: bool,
     pub auto: bool,
@@ -2085,6 +2127,8 @@ pub struct RecordDef {
 pub struct RecordField {
     pub name: String,
     pub ty: Type,
+    pub privacy: PrivacyClass,
+    pub redact: bool,
     pub span: Span,
 }
 
@@ -2107,6 +2151,7 @@ pub struct Function {
 pub struct Param {
     pub name: String,
     pub ty: Type,
+    pub privacy: PrivacyClass,
     pub span: Span,
 }
 

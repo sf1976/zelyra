@@ -1,0 +1,22 @@
+table customers {
+    id: Id primary auto
+    email: Email required @pii @redact
+    external_token: String(128) required @secret
+}
+
+table invoices {
+    id: Id primary auto
+    customer: Customer required
+    billing_contact: String(128) required @pii
+    total: Decimal required
+}
+
+ledger payments {
+    id: Id primary auto
+    invoice: Invoice required
+    payment_reference: String(128) required @pii
+    debit: Decimal required
+    credit: Decimal required
+}
+
+fn main() {}

@@ -11,6 +11,8 @@ pub enum ContractKind {
     LoopInvariant,
     StateMachine,
     Workflow,
+    Authorization,
+    Privacy,
 }
 
 impl fmt::Display for ContractKind {
@@ -21,7 +23,40 @@ impl fmt::Display for ContractKind {
             Self::LoopInvariant => write!(f, "invariant"),
             Self::StateMachine => write!(f, "state_machine"),
             Self::Workflow => write!(f, "workflow"),
+            Self::Authorization => write!(f, "authorization"),
+            Self::Privacy => write!(f, "privacy"),
         }
+    }
+}
+
+/// Binding 6-level evidence classification shared across reports and future proofs.
+/// Undecidable checks, timeouts, and unknown states never classify as `PROVEN`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum EvidenceClass {
+    Proven,
+    Enforced,
+    Tested,
+    Attested,
+    Assumed,
+    Unverified,
+}
+
+impl EvidenceClass {
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Proven => "PROVEN",
+            Self::Enforced => "ENFORCED",
+            Self::Tested => "TESTED",
+            Self::Attested => "ATTESTED",
+            Self::Assumed => "ASSUMED",
+            Self::Unverified => "UNVERIFIED",
+        }
+    }
+}
+
+impl fmt::Display for EvidenceClass {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(self.as_str())
     }
 }
 
@@ -76,6 +111,16 @@ pub struct VerificationResult {
     pub span: Span,
     pub message: String,
     pub counterexample: Option<Vec<(String, i64)>>,
+}
+
+impl VerificationResult {
+    pub const fn evidence_class(&self) -> EvidenceClass {
+        match self.status {
+            VerificationStatus::Proven => EvidenceClass::Proven,
+            VerificationStatus::RuntimeCheck => EvidenceClass::Enforced,
+            VerificationStatus::Unproven | VerificationStatus::Failed => EvidenceClass::Unverified,
+        }
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -179,6 +224,283 @@ pub fn verify(program: &Program) -> Vec<VerificationResult> {
     for (index, workflow) in program.workflows.iter().enumerate() {
         results.push(verify_workflow(program, workflow, index));
     }
+    if crate::privacy::program_uses_privacy(program) {
+        results.push(verify_privacy(program));
+    }
+    results.extend(authorization_matrix(program));
+    results
+}
+
+fn verify_privacy(program: &Program) -> VerificationResult {
+    let inventory = crate::privacy::inspect_privacy_inventory(program);
+    let pii_count = inventory
+        .columns
+        .iter()
+        .filter(|c| c.privacy == PrivacyClass::Pii)
+        .count()
+        + inventory
+            .record_fields
+            .iter()
+            .filter(|f| f.privacy == PrivacyClass::Pii)
+            .count();
+    let secret_count = inventory
+        .columns
+        .iter()
+        .filter(|c| c.privacy == PrivacyClass::Secret)
+        .count()
+        + inventory
+            .record_fields
+            .iter()
+            .filter(|f| f.privacy == PrivacyClass::Secret)
+            .count();
+    let span = program
+        .tables
+        .iter()
+        .find_map(|t| {
+            t.columns
+                .iter()
+                .find(|c| c.privacy != PrivacyClass::Public || c.redact)
+                .map(|c| c.span)
+        })
+        .or_else(|| program.functions.first().map(|f| f.span))
+        .unwrap_or_default();
+    match crate::privacy::check_privacy(program) {
+        Ok(()) => VerificationResult {
+            function: "__privacy__".into(),
+            kind: ContractKind::Privacy,
+            index: 0,
+            status: VerificationStatus::Proven,
+            span,
+            message: format!(
+                "Information flow verified (E-PRIVACY-001): {pii_count} @pii and {secret_count} @secret declarations checked with zero unauthorized leaks in documented scope; legal GDPR compliance remains ASSUMED."
+            ),
+            counterexample: None,
+        },
+        Err(errors) => VerificationResult {
+            function: "__privacy__".into(),
+            kind: ContractKind::Privacy,
+            index: 0,
+            status: VerificationStatus::Failed,
+            span: errors.first().map_or(span, |e| e.span),
+            message: errors
+                .first()
+                .map_or_else(|| "Privacy flow check failed.".into(), |e| e.message.clone()),
+            counterexample: None,
+        },
+    }
+}
+
+fn program_uses_authorization(program: &Program) -> bool {
+    !program.auth.is_empty()
+        || !program.cruds.is_empty()
+        || program.tables.iter().any(|t| {
+            t.tenant_scope.is_some()
+                || t.state_machines.iter().any(|m| {
+                    m.transitions
+                        .iter()
+                        .any(|r| !r.required_roles.is_empty() || r.four_eyes_column.is_some())
+                })
+        })
+        || program
+            .apis
+            .iter()
+            .any(|a| a.requires_auth || !a.permissions.is_empty())
+}
+
+fn handler_writes_database(function: &Function) -> bool {
+    function.capabilities.iter().any(|cap| {
+        cap == "Database" || cap == "Database(write)" || cap.starts_with("Database(write:")
+    })
+}
+
+/// Authorization findings for the declarative API, generated CRUD, and state policies.
+pub fn authorization_matrix(program: &Program) -> Vec<VerificationResult> {
+    if !program_uses_authorization(program) {
+        return Vec::new();
+    }
+    let functions = program
+        .functions
+        .iter()
+        .map(|function| (function.name.as_str(), function))
+        .collect::<HashMap<_, _>>();
+    let mut results = Vec::new();
+    let strict_auth_context = !program.auth.is_empty()
+        || program
+            .tables
+            .iter()
+            .any(|t| t.tenant_scope.is_some() || t.is_ledger);
+    for (idx, api) in program.apis.iter().enumerate() {
+        if !api.requires_auth && strict_auth_context {
+            let writes_db = api
+                .handler
+                .as_ref()
+                .and_then(|name| functions.get(name.as_str()))
+                .is_some_and(|func| handler_writes_database(func));
+            if writes_db {
+                results.push(VerificationResult {
+                    function: api
+                        .handler
+                        .clone()
+                        .unwrap_or_else(|| format!("{} {}", api.method, api.path)),
+                    kind: ContractKind::Authorization,
+                    index: idx,
+                    status: VerificationStatus::Failed,
+                    span: api.span,
+                    message: format!(
+                        "API `{} {}` declares database write capability without `requires auth` in a protected/tenant/ledger project.",
+                        api.method.to_ascii_uppercase(),
+                        api.path
+                    ),
+                    counterexample: None,
+                });
+            }
+        }
+        if let Some(scope) = api.validates_table.as_ref().and_then(|name| {
+            program
+                .tables
+                .iter()
+                .find(|table| table.name == *name)?
+                .tenant_scope
+                .as_ref()
+        }) {
+            let membership_configured = program.auth.iter().any(|auth| {
+                auth.membership_table.is_some()
+                    || (auth.tenant_owner_table.is_some() && auth.tenant_owner_column.is_some())
+            });
+            let authenticated = api.requires_auth && membership_configured;
+            results.push(VerificationResult {
+                function: format!("{} {}", api.method, api.path),
+                kind: ContractKind::Authorization,
+                index: idx,
+                status: if authenticated { VerificationStatus::RuntimeCheck } else { VerificationStatus::Failed },
+                span: api.span,
+                message: if authenticated {
+                    format!("Tenant entry `{}` is supplied by verified session membership or ownership. Checked SQL requires the same tenant throughout the API call.", scope.column)
+                } else {
+                    "Scoped API validation requires authentication and a configured tenant membership or ownership source.".into()
+                },
+                counterexample: None,
+            });
+        }
+    }
+
+    for (index, crud) in program.cruds.iter().enumerate() {
+        let expected_tenant = program
+            .tables
+            .iter()
+            .find(|table| table.name == crud.table)
+            .and_then(|table| table.tenant_scope.as_ref())
+            .map(|scope| scope.column.as_str());
+        let expected_recipient = program.cruds.iter().find_map(|other| {
+            (other.table == crud.table)
+                .then_some(other.recipient_column.as_deref())
+                .flatten()
+        });
+        if expected_tenant.is_some_and(|column| crud.tenant_column.as_deref() != Some(column))
+            || expected_recipient
+                .is_some_and(|column| crud.recipient_column.as_deref() != Some(column))
+        {
+            results.push(VerificationResult {
+                function: format!("CRUD {}", crud.name),
+                kind: ContractKind::Authorization,
+                index,
+                status: VerificationStatus::Failed,
+                span: crud.span,
+                message: format!("Generated CRUD for `{}` must retain its declared tenant and recipient boundaries.", crud.table),
+                counterexample: None,
+            });
+            continue;
+        }
+        if crud.tenant_column.is_some()
+            || crud.recipient_column.is_some()
+            || !crud.permissions.is_empty()
+            || !crud.create_permissions.is_empty()
+            || !crud.edit_permissions.is_empty()
+            || !crud.delete_permissions.is_empty()
+            || !crud.conditional_permissions.is_empty()
+            || !crud.guards.is_empty()
+        {
+            results.push(VerificationResult {
+                function: format!("CRUD {}", crud.name),
+                kind: ContractKind::Authorization,
+                index,
+                status: VerificationStatus::RuntimeCheck,
+                span: crud.span,
+                message: format!(
+                    "Generated object `{}` checks tenant field {:?}, recipient field {:?}, access permissions {:?}, create/edit/delete permissions {:?}/{:?}/{:?}, and {} conditional permission(s) and {} lifecycle guard(s) at runtime.",
+                    crud.table, crud.tenant_column, crud.recipient_column, crud.permissions,
+                    crud.create_permissions, crud.edit_permissions, crud.delete_permissions,
+                    crud.conditional_permissions.len(), crud.guards.len()
+                ),
+                counterexample: None,
+            });
+        }
+    }
+
+    for table in &program.tables {
+        for machine in &table.state_machines {
+            for (index, transition) in machine.transitions.iter().enumerate() {
+                if transition.required_roles.is_empty() && transition.four_eyes_column.is_none() {
+                    continue;
+                }
+                results.push(VerificationResult {
+                    function: format!("{}.{}:{}", table.name, machine.column, transition.from),
+                    kind: ContractKind::Authorization,
+                    index,
+                    status: VerificationStatus::RuntimeCheck,
+                    span: transition.span,
+                    message: format!("Generated transitions to {:?} check actor roles {:?} and the four-eyes column {:?} before a state change. Role provisioning and writers outside generated routes are assumed.", transition.to, transition.required_roles, transition.four_eyes_column),
+                    counterexample: None,
+                });
+            }
+        }
+    }
+    if results
+        .iter()
+        .any(|entry| entry.status == VerificationStatus::Failed)
+    {
+        return results;
+    }
+
+    let protected_apis = program.apis.iter().filter(|a| a.requires_auth).count();
+    let tenant_tables = program
+        .tables
+        .iter()
+        .filter(|t| t.tenant_scope.is_some())
+        .count();
+    let role_transitions: usize = program
+        .tables
+        .iter()
+        .flat_map(|t| t.state_machines.iter())
+        .flat_map(|m| m.transitions.iter())
+        .filter(|r| !r.required_roles.is_empty())
+        .count();
+    let four_eyes_transitions: usize = program
+        .tables
+        .iter()
+        .flat_map(|t| t.state_machines.iter())
+        .flat_map(|m| m.transitions.iter())
+        .filter(|r| r.four_eyes_column.is_some())
+        .count();
+    let span = program
+        .auth
+        .first()
+        .map(|a| a.span)
+        .or_else(|| program.apis.first().map(|a| a.span))
+        .or_else(|| program.tables.first().map(|t| t.span))
+        .unwrap_or_default();
+
+    results.push(VerificationResult {
+        function: "__authorization__".into(),
+        kind: ContractKind::Authorization,
+        index: 0,
+        status: VerificationStatus::Proven,
+        span,
+        message: format!(
+            "API authentication gate verified for database-write declarations in protected, tenant, or ledger projects. Declarations include {protected_apis} auth-gated API(s), {tenant_tables} tenant-scoped table(s), {role_transitions} role-gated and {four_eyes_transitions} four-eyes transition(s). Identity provisioning and session secrets remain ASSUMED."
+        ),
+        counterexample: None,
+    });
     results
 }
 
@@ -498,6 +820,20 @@ fn verification_message(
         }
         (ContractKind::Workflow, VerificationStatus::Failed, _) => {
             "The workflow failed static timer-cycle or target verification.".into()
+        }
+        (ContractKind::Authorization, VerificationStatus::RuntimeCheck, _) => {
+            "Authorization requires runtime role/session checks.".into()
+        }
+        (ContractKind::Authorization, VerificationStatus::Failed, _) => {
+            "Authorization verification detected an unprotected mutating endpoint or role conflict."
+                .into()
+        }
+        (ContractKind::Privacy, VerificationStatus::RuntimeCheck, _) => {
+            "Privacy flow requires runtime redaction checks.".into()
+        }
+        (ContractKind::Privacy, VerificationStatus::Failed, _) => {
+            "Privacy flow verification detected a potential `@pii`/`@secret` leak (`E-PRIVACY-001`)."
+                .into()
         }
         (_, VerificationStatus::Unproven, false) => {
             "No proof target was declared for this function.".into()

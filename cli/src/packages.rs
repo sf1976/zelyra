@@ -1159,7 +1159,7 @@ fn parse_declared_effects(
                 ),
             });
         };
-        if !zelyra_runtime::KNOWN_CAPABILITIES.contains(&effect) {
+        if zelyra_runtime::parse_capability_spec(effect).is_none() {
             return Err(PackageError {
                 message: format!(
                     "package `{package_name}` declares unknown effect `{effect}`; expected one of {}",

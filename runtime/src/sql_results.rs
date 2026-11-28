@@ -41,6 +41,8 @@ pub(crate) fn definitions(program: &Program) -> HashMap<String, RecordDef> {
                 RecordField {
                     name,
                     ty,
+                    privacy: column.privacy,
+                    redact: column.redact,
                     span: column.span,
                 }
             })

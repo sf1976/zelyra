@@ -993,6 +993,8 @@ impl<'a> Reader<'a> {
                 fields.push(RecordField {
                     name: self.string()?,
                     ty: self.ty(0)?,
+                    privacy: zelyra_ast::PrivacyClass::Public,
+                    redact: false,
                     span: self.span()?,
                 });
             }
