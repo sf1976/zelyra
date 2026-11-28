@@ -6280,6 +6280,37 @@ fn main() {
 }
 
 #[test]
+fn redact_builtin_preserves_existing_function_names_across_backends() {
+    let directory = temporary_directory("zelyra-redact-backends");
+    fs::create_dir_all(&directory).unwrap();
+    for (name, source, expected) in [
+        (
+            "builtin",
+            "fn main() { print(redact(\"sample\")) }\n",
+            "[REDACTED]",
+        ),
+        (
+            "user_function",
+            "fn redact(value: Int) -> Int { return value + 1 }\nfn main() { print(redact(41)) }\n",
+            "42",
+        ),
+    ] {
+        let entry = directory.join(format!("{name}.zyl"));
+        fs::write(&entry, source).unwrap();
+        for backend in ["ast", "mir", "bytecode"] {
+            let output = run(&["run", entry.to_str().unwrap(), "--backend", backend]);
+            assert!(
+                output.status.success(),
+                "{name} on {backend}: {}",
+                String::from_utf8_lossy(&output.stderr)
+            );
+            assert_eq!(String::from_utf8_lossy(&output.stdout).trim(), expected);
+        }
+    }
+    fs::remove_dir_all(directory).unwrap();
+}
+
+#[test]
 #[ignore = "requires ZELYRA_TEST_DATABASE_URL pointing to a disposable MariaDB or PostgreSQL database"]
 fn scoped_sql_reads_and_writes_preserve_tenant_boundaries_on_live_databases() {
     let database_url = std::env::var("ZELYRA_TEST_DATABASE_URL")

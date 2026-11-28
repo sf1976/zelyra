@@ -955,7 +955,7 @@ fn analyze_expr(
                     }
                     return TaintVal::clean();
                 }
-                "redact" => {
+                "redact" if !summaries.contains_key(name) && !env.contains_key(name) => {
                     if let Some(t) = arg_taints.first() {
                         check_sink(t, "redact", false, true, args[0].span, out_summary, errors);
                     }
@@ -997,7 +997,7 @@ fn analyze_expr(
                 _ => {}
             }
 
-            if let Some(callee) = summaries.get(name) {
+            if let Some(callee) = summaries.get(name).filter(|_| !env.contains_key(name)) {
                 for (idx, arg_taint) in arg_taints.iter().enumerate() {
                     if let Some(flags) = callee.param_sinks.get(idx) {
                         let span = args.get(idx).map_or(expr.span, |a| a.span);

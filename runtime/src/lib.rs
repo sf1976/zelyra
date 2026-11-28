@@ -1144,7 +1144,6 @@ fn is_runtime_builtin(name: &str) -> bool {
             | "verify_ledger_balance"
             | "einvoice_xml"
             | "einvoice_validate"
-            | "redact"
             | "render_markdown"
             | "markdown_toc"
             | "render_pdf"

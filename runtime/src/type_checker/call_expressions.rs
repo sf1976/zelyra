@@ -182,7 +182,10 @@ impl Checker<'_> {
             let xml = self.check_expr(&args[0], scopes);
             self.expect_type(&Type::String, &xml, args[0].span);
             Type::Result(Box::new(Type::Bool), Box::new(Type::String))
-        } else if name == "redact" {
+        } else if name == "redact"
+            && !self.functions.contains_key(name)
+            && self.lookup(scopes, name).is_none()
+        {
             if !type_args.is_empty() || args.len() != 1 {
                 self.error(
                     span,
