@@ -63,6 +63,12 @@ The inventory does not include `.env` values, credentials, or other secrets.
 For package dependencies, the lock is reported as current only after the
 normal compiler validation has accepted it.
 
+A package function may narrow an approved `package.effects` scope. For
+example, `effects = ['Network(allow: [one.example, two.example])']` admits
+`uses Network(allow: ["one.example"])`. A broader effect or a resource outside
+the ceiling fails with `E-PKG-003`. Manifest or source changes invalidate the
+content lock and require an explicit lockfile update.
+
 ## Manifest
 
 Create a local package without an installer, registry, build script, or

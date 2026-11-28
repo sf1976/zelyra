@@ -70,6 +70,13 @@ Zugangsdaten oder sonstigen Geheimnisse. Bei Paketabhängigkeiten wird der
 Lockfile-Status nur als aktuell gemeldet, wenn der normale Compilercheck den
 Lock bereits akzeptiert hat.
 
+Eine Paketfunktion darf einen genehmigten Bereich aus `package.effects`
+einschränken. Beispielsweise erlaubt
+`effects = ['Network(allow: [one.example, two.example])']` die Deklaration
+`uses Network(allow: ["one.example"])`. Ein breiterer Effekt oder eine
+Ressource außerhalb der Obergrenze scheitert mit `E-PKG-003`. Änderungen an
+Manifest oder Quelltext erfordern eine ausdrückliche Lockfile-Aktualisierung.
+
 ## Manifest
 
 Ein lokales Paket lässt sich ohne Installer, Registry, Build-Skript oder

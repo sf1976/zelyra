@@ -47,78 +47,89 @@ pub(super) fn privacy_command(mut args: impl Iterator<Item = String>) -> ExitCod
         Ok(program) => program,
         Err(()) => return ExitCode::from(1),
     };
-    let inventory = inspect_privacy_inventory(&program);
+    if subcommand == "map" {
+        print_privacy_map(&entry_path, &inspect_privacy_inventory(&program), &format);
+        return ExitCode::SUCCESS;
+    }
 
-    match subcommand.as_str() {
-        "map" => print_privacy_map(&entry_path, &inventory, &format),
-        "export-plan" => print_export_plan(&entry_path, &program, &inventory, &format),
-        "erase-plan" => print_erase_plan(&entry_path, &program, &inventory, &format),
-        _ => unreachable!(),
+    let Ok(schema) = build_schema(&program) else {
+        eprintln!("error[E-PRIVACY-002]: cannot derive a privacy plan from an invalid schema");
+        return ExitCode::from(1);
+    };
+    let order = match table_dependency_order(&schema) {
+        Ok(order) => order,
+        Err(blocked) => {
+            let plan = if subcommand == "erase-plan" {
+                "gdpr_art_17_erasure"
+            } else {
+                "gdpr_art_15_20_export"
+            };
+            if format == "json" {
+                println!(
+                    "{}",
+                    json!({
+                        "schema_version": 1,
+                        "plan": plan,
+                        "entry": entry_path,
+                        "evidence_class": "UNVERIFIED",
+                        "legal_compliance_evidence": "ASSUMED",
+                        "blocking_tables": blocked,
+                        "steps": [],
+                    })
+                );
+            }
+            eprintln!(
+                "error[E-PRIVACY-002]: cyclic foreign-key dependencies require review: {}",
+                blocked.join(", ")
+            );
+            return ExitCode::from(1);
+        }
+    };
+    if subcommand == "export-plan" {
+        print_export_plan(&entry_path, &program, &order, &format);
+    } else {
+        print_erase_plan(&entry_path, &program, &schema, &order, &format);
     }
     ExitCode::SUCCESS
 }
 
-fn table_dependency_order(program: &Program) -> Vec<String> {
-    let mut names = program
-        .tables
-        .iter()
-        .map(|t| t.name.clone())
-        .collect::<Vec<_>>();
-    names.sort();
-    let table_set = names
-        .iter()
-        .map(|n| n.to_ascii_lowercase())
-        .collect::<HashSet<_>>();
-    let mut deps: HashMap<String, Vec<String>> = HashMap::new();
-    for t in &program.tables {
-        let mut refs = Vec::new();
-        for c in &t.columns {
-            if let Some(target) = &c.references {
-                let low = target.to_ascii_lowercase();
-                if table_set.contains(&low) && !low.eq_ignore_ascii_case(&t.name) {
-                    if let Some(canonical) = program
-                        .tables
-                        .iter()
-                        .find(|cand| cand.name.eq_ignore_ascii_case(target))
-                        .map(|cand| cand.name.clone())
-                    {
-                        refs.push(canonical);
-                    }
-                }
-            }
+fn table_dependency_order(schema: &Schema) -> Result<Vec<&str>, Vec<&str>> {
+    let mut pending = BTreeMap::new();
+    let mut children: HashMap<&str, Vec<&str>> = HashMap::new();
+    for table in &schema.tables {
+        let parents = table
+            .foreign_keys
+            .iter()
+            .map(|key| key.referenced_table.as_str())
+            .collect::<HashSet<_>>();
+        pending.insert(table.name.as_str(), parents.len());
+        for parent in parents {
+            children.entry(parent).or_default().push(&table.name);
         }
-        refs.sort();
-        refs.dedup();
-        deps.insert(t.name.clone(), refs);
     }
-    // Topological sort: parent (referenced) tables first, dependent child tables after.
-    let mut visited = HashSet::new();
-    let mut visiting = HashSet::new();
+
+    // Only tables whose parents have been ordered can enter the queue.
+    let mut ready = pending
+        .iter()
+        .filter_map(|(&table, &parents)| (parents == 0).then_some(table))
+        .collect::<BTreeSet<_>>();
     let mut ordered = Vec::new();
-    fn visit(
-        name: &str,
-        deps: &HashMap<String, Vec<String>>,
-        visited: &mut HashSet<String>,
-        visiting: &mut HashSet<String>,
-        ordered: &mut Vec<String>,
-    ) {
-        if visited.contains(name) || visiting.contains(name) {
-            return;
-        }
-        visiting.insert(name.to_owned());
-        if let Some(parents) = deps.get(name) {
-            for p in parents {
-                visit(p, deps, visited, visiting, ordered);
+    while let Some(table) = ready.pop_first() {
+        ordered.push(table);
+        pending.remove(table);
+        for child in children.remove(table).unwrap_or_default() {
+            let parents = pending.get_mut(child).expect("child awaits its parent");
+            *parents -= 1;
+            if *parents == 0 {
+                ready.insert(child);
             }
         }
-        visiting.remove(name);
-        visited.insert(name.to_owned());
-        ordered.push(name.to_owned());
     }
-    for name in &names {
-        visit(name, &deps, &mut visited, &mut visiting, &mut ordered);
+    if pending.is_empty() {
+        Ok(ordered)
+    } else {
+        Err(pending.into_keys().collect())
     }
-    ordered
 }
 
 fn print_privacy_map(entry_path: &str, inventory: &zelyra_runtime::PrivacyInventory, format: &str) {
@@ -245,16 +256,10 @@ fn print_privacy_map(entry_path: &str, inventory: &zelyra_runtime::PrivacyInvent
     }
 }
 
-fn print_export_plan(
-    entry_path: &str,
-    program: &Program,
-    _inventory: &zelyra_runtime::PrivacyInventory,
-    format: &str,
-) {
-    let order = table_dependency_order(program);
+fn print_export_plan(entry_path: &str, program: &Program, order: &[&str], format: &str) {
     let mut steps = Vec::new();
-    for (idx, table_name) in order.iter().enumerate() {
-        let Some(table) = program.tables.iter().find(|t| &t.name == table_name) else {
+    for table_name in order {
+        let Some(table) = program.tables.iter().find(|t| t.name == *table_name) else {
             continue;
         };
         let mut pii_cols = table
@@ -275,7 +280,7 @@ fn print_export_plan(
             .collect::<Vec<_>>();
         secret_excluded.sort();
         steps.push(json!({
-            "step": idx + 1,
+            "step": steps.len() + 1,
             "table": table.name,
             "tenant_column": table.tenant_scope.as_ref().map(|s| s.column.clone()),
             "exported_pii_columns": pii_cols,
@@ -290,6 +295,7 @@ fn print_export_plan(
             "plan": "gdpr_art_15_20_export",
             "entry": entry_path,
             "evidence_class": "PROVEN",
+            "execution_evidence": "UNVERIFIED",
             "legal_compliance_evidence": "ASSUMED",
             "assumptions": [
                 "Secret columns (@secret) are excluded from subject exports by policy.",
@@ -316,15 +322,13 @@ fn print_export_plan(
 fn print_erase_plan(
     entry_path: &str,
     program: &Program,
-    _inventory: &zelyra_runtime::PrivacyInventory,
+    schema: &Schema,
+    order: &[&str],
     format: &str,
 ) {
-    // Reverse FK order: children before referenced parents.
-    let mut order = table_dependency_order(program);
-    order.reverse();
     let mut steps = Vec::new();
-    for table_name in &order {
-        let Some(table) = program.tables.iter().find(|t| &t.name == table_name) else {
+    for table_name in order.iter().rev() {
+        let Some(table) = program.tables.iter().find(|t| t.name == *table_name) else {
             continue;
         };
         let mut sensitive_cols = table
@@ -341,7 +345,22 @@ fn print_erase_plan(
             .cruds
             .iter()
             .filter(|c| c.table == table.name)
-            .any(|c| !c.guards.is_empty());
+            .any(|c| {
+                c.guards
+                    .iter()
+                    .any(|guard| guard.action == zelyra_ast::CrudRecordAction::Delete)
+            });
+        let dependent_tables = schema
+            .tables
+            .iter()
+            .filter(|child| {
+                child
+                    .foreign_keys
+                    .iter()
+                    .any(|key| key.referenced_table == table.name)
+            })
+            .map(|child| child.name.as_str())
+            .collect::<BTreeSet<_>>();
         let (action, note) = if table.is_ledger {
             (
                 "retain_immutable_ledger",
@@ -357,10 +376,15 @@ fn print_erase_plan(
                 "respect_delete_guard_or_anonymize",
                 "CRUD delete guard constrains deletion; check active guard conditions or anonymize columns",
             )
+        } else if !dependent_tables.is_empty() {
+            (
+                "review_references_before_erasure",
+                "check dependent rows, cascade actions, and retention before erasing the subject's data",
+            )
         } else {
             (
                 "anonymize_or_delete",
-                "no ledger lock or delete guard detected; safe to anonymize or delete in child-first foreign-key order",
+                "review subject identity, retention, and live data before erasure",
             )
         };
         steps.push(json!({
@@ -368,6 +392,7 @@ fn print_erase_plan(
             "table": table.name,
             "action": action,
             "reason": note,
+            "dependent_tables": dependent_tables,
             "columns": sensitive_cols,
             "tenant_column": table.tenant_scope.as_ref().map(|s| s.column.clone()),
             "is_ledger": table.is_ledger,
@@ -382,6 +407,7 @@ fn print_erase_plan(
             "plan": "gdpr_art_17_erasure",
             "entry": entry_path,
             "evidence_class": "PROVEN",
+            "execution_evidence": "UNVERIFIED",
             "legal_compliance_evidence": "ASSUMED",
             "assumptions": [
                 "Statutory commercial/tax retention periods (e.g. GoBD/HGB for ledgers and invoices) take legal precedence and remain ASSUMED.",

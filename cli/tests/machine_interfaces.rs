@@ -6420,6 +6420,84 @@ fn main() uses Database(read: [{table}]), Database(write: [{table}]) {{
 }
 
 #[test]
+fn privacy_plans_and_inventory_use_the_resolved_business_schema() {
+    let entry = concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../examples/privacy_mini_erp.zyl"
+    );
+    let output = |command| {
+        let result = run(&["privacy", command, entry, "--format=json"]);
+        assert!(
+            result.status.success(),
+            "{}",
+            String::from_utf8_lossy(&result.stderr)
+        );
+        result.stdout
+    };
+    let map_output = output("map");
+    assert_eq!(map_output, output("map"));
+    let inventory: serde_json::Value = serde_json::from_slice(&map_output).unwrap();
+    let columns = inventory["columns"].as_array().unwrap();
+    assert_eq!(columns.len(), 4);
+    assert!(columns
+        .iter()
+        .any(|column| column["column"] == "billing_contact"
+            && column["foreign_keys"] == serde_json::json!(["invoices.customer_id:customers"])));
+
+    let export: serde_json::Value = serde_json::from_slice(&output("export-plan")).unwrap();
+    assert_eq!(export["steps"][0]["table"], "customers");
+    assert_eq!(
+        export["steps"][0]["exported_pii_columns"],
+        serde_json::json!(["email"])
+    );
+    assert_eq!(
+        export["steps"][0]["excluded_secret_columns"],
+        serde_json::json!(["external_token"])
+    );
+
+    let erase: serde_json::Value = serde_json::from_slice(&output("erase-plan")).unwrap();
+    assert_eq!(erase["execution_evidence"], "UNVERIFIED");
+    assert_eq!(erase["steps"][0]["table"], "payments");
+    assert_eq!(erase["steps"][0]["action"], "retain_immutable_ledger");
+    assert_eq!(erase["steps"][1]["table"], "invoices");
+    assert_eq!(
+        erase["steps"][1]["action"],
+        "review_references_before_erasure"
+    );
+    assert_eq!(
+        erase["steps"][1]["dependent_tables"],
+        serde_json::json!(["payments"])
+    );
+    assert_eq!(erase["steps"][2]["table"], "customers");
+
+    let directory = temporary_directory("zelyra-privacy-cycle");
+    fs::create_dir_all(&directory).unwrap();
+    let entry = directory.join("cycle.zyl");
+    fs::write(
+        &entry,
+        r#"
+table nodes {
+    id: Id primary auto
+    parent: Node?
+    label: String(128) required @pii
+}
+fn main() {}
+"#,
+    )
+    .unwrap();
+    for command in ["export-plan", "erase-plan"] {
+        let result = run(&["privacy", command, entry.to_str().unwrap(), "--format=json"]);
+        assert!(!result.status.success());
+        assert!(String::from_utf8_lossy(&result.stderr).contains("E-PRIVACY-002"));
+        let report: serde_json::Value = serde_json::from_slice(&result.stdout).unwrap();
+        assert_eq!(report["evidence_class"], "UNVERIFIED");
+        assert_eq!(report["blocking_tables"], serde_json::json!(["nodes"]));
+        assert_eq!(report["steps"], serde_json::json!([]));
+    }
+    fs::remove_dir_all(directory).unwrap();
+}
+
+#[test]
 fn privacy_information_flow_scoped_capabilities_and_verified_auth_v1() {
     let directory = temporary_directory("zelyra-170-privacy-auth");
     fs::create_dir_all(&directory).unwrap();

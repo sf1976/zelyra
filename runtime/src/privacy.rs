@@ -1037,22 +1037,27 @@ fn analyze_expr(
 /// Deterministic GDPR inventory derived from the AST.
 pub fn inspect_privacy_inventory(program: &Program) -> PrivacyInventory {
     let schema = PrivacySchemaIndex::new(program);
+    let storage = zelyra_database::build_schema(program).ok();
     let mut columns = Vec::new();
     for table in &program.tables {
-        let foreign_keys = table
-            .columns
-            .iter()
-            .filter_map(|c| {
-                c.references
-                    .as_ref()
-                    .map(|target| format!("{}.{}:{}", table.name, c.name, target))
-            })
+        let mut foreign_keys = storage
+            .as_ref()
+            .and_then(|schema| schema.tables.iter().find(|item| item.name == table.name))
+            .into_iter()
+            .flat_map(|item| &item.foreign_keys)
+            .map(|key| format!("{}.{}:{}", table.name, key.column, key.referenced_table))
             .collect::<Vec<_>>();
+        foreign_keys.sort_unstable();
+        foreign_keys.dedup();
         let has_delete_guard = program
             .cruds
             .iter()
             .filter(|c| c.table == table.name)
-            .any(|c| !c.guards.is_empty());
+            .any(|c| {
+                c.guards
+                    .iter()
+                    .any(|guard| guard.action == CrudRecordAction::Delete)
+            });
         for col in &table.columns {
             if col.privacy == PrivacyClass::Public && !col.redact {
                 continue;
@@ -1113,7 +1118,7 @@ pub fn inspect_privacy_inventory(program: &Program) -> PrivacyInventory {
         routes.push(PrivacyRouteEntry {
             kind: "api",
             target: format!("{} {}", api.method.to_ascii_uppercase(), api.path),
-            requires_auth: api.requires_auth,
+            requires_auth: api.requires_auth || !api.permissions.is_empty(),
             permissions: api.permissions.clone(),
             privacy_level: level,
             tables,
@@ -1155,8 +1160,11 @@ pub fn inspect_privacy_inventory(program: &Program) -> PrivacyInventory {
         routes.push(PrivacyRouteEntry {
             kind: "crud",
             target: format!("/crud/{}", crud.name),
-            requires_auth: true,
-            permissions: Vec::new(),
+            requires_auth: crud.requires_auth
+                || crud.tenant_column.is_some()
+                || crud.recipient_column.is_some()
+                || !crud.permissions.is_empty(),
+            permissions: crud.permissions.clone(),
             privacy_level: level,
             tables: vec![crud.table.clone()],
         });
